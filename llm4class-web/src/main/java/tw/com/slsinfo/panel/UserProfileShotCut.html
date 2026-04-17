@@ -1,0 +1,35 @@
+<html xmlns:wicket="http://git-wip-us.apache.org/repos/asf/wicket/repo?p=wicket.git;a=blob_plain;f=wicket-core/src/main/resources/META-INF/wicket-1.5.xsd;hb=master">
+<wicket:panel>
+    <!-- User Logo start -->
+    <div class="bd-header-user">
+        <div class="dropdown">
+            <a class="dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"
+               aria-expanded="false">
+                <div class="author">
+                    <div class="author-thumb">
+                        <img src="assets/images/avatar/main-user.webp" alt="user">
+                    </div>
+                    <div class="verified-badge pos-badge">
+                        <i class="icon-check"></i>
+                    </div>
+                </div>
+            </a>
+            <ul class="dropdown-menu">
+                <li class="bd-user-info">
+                    <div class="thumb"><img src="assets/images/avatar/main-user.webp" alt="user"></div>
+                    <div class="meta">
+                        <h6 class="name" wicket:id="truename">John Doe</h6>
+                        <span class="digi" wicket:id="title">Founder</span>
+                    </div>
+                </li>
+                <li class="bd-user-info-list"><i class="ri-settings-2-line"></i>
+                    <span wicket:id="revision">version</span></li>
+                <li class="bd-user-info-list"><a href="#" wicket:id="signout"><i
+                        class="ri-logout-circle-line"></i>登出</a></li>
+            </ul>
+        </div>
+    </div>
+    <!-- User Logo end -->
+
+</wicket:panel>
+</html>

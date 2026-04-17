@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<persistence version="3.0" xmlns="https://jakarta.ee/xml/ns/persistence"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xsi:schemaLocation="https://jakarta.ee/xml/ns/persistence https://jakarta.ee/xml/ns/persistence/persistence_3_0.xsd">
+
+    <!-- essayai database-->
+    <persistence-unit name="jndiWildfly" transaction-type="JTA">
+        <provider>org.hibernate.jpa.HibernatePersistenceProvider</provider>
+        <jta-data-source>java:jboss/datasources/aidbDS</jta-data-source>
+        <class>tw.com.slsinfo.essayai.databases.mysql.entities.Authpage</class>
+        <class>tw.com.slsinfo.essayai.databases.mysql.entities.Classinfo</class>
+        <class>tw.com.slsinfo.essayai.databases.mysql.entities.Role</class>
+        <class>tw.com.slsinfo.essayai.databases.mysql.entities.Rolepermission</class>
+        <class>tw.com.slsinfo.essayai.databases.mysql.entities.Roleuser</class>
+        <class>tw.com.slsinfo.essayai.databases.mysql.entities.School</class>
+        <class>tw.com.slsinfo.essayai.databases.mysql.entities.User</class>
+        <shared-cache-mode>ENABLE_SELECTIVE</shared-cache-mode>
+        <properties>
+            <property name="wildfly.jpa.default-unit" value="true"/>
+            <property name="hibernate.show_sql" value="false"/>
+            <property name="hibernate.dialect" value="org.hibernate.dialect.MySQLDialect"/>
+            <!-- Use Infinispan second level cache provider -->
+            <property name="hibernate.cache.region.factory_class" value="infinispan"/>
+            <property name="hibernate.cache.use_second_level_cache" value="true"/>
+            <property name="hibernate.cache.use_query_cache" value="true"/>
+            <property name="hibernate.generate_statistics" value="false"/>
+            <property name="hibernate.cache.infinispan.statistics" value="true"/>
+            <property name="hibernate.cache.infinispan.entity.eviction.strategy" value="LRU"/>
+            <property name="hibernate.cache.infinispan.entity.eviction.wake_up_interval" value="10000"/>
+            <property name="hibernate.cache.infinispan.entity.eviction.max_entries" value="4096"/>
+            <property name="hibernate.cache.infinispan.entity.expiration.lifespan" value="60000"/>
+            <property name="hibernate.cache.infinispan.entity.expiration.max_idle" value="30000"/>
+        </properties>
+    </persistence-unit>
+
+    <!-- essayai database local-->
+    <persistence-unit name="ailocal">
+        <provider>org.hibernate.jpa.HibernatePersistenceProvider</provider>
+        <properties>
+            <property name="hibernate.connection.driver_class" value="com.mysql.cj.jdbc.Driver"/>
+            <property name="hibernate.show_sql" value="true"/>
+            <property name="hibernate.connection.autocommit" value="true"/>
+            <property name="hibernate.dialect" value="org.hibernate.dialect.MySQLDialect"/>
+            <!-- Use Infinispan second level cache provider -->
+            <property name="hibernate.cache.region.factory_class" value="infinispan"/>
+            <property name="hibernate.cache.use_second_level_cache" value="true"/>
+            <property name="hibernate.cache.use_query_cache" value="true"/>
+            <property name="hibernate.generate_statistics" value="false"/>
+            <property name="hibernate.cache.infinispan.statistics" value="true"/>
+            <property name="hibernate.cache.infinispan.entity.eviction.strategy" value="LRU"/>
+            <property name="hibernate.cache.infinispan.entity.eviction.wake_up_interval" value="10000"/>
+            <property name="hibernate.cache.infinispan.entity.eviction.max_entries" value="4096"/>
+            <property name="hibernate.cache.infinispan.entity.expiration.lifespan" value="60000"/>
+            <property name="hibernate.cache.infinispan.entity.expiration.max_idle" value="30000"/>
+        </properties>
+    </persistence-unit>
+</persistence>

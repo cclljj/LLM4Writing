@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<jboss-deployment-structure>
+    <deployment>
+        <dependencies>
+            <module name="org.mongodb"/>
+        </dependencies>
+        <exclude-subsystems>
+            <subsystem name="logging"/>
+        </exclude-subsystems>
+    </deployment>
+</jboss-deployment-structure>

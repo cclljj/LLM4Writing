@@ -1,0 +1,32 @@
+<html xmlns:wicket="http://git-wip-us.apache.org/repos/asf/wicket/repo?p=wicket.git;a=blob_plain;f=wicket-core/src/main/resources/META-INF/wicket-1.5.xsd;hb=master">
+<wicket:extend>
+    <!-- Start app-content-area -->
+    <div class="app-content-area p-relative">
+        <div class="app-content-wrap">
+            <div class="generator-box-wrapper generator-gap">
+                <div class="single-item-generator">
+<!--                    <div class="chat-box">-->
+<!--                        <div class="d-flex flex-wrap justify-start align-start gap-20">-->
+<!--                            <div class="ekoai-thumb"><img src="assets/images/logo/favicon.svg" alt=""></div>-->
+<!--                            <div class="ekoai-body">-->
+<!--                                <p class="description" >您好，我是您的AI助理，就讓我們開始寫作文吧！</p>-->
+<!--                            </div>-->
+<!--                        </div>-->
+<!--                    </div>-->
+                    <div wicket:id="chatpanel">
+                        <div wicket:id="messages"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- new chat form -->
+        <div class="new-chat-form-wrapper">
+            <div class="new-chat-form">
+                <wicket:container wicket:id="chatForm"></wicket:container>
+            </div>
+        </div>
+        <!-- new chat form -->
+    </div>
+    <!-- end app-content-area -->
+</wicket:extend>
+</html>

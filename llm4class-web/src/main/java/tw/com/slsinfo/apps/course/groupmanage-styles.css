@@ -1,0 +1,251 @@
+/* 純前端拖曳系統專用樣式 */
+
+/* Loading 動畫加強 */
+.loading-overlay {
+    backdrop-filter: blur(3px);
+    transition: all 0.3s ease;
+}
+
+.loading-content {
+    background: rgba(255, 255, 255, 0.95);
+    padding: 30px;
+    border-radius: 15px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+    text-align: center;
+}
+
+.spinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid #e3f2fd;
+    border-top: 4px solid #2196f3;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 15px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Toast 通知系統強化 */
+.toast {
+    min-width: 300px;
+    border-radius: 12px;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+}
+
+.toast-content {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.toast-icon {
+    font-size: 18px;
+    font-weight: bold;
+    flex-shrink: 0;
+}
+
+.toast-message {
+    flex: 1;
+    line-height: 1.4;
+}
+
+.temp-success-toast {
+    background: linear-gradient(135deg, #9c27b0 0%, #673ab7 100%);
+    border-left: 4px solid #e91e63;
+}
+
+/* 學生項目拖曳狀態 */
+.student-item.dragging-original {
+    opacity: 0.5;
+    transform: scale(0.95);
+    filter: grayscale(0.5);
+}
+
+.dragging-helper {
+    transform: rotate(5deg) scale(1.1);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3) !important;
+    z-index: 1001 !important;
+    pointer-events: none;
+}
+
+/* 暫時變更狀態增強 */
+.student-item.temp-changed::before {
+    content: '';
+    position: absolute;
+    top: -2px;
+    left: -2px;
+    right: -2px;
+    bottom: -2px;
+    background: linear-gradient(45deg, #ff6b6b, #feca57, #48dbfb, #ff9ff3);
+    border-radius: 10px;
+    z-index: -1;
+    animation: borderRotate 3s linear infinite;
+}
+
+@keyframes borderRotate {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* 未儲存變更指示器位置調整 */
+#unsaved-changes-indicator {
+    position: fixed;
+    top: 80px;
+    right: 20px;
+    z-index: 1100;
+    padding: 12px 18px;
+    border-radius: 25px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+#unsaved-changes-indicator:hover {
+    transform: scale(1.05);
+    box-shadow: 0 6px 20px rgba(255, 87, 34, 0.5);
+}
+
+.change-count {
+    background: rgba(255, 255, 255, 0.3);
+    padding: 2px 8px;
+    border-radius: 12px;
+    margin-left: 5px;
+    font-weight: bold;
+}
+
+/* 儲存按鈕狀態 */
+.btn-success.has-changes {
+    position: relative;
+    overflow: hidden;
+}
+
+.btn-success.has-changes::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+    0% { left: -100%; }
+    100% { left: 100%; }
+}
+
+/* 組別容器拖曳狀態 */
+.group-container.drop-target {
+    background: linear-gradient(135deg, #e8f5e8 0%, #c8e6c9 100%) !important;
+    border-color: #4caf50 !important;
+    box-shadow: 0 0 20px rgba(76, 175, 80, 0.3);
+}
+
+.unassigned-area.drop-target {
+    background: linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%) !important;
+    border-color: #ff9800 !important;
+    box-shadow: 0 0 20px rgba(255, 152, 0, 0.3);
+}
+
+/* 空狀態訊息樣式調整 */
+.empty-message {
+    margin: 20px 0;
+    padding: 20px;
+    text-align: center;
+    border-radius: 10px;
+    background: rgba(0, 0, 0, 0.02);
+    border: 2px dashed rgba(0, 0, 0, 0.1);
+}
+
+.empty-groups-message {
+    grid-column: 1 / -1; /* 占滿整個網格寬度 */
+    background: linear-gradient(135deg, #fafafa 0%, #f0f0f0 100%);
+    border-radius: 15px;
+    margin: 20px 0;
+}
+
+/* 響應式設計優化 */
+@media (max-width: 1200px) {
+    .groups-grid {
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    }
+}
+
+@media (max-width: 768px) {
+    .groups-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .student-item {
+        font-size: 13px;
+        padding: 8px 10px;
+        margin: 4px;
+    }
+
+    .group-container {
+        margin: 8px 0;
+        padding: 12px;
+        min-height: 120px;
+    }
+
+    .unassigned-area {
+        min-height: 100px;
+        padding: 15px;
+    }
+
+    #unsaved-changes-indicator {
+        top: 60px;
+        right: 10px;
+        font-size: 12px;
+        padding: 8px 12px;
+    }
+
+    .toast {
+        right: 10px;
+        min-width: 280px;
+        font-size: 14px;
+    }
+}
+
+/* 高對比度模式支援 */
+@media (prefers-contrast: high) {
+    .student-item {
+        border: 2px solid #000;
+    }
+
+    .temp-changed {
+        border: 3px solid #ff0000 !important;
+    }
+
+    .drop-target {
+        border: 4px solid #00ff00 !important;
+    }
+}
+
+/* 減少動畫設定支援 */
+@media (prefers-reduced-motion: reduce) {
+    .student-item,
+    .group-container,
+    .toast,
+    .loading-overlay,
+    #unsaved-changes-indicator {
+        animation: none !important;
+        transition: none !important;
+    }
+
+    .temp-changed::before {
+        animation: none;
+        background: #ff6b6b;
+    }
+}
+
+.custom-modal.show {
+    display: flex !important;
+}

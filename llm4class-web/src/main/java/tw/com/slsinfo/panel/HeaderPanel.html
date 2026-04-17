@@ -1,0 +1,57 @@
+<html xmlns:wicket="http://git-wip-us.apache.org/repos/asf/wicket/repo?p=wicket.git;a=blob_plain;f=wicket-core/src/main/resources/META-INF/wicket-1.5.xsd;hb=master">
+<wicket:panel>
+    <!-- Header area start-->
+    <wicket:container wicket:id="headertopbar"></wicket:container>
+    <header>
+        <div class="bd-header-area" id="header-sticky">
+            <div class="bd-header-inner">
+                <div class="bd-header-left">
+                    <div class="bd-header-logo">
+                        <a class="bd-header-dark-logo" href="/home">
+                            <img src="assets/images/logo/logo-white_03.svg" alt="image">
+                        </a>
+                        <a class="bd-header-light-logo" href="/home">
+                            <img src="assets/images/logo/logo-black_03.svg" alt="image">
+                        </a>
+                    </div>
+                </div>
+                <div class="bd-header-menu d-none d-xl-block">
+                    <nav class="main-menu bd-mobile-menu-active">
+                        <ul>
+                            <li><a href="#" wicket:id="home">首頁</a></li>
+                            <!-- 系統管理者選單 -->
+                            <wicket:container wicket:id="supervisor"></wicket:container>
+                            <!-- 教師選單 -->
+                            <wicket:container wicket:id="teacher"></wicket:container>
+                            <!-- 研究助理選單 -->
+                            <wicket:container wicket:id="assistant"></wicket:container>
+                            <!-- 學生選單 -->
+                            <wicket:container wicket:id="student"></wicket:container>
+                            <!--
+
+                            -->
+
+
+                            <li><a href="#">問題反應與回饋</a></li>
+                        </ul>
+                    </nav>
+                </div>
+                <div class="bd-header-right">
+                    <wicket:container wicket:id="userlogo"></wicket:container>
+                    <div class="bd-header-hamburger">
+                        <div class="sidebar-toggle">
+                            <a class="bar-icon" href="javascript:void(0)">
+                                <span></span>
+                                <span></span>
+                                <span></span>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+    <!-- Header area end -->
+
+</wicket:panel>
+</html>

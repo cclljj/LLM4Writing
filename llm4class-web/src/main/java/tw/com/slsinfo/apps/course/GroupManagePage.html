@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html xmlns:wicket="http://wicket.apache.org"
+      xmlns="http://www.w3.org/1999/html">
+<wicket:extend>
+
+    <div class="app-content-area">
+        <div class="app-content-wrap app-gap-bottom">
+            <div class="container-fluid">
+                <div class="row justify-center">
+                    <div class="col-xl-12 col-lg-12 col-md-12">
+                        <div class="app-breadcrumb-wrap d-flex-between flex-wrap align-center gap-15 section-title-gap-sm">
+                            <h2 class="app-breadcrumb-title">作文分組設定</h2>
+                            <button wicket:id="btnBack" type="submit"
+                                    class="bd-btn btn-primary btn-small">
+                                返回
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <!-- 班級篩選區域 -->
+                    <div class="filter-section">
+                        <h5 style="margin-top: 0; color: #2d3436;">班級篩選</h5>
+                        <form wicket:id="filterForm">
+                            <select wicket:id="classFilter" class="class-filter"></select>
+                            <span style="margin-left: 10px; color: #636e72; font-size: 14px;">選擇班級來篩選學生清單</span>
+                        </form>
+                    </div>
+
+                    <!-- 控制按鈕 -->
+                    <div class="controls">
+                        <a wicket:id="addGroupButton" class="btn-primary bd-btn btn-very-small">建立新組別</a>
+                        <a wicket:id="saveGroupsButton" class="btn-success bd-btn btn-very-small">儲存分組</a>
+
+                        <div class="status-info">
+                            <div class="save-hint">
+                                <small>💡 完成後點選「儲存分組」永久保存</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 回饋訊息 -->
+                    <div wicket:id="feedbackPanel"></div>
+
+                    <!-- 未分配學生區域 -->
+                    <div wicket:id="unassignedContainer" class="unassigned-area ui-droppable" data-group-id="">
+                        <div class="unassigned-title">📚 未分配學生</div>
+                        <div class="students-container">
+                            <div wicket:id="unassignedStudents" class="student-item ui-draggable ui-draggable-handle">
+                                <span wicket:id="studentName"></span>
+                                <span wicket:id="studentClass" class="student-class"></span>
+                            </div>
+                        </div>
+                        <div wicket:id="emptyUnassignedMessage" class="empty-message">
+                            <p style="color: #636e72; font-style: italic; text-align: center; margin-top: 20px;">
+                                🎉 所有學生都已分配到組別
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- 組別列表 -->
+                    <div class="groups-grid" wicket:id="groupsContainer">
+                        <div wicket:id="groupsList" class="group-container ui-droppable">
+                            <div class="group-header">
+                                <span wicket:id="groupName"></span>
+                                <a wicket:id="deleteGroup" class="btn btn-danger" title="刪除組別">✕</a>
+                            </div>
+                            <div class="members-container">
+                                <div wicket:id="membersList" class="student-item ui-draggable ui-draggable-handle">
+                                    <span wicket:id="memberName"></span>
+                                    <span wicket:id="memberClass" class="student-class"></span>
+                                </div>
+                            </div>
+                            <div wicket:id="emptyGroupMessage" class="empty-message">
+                                <p style="color: #636e72; font-style: italic; text-align: center; margin-top: 30px;">
+                                    👥 此組別暫無成員<br>
+                                    <small>拖曳學生到此區域進行分配</small>
+                                </p>
+                            </div>
+                        </div>
+                        <div wicket:id="emptyGroupsMessage" class="empty-groups-message">
+                            <div style="text-align: center; color: #636e72; font-style: italic; padding: 40px;">
+                                <h3>🏫 尚未建立任何組別</h3>
+                                <p>點擊「建立新組別」開始建立分組</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 建立組別彈窗 -->
+                    <div wicket:id="createGroupModal" class="custom-modal" role="dialog" aria-labelledby="modalTitle" aria-hidden="true">
+                        <div class="modal-content" role="document">
+                            <div wicket:id="createGroupPanel" style="padding: 15px;"></div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 自訂樣式 -->
+    <style>
+        .operation-guide {
+            background: linear-gradient(135deg, #e3f2fd 0%, #f1f8ff 100%);
+            border: 2px solid #1976d2;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 25px;
+            box-shadow: 0 4px 12px rgba(25, 118, 210, 0.15);
+        }
+
+        .guide-content h5 {
+            color: #1565c0;
+            margin-bottom: 15px;
+            font-weight: 600;
+        }
+
+        .guide-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .guide-list li {
+            padding: 8px 0;
+            color: #1e88e5;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .guide-list li strong {
+            color: #0d47a1;
+        }
+
+        .controls {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .status-info {
+            flex: 1;
+            min-width: 300px;
+        }
+
+        .save-hint {
+            padding: 8px 12px;
+            background: linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%);
+            border-radius: 15px;
+            border: 1px solid #ffb74d;
+            margin-top: 5px;
+        }
+
+        .save-hint small {
+            color: #ef6c00;
+            font-weight: 500;
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #90a4ae 0%, #607d8b 100%);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            /*border-radius: 25px;*/
+            cursor: pointer;
+            font-weight: 600;
+            text-decoration: none;
+            transition: all 0.3s ease;
+        }
+
+        .btn-secondary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(96, 125, 139, 0.3);
+        }
+
+        /* 純前端拖曳特效 */
+        .student-item {
+            transition: all 0.2s ease-in-out;
+        }
+
+        .student-item.temp-changed {
+            animation: tempChangedPulse 2s infinite;
+        }
+
+        @keyframes tempChangedPulse {
+            0%, 100% {
+                transform: scale(1);
+                box-shadow: 0 2px 8px rgba(253, 203, 110, 0.4);
+            }
+            50% {
+                transform: scale(1.05);
+                box-shadow: 0 4px 16px rgba(253, 203, 110, 0.6);
+            }
+        }
+
+        .drop-target {
+            transform: scale(1.02);
+            border: 3px dashed #4caf50 !important;
+            background: rgba(76, 175, 80, 0.1) !important;
+        }
+
+        .drop-success {
+            animation: dropSuccessFlash 0.6s ease-out;
+        }
+
+        @keyframes dropSuccessFlash {
+            0% {
+                background: rgba(76, 175, 80, 0.3);
+                transform: scale(1.02);
+            }
+            50% {
+                background: rgba(76, 175, 80, 0.5);
+                transform: scale(1.05);
+            }
+            100% {
+                background: inherit;
+                transform: scale(1);
+            }
+        }
+
+        /* 未儲存變更指示器強化樣式 */
+        #unsaved-changes-indicator {
+            background: linear-gradient(135deg, #ff5722 0%, #f44336 100%);
+            color: white;
+            font-weight: 600;
+            box-shadow: 0 4px 12px rgba(255, 87, 34, 0.4);
+            animation: slideInBounce 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+        }
+
+        @keyframes slideInBounce {
+            0% {
+                transform: translateX(100%) scale(0.8);
+                opacity: 0;
+            }
+            60% {
+                transform: translateX(-10%) scale(1.1);
+                opacity: 0.8;
+            }
+            100% {
+                transform: translateX(0) scale(1);
+                opacity: 1;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .operation-guide {
+                margin-bottom: 15px;
+                padding: 15px;
+            }
+
+            .guide-list li {
+                font-size: 13px;
+                padding: 6px 0;
+            }
+
+            .controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .controls .btn {
+                text-align: center;
+                margin-bottom: 5px;
+            }
+
+            .status-info {
+                min-width: auto;
+                width: 100%;
+            }
+        }
+    </style>
+
+</wicket:extend>
+</html>

@@ -1,0 +1,64 @@
+{
+    "class": "TreeModel",
+    "nodeDataArray": [
+        {
+            "key": "root",
+            "text": "說明文",
+            "fixed": true
+        },
+        {
+            "key": "intro",
+            "parent": "root",
+            "text": "總說",
+            "fixed": true
+        },
+        {
+            "key": "detail",
+            "parent": "root",
+            "text": "分說",
+            "fixed": true
+        },
+        {
+            "key": "conclude",
+            "parent": "root",
+            "text": "總說",
+            "fixed": true
+        },
+        {
+            "key": "intro_feature",
+            "parent": "intro",
+            "text": "說明具體事務的特點",
+            "fixed": false
+        },
+        {
+            "key": "intro_concept",
+            "parent": "intro",
+            "text": "說明抽象事理的概念",
+            "fixed": false
+        },
+        {
+            "key": "detail_1",
+            "parent": "detail",
+            "text": "分項說明（一）",
+            "fixed": false
+        },
+        {
+            "key": "detail_2",
+            "parent": "detail",
+            "text": "分項說明（二）",
+            "fixed": false
+        },
+        {
+            "key": "detail_3",
+            "parent": "detail",
+            "text": "分項說明（三）",
+            "fixed": false
+        },
+        {
+            "key": "conclude_summary",
+            "parent": "conclude",
+            "text": "總結特點",
+            "fixed": false
+        }
+    ]
+}

@@ -1,0 +1,65 @@
+<html xmlns:wicket="http://git-wip-us.apache.org/repos/asf/wicket/repo?p=wicket.git;a=blob_plain;f=wicket-core/src/main/resources/META-INF/wicket-1.5.xsd;hb=master">
+<wicket:panel>
+    <!-- app-header -->
+    <div class="app-header-area">
+        <header class="app-header" id="header">
+            <div class="app-header-inner">
+                <div class="app-header-left">
+                    <div class="d-flex align-center gap-15">
+                        <div class="app-header-element">
+                            <a class="sidebar-toggle-bar" id="sidebarToggle" href="javascript:void(0)">
+                                <div class="sidebar-menu-bar">
+                                    <span></span>
+                                    <span></span>
+                                    <span></span>
+                                </div>
+                            </a>
+                        </div>
+                        <div class="app-header-mobile-logo">
+                            <a class="bd-header-dark-logo" href="/home">
+                                <img src="assets/images/logo/logo-white_03.svg" alt="image">
+                            </a>
+                            <a class="bd-header-light-logo" href="/home">
+                                <img src="assets/images/logo/logo-black_03.svg" alt="image">
+                            </a>
+                        </div>
+                    </div>
+                    <div class="app-header-site-menu">
+                        <nav class="main-menu bd-mobile-menu-active">
+                            <ul>
+                                <li><a href="/home">首頁</a></li>
+                                <!-- 系統管理者選單 -->
+                                <wicket:container wicket:id="supervisor"></wicket:container>
+                                <!-- 教師選單 -->
+                                <wicket:container wicket:id="teacher"></wicket:container>
+                                <!-- 研究助理選單 -->
+                                <wicket:container wicket:id="assistant"></wicket:container>
+                                <!-- 學生選單 -->
+                                <wicket:container wicket:id="student"></wicket:container>
+
+                                <!--<li><a href="#">問題反應與回饋</a></li>-->
+                            </ul>
+                        </nav>
+                    </div>
+                </div>
+                <div class="app-header-right">
+                    <wicket:container wicket:id="userlogo"></wicket:container>
+                    <!--
+                    <div class="app-header-hamburger">
+                        <div class="sidebar-toggle">
+                            <a class="bar-icon" href="javascript:void(0)">
+                                <span></span>
+                                <span></span>
+                                <span></span>
+                            </a>
+                        </div>
+                    </div>
+                    -->
+                </div>
+            </div>
+        </header>
+        <div class="body__overlay"></div>
+    </div>
+    <!-- app-header -->
+</wicket:panel>
+</html>

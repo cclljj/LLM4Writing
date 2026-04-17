@@ -1,0 +1,26 @@
+<html xmlns:wicket="http://git-wip-us.apache.org/repos/asf/wicket/repo?p=wicket.git;a=blob_plain;f=wicket-core/src/main/resources/META-INF/wicket-1.5.xsd;hb=master">
+<wicket:panel>
+
+    <!-- start app-sidebar-wrapper -->
+    <div class="app-sidebar-wrapper custom-scrollbar">
+        <nav class="app-sidebar-menu-wrapper nav flex-column sub-open">
+            <div class="sidebar-left" id="sidebar-left"></div>
+            <ul class="app-sidebar-main-menu">
+                <li class="sidebar-menu-category"><span class="category-name">功能選單</span></li>
+                <!-- 系統管理者選單 -->
+                <wicket:container wicket:id="supervisor"></wicket:container>
+                <!-- 教師選單 -->
+                <wicket:container wicket:id="teacher"></wicket:container>
+                <!-- 研究助理選單 -->
+                <wicket:container wicket:id="assistant"></wicket:container>
+                <!-- 學生選單 -->
+                <wicket:container wicket:id="student"></wicket:container>
+            </ul>
+            <div class="sidebar-right" id="sidebar-right"></div>
+        </nav>
+        <wicket:container wicket:id="progress"></wicket:container>
+    </div>
+    <!-- end app-sidebar-wrapper -->
+
+</wicket:panel>
+</html>

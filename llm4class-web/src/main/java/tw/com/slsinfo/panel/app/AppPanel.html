@@ -1,0 +1,41 @@
+<html xmlns:wicket="http://git-wip-us.apache.org/repos/asf/wicket/repo?p=wicket.git;a=blob_plain;f=wicket-core/src/main/resources/META-INF/wicket-1.5.xsd;hb=master">
+<wicket:panel>
+    <!-- Dashboard page wrapper start -->
+    <div class="page">
+
+        <!-- Start app-sidebar -->
+        <aside class="app-sidebar sticky" id="sidebar">
+            <!-- app-sidebar-header -->
+            <wicket:container wicket:id="appsidebarheader"></wicket:container>
+
+            <!-- app-sidebar-wrapper -->
+            <wicket:container wicket:id="appsidebarwrapper"></wicket:container>
+        </aside>
+        <div class="app__offcanvas-overlay"></div>
+        <!-- end app-sidebar -->
+
+        <!-- app-header -->
+        <wicket:container wicket:id="appheader"></wicket:container>
+
+        <!-- Start app-content-area -->
+        <wicket:container wicket:id="appcontent"></wicket:container>
+
+        <!-- footer area start -->
+        <footer class="app-footer-area">
+            <div class="row">
+                <div class="col-xl-12">
+                    <div class="bd-card-footer d-flex justify-center">
+                        <p>Copyright © <span id="year"></span> <span class="text-primary">EkoAI</span> Designed by <a
+                                href="https://themeforest.net/user/bdevs" target="_blank">Bdevs</a>
+                            All rights reserved
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </footer>
+        <!-- footer area end -->
+
+    </div>
+    <!-- Dashboard page wrapper end -->
+</wicket:panel>
+</html>

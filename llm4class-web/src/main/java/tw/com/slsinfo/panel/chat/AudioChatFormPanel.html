@@ -1,0 +1,40 @@
+<html xmlns:wicket="http://git-wip-us.apache.org/repos/asf/wicket/repo?p=wicket.git;a=blob_plain;f=wicket-core/src/main/resources/META-INF/wicket-1.5.xsd;hb=master">
+<wicket:panel>
+    <form action="#" wicket:id="chatForm">
+        <textarea wicket:id="content" placeholder="請寫下想問AI的話..."></textarea>
+        <div class="new-chat-input d-flex align-center justify-between gap-30 mt-15">
+            <div class="">
+                <div class="generator-info-btn d-flex align-center gap-05">
+                    <button class="generator-btn bd-tooltip-show" type="button" wicket:id="btnSummary">
+                        <i class="ri-chat-check-line"></i>
+                        <span class="bd-tooltip">總結</span>
+                    </button>
+                    <button class="generator-btn bd-tooltip-show" type="button" wicket:id="btnNext">
+                        <i class="ri-arrow-right-line"></i>
+                        <span class="bd-tooltip">下一步</span>
+                    </button>
+                </div>
+            </div>
+            <div class="">
+                <div class="generator-info-btn d-flex align-center gap-05">
+                    <form wicket:id="audioForm">
+                        <input type="file" wicket:id="upload" hidden>
+                        <a wicket:id="btnRecord" class="generator-btn bd-tooltip-show" href="javascript:void(0)"><i
+                                class="ri-mic-fill"></i><span class="bd-tooltip">按一下錄音</span></a>
+                    </form>
+                    <button type="button" wicket:id="btnAudioUpload" style="display: none;">
+                        <i class="ri-upload-line"></i>
+                        </button>
+                    <button class="generator-btn bd-tooltip-show" type="button" wicket:id="btnPost">
+                        <i class="ri-upload-line"></i>
+                        <span class="bd-tooltip">請按鈕送出對話</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </form>
+    <div wicket:id="feedback">
+    </div>
+    <!-- new chat form -->
+</wicket:panel>
+</html>

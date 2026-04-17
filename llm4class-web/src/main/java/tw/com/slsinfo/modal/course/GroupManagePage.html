@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html xmlns:wicket="http://wicket.apache.org">
+<head>
+    <meta charset="UTF-8">
+    <title>分組管理</title>
+</head>
+<body>
+<wicket:extend>
+    <div class="page-container">
+        <h1>分組管理</h1>
+
+        <!-- 班級篩選區域 -->
+        <div class="filter-section">
+            <form wicket:id="filterForm">
+                <label>選擇班級：</label>
+                <select wicket:id="classFilter" class="class-filter"></select>
+            </form>
+        </div>
+
+        <!-- 控制按鈕 -->
+        <div class="controls">
+            <a href="#" wicket:id="addGroupButton" class="btn btn-primary">新增組別</a>
+            <a href="#" wicket:id="saveGroupsButton" class="btn btn-success">儲存分組</a>
+        </div>
+
+        <!-- 未分配學生區域 -->
+        <div wicket:id="unassignedContainer" class="unassigned-area" data-group-id="">
+            <div class="unassigned-title">未分配學生</div>
+            <div wicket:id="unassignedStudents" class="student-item" wicket:data-student-id="[uid.id]">
+                <span wicket:id="studentName"></span>
+                <span wicket:id="studentClass" class="student-class"></span>
+            </div>
+        </div>
+
+        <!-- 組別區域 -->
+        <div wicket:id="groupsContainer">
+            <div class="groups-grid">
+                <div wicket:id="groupsList" class="group-container" wicket:data-group-id="[id]">
+                    <div class="group-header">
+                        <span wicket:id="groupName"></span>
+                        <a href="#" wicket:id="deleteGroup" class="btn btn-danger">×</a>
+                    </div>
+                    <div wicket:id="membersList" class="student-item" wicket:data-student-id="[memberCid.uid.id]">
+                        <span wicket:id="memberName"></span>
+                        <span wicket:id="memberClass" class="student-class"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 建立組別 Modal -->
+        <div wicket:id="createGroupModalContainer" id="createGroupModal" class="custom-modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 class="modal-title">建立新組別</h3>
+                </div>
+                <div class="modal-body">
+                    <div wicket:id="createGroupPanel"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</wicket:extend>
+</body>
+</html>

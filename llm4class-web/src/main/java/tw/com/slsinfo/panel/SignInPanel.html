@@ -1,0 +1,87 @@
+<html xmlns:wicket="http://git-wip-us.apache.org/repos/asf/wicket/repo?p=wicket.git;a=blob_plain;f=wicket-core/src/main/resources/META-INF/wicket-1.5.xsd;hb=master">
+<wicket:panel>
+    <!-- Body main wrapper start -->
+    <main>
+
+        <!-- sign form area start -->
+        <section class="bd-authentication-cover-main ">
+            <div class="row h100vh mx-0">
+                <div class="col-xxl-6 col-xl-5 col-lg-12 d-xl-block d-none px-0">
+                    <div class="bd-authentication-cover overflow-hidden"
+                         data-background="assets/images/contact/signin.png">
+                        <div class="bd-authentication-cover-content d-flex-center d-none">
+                            <div class="bd-section-title-wrapper">
+                                <h2 class="bd-section-title mb-20">Welcome Back!</h2>
+                                <p class="bd-section-paragraph">Sign in to continue your journey and unlock a world of
+                                    opportunities.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-xxl-6 col-xl-7">
+                    <div class="row justify-center align-center h100p">
+                        <div class="col-xxl-6 col-xl-8 col-lg-6 col-md-6 col-sm-8 col-12">
+                            <div class="bd-authentication-form-wrapper light-effect">
+                                <div class="bd-authentication-form-logo">
+                                    <a class="authentication-dark-logo" href="/home">
+                                        <img src="assets/images/logo/logo-white_03.svg" alt="image">
+                                    </a>
+                                    <a class="authentication-light-logo" href="/home">
+                                        <img src="assets/images/logo/logo-black_03.svg" alt="image">
+                                    </a>
+                                </div>
+                                <h3 class="title mb-10">請登入</h3>
+                                <p class="subtitle">歡迎使用LLM4Class</p>
+                                <form wicket:id="formSignIn">
+                                    <input wicket:id="anticsrf" type="hidden" id="anticsrf">
+                                    <div class="form-input-box mb-20">
+                                        <div class="form-input-title">
+                                            <label for="username">帳號 <span>*</span></label>
+                                        </div>
+                                        <div class="form-input">
+                                            <input wicket:id="username" name="username" id="username" type="text"
+                                                   autocomplete="off"
+                                                   placeholder="請輸入帳號">
+                                        </div>
+                                    </div>
+                                    <div class="form-input-box mb-20">
+                                        <div class="form-input-title">
+                                            <label for="password">密碼 <span>*</span></label>
+                                        </div>
+                                        <div class="form-input">
+                                            <input wicket:id="password" name="password" id="password" type="password"
+                                                   autocomplete="off"
+                                                   placeholder="請輸入密碼">
+                                        </div>
+                                    </div>
+                                    <div class="form-input-box mb-20">
+                                        <div wicket:id="captchaPanel"></div>
+                                    </div>
+                                    <div class="form-input-box mb-20">
+                                        <div class="form-input-title">
+                                            <label for="captcha">驗證碼 <span>*</span></label>
+                                        </div>
+                                        <div class="form-input">
+                                            <input wicket:id="captcha" name="captcha" id="captcha" type="text"
+                                                   autocomplete="off"
+                                                   placeholder="請輸入驗證碼">
+                                        </div>
+                                    </div>
+                                </form>
+                                <div class="bd-sign-btn mb-20">
+                                    <a class="bd-btn btn-primary w-100" wicket:id="doLogin">登入</a>
+                                </div>
+                                <div wicket:id="feedback" class="mb-20">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        <!-- sign form area end -->
+
+    </main>
+    <!-- Body main wrapper end -->
+</wicket:panel>
+</html>
