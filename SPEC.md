@@ -22,7 +22,7 @@
 - 狀態/資料：
   - `Session` 儲存在 Postgres（若無 DB 退回 memory）
   - `User` 儲存在 Postgres（若無 DB 退回 memory）
-  - `Essay/OpenClass/Groups/PromptConfig` 為 process memory mock store（`src/lib/mock-data.ts`）
+  - `Essay/OpenClass/Groups/PromptConfig` 儲存在 Domain Store（Postgres 啟用時持久化；否則退回 memory）
 
 ---
 
@@ -64,8 +64,12 @@
 ### Domain Mock Store
 
 - 檔案：`src/lib/mock-data.ts`
-- 內容：`essays`、`openClasses`、`activityGroupMap`、`essayPromptConfigs`、`openClassPromptConfigs`
-- 注意：此區資料目前不持久化到 DB
+- 內容：`users`、`userPasswords`、`essays`、`openClasses`、`activityGroupMap`、`courseStatusMap`、`essayPromptConfigs`、`openClassPromptConfigs`
+- Postgres 啟用時：
+  - 表：`llm4writing_domain`
+  - 主鍵固定 `id='singleton'`，`payload` 存整體 domain JSON
+  - 相關 API 會先 hydrate 再操作，變更後 flush 回 DB
+- 無 DB 時：使用 `globalThis` memory state
 
 ---
 
@@ -616,7 +620,7 @@ Behavior:
 5. Step1/2 必須維持「所有組員回覆才 AI 回覆」的 group gate
 6. Step5/7/10 必須是 non-interactive（學生送訊息會報錯）
 7. student artifact 只能存到自己參與的 session
-8. session/user store 必須維持「有 DB 用 DB，無 DB 用 memory」雙模式
+8. session/user/domain store 必須維持「有 DB 用 DB，無 DB 用 memory」雙模式
 9. student 透過 `/api/student/join` 加入時必須遵守課程狀態限制（未開始/已結束不可加入）
 10. 停用主題不可建立新寫作任務，但既有任務不受影響
 
@@ -624,10 +628,9 @@ Behavior:
 
 ## 11. 已知限制（現況）
 
-1. essays/openClasses/groups/prompt configs 仍為 in-memory，尚未持久化 DB
-2. `mock-data` 與 `user-store` 分層共存，重啟後 domain 資料會回預設
-3. 群組隨機分配採前端簡單亂數，不含種子與可重現性
-4. 提示詞編輯 UI 目前僅暴露部分 key（step1 / 2-1 / 1-3 / 1-1 等）
+1. 無 DB 環境下，domain 仍為 in-memory，重啟後回預設
+2. 群組隨機分配採前端簡單亂數，不含種子與可重現性
+3. 提示詞編輯 UI 目前僅暴露部分 key（step1 / 2-1 / 1-3 / 1-1 等）
 
 ---
 

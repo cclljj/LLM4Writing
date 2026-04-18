@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/src/lib/auth-server";
-import { getAllActivities } from "@/src/lib/mock-data";
+import { getAllActivities, hydrateDomainState } from "@/src/lib/mock-data";
 import { listSessions } from "@/src/lib/store";
 import { getUserStore } from "@/src/lib/user-store";
 
@@ -10,6 +10,7 @@ export async function GET() {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
+  await hydrateDomainState();
   const profile = await getUserStore(user.username);
   if (!profile || profile.role !== "student") {
     return NextResponse.json({ error: "student_profile_not_found" }, { status: 404 });

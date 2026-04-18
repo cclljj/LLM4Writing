@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/src/lib/auth-server";
-import { endCourse, getActivitiesVisibleToTeacher, getAllActivities, startCourse } from "@/src/lib/mock-data";
+import { endCourse, flushDomainState, getActivitiesVisibleToTeacher, getAllActivities, hydrateDomainState, startCourse } from "@/src/lib/mock-data";
 
 export async function POST(request: NextRequest) {
   const user = await getCurrentUser();
@@ -8,6 +8,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
+  await hydrateDomainState();
   const body = (await request.json()) as { activityId?: string; action?: "start" | "end" };
   if (!body.activityId || !body.action) {
     return NextResponse.json({ error: "missing_required_fields" }, { status: 400 });
@@ -23,6 +24,7 @@ export async function POST(request: NextRequest) {
     if (!result.ok) {
       return NextResponse.json({ error: result.error }, { status: 400 });
     }
+    await flushDomainState();
     return NextResponse.json({ ok: true, status: result.status });
   }
 
@@ -30,6 +32,7 @@ export async function POST(request: NextRequest) {
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: 400 });
   }
+  await flushDomainState();
 
   return NextResponse.json({ ok: true, status: result.status });
 }

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/src/lib/auth-server";
-import { getAllActivities } from "@/src/lib/mock-data";
+import { getAllActivities, hydrateDomainState } from "@/src/lib/mock-data";
 import { listSessions } from "@/src/lib/store";
 
 export async function GET(_: Request, context: { params: Promise<{ activityId: string }> }) {
@@ -9,6 +9,7 @@ export async function GET(_: Request, context: { params: Promise<{ activityId: s
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
+  await hydrateDomainState();
   const { activityId } = await context.params;
   if (!activityId) {
     return NextResponse.json({ error: "activityId_required" }, { status: 400 });

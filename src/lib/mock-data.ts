@@ -1,4 +1,5 @@
 import { Activity, ActivityGroup, PromptConfig, UserAccount } from "@/src/lib/types";
+import postgres, { Sql } from "postgres";
 
 type Essay = {
   id: string;
@@ -22,7 +23,20 @@ type OpenClassView = OpenClassTask & {
   essayGenre: string;
 };
 
-const users: UserAccount[] = [
+type DomainState = {
+  users: UserAccount[];
+  userPasswords: Record<string, string>;
+  essays: Essay[];
+  openClasses: OpenClassTask[];
+  activityGroupMap: Record<string, ActivityGroup[]>;
+  courseStatusMap: Record<string, "not_started" | "in_progress" | "ended">;
+  essayPromptConfigs: Record<string, PromptConfig>;
+  openClassPromptConfigs: Record<string, PromptConfig>;
+};
+
+const KEY = "__llm4writing_domain_state__";
+
+const defaultUsers: UserAccount[] = [
   { username: "admin", name: "System Admin", school: "Demo High", role: "admin" },
   { username: "teacher", name: "Teacher One", school: "Demo High", role: "teacher" },
   {
@@ -59,7 +73,7 @@ const users: UserAccount[] = [
   }
 ];
 
-const userPasswords: Record<string, string> = {
+const defaultUserPasswords: Record<string, string> = {
   admin: "admin123",
   student: "student123",
   s1: "student123",
@@ -68,17 +82,17 @@ const userPasswords: Record<string, string> = {
   teacher: "teacher123"
 };
 
-const essays: Essay[] = [
+const defaultEssays: Essay[] = [
   { id: "essay-1", title: "科技與生活", genre: "議論文", description: "科技改變生活的利弊分析", enabled: true },
   { id: "essay-2", title: "我的校園角落", genre: "說明文", description: "校園問題觀察與改善", enabled: true }
 ];
 
-const openClasses: OpenClassTask[] = [
+const defaultOpenClasses: OpenClassTask[] = [
   { id: "oc-001", school: "Demo High", classNumber: "701", essayId: "essay-1", durationMinutes: 45, supplemental: "AI 與日常" },
   { id: "oc-002", school: "Demo High", classNumber: "702", essayId: "essay-2", durationMinutes: 40, supplemental: "觀察與提案" }
 ];
 
-const activityGroupMap: Record<string, ActivityGroup[]> = {
+const defaultActivityGroupMap: Record<string, ActivityGroup[]> = {
   "oc-001": [
     { groupId: "g1", groupName: "1", members: ["student", "s1", "s2"] },
     { groupId: "g2", groupName: "2", members: ["s3"] }
@@ -86,12 +100,12 @@ const activityGroupMap: Record<string, ActivityGroup[]> = {
   "oc-002": [{ groupId: "g1", groupName: "1", members: ["student", "s3"] }]
 };
 
-const courseStatusMap: Record<string, "not_started" | "in_progress" | "ended"> = {
+const defaultCourseStatusMap: Record<string, "not_started" | "in_progress" | "ended"> = {
   "oc-001": "not_started",
   "oc-002": "not_started"
 };
 
-const essayPromptConfigs: Record<string, PromptConfig> = {
+const defaultEssayPromptConfigs: Record<string, PromptConfig> = {
   "essay-1": {
     stepPrompts: {
       "1": "你是引導討論助教，請聚焦題意澄清。",
@@ -121,7 +135,7 @@ const essayPromptConfigs: Record<string, PromptConfig> = {
   }
 };
 
-const openClassPromptConfigs: Record<string, PromptConfig> = {
+const defaultOpenClassPromptConfigs: Record<string, PromptConfig> = {
   "oc-001": {
     stepPrompts: {
       "1": "701 班專用：先釐清科技影響面向（學習/社交/生活）。"
@@ -130,6 +144,155 @@ const openClassPromptConfigs: Record<string, PromptConfig> = {
     questionBanks: {}
   }
 };
+
+function cloneState(): DomainState {
+  return {
+    users: defaultUsers.map((user) => ({ ...user })),
+    userPasswords: { ...defaultUserPasswords },
+    essays: defaultEssays.map((essay) => ({ ...essay })),
+    openClasses: defaultOpenClasses.map((openClass) => ({ ...openClass })),
+    activityGroupMap: JSON.parse(JSON.stringify(defaultActivityGroupMap)) as Record<string, ActivityGroup[]>,
+    courseStatusMap: { ...defaultCourseStatusMap },
+    essayPromptConfigs: JSON.parse(JSON.stringify(defaultEssayPromptConfigs)) as Record<string, PromptConfig>,
+    openClassPromptConfigs: JSON.parse(JSON.stringify(defaultOpenClassPromptConfigs)) as Record<string, PromptConfig>
+  };
+}
+
+function getState(): DomainState {
+  const globalScope = globalThis as unknown as Record<string, DomainState | undefined>;
+  if (!globalScope[KEY]) {
+    globalScope[KEY] = cloneState();
+  }
+  return globalScope[KEY] as DomainState;
+}
+
+const state = getState();
+const users = state.users;
+const userPasswords = state.userPasswords;
+const essays = state.essays;
+const openClasses = state.openClasses;
+const activityGroupMap = state.activityGroupMap;
+const courseStatusMap = state.courseStatusMap;
+const essayPromptConfigs = state.essayPromptConfigs;
+const openClassPromptConfigs = state.openClassPromptConfigs;
+
+function getPostgresUrl(): string | undefined {
+  return process.env.POSTGRES_URL ?? process.env.DATABASE_URL;
+}
+
+function isPostgresEnabled(): boolean {
+  return Boolean(getPostgresUrl());
+}
+
+let sqlClient: Sql | undefined;
+
+function getSqlClient(): Sql {
+  if (!sqlClient) {
+    const url = getPostgresUrl();
+    if (!url) {
+      throw new Error("postgres_url_missing");
+    }
+    sqlClient = postgres(url, { prepare: true, max: 1 });
+  }
+  return sqlClient;
+}
+
+let domainInitPromise: Promise<void> | undefined;
+
+async function ensureDomainTable(): Promise<void> {
+  if (!isPostgresEnabled()) return;
+  if (!domainInitPromise) {
+    domainInitPromise = (async () => {
+      const sql = getSqlClient();
+      await sql`
+        CREATE TABLE IF NOT EXISTS llm4writing_domain (
+          id TEXT PRIMARY KEY,
+          payload JSONB NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `;
+    })();
+  }
+  await domainInitPromise;
+}
+
+function applyState(next: DomainState) {
+  users.splice(0, users.length, ...next.users.map((item) => ({ ...item })));
+
+  Object.keys(userPasswords).forEach((key) => delete userPasswords[key]);
+  Object.entries(next.userPasswords).forEach(([key, value]) => {
+    userPasswords[key] = value;
+  });
+
+  essays.splice(0, essays.length, ...next.essays.map((item) => ({ ...item })));
+  openClasses.splice(0, openClasses.length, ...next.openClasses.map((item) => ({ ...item })));
+
+  Object.keys(activityGroupMap).forEach((key) => delete activityGroupMap[key]);
+  Object.entries(next.activityGroupMap).forEach(([key, value]) => {
+    activityGroupMap[key] = value.map((group) => ({ ...group, members: [...group.members] }));
+  });
+
+  Object.keys(courseStatusMap).forEach((key) => delete courseStatusMap[key]);
+  Object.entries(next.courseStatusMap).forEach(([key, value]) => {
+    courseStatusMap[key] = value;
+  });
+
+  Object.keys(essayPromptConfigs).forEach((key) => delete essayPromptConfigs[key]);
+  Object.entries(next.essayPromptConfigs).forEach(([key, value]) => {
+    essayPromptConfigs[key] = JSON.parse(JSON.stringify(value)) as PromptConfig;
+  });
+
+  Object.keys(openClassPromptConfigs).forEach((key) => delete openClassPromptConfigs[key]);
+  Object.entries(next.openClassPromptConfigs).forEach(([key, value]) => {
+    openClassPromptConfigs[key] = JSON.parse(JSON.stringify(value)) as PromptConfig;
+  });
+}
+
+function snapshotState(): DomainState {
+  return {
+    users: users.map((item) => ({ ...item })),
+    userPasswords: { ...userPasswords },
+    essays: essays.map((item) => ({ ...item })),
+    openClasses: openClasses.map((item) => ({ ...item })),
+    activityGroupMap: JSON.parse(JSON.stringify(activityGroupMap)) as Record<string, ActivityGroup[]>,
+    courseStatusMap: { ...courseStatusMap },
+    essayPromptConfigs: JSON.parse(JSON.stringify(essayPromptConfigs)) as Record<string, PromptConfig>,
+    openClassPromptConfigs: JSON.parse(JSON.stringify(openClassPromptConfigs)) as Record<string, PromptConfig>
+  };
+}
+
+export async function hydrateDomainState(): Promise<void> {
+  if (!isPostgresEnabled()) return;
+  await ensureDomainTable();
+  const sql = getSqlClient();
+  const rows = await sql<{ payload: DomainState }[]>`
+    SELECT payload
+    FROM llm4writing_domain
+    WHERE id = 'singleton'
+    LIMIT 1
+  `;
+  const row = rows[0];
+  if (!row?.payload) {
+    await flushDomainState();
+    return;
+  }
+  applyState(row.payload);
+}
+
+export async function flushDomainState(): Promise<void> {
+  if (!isPostgresEnabled()) return;
+  await ensureDomainTable();
+  const sql = getSqlClient();
+  await sql`
+    INSERT INTO llm4writing_domain (id, payload)
+    VALUES ('singleton', ${JSON.stringify(snapshotState())}::jsonb)
+    ON CONFLICT (id)
+    DO UPDATE SET
+      payload = EXCLUDED.payload,
+      updated_at = NOW()
+  `;
+}
 
 function mergePromptConfig(base: PromptConfig, override: PromptConfig): PromptConfig {
   return {

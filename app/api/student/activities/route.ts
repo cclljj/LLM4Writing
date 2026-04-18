@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/src/lib/auth-server";
-import { getActivitiesForStudent } from "@/src/lib/mock-data";
+import { getActivitiesForStudent, hydrateDomainState } from "@/src/lib/mock-data";
 
 export async function GET() {
   const user = await getCurrentUser();
@@ -8,6 +8,7 @@ export async function GET() {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
+  await hydrateDomainState();
   const activities = getActivitiesForStudent(user.username);
   return NextResponse.json({ activities });
 }

@@ -1831,7 +1831,13 @@ export default function TeacherPage() {
                             <button
                               type="button"
                               className="secondary"
-                              style={{ width: "auto" }}
+                              style={{
+                                width: "auto",
+                                background: essay.enabled ? "#f3f4f6" : undefined,
+                                color: essay.enabled ? "#9ca3af" : undefined,
+                                borderColor: essay.enabled ? "#e5e7eb" : undefined,
+                                cursor: essay.enabled ? "not-allowed" : undefined
+                              }}
                               disabled={essay.enabled}
                               onClick={() => toggleEssayEnabled(essay, true)}
                             >
@@ -1840,7 +1846,13 @@ export default function TeacherPage() {
                             <button
                               type="button"
                               className="secondary"
-                              style={{ width: "auto" }}
+                              style={{
+                                width: "auto",
+                                background: !essay.enabled ? "#f3f4f6" : undefined,
+                                color: !essay.enabled ? "#9ca3af" : undefined,
+                                borderColor: !essay.enabled ? "#e5e7eb" : undefined,
+                                cursor: !essay.enabled ? "not-allowed" : undefined
+                              }}
                               disabled={!essay.enabled}
                               onClick={() => toggleEssayEnabled(essay, false)}
                             >

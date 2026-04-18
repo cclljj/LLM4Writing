@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/src/lib/auth-server";
-import { findActivity, updateActivityGroups } from "@/src/lib/mock-data";
+import { findActivity, flushDomainState, hydrateDomainState, updateActivityGroups } from "@/src/lib/mock-data";
 import { ActivityGroup } from "@/src/lib/types";
 import { getUsersVisibleToTeacherStore, listUsersStore } from "@/src/lib/user-store";
 
@@ -10,6 +10,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
+  await hydrateDomainState();
   const body = (await request.json()) as { activityId?: string; groups?: ActivityGroup[] };
   if (!body.activityId || !body.groups) {
     return NextResponse.json({ error: "missing_required_fields" }, { status: 400 });
@@ -30,6 +31,7 @@ export async function POST(request: NextRequest) {
   if (!updated) {
     return NextResponse.json({ error: "activity_not_found" }, { status: 404 });
   }
+  await flushDomainState();
 
   return NextResponse.json({ updated });
 }

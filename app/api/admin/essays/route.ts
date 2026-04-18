@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/src/lib/auth-server";
-import { getEssayPromptConfig, getEssays, saveEssayPromptConfig, upsertEssay } from "@/src/lib/mock-data";
+import { flushDomainState, getEssayPromptConfig, getEssays, hydrateDomainState, saveEssayPromptConfig, upsertEssay } from "@/src/lib/mock-data";
 import { PromptConfig } from "@/src/lib/types";
 
 export async function GET() {
@@ -9,6 +9,7 @@ export async function GET() {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
+  await hydrateDomainState();
   const essays = getEssays().map((essay) => {
     const config = getEssayPromptConfig(essay.id);
     return {
@@ -28,6 +29,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
+  await hydrateDomainState();
   const body = (await request.json()) as {
     id?: string;
     title?: string;
@@ -52,6 +54,7 @@ export async function POST(request: NextRequest) {
   if (body.promptConfig) {
     saveEssayPromptConfig(saved.id, body.promptConfig);
   }
+  await flushDomainState();
 
   const config = getEssayPromptConfig(saved.id);
 

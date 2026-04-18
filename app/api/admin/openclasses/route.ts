@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/src/lib/auth-server";
 import {
+  flushDomainState,
   getOpenClasses,
+  hydrateDomainState,
   saveOpenClassPromptConfig,
   upsertOpenClass
 } from "@/src/lib/mock-data";
@@ -14,6 +16,7 @@ export async function GET() {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
+  await hydrateDomainState();
   if (user.role === "admin") {
     return NextResponse.json({ openClasses: getOpenClasses() });
   }
@@ -32,6 +35,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
+  await hydrateDomainState();
   const body = (await request.json()) as {
     id?: string;
     classNumber?: string;
@@ -84,6 +88,7 @@ export async function POST(request: NextRequest) {
   if (body.promptOverride) {
     saveOpenClassPromptConfig(saved.saved.id, body.promptOverride);
   }
+  await flushDomainState();
 
   return NextResponse.json({ saved: saved.saved });
 }

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/src/lib/auth-server";
-import { getAllActivities } from "@/src/lib/mock-data";
+import { getAllActivities, hydrateDomainState } from "@/src/lib/mock-data";
 import { getUsersVisibleToTeacherStore, listUsersStore } from "@/src/lib/user-store";
 
 export async function GET() {
@@ -9,6 +9,7 @@ export async function GET() {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
+  await hydrateDomainState();
   const baseActivities = getAllActivities();
   const visibleUsers = user.role === "admin" ? await listUsersStore() : await getUsersVisibleToTeacherStore(user.username);
   const visibleStudents = visibleUsers.filter((u) => u.role === "student");
