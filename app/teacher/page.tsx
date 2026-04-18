@@ -56,7 +56,7 @@ const genreOptions = ["議論文", "說明文", "抒情文", "其他"];
 const groupInteractionSteps = [1, 2, 4];
 const personalInteractionSteps = [3, 6, 8];
 
-type CourseTab = "essay" | "essay_prompt" | "openclass" | "group";
+type CourseTab = "essay" | "openclass" | "group";
 
 export default function TeacherPage() {
   const [loginUser, setLoginUser] = useState("");
@@ -102,7 +102,16 @@ export default function TeacherPage() {
   const [generatedPassword, setGeneratedPassword] = useState("");
   const [manualResetPassword, setManualResetPassword] = useState("");
 
-  const [essayForm, setEssayForm] = useState({ title: "", genre: "議論文", description: "", enabled: true });
+  const [essayForm, setEssayForm] = useState({
+    id: "",
+    title: "",
+    genre: "議論文",
+    description: "",
+    enabled: true,
+    step1Prompt: "",
+    subStep13Prompt: "",
+    questionBank11Text: ""
+  });
   const [openClassForm, setOpenClassForm] = useState({
     id: "",
     classNumber: "",
@@ -127,9 +136,6 @@ export default function TeacherPage() {
   const [personalMessages, setPersonalMessages] = useState<
     Array<{ id: string; role: string; userId?: string; text: string; at: string; step: number }>
   >([]);
-
-  const [selectedEssayForPrompt, setSelectedEssayForPrompt] = useState("");
-  const [essayPromptConfig, setEssayPromptConfig] = useState<PromptConfig>({ stepPrompts: {}, subStepPrompts: {}, questionBanks: {} });
 
   const classOptions = useMemo(
     () =>
@@ -230,16 +236,6 @@ export default function TeacherPage() {
   }, [selectedActivityId, activities]);
 
   useEffect(() => {
-    if (!selectedEssayForPrompt) return;
-    fetch(`/api/admin/prompts/essay?essayId=${encodeURIComponent(selectedEssayForPrompt)}`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (data?.config) setEssayPromptConfig(data.config);
-      })
-      .catch(() => undefined);
-  }, [selectedEssayForPrompt]);
-
-  useEffect(() => {
     setShowCourseStatusView(false);
     setMonitorSelected(null);
     setProgressRows([]);
@@ -262,7 +258,6 @@ export default function TeacherPage() {
     if (e.ok) {
       const list = (await e.json()).essays ?? [];
       setEssays(list);
-      if (!selectedEssayForPrompt && list[0]?.id) setSelectedEssayForPrompt(list[0].id);
     }
     if (o.ok) {
       const list = (await o.json()).openClasses ?? [];
@@ -711,13 +706,98 @@ export default function TeacherPage() {
 
   async function saveEssay(e: FormEvent) {
     e.preventDefault();
-    await fetch("/api/admin/essays", {
+    setError("");
+
+    const step1Prompt = essayForm.step1Prompt.trim();
+    const subStep13Prompt = essayForm.subStep13Prompt.trim();
+    const questionBank11 = essayForm.questionBank11Text
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    if (!essayForm.title.trim() || !essayForm.genre.trim() || !essayForm.description.trim()) {
+      setError("寫作主題基本欄位未填完整");
+      return;
+    }
+    if (!step1Prompt || !subStep13Prompt || questionBank11.length === 0) {
+      setError("請完整填寫步驟 1 Prompt、步驟 1-3 Prompt、問題庫 1-1");
+      return;
+    }
+
+    const essayResponse = await fetch("/api/admin/essays", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(essayForm)
+      body: JSON.stringify({
+        id: essayForm.id || undefined,
+        title: essayForm.title,
+        genre: essayForm.genre,
+        description: essayForm.description,
+        enabled: essayForm.enabled
+      })
     });
-    setEssayForm({ title: "", genre: "議論文", description: "", enabled: true });
+    const essayData = await essayResponse.json();
+    if (!essayResponse.ok) {
+      setError(essayData.error ?? "save_essay_failed");
+      return;
+    }
+
+    const savedEssayId = essayData?.saved?.id as string | undefined;
+    if (!savedEssayId) {
+      setError("save_essay_failed");
+      return;
+    }
+
+    const promptResponse = await fetch("/api/admin/prompts/essay", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        essayId: savedEssayId,
+        config: {
+          stepPrompts: { "1": step1Prompt },
+          subStepPrompts: { "1-3": subStep13Prompt },
+          questionBanks: { "1-1": questionBank11 }
+        }
+      })
+    });
+    const promptData = await promptResponse.json();
+    if (!promptResponse.ok) {
+      setError(promptData.error ?? "save_essay_prompt_failed");
+      return;
+    }
+
+    setEssayForm({
+      id: "",
+      title: "",
+      genre: "議論文",
+      description: "",
+      enabled: true,
+      step1Prompt: "",
+      subStep13Prompt: "",
+      questionBank11Text: ""
+    });
     await refreshAll();
+  }
+
+  async function startEditEssay(essay: EssayRow) {
+    setError("");
+    const response = await fetch(`/api/admin/prompts/essay?essayId=${encodeURIComponent(essay.id)}`);
+    const data = await response.json();
+    if (!response.ok) {
+      setError(data.error ?? "load_essay_prompt_failed");
+      return;
+    }
+
+    const config = (data?.config ?? { stepPrompts: {}, subStepPrompts: {}, questionBanks: {} }) as PromptConfig;
+    setEssayForm({
+      id: essay.id,
+      title: essay.title,
+      genre: essay.genre,
+      description: essay.description,
+      enabled: essay.enabled,
+      step1Prompt: config.stepPrompts["1"] ?? "",
+      subStep13Prompt: config.subStepPrompts["1-3"] ?? "",
+      questionBank11Text: (config.questionBanks["1-1"] ?? []).join("\n")
+    });
   }
 
   async function saveOpenClass(e: FormEvent) {
@@ -849,42 +929,6 @@ export default function TeacherPage() {
 
   function removeGroup(groupId: string) {
     setEditableGroups((prev) => prev.filter((group) => group.groupId !== groupId));
-  }
-
-  function patchPrompt(
-    target: PromptConfig,
-    type: "step" | "substep" | "bank",
-    key: string,
-    value: string
-  ): PromptConfig {
-    if (type === "step") {
-      return { ...target, stepPrompts: { ...target.stepPrompts, [key]: value } };
-    }
-
-    if (type === "substep") {
-      return { ...target, subStepPrompts: { ...target.subStepPrompts, [key]: value } };
-    }
-
-    return {
-      ...target,
-      questionBanks: {
-        ...target.questionBanks,
-        [key]: value
-          .split("\n")
-          .map((line) => line.trim())
-          .filter(Boolean)
-      }
-    };
-  }
-
-  async function saveEssayPromptConfig() {
-    if (!selectedEssayForPrompt) return;
-    await fetch("/api/admin/prompts/essay", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ essayId: selectedEssayForPrompt, config: essayPromptConfig })
-    });
-    alert("已儲存寫作主題 Prompt/問題庫");
   }
 
   async function startEditOpenClass(openClass: OpenClassRow) {
@@ -1651,9 +1695,6 @@ export default function TeacherPage() {
               <button type="button" className={courseTab === "essay" ? "" : "secondary"} onClick={() => setCourseTab("essay")}>寫作主題管理</button>
               </div>
               <div style={{ width: 210 }}>
-              <button type="button" className={courseTab === "essay_prompt" ? "" : "secondary"} onClick={() => setCourseTab("essay_prompt")}>主題 Prompt/問題庫</button>
-              </div>
-              <div style={{ width: 210 }}>
               <button type="button" className={courseTab === "openclass" ? "" : "secondary"} onClick={() => setCourseTab("openclass")}>寫作任務管理</button>
               </div>
               <div style={{ width: 210 }}>
@@ -1665,6 +1706,7 @@ export default function TeacherPage() {
           {courseTab === "essay" ? (
             <div className="card">
               <h2>寫作主題管理</h2>
+              <small>新增或編輯主題時，需同時維護核心 Prompt/問題庫欄位。</small>
               <form onSubmit={saveEssay} className="row">
                 <div className="col">
                   <label>標題</label>
@@ -1681,16 +1723,69 @@ export default function TeacherPage() {
                   </select>
                 </div>
                 <div className="col">
-                  <label>說明</label>
+                  <label>引導說明</label>
                   <input
                     value={essayForm.description}
                     onChange={(e) => setEssayForm({ ...essayForm, description: e.target.value })}
                   />
                 </div>
-                <div className="col" style={{ alignSelf: "end" }}>
-                  <button type="submit">新增主題</button>
+                <div className="col">
+                  <label>步驟 1 Prompt</label>
+                  <textarea
+                    value={essayForm.step1Prompt}
+                    onChange={(e) => setEssayForm({ ...essayForm, step1Prompt: e.target.value })}
+                  />
                 </div>
+                <div className="col">
+                  <label>步驟 1-3 Prompt</label>
+                  <textarea
+                    value={essayForm.subStep13Prompt}
+                    onChange={(e) => setEssayForm({ ...essayForm, subStep13Prompt: e.target.value })}
+                  />
+                </div>
+                <div className="col">
+                  <label>問題庫 1-1（每行一題）</label>
+                  <textarea
+                    value={essayForm.questionBank11Text}
+                    onChange={(e) => setEssayForm({ ...essayForm, questionBank11Text: e.target.value })}
+                  />
+                </div>
+                <div className="col" style={{ alignSelf: "end" }}>
+                  <button type="submit">{essayForm.id ? "儲存主題" : "新增主題"}</button>
+                </div>
+                {essayForm.id ? (
+                  <div className="col" style={{ alignSelf: "end" }}>
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() =>
+                        setEssayForm({
+                          id: "",
+                          title: "",
+                          genre: "議論文",
+                          description: "",
+                          enabled: true,
+                          step1Prompt: "",
+                          subStep13Prompt: "",
+                          questionBank11Text: ""
+                        })
+                      }
+                    >
+                      取消編輯
+                    </button>
+                  </div>
+                ) : null}
+                {error ? (
+                  <div className="col" style={{ width: "100%" }}>
+                    <small>{error}</small>
+                  </div>
+                ) : null}
               </form>
+              {essayForm.id ? (
+                <small>
+                  目前正在編輯：{essayForm.id}
+                </small>
+              ) : null}
               <div style={{ overflowX: "auto", marginTop: 10 }}>
                 <table className="pro-table">
                   <thead>
@@ -1699,6 +1794,7 @@ export default function TeacherPage() {
                       <th>主題</th>
                       <th>文體</th>
                       <th>引導說明</th>
+                      <th style={{ width: 140 }}>操作</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1708,57 +1804,15 @@ export default function TeacherPage() {
                         <td>{essay.title}</td>
                         <td>{essay.genre}</td>
                         <td>{essay.description || "—"}</td>
+                        <td>
+                          <button type="button" className="secondary" style={{ width: "auto" }} onClick={() => startEditEssay(essay)}>
+                            編輯
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-              </div>
-            </div>
-          ) : null}
-
-          {courseTab === "essay_prompt" ? (
-            <div className="card">
-              <h2>寫作主題 Prompt / 問題庫</h2>
-              <div className="row">
-                <div className="col">
-                  <label>選擇主題</label>
-                  <select value={selectedEssayForPrompt} onChange={(e) => setSelectedEssayForPrompt(e.target.value)}>
-                    <option value="">請選擇</option>
-                    {essays.map((essay) => (
-                      <option key={essay.id} value={essay.id}>
-                        {essay.id} / {essay.title}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div className="row" style={{ marginTop: 10 }}>
-                <div className="col">
-                  <label>步驟 1 Prompt</label>
-                  <textarea
-                    value={essayPromptConfig.stepPrompts["1"] ?? ""}
-                    onChange={(e) => setEssayPromptConfig((prev) => patchPrompt(prev, "step", "1", e.target.value))}
-                  />
-                </div>
-                <div className="col">
-                  <label>子步驟 1-3 Prompt</label>
-                  <textarea
-                    value={essayPromptConfig.subStepPrompts["1-3"] ?? ""}
-                    onChange={(e) => setEssayPromptConfig((prev) => patchPrompt(prev, "substep", "1-3", e.target.value))}
-                  />
-                </div>
-                <div className="col">
-                  <label>問題庫 1-1（每行一題）</label>
-                  <textarea
-                    value={(essayPromptConfig.questionBanks["1-1"] ?? []).join("\n")}
-                    onChange={(e) => setEssayPromptConfig((prev) => patchPrompt(prev, "bank", "1-1", e.target.value))}
-                  />
-                </div>
-              </div>
-              <div style={{ width: 220, marginTop: 10 }}>
-                <button type="button" onClick={saveEssayPromptConfig}>
-                  儲存主題 Prompt/問題庫
-                </button>
               </div>
             </div>
           ) : null}

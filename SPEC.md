@@ -322,8 +322,14 @@ student 可儲存三種內容：
 
 ### 課程管理
 
-- 寫作主題管理（essay CRUD）
-- 主題 Prompt/問題庫編輯（essay prompt config）
+- 寫作主題管理（含 essay + 核心 prompt 欄位整合編輯）：
+  - 「說明」欄位文案為「引導說明」
+  - 新增/編輯主題時，需同時維護：
+    - `步驟 1 Prompt`
+    - `步驟 1-3 Prompt`
+    - `問題庫 1-1（每行一題）`
+  - 主題清單含「編輯」按鈕，可載入並編輯主題完整內容
+  - 原「主題 Prompt/問題庫」獨立分頁已移除
 - 寫作任務管理（open class）：
   - 班級下拉：來自可見 student 的 classNumber 清單
   - 主題下拉：顯示 `essayId / title`
@@ -498,12 +504,12 @@ Request:
 ### `GET/POST /api/admin/essays`
 
 - 權限：teacher/admin
-- 管理寫作主題
+- 管理寫作主題主資料（title/genre/引導說明）
 
 ### `GET/POST /api/admin/prompts/essay`
 
 - 權限：teacher/admin
-- 管理 essay 層級 prompt config
+- 管理 essay 層級 prompt config（目前由「寫作主題管理」同頁整合呼叫）
 
 ### `GET/POST /api/admin/openclasses`
 
