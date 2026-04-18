@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/src/lib/auth-server";
 import { createSession } from "@/src/lib/engine";
-import { findActivity } from "@/src/lib/mock-data";
+import { findActivity, resolvePromptConfigForActivity } from "@/src/lib/mock-data";
 import { listSessions, saveSession } from "@/src/lib/store";
 
 export async function POST(request: NextRequest) {
@@ -35,7 +35,10 @@ export async function POST(request: NextRequest) {
     workflow: "spec10",
     phaseMax: 10,
     activityId: activity.id,
-    activityTitle: activity.title
+    activityTitle: activity.title,
+    groupId: group.groupId,
+    groupName: group.groupName,
+    promptConfig: resolvePromptConfigForActivity(activity.id)
   });
 
   await saveSession(session);

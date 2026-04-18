@@ -26,6 +26,8 @@ type MonitorSession = {
   sessionId: string;
   activityId?: string;
   activityTitle?: string;
+  groupId?: string;
+  groupName?: string;
   participants: string[];
   currentStep: number;
   messages: Array<{ id: string; role: string; userId?: string; text: string; at: string; step: number }>;
@@ -39,6 +41,8 @@ type PersonalProgressRow = {
 };
 
 const genreOptions = ["議論文", "說明文", "抒情文", "其他"];
+const groupInteractionSteps = [1, 2, 4];
+const personalInteractionSteps = [3, 6, 8];
 
 type CourseTab = "essay" | "essay_prompt" | "openclass" | "openclass_prompt" | "group";
 
@@ -52,9 +56,30 @@ export default function TeacherPage() {
   const [activities, setActivities] = useState<ActivityRow[]>([]);
   const [monitorSessions, setMonitorSessions] = useState<MonitorSession[]>([]);
   const [monitorSelected, setMonitorSelected] = useState<MonitorSession | null>(null);
+  const [groupViewStep, setGroupViewStep] = useState<string>("all");
   const [sessionId, setSessionId] = useState("");
   const [step, setStep] = useState(1);
   const [error, setError] = useState("");
+  const [userQuery, setUserQuery] = useState("");
+  const [roleFilter, setRoleFilter] = useState<"all" | "teacher" | "student">("all");
+  const [accountError, setAccountError] = useState("");
+  const [accountSuccess, setAccountSuccess] = useState("");
+  const [editingUser, setEditingUser] = useState<{
+    username: string;
+    name: string;
+    school: string;
+    role: "student" | "teacher";
+    password: string;
+  } | null>(null);
+  const [newUserForm, setNewUserForm] = useState({
+    username: "",
+    name: "",
+    school: "",
+    role: "student" as "student" | "teacher",
+    password: ""
+  });
+  const [csvInput, setCsvInput] = useState("");
+  const [csvPreviewErrors, setCsvPreviewErrors] = useState<string[]>([]);
 
   const [essayForm, setEssayForm] = useState({ title: "", genre: "議論文", description: "", enabled: true });
   const [openClassForm, setOpenClassForm] = useState({ className: "", essayTitle: "", durationMinutes: 40, supplemental: "" });
@@ -66,6 +91,7 @@ export default function TeacherPage() {
   const [progressSessionId, setProgressSessionId] = useState("");
   const [progressRows, setProgressRows] = useState<PersonalProgressRow[]>([]);
   const [selectedProgressUser, setSelectedProgressUser] = useState("");
+  const [personalViewStep, setPersonalViewStep] = useState<number>(3);
   const [personalMessages, setPersonalMessages] = useState<
     Array<{ id: string; role: string; userId?: string; text: string; at: string; step: number }>
   >([]);
@@ -83,6 +109,36 @@ export default function TeacherPage() {
   const sessionHints = useMemo(
     () => Array.from(new Set(monitorSessions.map((session) => session.sessionId))),
     [monitorSessions]
+  );
+
+  const filteredUsers = useMemo(
+    () =>
+      users.filter((user) => {
+        if (roleFilter !== "all" && user.role !== roleFilter) return false;
+        const keyword = userQuery.trim().toLowerCase();
+        if (!keyword) return true;
+        return (
+          user.username.toLowerCase().includes(keyword) ||
+          user.name.toLowerCase().includes(keyword) ||
+          user.school.toLowerCase().includes(keyword)
+        );
+      }),
+    [users, roleFilter, userQuery]
+  );
+
+  const groupMessages = useMemo(() => {
+    if (!monitorSelected) return [];
+    const base = monitorSelected.messages.filter((message) => groupInteractionSteps.includes(message.step));
+    if (groupViewStep === "all") return base;
+    return base.filter((message) => message.step === Number(groupViewStep));
+  }, [monitorSelected, groupViewStep]);
+
+  const personalFilteredMessages = useMemo(
+    () =>
+      personalMessages.filter(
+        (message) => personalInteractionSteps.includes(message.step) && message.step === personalViewStep
+      ),
+    [personalMessages, personalViewStep]
   );
 
   useEffect(() => {
@@ -183,10 +239,13 @@ export default function TeacherPage() {
       sessionId: data.id,
       activityId: data.activityId,
       activityTitle: data.activityTitle,
+      groupId: data.groupId,
+      groupName: data.groupName,
       participants: data.participants,
       currentStep: data.currentStep,
-      messages: data.messages.slice(-20)
+      messages: data.messages
     });
+    setGroupViewStep("all");
 
     await refreshAll();
   }
@@ -211,16 +270,206 @@ export default function TeacherPage() {
     setPersonalMessages(data.personalMessages ?? []);
     if (username) {
       setSelectedProgressUser(username);
+      const matchedStep = personalInteractionSteps.find((targetStep) =>
+        (data.personalMessages ?? []).some((message: { step: number }) => message.step === targetStep)
+      );
+      setPersonalViewStep(matchedStep ?? 3);
     }
   }
 
   async function resetPassword(username: string) {
-    await fetch("/api/admin/users", {
+    const response = await fetch("/api/admin/users", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, newPassword: "newpass123" })
+      body: JSON.stringify({ action: "reset_password", username, newPassword: "newpass123" })
     });
-    alert(`已重設 ${username} 密碼為 newpass123`);
+    if (!response.ok) {
+      const data = await response.json();
+      setAccountError(data.error ?? "reset_password_failed");
+      setAccountSuccess("");
+      return;
+    }
+    setAccountSuccess(`已重設 ${username} 密碼為 newpass123`);
+    setAccountError("");
+  }
+
+  async function createUser() {
+    setAccountError("");
+    setAccountSuccess("");
+    const validationErrors = validateCsvRows([
+      `${newUserForm.username},${newUserForm.name},${newUserForm.school},${newUserForm.role},${newUserForm.password}`
+    ]);
+    if (validationErrors.length > 0) {
+      setAccountError(validationErrors[0]!);
+      return;
+    }
+
+    const response = await fetch("/api/admin/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "create", user: newUserForm })
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      setAccountError(data.error ?? "create_user_failed");
+      return;
+    }
+
+    setNewUserForm({ username: "", name: "", school: "", role: "student", password: "" });
+    setAccountSuccess("已新增帳號。");
+    await refreshAll();
+  }
+
+  async function saveEditedUser() {
+    if (!editingUser) return;
+
+    setAccountError("");
+    setAccountSuccess("");
+    const row = `${editingUser.username},${editingUser.name},${editingUser.school},${editingUser.role},${
+      editingUser.password || "placeholder123"
+    }`;
+    const validationErrors = validateCsvRows([row], editingUser.password ? undefined : { skipPasswordLength: true });
+    if (validationErrors.length > 0) {
+      setAccountError(validationErrors[0]!);
+      return;
+    }
+
+    const patch: { name: string; school: string; role: "student" | "teacher"; password?: string } = {
+      name: editingUser.name,
+      school: editingUser.school,
+      role: editingUser.role
+    };
+    if (editingUser.password) {
+      patch.password = editingUser.password;
+    }
+
+    const response = await fetch("/api/admin/users", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: editingUser.username, patch })
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      setAccountError(data.error ?? "update_user_failed");
+      return;
+    }
+
+    setEditingUser(null);
+    setAccountSuccess("已更新帳號資料。");
+    await refreshAll();
+  }
+
+  async function deleteUser(username: string) {
+    const confirmed = window.confirm(`確定刪除帳號 ${username} 嗎？`);
+    if (!confirmed) return;
+
+    setAccountError("");
+    setAccountSuccess("");
+    const response = await fetch("/api/admin/users", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username })
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      setAccountError(data.error ?? "delete_user_failed");
+      return;
+    }
+    setAccountSuccess(`已刪除 ${username}。`);
+    await refreshAll();
+  }
+
+  async function importUsersFromCsv() {
+    setAccountError("");
+    setAccountSuccess("");
+
+    const parsedLines = csvInput
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    if (parsedLines.length === 0) {
+      setAccountError("csv_empty");
+      return;
+    }
+
+    const hasHeader =
+      parsedLines[0]!.toLowerCase() === "username,name,school,role,password" || parsedLines[0] === "帳號,姓名,學校,角色,密碼";
+    const dataLines = hasHeader ? parsedLines.slice(1) : parsedLines;
+    const previewErrors = validateCsvRows(dataLines);
+    setCsvPreviewErrors(previewErrors);
+    if (previewErrors.length > 0) {
+      setAccountError("csv_validation_failed");
+      return;
+    }
+
+    const response = await fetch("/api/admin/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "bulk_create_from_csv", csv: csvInput })
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      const detail = Array.isArray(data.details)
+        ? data.details.map((d: { line: number; message: string }) => `line ${d.line}: ${d.message}`).join("; ")
+        : data.error;
+      setAccountError(detail ?? "bulk_create_failed");
+      return;
+    }
+
+    setCsvInput("");
+    setCsvPreviewErrors([]);
+    setAccountSuccess(`已批次新增 ${data.createdCount ?? 0} 筆帳號。`);
+    await refreshAll();
+  }
+
+  function validateCsvRows(lines: string[], options?: { skipPasswordLength?: boolean }): string[] {
+    const errors: string[] = [];
+    const seen = new Set<string>();
+    lines.forEach((line, idx) => {
+      const cols = splitCsvLine(line);
+      if (cols.length !== 5) {
+        errors.push(`第 ${idx + 1} 列欄位數錯誤（需 5 欄）`);
+        return;
+      }
+      const [username, name, school, role, password] = cols.map((v) => v.trim());
+      if (!username || !name || !school || !role || !password) {
+        errors.push(`第 ${idx + 1} 列有必填欄位為空`);
+        return;
+      }
+      if (!/^[A-Za-z0-9._-]{3,32}$/.test(username)) {
+        errors.push(`第 ${idx + 1} 列 username 格式錯誤`);
+      }
+      if (!["student", "teacher"].includes(role)) {
+        errors.push(`第 ${idx + 1} 列 role 必須是 student 或 teacher`);
+      }
+      if (!options?.skipPasswordLength && password.length < 6) {
+        errors.push(`第 ${idx + 1} 列 password 至少 6 碼`);
+      }
+      if (seen.has(username)) {
+        errors.push(`第 ${idx + 1} 列 username 重複`);
+      }
+      seen.add(username);
+    });
+    return errors;
+  }
+
+  function splitCsvLine(line: string): string[] {
+    const cells: string[] = [];
+    let current = "";
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i += 1) {
+      const char = line[i]!;
+      if (char === "\"") {
+        inQuotes = !inQuotes;
+      } else if (char === "," && !inQuotes) {
+        cells.push(current);
+        current = "";
+      } else {
+        current += char;
+      }
+    }
+    cells.push(current);
+    return cells;
   }
 
   async function saveEssay(e: FormEvent) {
@@ -386,6 +635,119 @@ export default function TeacherPage() {
       {tab === "system" ? (
         <div className="card">
           <h2>帳號管理</h2>
+          <div className="row" style={{ marginBottom: 10 }}>
+            <div className="col card" style={{ marginBottom: 0, padding: 12 }}>
+              <small>總帳號數</small>
+              <div style={{ fontSize: 22, fontWeight: 700 }}>{users.length}</div>
+            </div>
+            <div className="col card" style={{ marginBottom: 0, padding: 12 }}>
+              <small>教師帳號</small>
+              <div style={{ fontSize: 22, fontWeight: 700 }}>{users.filter((user) => user.role === "teacher").length}</div>
+            </div>
+            <div className="col card" style={{ marginBottom: 0, padding: 12 }}>
+              <small>學生帳號</small>
+              <div style={{ fontSize: 22, fontWeight: 700 }}>{users.filter((user) => user.role === "student").length}</div>
+            </div>
+          </div>
+
+          <div className="row" style={{ marginBottom: 10 }}>
+            <div className="col">
+              <label>搜尋（帳號 / 姓名 / 學校）</label>
+              <input value={userQuery} onChange={(e) => setUserQuery(e.target.value)} placeholder="輸入關鍵字" />
+            </div>
+            <div className="col">
+              <label>角色篩選</label>
+              <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value as "all" | "teacher" | "student")}>
+                <option value="all">全部</option>
+                <option value="teacher">教師</option>
+                <option value="student">學生</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="card" style={{ marginBottom: 10 }}>
+            <h3 style={{ marginBottom: 8 }}>新增單一帳號</h3>
+            <div className="row">
+              <div className="col">
+                <label>帳號（username）</label>
+                <input
+                  value={newUserForm.username}
+                  onChange={(e) => setNewUserForm((prev) => ({ ...prev, username: e.target.value }))}
+                  placeholder="例如 student01"
+                />
+              </div>
+              <div className="col">
+                <label>姓名</label>
+                <input value={newUserForm.name} onChange={(e) => setNewUserForm((prev) => ({ ...prev, name: e.target.value }))} />
+              </div>
+              <div className="col">
+                <label>學校</label>
+                <input
+                  value={newUserForm.school}
+                  onChange={(e) => setNewUserForm((prev) => ({ ...prev, school: e.target.value }))}
+                />
+              </div>
+              <div className="col">
+                <label>角色</label>
+                <select
+                  value={newUserForm.role}
+                  onChange={(e) => setNewUserForm((prev) => ({ ...prev, role: e.target.value as "student" | "teacher" }))}
+                >
+                  <option value="student">student</option>
+                  <option value="teacher">teacher</option>
+                </select>
+              </div>
+              <div className="col">
+                <label>密碼（至少 6 碼）</label>
+                <input
+                  type="password"
+                  value={newUserForm.password}
+                  onChange={(e) => setNewUserForm((prev) => ({ ...prev, password: e.target.value }))}
+                />
+              </div>
+              <div className="col" style={{ alignSelf: "end" }}>
+                <button type="button" onClick={createUser}>
+                  新增帳號
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="card" style={{ marginBottom: 10 }}>
+            <h3 style={{ marginBottom: 8 }}>CSV 貼上批次新增</h3>
+            <small>格式：`username,name,school,role,password`（可含標題列，role 僅接受 student/teacher）</small>
+            <textarea
+              style={{ marginTop: 8 }}
+              value={csvInput}
+              onChange={(e) => setCsvInput(e.target.value)}
+              placeholder={"username,name,school,role,password\nstudent10,王小明,Demo High,student,abc12345"}
+            />
+            <div className="row" style={{ marginTop: 10 }}>
+              <div style={{ width: 220 }}>
+                <button type="button" onClick={importUsersFromCsv}>
+                  驗證並批次新增
+                </button>
+              </div>
+              <div style={{ width: 220 }}>
+                <button type="button" className="secondary" onClick={() => setCsvInput("username,name,school,role,password")}>
+                  載入範例表頭
+                </button>
+              </div>
+            </div>
+            {csvPreviewErrors.length > 0 ? (
+              <div style={{ marginTop: 8 }}>
+                {csvPreviewErrors.map((item, idx) => (
+                  <small key={`${item}-${idx}`} style={{ display: "block" }}>
+                    {item}
+                  </small>
+                ))}
+              </div>
+            ) : null}
+          </div>
+
+          {accountError ? <small style={{ color: "#b91c1c", display: "block", marginBottom: 8 }}>{accountError}</small> : null}
+          {accountSuccess ? <small style={{ color: "#166534", display: "block", marginBottom: 8 }}>{accountSuccess}</small> : null}
+
           <div style={{ overflowX: "auto" }}>
             <table className="pro-table">
               <thead>
@@ -395,27 +757,111 @@ export default function TeacherPage() {
                   <th>姓名</th>
                   <th>學校</th>
                   <th>角色</th>
-                  <th>操作</th>
+                  <th style={{ width: 360 }}>操作</th>
                 </tr>
               </thead>
               <tbody>
-                {users.map((user, idx) => (
+                {filteredUsers.map((user, idx) => (
                   <tr key={user.username}>
                     <td>{idx + 1}</td>
                     <td>{user.username}</td>
-                    <td>{user.name}</td>
-                    <td>{user.school}</td>
-                    <td>{user.role}</td>
-                    <td>
-                      <button
-                        type="button"
-                        className="secondary"
-                        style={{ width: "auto", minWidth: 96 }}
-                        onClick={() => resetPassword(user.username)}
-                      >
-                        修改密碼
-                      </button>
-                    </td>
+                    {editingUser?.username === user.username ? (
+                      <>
+                        <td>
+                          <input
+                            value={editingUser.name}
+                            onChange={(e) => setEditingUser((prev) => (prev ? { ...prev, name: e.target.value } : prev))}
+                          />
+                        </td>
+                        <td>
+                          <input
+                            value={editingUser.school}
+                            onChange={(e) => setEditingUser((prev) => (prev ? { ...prev, school: e.target.value } : prev))}
+                          />
+                        </td>
+                        <td>
+                          <select
+                            value={editingUser.role}
+                            onChange={(e) =>
+                              setEditingUser((prev) =>
+                                prev ? { ...prev, role: e.target.value as "student" | "teacher" } : prev
+                              )
+                            }
+                          >
+                            <option value="student">student</option>
+                            <option value="teacher">teacher</option>
+                          </select>
+                        </td>
+                        <td>
+                          <div className="row">
+                            <div style={{ minWidth: 150 }}>
+                              <input
+                                type="password"
+                                placeholder="新密碼（選填）"
+                                value={editingUser.password}
+                                onChange={(e) =>
+                                  setEditingUser((prev) => (prev ? { ...prev, password: e.target.value } : prev))
+                                }
+                              />
+                            </div>
+                            <div style={{ width: 90 }}>
+                              <button type="button" onClick={saveEditedUser}>
+                                儲存
+                              </button>
+                            </div>
+                            <div style={{ width: 90 }}>
+                              <button type="button" className="secondary" onClick={() => setEditingUser(null)}>
+                                取消
+                              </button>
+                            </div>
+                          </div>
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                        <td>{user.name}</td>
+                        <td>{user.school}</td>
+                        <td>
+                          <span className="badge">{user.role === "teacher" ? "教師" : "學生"}</span>
+                        </td>
+                        <td>
+                          <div className="row" style={{ gap: 8 }}>
+                            <button
+                              type="button"
+                              className="secondary"
+                              style={{ width: "auto" }}
+                              onClick={() =>
+                                setEditingUser({
+                                  username: user.username,
+                                  name: user.name,
+                                  school: user.school,
+                                  role: user.role === "teacher" ? "teacher" : "student",
+                                  password: ""
+                                })
+                              }
+                            >
+                              修改
+                            </button>
+                            <button
+                              type="button"
+                              className="secondary"
+                              style={{ width: "auto" }}
+                              onClick={() => resetPassword(user.username)}
+                            >
+                              重設密碼
+                            </button>
+                            <button
+                              type="button"
+                              className="secondary"
+                              style={{ width: "auto", color: "#b91c1c", borderColor: "#fecaca", background: "#fef2f2" }}
+                              onClick={() => deleteUser(user.username)}
+                            >
+                              刪除
+                            </button>
+                          </div>
+                        </td>
+                      </>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -427,32 +873,60 @@ export default function TeacherPage() {
       {tab === "learning" ? (
         <>
           <div className="card">
-            <h2>課堂觀察</h2>
-            {monitorSessions.map((session) => (
-              <div key={session.sessionId} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
-                <strong>{session.activityTitle ?? session.activityId}</strong>
-                <div>
-                  <small>
-                    Session: {session.sessionId} / 小組：{session.participants.join(", ")} / 進度：Step {session.currentStep}
-                  </small>
-                </div>
-                <div className="row" style={{ marginTop: 8 }}>
-                  <div style={{ width: 180 }}>
-                    <button
-                      type="button"
-                      className="secondary"
-                      onClick={() => {
-                        setMonitorSelected(session);
-                        setProgressSessionId(session.sessionId);
-                        setSessionId(session.sessionId);
-                      }}
-                    >
-                      查看小組對話
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
+            <h2>課堂觀察（檢視學習進度）</h2>
+            <div style={{ overflowX: "auto" }}>
+              <table className="pro-table">
+                <thead>
+                  <tr>
+                    <th>序號</th>
+                    <th>寫作任務</th>
+                    <th>小組名稱</th>
+                    <th>成員名單</th>
+                    <th>小組進度</th>
+                    <th>動作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {monitorSessions.map((session, idx) => (
+                    <tr key={session.sessionId}>
+                      <td>{idx + 1}</td>
+                      <td>{session.activityTitle ?? session.activityId}</td>
+                      <td>{session.groupName ?? session.groupId ?? "未命名組"}</td>
+                      <td>{session.participants.join(", ")}</td>
+                      <td>Step {session.currentStep}</td>
+                      <td>
+                        <div className="row" style={{ gap: 8 }}>
+                          <button
+                            type="button"
+                            className="secondary"
+                            style={{ width: "auto" }}
+                            onClick={() => {
+                              setMonitorSelected(session);
+                              setGroupViewStep("all");
+                              setProgressSessionId(session.sessionId);
+                              setSessionId(session.sessionId);
+                            }}
+                          >
+                            查看小組對話
+                          </button>
+                          <button
+                            type="button"
+                            className="secondary"
+                            style={{ width: "auto" }}
+                            onClick={() => {
+                              setProgressSessionId(session.sessionId);
+                              loadProgress(session.sessionId);
+                            }}
+                          >
+                            查看個人進度
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
 
           <div className="card">
@@ -461,6 +935,7 @@ export default function TeacherPage() {
               <div className="col">
                 <label>Session ID</label>
                 <input list="session-id-options" value={sessionId} onChange={(e) => setSessionId(e.target.value)} />
+                <small>可直接輸入，或從建議清單挑選既有 Session ID。</small>
               </div>
               <div className="col">
                 <label>Step</label>
@@ -476,6 +951,19 @@ export default function TeacherPage() {
                 <button type="submit">切換步驟</button>
               </div>
             </form>
+            <div className="row" style={{ marginTop: 8 }}>
+              {sessionHints.slice(0, 6).map((id) => (
+                <button
+                  key={id}
+                  type="button"
+                  className="secondary"
+                  style={{ width: "auto" }}
+                  onClick={() => setSessionId(id)}
+                >
+                  {id}
+                </button>
+              ))}
+            </div>
             {error ? <small>{error}</small> : null}
           </div>
 
@@ -496,27 +984,59 @@ export default function TeacherPage() {
                 </button>
               </div>
             </div>
-            {progressRows.map((row, idx) => (
-              <div key={row.username} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
-                #{idx + 1} / {row.username} / 進度 Step {row.currentStep} / 發言數 {row.messageCount}
-                <div style={{ marginTop: 6, width: 180 }}>
-                  <button
-                    type="button"
-                    className="secondary"
-                    onClick={() => loadProgress(progressSessionId, row.username)}
-                  >
-                    查看個人對話
-                  </button>
-                </div>
-              </div>
-            ))}
+            <div style={{ overflowX: "auto", marginTop: 10 }}>
+              <table className="pro-table">
+                <thead>
+                  <tr>
+                    <th>序號</th>
+                    <th>姓名</th>
+                    <th>個人進度</th>
+                    <th>發言數</th>
+                    <th>最後發言時間</th>
+                    <th>動作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {progressRows.map((row, idx) => (
+                    <tr key={row.username}>
+                      <td>{idx + 1}</td>
+                      <td>{row.username}</td>
+                      <td>Step {row.currentStep}</td>
+                      <td>{row.messageCount}</td>
+                      <td>{row.lastMessageAt ? new Date(row.lastMessageAt).toLocaleString("zh-TW") : "—"}</td>
+                      <td>
+                        <button
+                          type="button"
+                          className="secondary"
+                          style={{ width: "auto" }}
+                          onClick={() => loadProgress(progressSessionId, row.username)}
+                        >
+                          查看 3/6/8 對話
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
             {selectedProgressUser ? <small>目前檢視：{selectedProgressUser}</small> : null}
           </div>
 
           {monitorSelected ? (
             <div className="card">
               <h2>小組對話紀錄</h2>
-              {monitorSelected.messages.map((message) => (
+              <div className="row" style={{ marginBottom: 8 }}>
+                <div className="col">
+                  <label>步驟篩選（僅小組互動步驟）</label>
+                  <select value={groupViewStep} onChange={(e) => setGroupViewStep(e.target.value)}>
+                    <option value="all">全部（1/2/4）</option>
+                    <option value="1">Step 1</option>
+                    <option value="2">Step 2</option>
+                    <option value="4">Step 4</option>
+                  </select>
+                </div>
+              </div>
+              {groupMessages.map((message) => (
                 <div key={message.id} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
                   <strong>
                     [S{message.step}] {message.role}
@@ -525,13 +1045,24 @@ export default function TeacherPage() {
                   <div>{message.text}</div>
                 </div>
               ))}
+              {groupMessages.length === 0 ? <small>目前此篩選條件下沒有 1/2/4 步驟對話。</small> : null}
             </div>
           ) : null}
 
           {personalMessages.length > 0 ? (
             <div className="card">
               <h2>個人對話紀錄</h2>
-              {personalMessages.map((message) => (
+              <div className="row" style={{ marginBottom: 8 }}>
+                <div className="col">
+                  <label>步驟篩選（僅個人互動步驟）</label>
+                  <select value={personalViewStep} onChange={(e) => setPersonalViewStep(Number(e.target.value))}>
+                    <option value={3}>Step 3</option>
+                    <option value={6}>Step 6</option>
+                    <option value={8}>Step 8</option>
+                  </select>
+                </div>
+              </div>
+              {personalFilteredMessages.map((message) => (
                 <div key={message.id} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
                   <strong>
                     [S{message.step}] {message.role}
@@ -540,6 +1071,7 @@ export default function TeacherPage() {
                   <div>{message.text}</div>
                 </div>
               ))}
+              {personalFilteredMessages.length === 0 ? <small>目前此學生在所選步驟沒有可顯示對話。</small> : null}
             </div>
           ) : null}
         </>
@@ -547,21 +1079,25 @@ export default function TeacherPage() {
 
       {tab === "course" ? (
         <>
-          <div className="card row">
-            <div style={{ width: 210 }}>
+          <div className="card">
+            <h2>課程管理</h2>
+            <small>以下為第二層分頁，先選擇管理模組，再編輯對應內容。</small>
+            <div className="row" style={{ marginTop: 10 }}>
+              <div style={{ width: 210 }}>
               <button type="button" className={courseTab === "essay" ? "" : "secondary"} onClick={() => setCourseTab("essay")}>寫作主題管理</button>
-            </div>
-            <div style={{ width: 210 }}>
+              </div>
+              <div style={{ width: 210 }}>
               <button type="button" className={courseTab === "essay_prompt" ? "" : "secondary"} onClick={() => setCourseTab("essay_prompt")}>主題 Prompt/問題庫</button>
-            </div>
-            <div style={{ width: 210 }}>
+              </div>
+              <div style={{ width: 210 }}>
               <button type="button" className={courseTab === "openclass" ? "" : "secondary"} onClick={() => setCourseTab("openclass")}>寫作任務管理</button>
-            </div>
-            <div style={{ width: 210 }}>
+              </div>
+              <div style={{ width: 210 }}>
               <button type="button" className={courseTab === "openclass_prompt" ? "" : "secondary"} onClick={() => setCourseTab("openclass_prompt")}>任務 Prompt 覆蓋</button>
-            </div>
-            <div style={{ width: 210 }}>
+              </div>
+              <div style={{ width: 210 }}>
               <button type="button" className={courseTab === "group" ? "" : "secondary"} onClick={() => setCourseTab("group")}>組別管理</button>
+              </div>
             </div>
           </div>
 
@@ -594,11 +1130,28 @@ export default function TeacherPage() {
                   <button type="submit">新增主題</button>
                 </div>
               </form>
-              {essays.map((essay) => (
-                <div key={essay.id} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
-                  {essay.id} / {essay.title} / {essay.genre} / {essay.description}
-                </div>
-              ))}
+              <div style={{ overflowX: "auto", marginTop: 10 }}>
+                <table className="pro-table">
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>主題</th>
+                      <th>文體</th>
+                      <th>引導說明</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {essays.map((essay) => (
+                      <tr key={essay.id}>
+                        <td>{essay.id}</td>
+                        <td>{essay.title}</td>
+                        <td>{essay.genre}</td>
+                        <td>{essay.description || "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           ) : null}
 
@@ -686,11 +1239,30 @@ export default function TeacherPage() {
                   <button type="submit">新增班級任務</button>
                 </div>
               </form>
-              {openClasses.map((openClass) => (
-                <div key={openClass.id} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
-                  {openClass.id} / {openClass.className} / {openClass.essayTitle} / {openClass.durationMinutes} 分鐘 / {openClass.supplemental}
-                </div>
-              ))}
+              <div style={{ overflowX: "auto", marginTop: 10 }}>
+                <table className="pro-table">
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>班級</th>
+                      <th>主題</th>
+                      <th>時長</th>
+                      <th>補充資料</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {openClasses.map((openClass) => (
+                      <tr key={openClass.id}>
+                        <td>{openClass.id}</td>
+                        <td>{openClass.className}</td>
+                        <td>{openClass.essayTitle}</td>
+                        <td>{openClass.durationMinutes} 分鐘</td>
+                        <td>{openClass.supplemental || "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           ) : null}
 

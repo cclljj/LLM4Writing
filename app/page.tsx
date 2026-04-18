@@ -4,8 +4,8 @@ export default function HomePage() {
   return (
     <main>
       <div className="card">
-        <h1>LLM4Writing Vercel-native（現況版流程）</h1>
-        <p>已依 `SPEC_generated_by_AI.md` 回補：學生活動列表 + Phase1~5 聊天流程 + 教師三大管理模組入口。</p>
+        <h1>LLM4Writing Vercel-native</h1>
+        <p>系統已依 `SPEC_generated_by_AI.md` 持續對齊，包含學生端 10 步驟學習流程與教師端三大管理模組。</p>
         <p>
           請先從 <Link href="/login">登入頁</Link> 進入。
         </p>
@@ -14,7 +14,7 @@ export default function HomePage() {
       <div className="row">
         <div className="col card">
           <h2>學生端</h2>
-          <p>Activity 列表、加入討論、歷史紀錄、Phase1~5 對話。</p>
+          <p>任務列表、加入討論、10 步驟學習、歷史紀錄。</p>
           <Link href="/student">前往學生端</Link>
         </div>
 

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/src/lib/auth-server";
 import { getEssayPromptConfig, saveEssayPromptConfig } from "@/src/lib/mock-data";
-import { PromptConfig } from "@/src/lib/mock-data";
+import { PromptConfig } from "@/src/lib/types";
 
 export async function GET(request: NextRequest) {
   const user = await getCurrentUser();

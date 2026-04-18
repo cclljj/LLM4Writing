@@ -14,6 +14,12 @@ export interface StepDefinition {
   mode: InteractionMode;
 }
 
+export interface PromptConfig {
+  stepPrompts: Record<string, string>;
+  subStepPrompts: Record<string, string>;
+  questionBanks: Record<string, string[]>;
+}
+
 export interface ChatMessage {
   id: string;
   role: Role;
@@ -29,12 +35,27 @@ export interface SessionState {
   currentStep: number;
   participants: string[];
   messages: ChatMessage[];
-  groupGate: Record<number, string[]>;
+  groupGate: Record<string, string[]>;
   reflectionIndex: Record<string, number>;
   workflow: SessionWorkflow;
   phaseMax: number;
   activityId?: string;
   activityTitle?: string;
+  groupId?: string;
+  groupName?: string;
+  promptConfig: PromptConfig;
+  stepState: {
+    step1Substep: number;
+    step2Substep: number;
+  };
+  outlines: Record<string, string>;
+  draftStep6: Record<string, string>;
+  draftStep8: Record<string, string>;
+  reports: {
+    step5?: string;
+    step7: Record<string, string>;
+    step10: Record<string, string>;
+  };
 }
 
 export interface StartSessionPayload {
@@ -43,6 +64,9 @@ export interface StartSessionPayload {
   phaseMax?: number;
   activityId?: string;
   activityTitle?: string;
+  groupId?: string;
+  groupName?: string;
+  promptConfig?: PromptConfig;
 }
 
 export interface SendMessagePayload {

@@ -1,4 +1,4 @@
-import { Activity, ActivityGroup, UserAccount } from "@/src/lib/types";
+import { Activity, ActivityGroup, PromptConfig, UserAccount } from "@/src/lib/types";
 
 const users: UserAccount[] = [
   { username: "student", name: "Student One", school: "Demo High", role: "student" },
@@ -50,22 +50,26 @@ const openClasses = [
   { id: "oc-002", className: "702", essayTitle: "我的校園角落", durationMinutes: 40, supplemental: "觀察與提案" }
 ];
 
-export type PromptConfig = {
-  stepPrompts: Record<string, string>;
-  subStepPrompts: Record<string, string>;
-  questionBanks: Record<string, string[]>;
-};
-
 const essayPromptConfigs: Record<string, PromptConfig> = {
   "essay-1": {
     stepPrompts: {
       "1": "你是引導討論助教，請聚焦題意澄清。",
       "2": "引導蒐集論據，提醒資料來源。",
-      "3": "協助產生可辯護的論點。"
+      "3": "協助產生可辯護的論點。",
+      "4": "引導比較組員觀點並修正。",
+      "5": "總結前四步重點並形成摘要。",
+      "6": "引導學生完成作文初稿。",
+      "7": "分析初稿的論點、結構、語言。",
+      "8": "指導潤飾與修訂。",
+      "9": "反思提問由系統執行。",
+      "10": "輸出完整總結報告。"
     },
     subStepPrompts: {
       "1-3": "請從立場差異切入，提出追問。",
-      "2-1": "引導學生先列出可查證資料類型。"
+      "1-4": "請要求學生補足可驗證證據。",
+      "2-1": "引導學生先列出可查證資料類型。",
+      "2-2": "引導學生評估資料可信度。",
+      "2-3": "引導學生整理支持/反對資料。"
     },
     questionBanks: {
       "1-1": ["題目中的關鍵詞有哪些？", "這個題目要解決什麼問題？"],
@@ -85,6 +89,24 @@ const openClassPromptConfigs: Record<string, PromptConfig> = {
     questionBanks: {}
   }
 };
+
+function mergePromptConfig(base: PromptConfig, override: PromptConfig): PromptConfig {
+  return {
+    stepPrompts: { ...base.stepPrompts, ...override.stepPrompts },
+    subStepPrompts: { ...base.subStepPrompts, ...override.subStepPrompts },
+    questionBanks: { ...base.questionBanks, ...override.questionBanks }
+  };
+}
+
+export function resolvePromptConfigForActivity(activityId: string): PromptConfig {
+  const openClass = openClasses.find((item) => item.id === activityId);
+  const essay = essays.find((item) => item.title === openClass?.essayTitle);
+
+  const base: PromptConfig = essay ? getEssayPromptConfig(essay.id) : { stepPrompts: {}, subStepPrompts: {}, questionBanks: {} };
+  const override: PromptConfig = openClass ? getOpenClassPromptConfig(openClass.id) : { stepPrompts: {}, subStepPrompts: {}, questionBanks: {} };
+
+  return mergePromptConfig(base, override);
+}
 
 export function getUsers(): UserAccount[] {
   return users;
@@ -247,4 +269,74 @@ export function resetUserPassword(username: string, newPassword: string) {
   }
   userPasswords[username] = newPassword;
   return true;
+}
+
+export function createUserAccount(input: {
+  username: string;
+  name: string;
+  school: string;
+  role: "student" | "teacher";
+  password: string;
+}) {
+  if (users.some((user) => user.username === input.username)) {
+    return { ok: false as const, error: "username_exists" };
+  }
+
+  users.push({
+    username: input.username,
+    name: input.name,
+    school: input.school,
+    role: input.role
+  });
+  userPasswords[input.username] = input.password;
+
+  return { ok: true as const };
+}
+
+export function updateUserAccount(
+  username: string,
+  patch: {
+    name?: string;
+    school?: string;
+    role?: "student" | "teacher";
+    password?: string;
+  }
+) {
+  const user = users.find((item) => item.username === username);
+  if (!user) {
+    return { ok: false as const, error: "user_not_found" };
+  }
+
+  if (patch.name !== undefined) user.name = patch.name;
+  if (patch.school !== undefined) user.school = patch.school;
+  if (patch.role !== undefined) user.role = patch.role;
+  if (patch.password !== undefined) userPasswords[username] = patch.password;
+
+  if (user.role !== "student") {
+    activities.forEach((activity) => {
+      activity.groups.forEach((group) => {
+        group.members = group.members.filter((member) => member !== username);
+      });
+    });
+  }
+
+  return { ok: true as const };
+}
+
+export function deleteUserAccount(username: string) {
+  const index = users.findIndex((user) => user.username === username);
+  if (index < 0) {
+    return { ok: false as const, error: "user_not_found" };
+  }
+
+  users.splice(index, 1);
+  delete userPasswords[username];
+
+  activities.forEach((activity) => {
+    activity.groups.forEach((group) => {
+      group.members = group.members.filter((member) => member !== username);
+    });
+  });
+
+  return { ok: true as const };
 }

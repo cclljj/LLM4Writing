@@ -18,11 +18,12 @@ export async function GET(request: NextRequest) {
 
   const progress = session.participants.map((participant) => {
     const ownMessages = session.messages.filter((message) => message.userId === participant);
+    const ownInteractiveMessages = ownMessages.filter((message) => [3, 6, 8].includes(message.step));
     const last = ownMessages[ownMessages.length - 1];
     return {
       username: participant,
       currentStep: last?.step ?? session.currentStep,
-      messageCount: ownMessages.length,
+      messageCount: ownInteractiveMessages.length,
       lastMessageAt: last?.at ?? null
     };
   });

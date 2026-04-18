@@ -9,16 +9,18 @@ export async function GET() {
   }
 
   const sessions = await listSessions();
-  const legacySessions = sessions
-    .filter((s) => s.workflow === "legacy_phase")
+  const activeSessions = sessions
+    .filter((s) => s.workflow === "spec10")
     .map((s) => ({
       sessionId: s.id,
       activityId: s.activityId,
       activityTitle: s.activityTitle,
+      groupId: s.groupId,
+      groupName: s.groupName,
       participants: s.participants,
       currentStep: s.currentStep,
-      messages: s.messages.slice(-20)
+      messages: s.messages
     }));
 
-  return NextResponse.json({ sessions: legacySessions });
+  return NextResponse.json({ sessions: activeSessions });
 }
