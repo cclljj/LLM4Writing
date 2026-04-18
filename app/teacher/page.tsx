@@ -742,6 +742,7 @@ export default function TeacherPage() {
     }
 
     const savedEssayId = essayData?.saved?.id as string | undefined;
+    const savedEssay = essayData?.saved as EssayRow | undefined;
     if (!savedEssayId) {
       setError("save_essay_failed");
       return;
@@ -775,7 +776,19 @@ export default function TeacherPage() {
       subStep13Prompt: "",
       questionBank11Text: ""
     });
-    await refreshAll();
+    if (savedEssay) {
+      setEssays((prev) => {
+        const existingIndex = prev.findIndex((item) => item.id === savedEssay.id);
+        if (existingIndex >= 0) {
+          const next = [...prev];
+          next[existingIndex] = savedEssay;
+          return next;
+        }
+        return [...prev, savedEssay];
+      });
+    } else {
+      await refreshAll();
+    }
   }
 
   async function startEditEssay(essay: EssayRow) {
