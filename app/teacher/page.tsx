@@ -132,6 +132,14 @@ export default function TeacherPage() {
       }),
     [users, roleFilter, userQuery]
   );
+  const teacherUsers = useMemo(
+    () => users.filter((item) => item.role === "teacher"),
+    [users]
+  );
+  const loginTeacherProfile = useMemo(
+    () => teacherUsers.find((item) => item.username === loginUser),
+    [teacherUsers, loginUser]
+  );
 
   const groupMessages = useMemo(() => {
     if (!monitorSelected) return [];
@@ -385,6 +393,47 @@ export default function TeacherPage() {
     setAccountSuccess("已新增帳號。");
     await refreshAll();
   }
+
+  function handleNewUserRoleChange(role: "student" | "teacher") {
+    if (role === "student") {
+      if (loginRole === "admin") {
+        setNewUserForm((prev) => ({ ...prev, role, ownerTeacherUsername: "", school: "" }));
+      } else {
+        setNewUserForm((prev) => ({
+          ...prev,
+          role,
+          ownerTeacherUsername: loginUser,
+          school: loginTeacherProfile?.school ?? ""
+        }));
+      }
+      return;
+    }
+
+    setNewUserForm((prev) => ({ ...prev, role, ownerTeacherUsername: "" }));
+  }
+
+  function handleNewStudentTeacherChange(teacherUsername: string) {
+    const teacher = teacherUsers.find((item) => item.username === teacherUsername);
+    setNewUserForm((prev) => ({
+      ...prev,
+      ownerTeacherUsername: teacherUsername,
+      school: teacher?.school ?? ""
+    }));
+  }
+
+  useEffect(() => {
+    if (newUserForm.role !== "student") return;
+    if (loginRole === "teacher") {
+      const school = loginTeacherProfile?.school ?? "";
+      if (newUserForm.ownerTeacherUsername !== loginUser || newUserForm.school !== school) {
+        setNewUserForm((prev) => ({
+          ...prev,
+          ownerTeacherUsername: loginUser,
+          school
+        }));
+      }
+    }
+  }, [newUserForm.role, loginRole, loginUser, loginTeacherProfile?.school, newUserForm.ownerTeacherUsername, newUserForm.school]);
 
   async function saveEditedUser() {
     if (!editingUser) return;
@@ -772,6 +821,50 @@ export default function TeacherPage() {
             <h3 style={{ marginBottom: 8 }}>新增單一帳號</h3>
             <div className="row">
               <div className="col">
+                <label>角色</label>
+                <select
+                  value={newUserForm.role}
+                  onChange={(e) => handleNewUserRoleChange(e.target.value as "student" | "teacher")}
+                >
+                  <option value="student">student</option>
+                  {loginRole === "admin" ? <option value="teacher">teacher</option> : null}
+                </select>
+              </div>
+              {loginRole === "admin" && newUserForm.role === "student" ? (
+                <div className="col">
+                  <label>綁定教師（username）</label>
+                  <select
+                    value={newUserForm.ownerTeacherUsername}
+                    onChange={(e) => handleNewStudentTeacherChange(e.target.value)}
+                  >
+                    <option value="">請選擇教師</option>
+                    {teacherUsers
+                      .map((teacher) => (
+                        <option key={teacher.username} value={teacher.username}>
+                          {teacher.username} / {teacher.name}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              ) : null}
+              {newUserForm.role === "student" ? (
+                <div className="col">
+                  <label>學校（自動帶入）</label>
+                  <input value={newUserForm.school} readOnly />
+                </div>
+              ) : (
+                <div className="col">
+                  <label>學校</label>
+                  <input
+                    value={newUserForm.school}
+                    onChange={(e) => setNewUserForm((prev) => ({ ...prev, school: e.target.value }))}
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="row" style={{ marginTop: 8 }}>
+              <div className="col">
                 <label>帳號（username）</label>
                 <input
                   value={newUserForm.username}
@@ -783,43 +876,6 @@ export default function TeacherPage() {
                 <label>姓名</label>
                 <input value={newUserForm.name} onChange={(e) => setNewUserForm((prev) => ({ ...prev, name: e.target.value }))} />
               </div>
-              <div className="col">
-                <label>學校</label>
-                <input
-                  value={newUserForm.school}
-                  onChange={(e) => setNewUserForm((prev) => ({ ...prev, school: e.target.value }))}
-                />
-              </div>
-              <div className="col">
-                <label>角色</label>
-                <select
-                  value={newUserForm.role}
-                  onChange={(e) =>
-                    setNewUserForm((prev) => ({ ...prev, role: e.target.value as "student" | "teacher" }))
-                  }
-                >
-                  <option value="student">student</option>
-                  {loginRole === "admin" ? <option value="teacher">teacher</option> : null}
-                </select>
-              </div>
-              {loginRole === "admin" && newUserForm.role === "student" ? (
-                <div className="col">
-                  <label>綁定教師（username）</label>
-                  <select
-                    value={newUserForm.ownerTeacherUsername}
-                    onChange={(e) => setNewUserForm((prev) => ({ ...prev, ownerTeacherUsername: e.target.value }))}
-                  >
-                    <option value="">請選擇教師</option>
-                    {users
-                      .filter((item) => item.role === "teacher")
-                      .map((teacher) => (
-                        <option key={teacher.username} value={teacher.username}>
-                          {teacher.username} / {teacher.name}
-                        </option>
-                      ))}
-                  </select>
-                </div>
-              ) : null}
               <div className="col">
                 <label>密碼（至少 6 碼）</label>
                 <input

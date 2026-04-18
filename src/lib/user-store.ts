@@ -90,15 +90,15 @@ async function ensureUserTable(): Promise<void> {
         )
       `;
 
-      const rows = await sql<{ c: number }[]>`SELECT COUNT(*)::int as c FROM llm4writing_users`;
-      if ((rows[0]?.c ?? 0) === 0) {
-        for (const user of defaultUsers) {
-          const { password, ...payload } = user;
-          await sql`
-            INSERT INTO llm4writing_users (username, payload, password)
-            VALUES (${user.username}, ${JSON.stringify(payload)}::jsonb, ${password})
-          `;
-        }
+      // Backfill default bootstrap accounts if they are missing.
+      // Use ON CONFLICT DO NOTHING so existing data is never overwritten.
+      for (const user of defaultUsers) {
+        const { password, ...payload } = user;
+        await sql`
+          INSERT INTO llm4writing_users (username, payload, password)
+          VALUES (${user.username}, ${JSON.stringify(payload)}::jsonb, ${password})
+          ON CONFLICT (username) DO NOTHING
+        `;
       }
     })();
   }
