@@ -430,8 +430,13 @@ export function upsertOpenClass(input: {
     return { ok: false as const, error: "essay_not_found" };
   }
 
+  const existing = input.id ? openClasses.find((openClass) => openClass.id === input.id) : undefined;
+  const canReuseDisabledEssay = Boolean(existing && existing.essayId === input.essayId);
+  if (!essay.enabled && !canReuseDisabledEssay) {
+    return { ok: false as const, error: "essay_disabled" };
+  }
+
   if (input.id) {
-    const existing = openClasses.find((openClass) => openClass.id === input.id);
     if (existing) {
       existing.school = input.school;
       existing.classNumber = input.classNumber;

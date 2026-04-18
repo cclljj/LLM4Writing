@@ -329,10 +329,13 @@ student 可儲存三種內容：
     - `步驟 1-3 Prompt`
     - `問題庫 1-1（每行一題）`
   - 主題清單含「編輯」按鈕，可載入並編輯主題完整內容
+  - 主題清單含「啟用 / 停用」按鈕，且按鈕互斥可用：
+    - 啟用中：`停用` 可按、`啟用` disabled
+    - 停用中：`啟用` 可按、`停用` disabled
   - 原「主題 Prompt/問題庫」獨立分頁已移除
 - 寫作任務管理（open class）：
   - 班級下拉：來自可見 student 的 classNumber 清單
-  - 主題下拉：顯示 `essayId / title`
+  - 主題下拉：顯示 `essayId / title`（僅可選啟用主題；編輯既有任務時可保留既有停用主題）
   - 支援新增與編輯
   - 在同一編輯表單可寫 `步驟1` / `子步驟2-1` 的任務 prompt 覆蓋
 - 組別管理：
@@ -505,6 +508,7 @@ Request:
 
 - 權限：teacher/admin
 - 管理寫作主題主資料（title/genre/引導說明）
+- 可透過 `enabled` 切換主題啟用狀態
 
 ### `GET/POST /api/admin/prompts/essay`
 
@@ -520,6 +524,8 @@ Request:
 - POST（新增/編輯任務）：
   - 欄位：`id? classNumber essayId durationMinutes supplemental school? promptOverride?`
   - teacher 僅可對可見班級操作
+  - 停用中的主題不可建立新任務（`essay_disabled`）
+  - 既有任務若已綁定停用主題，仍可維持與編輯
   - `promptOverride` 寫入 open class prompt config
 
 ### `GET/POST /api/admin/prompts/openclass`
@@ -612,6 +618,7 @@ Behavior:
 7. student artifact 只能存到自己參與的 session
 8. session/user store 必須維持「有 DB 用 DB，無 DB 用 memory」雙模式
 9. student 透過 `/api/student/join` 加入時必須遵守課程狀態限制（未開始/已結束不可加入）
+10. 停用主題不可建立新寫作任務，但既有任務不受影響
 
 ---
 

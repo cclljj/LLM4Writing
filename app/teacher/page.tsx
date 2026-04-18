@@ -755,8 +755,7 @@ export default function TeacherPage() {
       return;
     }
 
-    const savedEssay = essayData?.saved as EssayRow | undefined;
-    if (!savedEssay?.id) {
+    if (!essayData?.saved?.id) {
       setError("save_essay_failed");
       return;
     }
@@ -771,19 +770,7 @@ export default function TeacherPage() {
       subStep13Prompt: "",
       questionBank11Text: ""
     });
-    if (savedEssay) {
-      setEssays((prev) => {
-        const existingIndex = prev.findIndex((item) => item.id === savedEssay.id);
-        if (existingIndex >= 0) {
-          const next = [...prev];
-          next[existingIndex] = savedEssay;
-          return next;
-        }
-        return [...prev, savedEssay];
-      });
-    } else {
-      await refreshAll();
-    }
+    await refreshAll();
   }
 
   async function startEditEssay(essay: EssayRow) {
@@ -802,13 +789,14 @@ export default function TeacherPage() {
 
   async function saveOpenClass(e: FormEvent) {
     e.preventDefault();
+    setError("");
     const promptOverride: PromptConfig = {
       stepPrompts: openClassForm.step1PromptOverride ? { "1": openClassForm.step1PromptOverride } : {},
       subStepPrompts: openClassForm.subStep21PromptOverride ? { "2-1": openClassForm.subStep21PromptOverride } : {},
       questionBanks: {}
     };
 
-    await fetch("/api/admin/openclasses", {
+    const response = await fetch("/api/admin/openclasses", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -820,6 +808,16 @@ export default function TeacherPage() {
         promptOverride
       })
     });
+    const data = await response.json();
+    if (!response.ok) {
+      if (data.error === "essay_disabled") {
+        setError("此主題已停用，無法建立新的寫作任務。");
+      } else {
+        setError(data.error ?? "save_openclass_failed");
+      }
+      return;
+    }
+
     setOpenClassForm({
       id: "",
       classNumber: "",
@@ -829,6 +827,27 @@ export default function TeacherPage() {
       step1PromptOverride: "",
       subStep21PromptOverride: ""
     });
+    await refreshAll();
+  }
+
+  async function toggleEssayEnabled(essay: EssayRow, enabled: boolean) {
+    setError("");
+    const response = await fetch("/api/admin/essays", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: essay.id,
+        title: essay.title,
+        genre: essay.genre,
+        description: essay.description,
+        enabled
+      })
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      setError(data.error ?? "toggle_essay_enabled_failed");
+      return;
+    }
     await refreshAll();
   }
 
@@ -1805,9 +1824,29 @@ export default function TeacherPage() {
                         <td>{essay.genre}</td>
                         <td>{essay.description || "—"}</td>
                         <td>
-                          <button type="button" className="secondary" style={{ width: "auto" }} onClick={() => startEditEssay(essay)}>
-                            編輯
-                          </button>
+                          <div className="row" style={{ gap: 8 }}>
+                            <button type="button" className="secondary" style={{ width: "auto" }} onClick={() => startEditEssay(essay)}>
+                              編輯
+                            </button>
+                            <button
+                              type="button"
+                              className="secondary"
+                              style={{ width: "auto" }}
+                              disabled={essay.enabled}
+                              onClick={() => toggleEssayEnabled(essay, true)}
+                            >
+                              啟用
+                            </button>
+                            <button
+                              type="button"
+                              className="secondary"
+                              style={{ width: "auto" }}
+                              disabled={!essay.enabled}
+                              onClick={() => toggleEssayEnabled(essay, false)}
+                            >
+                              停用
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -1842,11 +1881,13 @@ export default function TeacherPage() {
                     onChange={(e) => setOpenClassForm({ ...openClassForm, essayId: e.target.value })}
                   >
                     <option value="">請選擇</option>
-                    {essays.map((essay) => (
+                    {essays
+                      .filter((essay) => essay.enabled || essay.id === openClassForm.essayId)
+                      .map((essay) => (
                       <option key={essay.id} value={essay.id}>
                         {essay.id} / {essay.title}
                       </option>
-                    ))}
+                      ))}
                   </select>
                 </div>
                 <div className="col">
@@ -1881,6 +1922,11 @@ export default function TeacherPage() {
                 <div className="col" style={{ alignSelf: "end" }}>
                   <button type="submit">{openClassForm.id ? "儲存任務編輯" : "新增班級任務"}</button>
                 </div>
+                {error ? (
+                  <div className="col" style={{ width: "100%" }}>
+                    <small>{error}</small>
+                  </div>
+                ) : null}
               </form>
               <div style={{ overflowX: "auto", marginTop: 10 }}>
                 <table className="pro-table">
