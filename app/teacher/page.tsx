@@ -733,44 +733,62 @@ export default function TeacherPage() {
       return;
     }
 
-    const essayResponse = await fetch("/api/admin/essays", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        id: essayForm.id || undefined,
-        title: essayForm.title,
-        genre: essayForm.genre,
-        description: essayForm.description,
-        enabled: essayForm.enabled,
-        promptConfig: {
-          stepPrompts: { "1": step1Prompt },
-          subStepPrompts: { "1-3": subStep13Prompt },
-          questionBanks: { "1-1": questionBank11 }
+    try {
+      const essayResponse = await fetch("/api/admin/essays", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: essayForm.id || undefined,
+          title: essayForm.title,
+          genre: essayForm.genre,
+          description: essayForm.description,
+          enabled: essayForm.enabled,
+          promptConfig: {
+            stepPrompts: { "1": step1Prompt },
+            subStepPrompts: { "1-3": subStep13Prompt },
+            questionBanks: { "1-1": questionBank11 }
+          }
+        })
+      });
+      const essayData = await essayResponse.json();
+      if (!essayResponse.ok) {
+        setError(essayData.error ?? "save_essay_failed");
+        return;
+      }
+
+      const savedEssay = essayData?.saved as EssayRow | undefined;
+      if (!savedEssay?.id) {
+        setError("save_essay_failed");
+        return;
+      }
+
+      // 先本地更新，確保使用者儲存後立刻看得到結果
+      setEssays((prev) => {
+        const idx = prev.findIndex((item) => item.id === savedEssay.id);
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = savedEssay;
+          return next;
         }
-      })
-    });
-    const essayData = await essayResponse.json();
-    if (!essayResponse.ok) {
-      setError(essayData.error ?? "save_essay_failed");
-      return;
-    }
+        return [...prev, savedEssay];
+      });
 
-    if (!essayData?.saved?.id) {
+      setEssayForm({
+        id: "",
+        title: "",
+        genre: "議論文",
+        description: "",
+        enabled: true,
+        step1Prompt: "",
+        subStep13Prompt: "",
+        questionBank11Text: ""
+      });
+
+      // 再背景同步全部資料，若失敗不影響剛剛新增的顯示
+      refreshAll().catch(() => undefined);
+    } catch {
       setError("save_essay_failed");
-      return;
     }
-
-    setEssayForm({
-      id: "",
-      title: "",
-      genre: "議論文",
-      description: "",
-      enabled: true,
-      step1Prompt: "",
-      subStep13Prompt: "",
-      questionBank11Text: ""
-    });
-    await refreshAll();
   }
 
   async function startEditEssay(essay: EssayRow) {
