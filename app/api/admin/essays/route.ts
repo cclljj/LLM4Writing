@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/src/lib/auth-server";
-import { getEssays, upsertEssay } from "@/src/lib/mock-data";
+import { getEssayPromptConfig, getEssays, saveEssayPromptConfig, upsertEssay } from "@/src/lib/mock-data";
+import { PromptConfig } from "@/src/lib/types";
 
 export async function GET() {
   const user = await getCurrentUser();
@@ -8,7 +9,17 @@ export async function GET() {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
-  return NextResponse.json({ essays: getEssays() });
+  const essays = getEssays().map((essay) => {
+    const config = getEssayPromptConfig(essay.id);
+    return {
+      ...essay,
+      step1Prompt: config.stepPrompts["1"] ?? "",
+      subStep13Prompt: config.subStepPrompts["1-3"] ?? "",
+      questionBank11: config.questionBanks["1-1"] ?? []
+    };
+  });
+
+  return NextResponse.json({ essays });
 }
 
 export async function POST(request: NextRequest) {
@@ -23,6 +34,7 @@ export async function POST(request: NextRequest) {
     genre?: string;
     description?: string;
     enabled?: boolean;
+    promptConfig?: PromptConfig;
   };
 
   if (!body.title || !body.genre || !body.description) {
@@ -36,6 +48,10 @@ export async function POST(request: NextRequest) {
     description: body.description,
     enabled: body.enabled ?? true
   });
+
+  if (body.promptConfig) {
+    saveEssayPromptConfig(saved.id, body.promptConfig);
+  }
 
   return NextResponse.json({ saved });
 }

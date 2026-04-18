@@ -3,7 +3,16 @@
 import { DragEvent, FormEvent, useEffect, useMemo, useState } from "react";
 
 type UserRow = { username: string; name: string; school: string; role: string; ownerTeacherUsername?: string; classNumber?: string };
-type EssayRow = { id: string; title: string; genre: string; description: string; enabled: boolean };
+type EssayRow = {
+  id: string;
+  title: string;
+  genre: string;
+  description: string;
+  enabled: boolean;
+  step1Prompt?: string;
+  subStep13Prompt?: string;
+  questionBank11?: string[];
+};
 type OpenClassRow = {
   id: string;
   school: string;
@@ -732,7 +741,12 @@ export default function TeacherPage() {
         title: essayForm.title,
         genre: essayForm.genre,
         description: essayForm.description,
-        enabled: essayForm.enabled
+        enabled: essayForm.enabled,
+        promptConfig: {
+          stepPrompts: { "1": step1Prompt },
+          subStepPrompts: { "1-3": subStep13Prompt },
+          questionBanks: { "1-1": questionBank11 }
+        }
       })
     });
     const essayData = await essayResponse.json();
@@ -741,28 +755,9 @@ export default function TeacherPage() {
       return;
     }
 
-    const savedEssayId = essayData?.saved?.id as string | undefined;
     const savedEssay = essayData?.saved as EssayRow | undefined;
-    if (!savedEssayId) {
+    if (!savedEssay?.id) {
       setError("save_essay_failed");
-      return;
-    }
-
-    const promptResponse = await fetch("/api/admin/prompts/essay", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        essayId: savedEssayId,
-        config: {
-          stepPrompts: { "1": step1Prompt },
-          subStepPrompts: { "1-3": subStep13Prompt },
-          questionBanks: { "1-1": questionBank11 }
-        }
-      })
-    });
-    const promptData = await promptResponse.json();
-    if (!promptResponse.ok) {
-      setError(promptData.error ?? "save_essay_prompt_failed");
       return;
     }
 
@@ -793,23 +788,15 @@ export default function TeacherPage() {
 
   async function startEditEssay(essay: EssayRow) {
     setError("");
-    const response = await fetch(`/api/admin/prompts/essay?essayId=${encodeURIComponent(essay.id)}`);
-    const data = await response.json();
-    if (!response.ok) {
-      setError(data.error ?? "load_essay_prompt_failed");
-      return;
-    }
-
-    const config = (data?.config ?? { stepPrompts: {}, subStepPrompts: {}, questionBanks: {} }) as PromptConfig;
     setEssayForm({
       id: essay.id,
       title: essay.title,
       genre: essay.genre,
       description: essay.description,
       enabled: essay.enabled,
-      step1Prompt: config.stepPrompts["1"] ?? "",
-      subStep13Prompt: config.subStepPrompts["1-3"] ?? "",
-      questionBank11Text: (config.questionBanks["1-1"] ?? []).join("\n")
+      step1Prompt: essay.step1Prompt ?? "",
+      subStep13Prompt: essay.subStep13Prompt ?? "",
+      questionBank11Text: (essay.questionBank11 ?? []).join("\n")
     });
   }
 
