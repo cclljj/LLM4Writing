@@ -658,7 +658,7 @@ export default function TeacherPage() {
         errors.push(`第 ${idx + 1} 列有必填欄位為空`);
         return;
       }
-      if (!options?.skipUsernameFormat && !/^[A-Za-z0-9._-]{3,32}$/.test(username)) {
+      if (!options?.skipUsernameFormat && !/^[A-Za-z0-9._-]{2,32}$/.test(username)) {
         errors.push(`第 ${idx + 1} 列 username 格式錯誤`);
       }
       if (!["student", "teacher"].includes(role)) {

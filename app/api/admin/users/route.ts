@@ -360,7 +360,7 @@ async function validateUserFields(input: UserInput): Promise<
   if (!username || !name || !school || !role || !password) {
     return { ok: false, error: "missing_required_fields" };
   }
-  if (!/^[A-Za-z0-9._-]{3,32}$/.test(username)) {
+  if (!/^[A-Za-z0-9._-]{2,32}$/.test(username)) {
     return { ok: false, error: "invalid_username_format" };
   }
   if (!isValidRole(role)) {
