@@ -2,7 +2,7 @@
 
 import { DragEvent, FormEvent, useEffect, useMemo, useState } from "react";
 
-type UserRow = { username: string; name: string; school: string; role: string };
+type UserRow = { username: string; name: string; school: string; role: string; ownerTeacherUsername?: string };
 type EssayRow = { id: string; title: string; genre: string; description: string; enabled: boolean };
 type OpenClassRow = { id: string; className: string; essayTitle: string; durationMinutes: number; supplemental: string };
 type ActivityGroup = { groupId: string; groupName: string; members: string[] };
@@ -48,6 +48,7 @@ type CourseTab = "essay" | "essay_prompt" | "openclass" | "openclass_prompt" | "
 
 export default function TeacherPage() {
   const [loginUser, setLoginUser] = useState("");
+  const [loginRole, setLoginRole] = useState<"teacher" | "admin">("teacher");
   const [tab, setTab] = useState<"system" | "learning" | "course">("system");
   const [courseTab, setCourseTab] = useState<CourseTab>("essay");
   const [users, setUsers] = useState<UserRow[]>([]);
@@ -61,7 +62,7 @@ export default function TeacherPage() {
   const [step, setStep] = useState(1);
   const [error, setError] = useState("");
   const [userQuery, setUserQuery] = useState("");
-  const [roleFilter, setRoleFilter] = useState<"all" | "teacher" | "student">("all");
+  const [roleFilter, setRoleFilter] = useState<"all" | "teacher" | "student" | "admin">("all");
   const [accountError, setAccountError] = useState("");
   const [accountSuccess, setAccountSuccess] = useState("");
   const [editingUser, setEditingUser] = useState<{
@@ -69,6 +70,7 @@ export default function TeacherPage() {
     name: string;
     school: string;
     role: "student" | "teacher";
+    ownerTeacherUsername: string;
     password: string;
   } | null>(null);
   const [newUserForm, setNewUserForm] = useState({
@@ -76,10 +78,15 @@ export default function TeacherPage() {
     name: "",
     school: "",
     role: "student" as "student" | "teacher",
+    ownerTeacherUsername: "",
     password: ""
   });
   const [csvInput, setCsvInput] = useState("");
   const [csvPreviewErrors, setCsvPreviewErrors] = useState<string[]>([]);
+  const [resetTargetUser, setResetTargetUser] = useState("");
+  const [resetMode, setResetMode] = useState<"system" | "manual">("system");
+  const [generatedPassword, setGeneratedPassword] = useState("");
+  const [manualResetPassword, setManualResetPassword] = useState("");
 
   const [essayForm, setEssayForm] = useState({ title: "", genre: "議論文", description: "", enabled: true });
   const [openClassForm, setOpenClassForm] = useState({ className: "", essayTitle: "", durationMinutes: 40, supplemental: "" });
@@ -147,6 +154,11 @@ export default function TeacherPage() {
       .then((data) => {
         if (data?.authenticated) {
           setLoginUser(data.user.username);
+          if (data.user.role === "admin") {
+            setLoginRole("admin");
+          } else {
+            setLoginRole("teacher");
+          }
         }
       })
       .catch(() => undefined);
@@ -277,11 +289,45 @@ export default function TeacherPage() {
     }
   }
 
-  async function resetPassword(username: string) {
+  function openResetPassword(username: string) {
+    const newGenerated = createRandomPassword();
+    setResetTargetUser(username);
+    setResetMode("system");
+    setGeneratedPassword(newGenerated);
+    setManualResetPassword("");
+    setAccountError("");
+    setAccountSuccess("");
+  }
+
+  function createRandomPassword(length = 12): string {
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%";
+    let result = "";
+    for (let i = 0; i < length; i += 1) {
+      result += chars[Math.floor(Math.random() * chars.length)]!;
+    }
+    return result;
+  }
+
+  async function copyResetPasswordValue() {
+    const value = resetMode === "system" ? generatedPassword : manualResetPassword;
+    if (!value) return;
+    await navigator.clipboard.writeText(value);
+    setAccountSuccess("密碼已複製到剪貼簿。");
+  }
+
+  async function resetPassword() {
+    if (!resetTargetUser) return;
+    const nextPassword = resetMode === "system" ? generatedPassword : manualResetPassword;
+    if (!nextPassword || nextPassword.length < 6) {
+      setAccountError("password_too_short");
+      setAccountSuccess("");
+      return;
+    }
+
     const response = await fetch("/api/admin/users", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "reset_password", username, newPassword: "newpass123" })
+      body: JSON.stringify({ action: "reset_password", username: resetTargetUser, newPassword: nextPassword })
     });
     if (!response.ok) {
       const data = await response.json();
@@ -289,25 +335,45 @@ export default function TeacherPage() {
       setAccountSuccess("");
       return;
     }
-    setAccountSuccess(`已重設 ${username} 密碼為 newpass123`);
+    setAccountSuccess(`已重設 ${resetTargetUser} 密碼。`);
+    setResetTargetUser("");
+    setManualResetPassword("");
     setAccountError("");
   }
 
   async function createUser() {
     setAccountError("");
     setAccountSuccess("");
-    const validationErrors = validateCsvRows([
-      `${newUserForm.username},${newUserForm.name},${newUserForm.school},${newUserForm.role},${newUserForm.password}`
-    ]);
+    const validationErrors = validateCsvRows(
+      [
+        `${newUserForm.username},${newUserForm.name},${newUserForm.school},${newUserForm.role},${newUserForm.password},${newUserForm.ownerTeacherUsername}`
+      ],
+      { isAdmin: loginRole === "admin" }
+    );
     if (validationErrors.length > 0) {
       setAccountError(validationErrors[0]!);
       return;
     }
 
+    if (loginRole !== "admin" && newUserForm.role !== "student") {
+      setAccountError("teacher_can_only_create_students");
+      return;
+    }
+
+    const userPayload = {
+      ...newUserForm,
+      ownerTeacherUsername:
+        newUserForm.role === "student"
+          ? loginRole === "admin"
+            ? newUserForm.ownerTeacherUsername
+            : loginUser
+          : ""
+    };
+
     const response = await fetch("/api/admin/users", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "create", user: newUserForm })
+      body: JSON.stringify({ action: "create", user: userPayload })
     });
     const data = await response.json();
     if (!response.ok) {
@@ -315,7 +381,7 @@ export default function TeacherPage() {
       return;
     }
 
-    setNewUserForm({ username: "", name: "", school: "", role: "student", password: "" });
+    setNewUserForm({ username: "", name: "", school: "", role: "student", ownerTeacherUsername: "", password: "" });
     setAccountSuccess("已新增帳號。");
     await refreshAll();
   }
@@ -327,18 +393,30 @@ export default function TeacherPage() {
     setAccountSuccess("");
     const row = `${editingUser.username},${editingUser.name},${editingUser.school},${editingUser.role},${
       editingUser.password || "placeholder123"
-    }`;
-    const validationErrors = validateCsvRows([row], editingUser.password ? undefined : { skipPasswordLength: true });
+    },${editingUser.ownerTeacherUsername}`;
+    const validationErrors = validateCsvRows([row], {
+      skipPasswordLength: !editingUser.password,
+      isAdmin: loginRole === "admin"
+    });
     if (validationErrors.length > 0) {
       setAccountError(validationErrors[0]!);
       return;
     }
 
-    const patch: { name: string; school: string; role: "student" | "teacher"; password?: string } = {
+    const patch: {
+      name: string;
+      school: string;
+      role: "student" | "teacher";
+      ownerTeacherUsername?: string;
+      password?: string;
+    } = {
       name: editingUser.name,
       school: editingUser.school,
       role: editingUser.role
     };
+    if (editingUser.role === "student") {
+      patch.ownerTeacherUsername = loginRole === "admin" ? editingUser.ownerTeacherUsername : loginUser;
+    }
     if (editingUser.password) {
       patch.password = editingUser.password;
     }
@@ -395,7 +473,7 @@ export default function TeacherPage() {
     const hasHeader =
       parsedLines[0]!.toLowerCase() === "username,name,school,role,password" || parsedLines[0] === "帳號,姓名,學校,角色,密碼";
     const dataLines = hasHeader ? parsedLines.slice(1) : parsedLines;
-    const previewErrors = validateCsvRows(dataLines);
+    const previewErrors = validateCsvRows(dataLines, { isAdmin: loginRole === "admin" });
     setCsvPreviewErrors(previewErrors);
     if (previewErrors.length > 0) {
       setAccountError("csv_validation_failed");
@@ -422,16 +500,19 @@ export default function TeacherPage() {
     await refreshAll();
   }
 
-  function validateCsvRows(lines: string[], options?: { skipPasswordLength?: boolean }): string[] {
+  function validateCsvRows(lines: string[], options?: { skipPasswordLength?: boolean; isAdmin?: boolean }): string[] {
     const errors: string[] = [];
     const seen = new Set<string>();
+    const teacherUsernames = users.filter((item) => item.role === "teacher").map((item) => item.username);
+
     lines.forEach((line, idx) => {
       const cols = splitCsvLine(line);
-      if (cols.length !== 5) {
-        errors.push(`第 ${idx + 1} 列欄位數錯誤（需 5 欄）`);
+      if (cols.length !== 5 && cols.length !== 6) {
+        errors.push(`第 ${idx + 1} 列欄位數錯誤（需 5 或 6 欄）`);
         return;
       }
-      const [username, name, school, role, password] = cols.map((v) => v.trim());
+      const [username, name, school, role, password, ownerTeacherUsernameRaw = ""] = cols.map((v) => v.trim());
+      const ownerTeacherUsername = ownerTeacherUsernameRaw.trim();
       if (!username || !name || !school || !role || !password) {
         errors.push(`第 ${idx + 1} 列有必填欄位為空`);
         return;
@@ -440,10 +521,22 @@ export default function TeacherPage() {
         errors.push(`第 ${idx + 1} 列 username 格式錯誤`);
       }
       if (!["student", "teacher"].includes(role)) {
-        errors.push(`第 ${idx + 1} 列 role 必須是 student 或 teacher`);
+        errors.push(`第 ${idx + 1} 列 role 必須是 student 或 teacher（不可為 admin）`);
+      }
+      if (options?.isAdmin === false && role === "teacher") {
+        errors.push(`第 ${idx + 1} 列教師帳號只能由 admin 建立`);
       }
       if (!options?.skipPasswordLength && password.length < 6) {
         errors.push(`第 ${idx + 1} 列 password 至少 6 碼`);
+      }
+      if (role === "student") {
+        if (options?.isAdmin) {
+          if (!ownerTeacherUsername) {
+            errors.push(`第 ${idx + 1} 列 student 必填綁定教師 username`);
+          } else if (!teacherUsernames.includes(ownerTeacherUsername)) {
+            errors.push(`第 ${idx + 1} 列綁定教師不存在`);
+          }
+        }
       }
       if (seen.has(username)) {
         errors.push(`第 ${idx + 1} 列 username 重複`);
@@ -605,7 +698,7 @@ export default function TeacherPage() {
           <h1 style={{ marginBottom: 0 }}>教師端管理台</h1>
           <div>
             <span className="badge" style={{ marginRight: 8 }}>
-              {loginUser ? `登入者: ${loginUser}` : "教師"}
+              {loginUser ? `登入者: ${loginUser} (${loginRole === "admin" ? "管理員" : "教師"})` : "管理端"}
             </span>
             <button type="button" className="secondary" style={{ width: "auto" }} onClick={logout}>
               登出
@@ -644,6 +737,12 @@ export default function TeacherPage() {
               <small>教師帳號</small>
               <div style={{ fontSize: 22, fontWeight: 700 }}>{users.filter((user) => user.role === "teacher").length}</div>
             </div>
+            {loginRole === "admin" ? (
+              <div className="col card" style={{ marginBottom: 0, padding: 12 }}>
+                <small>管理員帳號</small>
+                <div style={{ fontSize: 22, fontWeight: 700 }}>{users.filter((user) => user.role === "admin").length}</div>
+              </div>
+            ) : null}
             <div className="col card" style={{ marginBottom: 0, padding: 12 }}>
               <small>學生帳號</small>
               <div style={{ fontSize: 22, fontWeight: 700 }}>{users.filter((user) => user.role === "student").length}</div>
@@ -657,8 +756,12 @@ export default function TeacherPage() {
             </div>
             <div className="col">
               <label>角色篩選</label>
-              <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value as "all" | "teacher" | "student")}>
+              <select
+                value={roleFilter}
+                onChange={(e) => setRoleFilter(e.target.value as "all" | "teacher" | "student" | "admin")}
+              >
                 <option value="all">全部</option>
+                {loginRole === "admin" ? <option value="admin">管理員</option> : null}
                 <option value="teacher">教師</option>
                 <option value="student">學生</option>
               </select>
@@ -691,12 +794,32 @@ export default function TeacherPage() {
                 <label>角色</label>
                 <select
                   value={newUserForm.role}
-                  onChange={(e) => setNewUserForm((prev) => ({ ...prev, role: e.target.value as "student" | "teacher" }))}
+                  onChange={(e) =>
+                    setNewUserForm((prev) => ({ ...prev, role: e.target.value as "student" | "teacher" }))
+                  }
                 >
                   <option value="student">student</option>
-                  <option value="teacher">teacher</option>
+                  {loginRole === "admin" ? <option value="teacher">teacher</option> : null}
                 </select>
               </div>
+              {loginRole === "admin" && newUserForm.role === "student" ? (
+                <div className="col">
+                  <label>綁定教師（username）</label>
+                  <select
+                    value={newUserForm.ownerTeacherUsername}
+                    onChange={(e) => setNewUserForm((prev) => ({ ...prev, ownerTeacherUsername: e.target.value }))}
+                  >
+                    <option value="">請選擇教師</option>
+                    {users
+                      .filter((item) => item.role === "teacher")
+                      .map((teacher) => (
+                        <option key={teacher.username} value={teacher.username}>
+                          {teacher.username} / {teacher.name}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              ) : null}
               <div className="col">
                 <label>密碼（至少 6 碼）</label>
                 <input
@@ -715,12 +838,21 @@ export default function TeacherPage() {
 
           <div className="card" style={{ marginBottom: 10 }}>
             <h3 style={{ marginBottom: 8 }}>CSV 貼上批次新增</h3>
-            <small>格式：`username,name,school,role,password`（可含標題列，role 僅接受 student/teacher）</small>
+            <small>
+              格式：`username,name,school,role,password[,ownerTeacherUsername]`。
+              {loginRole === "admin"
+                ? "admin 建 student 時，必填 ownerTeacherUsername。"
+                : "teacher 建立 student 時，系統會自動綁定目前登入教師。"}
+            </small>
             <textarea
               style={{ marginTop: 8 }}
               value={csvInput}
               onChange={(e) => setCsvInput(e.target.value)}
-              placeholder={"username,name,school,role,password\nstudent10,王小明,Demo High,student,abc12345"}
+              placeholder={
+                loginRole === "admin"
+                  ? "username,name,school,role,password,ownerTeacherUsername\nstudent10,王小明,Demo High,student,abc12345,teacher"
+                  : "username,name,school,role,password\nstudent10,王小明,Demo High,student,abc12345"
+              }
             />
             <div className="row" style={{ marginTop: 10 }}>
               <div style={{ width: 220 }}>
@@ -729,7 +861,17 @@ export default function TeacherPage() {
                 </button>
               </div>
               <div style={{ width: 220 }}>
-                <button type="button" className="secondary" onClick={() => setCsvInput("username,name,school,role,password")}>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() =>
+                    setCsvInput(
+                      loginRole === "admin"
+                        ? "username,name,school,role,password,ownerTeacherUsername"
+                        : "username,name,school,role,password"
+                    )
+                  }
+                >
                   載入範例表頭
                 </button>
               </div>
@@ -745,6 +887,61 @@ export default function TeacherPage() {
             ) : null}
           </div>
 
+          {resetTargetUser ? (
+            <div className="card" style={{ marginBottom: 10, borderColor: "#bfdbfe", background: "#eff6ff" }}>
+              <h3 style={{ marginBottom: 8 }}>重設密碼：{resetTargetUser}</h3>
+              <div className="row">
+                <div className="col">
+                  <label>密碼來源</label>
+                  <select value={resetMode} onChange={(e) => setResetMode(e.target.value as "system" | "manual")}>
+                    <option value="system">系統產生密碼</option>
+                    <option value="manual">手動輸入新密碼</option>
+                  </select>
+                </div>
+                {resetMode === "system" ? (
+                  <>
+                    <div className="col">
+                      <label>系統產生密碼</label>
+                      <input value={generatedPassword} readOnly />
+                    </div>
+                    <div className="col" style={{ alignSelf: "end" }}>
+                      <button type="button" className="secondary" onClick={() => setGeneratedPassword(createRandomPassword())}>
+                        重新產生
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <div className="col">
+                    <label>手動輸入新密碼（至少 6 碼）</label>
+                    <input
+                      type="text"
+                      value={manualResetPassword}
+                      onChange={(e) => setManualResetPassword(e.target.value)}
+                      placeholder="輸入新密碼"
+                    />
+                  </div>
+                )}
+              </div>
+              <div className="row" style={{ marginTop: 8 }}>
+                <div style={{ width: 180 }}>
+                  <button type="button" className="secondary" onClick={copyResetPasswordValue}>
+                    複製密碼
+                  </button>
+                </div>
+                <div style={{ width: 180 }}>
+                  <button type="button" onClick={resetPassword}>
+                    確認重設
+                  </button>
+                </div>
+                <div style={{ width: 180 }}>
+                  <button type="button" className="secondary" onClick={() => setResetTargetUser("")}>
+                    取消
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
           {accountError ? <small style={{ color: "#b91c1c", display: "block", marginBottom: 8 }}>{accountError}</small> : null}
           {accountSuccess ? <small style={{ color: "#166534", display: "block", marginBottom: 8 }}>{accountSuccess}</small> : null}
 
@@ -757,6 +954,7 @@ export default function TeacherPage() {
                   <th>姓名</th>
                   <th>學校</th>
                   <th>角色</th>
+                  <th>綁定教師</th>
                   <th style={{ width: 360 }}>操作</th>
                 </tr>
               </thead>
@@ -789,12 +987,41 @@ export default function TeacherPage() {
                             }
                           >
                             <option value="student">student</option>
-                            <option value="teacher">teacher</option>
+                            {loginRole === "admin" || editingUser.username === loginUser ? (
+                              <option value="teacher">teacher</option>
+                            ) : null}
                           </select>
                         </td>
                         <td>
-                          <div className="row">
-                            <div style={{ minWidth: 150 }}>
+                          {editingUser.role === "student" ? (
+                            loginRole === "admin" ? (
+                              <select
+                                value={editingUser.ownerTeacherUsername}
+                                onChange={(e) =>
+                                  setEditingUser((prev) =>
+                                    prev ? { ...prev, ownerTeacherUsername: e.target.value } : prev
+                                  )
+                                }
+                              >
+                                <option value="">請選擇教師</option>
+                                {users
+                                  .filter((item) => item.role === "teacher")
+                                  .map((teacher) => (
+                                    <option key={teacher.username} value={teacher.username}>
+                                      {teacher.username}
+                                    </option>
+                                  ))}
+                              </select>
+                            ) : (
+                              <small>{loginUser}</small>
+                            )
+                          ) : (
+                            <small>—</small>
+                          )}
+                        </td>
+                        <td>
+                          <div style={{ display: "grid", gap: 6 }}>
+                            <div>
                               <input
                                 type="password"
                                 placeholder="新密碼（選填）"
@@ -804,13 +1031,16 @@ export default function TeacherPage() {
                                 }
                               />
                             </div>
-                            <div style={{ width: 90 }}>
-                              <button type="button" onClick={saveEditedUser}>
+                            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                              <button type="button" style={{ width: "auto", minWidth: 72 }} onClick={saveEditedUser}>
                                 儲存
                               </button>
-                            </div>
-                            <div style={{ width: 90 }}>
-                              <button type="button" className="secondary" onClick={() => setEditingUser(null)}>
+                              <button
+                                type="button"
+                                className="secondary"
+                                style={{ width: "auto", minWidth: 72 }}
+                                onClick={() => setEditingUser(null)}
+                              >
                                 取消
                               </button>
                             </div>
@@ -822,43 +1052,51 @@ export default function TeacherPage() {
                         <td>{user.name}</td>
                         <td>{user.school}</td>
                         <td>
-                          <span className="badge">{user.role === "teacher" ? "教師" : "學生"}</span>
+                          <span className="badge">
+                            {user.role === "teacher" ? "教師" : user.role === "admin" ? "管理員" : "學生"}
+                          </span>
                         </td>
+                        <td>{user.role === "student" ? user.ownerTeacherUsername ?? "—" : "—"}</td>
                         <td>
-                          <div className="row" style={{ gap: 8 }}>
-                            <button
-                              type="button"
-                              className="secondary"
-                              style={{ width: "auto" }}
-                              onClick={() =>
-                                setEditingUser({
-                                  username: user.username,
-                                  name: user.name,
-                                  school: user.school,
-                                  role: user.role === "teacher" ? "teacher" : "student",
-                                  password: ""
-                                })
-                              }
-                            >
-                              修改
-                            </button>
-                            <button
-                              type="button"
-                              className="secondary"
-                              style={{ width: "auto" }}
-                              onClick={() => resetPassword(user.username)}
-                            >
-                              重設密碼
-                            </button>
-                            <button
-                              type="button"
-                              className="secondary"
-                              style={{ width: "auto", color: "#b91c1c", borderColor: "#fecaca", background: "#fef2f2" }}
-                              onClick={() => deleteUser(user.username)}
-                            >
-                              刪除
-                            </button>
-                          </div>
+                          {user.role === "admin" ? (
+                            <small>系統保留帳號</small>
+                          ) : (
+                            <div className="row" style={{ gap: 8 }}>
+                              <button
+                                type="button"
+                                className="secondary"
+                                style={{ width: "auto" }}
+                                onClick={() =>
+                                  setEditingUser({
+                                    username: user.username,
+                                    name: user.name,
+                                    school: user.school,
+                                    role: user.role === "teacher" ? "teacher" : "student",
+                                    ownerTeacherUsername: user.ownerTeacherUsername ?? "",
+                                    password: ""
+                                  })
+                                }
+                              >
+                                修改
+                              </button>
+                              <button
+                                type="button"
+                                className="secondary"
+                                style={{ width: "auto" }}
+                                onClick={() => openResetPassword(user.username)}
+                              >
+                                重設密碼
+                              </button>
+                              <button
+                                type="button"
+                                className="secondary"
+                                style={{ width: "auto", color: "#b91c1c", borderColor: "#fecaca", background: "#fef2f2" }}
+                                onClick={() => deleteUser(user.username)}
+                              >
+                                刪除
+                              </button>
+                            </div>
+                          )}
                         </td>
                       </>
                     )}

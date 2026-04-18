@@ -6,7 +6,7 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
   const username = store.get(AUTH_COOKIE_USER)?.value;
   const roleValue = store.get(AUTH_COOKIE_ROLE)?.value;
 
-  if (!username || (roleValue !== "student" && roleValue !== "teacher")) {
+  if (!username || (roleValue !== "student" && roleValue !== "teacher" && roleValue !== "admin")) {
     return null;
   }
 

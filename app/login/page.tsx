@@ -30,11 +30,11 @@ export default function LoginPage() {
     <main>
       <div className="card" style={{ maxWidth: 480, margin: "40px auto" }}>
         <h1>登入</h1>
-        <p>請使用學生或教師帳號登入。</p>
+        <p>請使用學生、教師或管理員帳號登入。</p>
 
         <form onSubmit={handleLogin}>
           <label>帳號</label>
-          <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="student 或 teacher" />
+          <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="admin / teacher / student" />
 
           <label style={{ marginTop: 10 }}>密碼</label>
           <input
@@ -56,7 +56,7 @@ export default function LoginPage() {
         </form>
 
         <div style={{ marginTop: 14 }}>
-          <small>預設測試帳號：student/student123、teacher/teacher123</small>
+          <small>預設測試帳號：admin/admin123、teacher/teacher123、student/student123</small>
         </div>
       </div>
     </main>

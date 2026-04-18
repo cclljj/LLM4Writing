@@ -5,7 +5,7 @@ import { ActivityGroup } from "@/src/lib/types";
 
 export async function POST(request: NextRequest) {
   const user = await getCurrentUser();
-  if (!user || user.role !== "teacher") {
+  if (!user || (user.role !== "teacher" && user.role !== "admin")) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 

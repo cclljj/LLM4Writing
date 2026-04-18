@@ -4,7 +4,7 @@ import { listSessions } from "@/src/lib/store";
 
 export async function GET() {
   const user = await getCurrentUser();
-  if (!user || user.role !== "teacher") {
+  if (!user || (user.role !== "teacher" && user.role !== "admin")) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 

@@ -100,5 +100,6 @@ export interface UserAccount {
   username: string;
   name: string;
   school: string;
-  role: "student" | "teacher";
+  role: "student" | "teacher" | "admin";
+  ownerTeacherUsername?: string;
 }

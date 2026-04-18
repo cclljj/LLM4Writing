@@ -11,7 +11,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "invalid_credentials" }, { status: 401 });
   }
 
-  const response = NextResponse.json({ ok: true, user, redirectTo: user.role === "teacher" ? "/teacher" : "/student" });
+  const response = NextResponse.json({
+    ok: true,
+    user,
+    redirectTo: user.role === "student" ? "/student" : "/teacher"
+  });
   response.cookies.set(AUTH_COOKIE_USER, user.username, {
     httpOnly: true,
     sameSite: "lax",

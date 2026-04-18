@@ -1,11 +1,12 @@
 import { Activity, ActivityGroup, PromptConfig, UserAccount } from "@/src/lib/types";
 
 const users: UserAccount[] = [
-  { username: "student", name: "Student One", school: "Demo High", role: "student" },
-  { username: "s1", name: "S1", school: "Demo High", role: "student" },
-  { username: "s2", name: "S2", school: "Demo High", role: "student" },
-  { username: "s3", name: "S3", school: "Demo High", role: "student" },
-  { username: "teacher", name: "Teacher One", school: "Demo High", role: "teacher" }
+  { username: "admin", name: "System Admin", school: "Demo High", role: "admin" },
+  { username: "teacher", name: "Teacher One", school: "Demo High", role: "teacher" },
+  { username: "student", name: "Student One", school: "Demo High", role: "student", ownerTeacherUsername: "teacher" },
+  { username: "s1", name: "S1", school: "Demo High", role: "student", ownerTeacherUsername: "teacher" },
+  { username: "s2", name: "S2", school: "Demo High", role: "student", ownerTeacherUsername: "teacher" },
+  { username: "s3", name: "S3", school: "Demo High", role: "student", ownerTeacherUsername: "teacher" }
 ];
 
 const activities: Activity[] = [
@@ -33,6 +34,7 @@ const activities: Activity[] = [
 ];
 
 const userPasswords: Record<string, string> = {
+  admin: "admin123",
   student: "student123",
   s1: "student123",
   s2: "student123",
@@ -114,6 +116,17 @@ export function getUsers(): UserAccount[] {
 
 export function getStudentUsers(): UserAccount[] {
   return users.filter((user) => user.role === "student");
+}
+
+export function getTeacherUsers(): UserAccount[] {
+  return users.filter((user) => user.role === "teacher");
+}
+
+export function getUsersVisibleToTeacher(teacherUsername: string): UserAccount[] {
+  return users.filter((user) => {
+    if (user.username === teacherUsername && user.role === "teacher") return true;
+    return user.role === "student" && user.ownerTeacherUsername === teacherUsername;
+  });
 }
 
 export function getUser(username: string): UserAccount | undefined {
@@ -275,18 +288,30 @@ export function createUserAccount(input: {
   username: string;
   name: string;
   school: string;
-  role: "student" | "teacher";
+  role: "student" | "teacher" | "admin";
   password: string;
+  ownerTeacherUsername?: string;
 }) {
   if (users.some((user) => user.username === input.username)) {
     return { ok: false as const, error: "username_exists" };
+  }
+
+  if (input.role === "student") {
+    if (!input.ownerTeacherUsername) {
+      return { ok: false as const, error: "missing_owner_teacher" };
+    }
+    const owner = users.find((user) => user.username === input.ownerTeacherUsername && user.role === "teacher");
+    if (!owner) {
+      return { ok: false as const, error: "owner_teacher_not_found" };
+    }
   }
 
   users.push({
     username: input.username,
     name: input.name,
     school: input.school,
-    role: input.role
+    role: input.role,
+    ownerTeacherUsername: input.role === "student" ? input.ownerTeacherUsername : undefined
   });
   userPasswords[input.username] = input.password;
 
@@ -298,8 +323,9 @@ export function updateUserAccount(
   patch: {
     name?: string;
     school?: string;
-    role?: "student" | "teacher";
+    role?: "student" | "teacher" | "admin";
     password?: string;
+    ownerTeacherUsername?: string;
   }
 ) {
   const user = users.find((item) => item.username === username);
@@ -307,10 +333,32 @@ export function updateUserAccount(
     return { ok: false as const, error: "user_not_found" };
   }
 
+  if (patch.role === "student" || user.role === "student") {
+    const nextRole = patch.role ?? user.role;
+    const nextOwnerTeacherUsername =
+      patch.ownerTeacherUsername !== undefined ? patch.ownerTeacherUsername : user.ownerTeacherUsername;
+
+    if (nextRole === "student") {
+      if (!nextOwnerTeacherUsername) {
+        return { ok: false as const, error: "missing_owner_teacher" };
+      }
+      const owner = users.find((item) => item.username === nextOwnerTeacherUsername && item.role === "teacher");
+      if (!owner) {
+        return { ok: false as const, error: "owner_teacher_not_found" };
+      }
+      user.ownerTeacherUsername = nextOwnerTeacherUsername;
+    } else {
+      user.ownerTeacherUsername = undefined;
+    }
+  }
+
   if (patch.name !== undefined) user.name = patch.name;
   if (patch.school !== undefined) user.school = patch.school;
   if (patch.role !== undefined) user.role = patch.role;
   if (patch.password !== undefined) userPasswords[username] = patch.password;
+  if (patch.ownerTeacherUsername !== undefined && user.role === "student") {
+    user.ownerTeacherUsername = patch.ownerTeacherUsername;
+  }
 
   if (user.role !== "student") {
     activities.forEach((activity) => {
@@ -327,6 +375,14 @@ export function deleteUserAccount(username: string) {
   const index = users.findIndex((user) => user.username === username);
   if (index < 0) {
     return { ok: false as const, error: "user_not_found" };
+  }
+
+  const target = users[index]!;
+  if (target.role === "teacher") {
+    const hasStudents = users.some((user) => user.role === "student" && user.ownerTeacherUsername === target.username);
+    if (hasStudents) {
+      return { ok: false as const, error: "teacher_has_students" };
+    }
   }
 
   users.splice(index, 1);

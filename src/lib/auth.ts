@@ -1,6 +1,6 @@
 import { validateUserCredential } from "@/src/lib/mock-data";
 
-export type AuthRole = "student" | "teacher";
+export type AuthRole = "student" | "teacher" | "admin";
 
 export interface AuthUser {
   username: string;

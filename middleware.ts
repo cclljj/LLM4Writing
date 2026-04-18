@@ -13,11 +13,11 @@ export function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const username = request.cookies.get(AUTH_COOKIE_USER)?.value;
   const role = request.cookies.get(AUTH_COOKIE_ROLE)?.value;
-  const isAuthed = Boolean(username) && (role === "student" || role === "teacher");
+  const isAuthed = Boolean(username) && (role === "student" || role === "teacher" || role === "admin");
 
   if (pathname === "/login" && isAuthed) {
     const url = request.nextUrl.clone();
-    url.pathname = role === "teacher" ? "/teacher" : "/student";
+    url.pathname = role === "student" ? "/student" : "/teacher";
     url.search = "";
     return NextResponse.redirect(url);
   }
@@ -43,7 +43,7 @@ export function middleware(request: NextRequest) {
       return NextResponse.redirect(url);
     }
 
-    if (role !== "teacher") {
+    if (role !== "teacher" && role !== "admin") {
       const url = request.nextUrl.clone();
       url.pathname = "/student";
       return NextResponse.redirect(url);
