@@ -100,6 +100,22 @@ export async function getSession(sessionId: string): Promise<SessionState | unde
   return rows[0]?.payload;
 }
 
+export async function listSessions(): Promise<SessionState[]> {
+  if (!isPostgresEnabled()) {
+    return Array.from(getMemoryStore().values());
+  }
+
+  await ensureSessionTable();
+  const sql = getSqlClient();
+  const rows = await sql<{ payload: SessionState }[]>`
+    SELECT payload
+    FROM llm4writing_sessions
+    ORDER BY updated_at DESC
+  `;
+
+  return rows.map((row) => row.payload);
+}
+
 export function getStorageMode(): "postgres" | "memory" {
   return isPostgresEnabled() ? "postgres" : "memory";
 }

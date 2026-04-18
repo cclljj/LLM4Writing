@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { ChatMessage, SessionState } from "@/src/lib/types";
+import { ChatMessage, SessionState, StartSessionPayload } from "@/src/lib/types";
 import { REFLECTION_QUESTIONS, STEP_DEFINITIONS, getModeByStep, getStepName } from "@/src/lib/spec";
 
 function now(): string {
@@ -14,8 +14,12 @@ function makeMessage(input: Omit<ChatMessage, "id" | "at">): ChatMessage {
   };
 }
 
-export function createSession(participants: string[]): SessionState {
+export function createSession(payload: StartSessionPayload): SessionState {
   const sessionId = randomUUID();
+  const workflow = payload.workflow ?? "spec10";
+  const phaseMax = payload.phaseMax ?? (workflow === "legacy_phase" ? 5 : 10);
+  const participants = payload.participants;
+
   const session: SessionState = {
     id: sessionId,
     createdAt: now(),
@@ -23,23 +27,38 @@ export function createSession(participants: string[]): SessionState {
     participants,
     messages: [],
     groupGate: {},
-    reflectionIndex: Object.fromEntries(participants.map((id) => [id, 0]))
+    reflectionIndex: Object.fromEntries(participants.map((id) => [id, 0])),
+    workflow,
+    phaseMax,
+    activityId: payload.activityId,
+    activityTitle: payload.activityTitle
   };
 
   session.messages.push(
     makeMessage({
       role: "system",
       step: 1,
-      text: `Session started. Current step: 1 ${getStepName(1)}.`
+      text:
+        workflow === "legacy_phase"
+          ? `進入 Phase1。任務：${payload.activityTitle ?? "未命名任務"}。請開始討論。`
+          : `Session started. Current step: 1 ${getStepName(1)}.`
     })
   );
 
   return session;
 }
 
+function isLegacy(session: SessionState): boolean {
+  return session.workflow === "legacy_phase";
+}
+
 function generateAiTextForStep(step: number, contextText: string): string {
   const stepName = getStepName(step);
   return `AI(${stepName}) 回覆：已收到內容「${contextText.slice(0, 80)}${contextText.length > 80 ? "..." : ""}」，請依本步驟目標繼續。`;
+}
+
+function generateLegacyAiText(step: number, contextText: string): string {
+  return `AI(Phase${step})：收到你的訊息「${contextText.slice(0, 80)}${contextText.length > 80 ? "..." : ""}」，請繼續。`;
 }
 
 function generateOneShotReport(step: number): string {
@@ -59,6 +78,17 @@ export function switchStep(session: SessionState, step: number): SessionState {
       text: `Teacher switched class to step ${step} ${getStepName(step)}.`
     })
   );
+
+  if (isLegacy(session)) {
+    session.messages.push(
+      makeMessage({
+        role: "system",
+        step,
+        text: `已切換到 Phase${step}。`
+      })
+    );
+    return session;
+  }
 
   const mode = getModeByStep(step);
 
@@ -85,13 +115,61 @@ export function switchStep(session: SessionState, step: number): SessionState {
   return session;
 }
 
+export function advanceLegacyPhase(session: SessionState): SessionState {
+  if (!isLegacy(session)) {
+    throw new Error("not_legacy_session");
+  }
+
+  if (session.currentStep >= session.phaseMax) {
+    session.messages.push(
+      makeMessage({
+        role: "system",
+        step: session.currentStep,
+        text: "已達最後階段。"
+      })
+    );
+    return session;
+  }
+
+  session.currentStep += 1;
+  session.messages.push(
+    makeMessage({
+      role: "system",
+      step: session.currentStep,
+      text: `進入 Phase${session.currentStep}。`
+    })
+  );
+
+  return session;
+}
+
 export function sendStudentMessage(session: SessionState, userId: string, text: string): SessionState {
   const step = session.currentStep;
-  const mode = getModeByStep(step);
 
   if (!session.participants.includes(userId)) {
     throw new Error("unknown_participant");
   }
+
+  if (isLegacy(session)) {
+    session.messages.push(
+      makeMessage({
+        role: "student",
+        userId,
+        step,
+        text
+      })
+    );
+    session.messages.push(
+      makeMessage({
+        role: "ai",
+        step,
+        text: generateLegacyAiText(step, text)
+      })
+    );
+    return session;
+  }
+
+  const mode = getModeByStep(step);
 
   if (mode === "non_interactive") {
     throw new Error("step_non_interactive");

@@ -2,9 +2,21 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
-interface SessionState {
+type Activity = {
+  id: string;
+  className: string;
+  title: string;
+  genre: string;
+  durationMinutes: number;
+  supplemental: string;
+};
+
+type SessionState = {
   id: string;
   currentStep: number;
+  activityId?: string;
+  activityTitle?: string;
+  workflow: string;
   participants: string[];
   messages: Array<{
     id: string;
@@ -14,16 +26,24 @@ interface SessionState {
     at: string;
     step: number;
   }>;
-}
+};
+
+type HistoryItem = {
+  sessionId: string;
+  activityId?: string;
+  activityTitle?: string;
+  currentStep: number;
+  messageCount: number;
+  createdAt: string;
+};
 
 export default function StudentPage() {
-  const [participantsInput, setParticipantsInput] = useState("s1,s2,s3");
-  const [sessionId, setSessionId] = useState("");
-  const [userId, setUserId] = useState("s1");
-  const [text, setText] = useState("");
-  const [session, setSession] = useState<SessionState | null>(null);
-  const [error, setError] = useState("");
   const [loginUser, setLoginUser] = useState("");
+  const [activities, setActivities] = useState<Activity[]>([]);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [session, setSession] = useState<SessionState | null>(null);
+  const [text, setText] = useState("");
+  const [error, setError] = useState("");
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -31,10 +51,14 @@ export default function StudentPage() {
       .then((data) => {
         if (data?.authenticated) {
           setLoginUser(data.user.username);
-          setUserId(data.user.username);
         }
       })
       .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    refreshActivities();
+    refreshHistory();
   }, []);
 
   const sortedMessages = useMemo(
@@ -47,56 +71,60 @@ export default function StudentPage() {
     window.location.href = "/login";
   }
 
-  async function startSession(e: FormEvent) {
-    e.preventDefault();
-    setError("");
-    const participants = participantsInput
-      .split(",")
-      .map((v) => v.trim())
-      .filter(Boolean);
+  async function refreshActivities() {
+    const response = await fetch("/api/student/activities");
+    const data = await response.json();
+    if (response.ok) {
+      setActivities(data.activities ?? []);
+    }
+  }
 
-    const response = await fetch("/api/session/start", {
+  async function refreshHistory(activityId?: string) {
+    const url = activityId ? `/api/student/history?activityId=${encodeURIComponent(activityId)}` : "/api/student/history";
+    const response = await fetch(url);
+    const data = await response.json();
+    if (response.ok) {
+      setHistory(data.history ?? []);
+    }
+  }
+
+  async function joinActivity(activityId: string) {
+    setError("");
+    const response = await fetch("/api/student/join", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ participants })
+      body: JSON.stringify({ activityId })
     });
 
     const data = await response.json();
     if (!response.ok) {
-      setError(data.error ?? "start_failed");
+      setError(data.error ?? "join_failed");
       return;
     }
 
     setSession(data);
-    setSessionId(data.id);
-    if (participants[0]) {
-      setUserId(participants[0]);
-    }
+    await refreshHistory(activityId);
   }
 
-  async function refreshSession() {
-    if (!sessionId) return;
-    setError("");
-
+  async function openHistorySession(sessionId: string) {
     const response = await fetch(`/api/session/${sessionId}`);
     const data = await response.json();
     if (!response.ok) {
       setError(data.error ?? "fetch_failed");
       return;
     }
-
     setSession(data);
   }
 
   async function sendMessage(e: FormEvent) {
     e.preventDefault();
-    if (!sessionId || !text.trim()) return;
+    if (!session || !text.trim()) return;
     setError("");
 
     const response = await fetch("/api/chat/send", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionId, userId, text })
+      body: JSON.stringify({ sessionId: session.id, userId: loginUser || "student", text })
     });
 
     const data = await response.json();
@@ -109,11 +137,26 @@ export default function StudentPage() {
     setText("");
   }
 
+  async function nextPhase() {
+    if (!session) return;
+    const response = await fetch("/api/session/advance-phase", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId: session.id })
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      setError(data.error ?? "advance_failed");
+      return;
+    }
+    setSession(data);
+  }
+
   return (
     <main>
       <div className="card">
         <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
-          <h1 style={{ marginBottom: 0 }}>學生端（Vercel-native）</h1>
+          <h1 style={{ marginBottom: 0 }}>學生端活動列表</h1>
           <div>
             <span className="badge" style={{ marginRight: 8 }}>
               {loginUser ? `登入者: ${loginUser}` : "學生"}
@@ -126,74 +169,99 @@ export default function StudentPage() {
       </div>
 
       <div className="card">
-        <h2>1) 建立 Session</h2>
-        <form onSubmit={startSession} className="row">
-          <div className="col">
-            <label>Participants (comma-separated)</label>
-            <input
-              value={participantsInput}
-              onChange={(e) => setParticipantsInput(e.target.value)}
-              placeholder="s1,s2,s3"
-            />
-          </div>
-          <div className="col" style={{ alignSelf: "end" }}>
-            <button type="submit">Start Session</button>
-          </div>
-        </form>
-      </div>
-
-      <div className="card">
-        <h2>2) 互動</h2>
-        <div className="row">
-          <div className="col">
-            <label>Session ID</label>
-            <input value={sessionId} onChange={(e) => setSessionId(e.target.value)} />
-          </div>
-          <div className="col">
-            <label>User ID</label>
-            <input value={userId} onChange={(e) => setUserId(e.target.value)} />
-          </div>
-          <div className="col" style={{ alignSelf: "end" }}>
-            <button type="button" className="secondary" onClick={refreshSession}>
-              Refresh
-            </button>
-          </div>
-        </div>
-
-        <form onSubmit={sendMessage}>
-          <label style={{ marginTop: 12 }}>Message</label>
-          <textarea value={text} onChange={(e) => setText(e.target.value)} />
-          <button type="submit" style={{ marginTop: 10 }}>
-            Send
-          </button>
-        </form>
-
-        {error ? (
-          <p>
-            <small>{error}</small>
-          </p>
-        ) : null}
-      </div>
-
-      <div className="card">
-        <h2>Session Snapshot</h2>
-        <pre>{JSON.stringify({ ...session, messages: undefined }, null, 2)}</pre>
-      </div>
-
-      <div className="card">
-        <h2>Messages</h2>
-        {sortedMessages.length === 0 ? <small>No messages yet.</small> : null}
-        {sortedMessages.map((message) => (
-          <div key={message.id} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
-            <strong>
-              [{message.step}] {message.role}
-              {message.userId ? `(${message.userId})` : ""}
-            </strong>
-            <div>{message.text}</div>
-            <small>{message.at}</small>
+        <h2>可參與任務（ActivityPage）</h2>
+        {activities.length === 0 ? <small>目前沒有可加入的任務。</small> : null}
+        {activities.map((activity) => (
+          <div key={activity.id} style={{ borderTop: "1px solid #e5e7eb", padding: "10px 0" }}>
+            <strong>{activity.title}</strong>（{activity.className} / {activity.genre} / {activity.durationMinutes} 分鐘）
+            <div>
+              <small>{activity.supplemental}</small>
+            </div>
+            <div className="row" style={{ marginTop: 8 }}>
+              <div style={{ width: 180 }}>
+                <button type="button" onClick={() => joinActivity(activity.id)}>
+                  加入討論
+                </button>
+              </div>
+              <div style={{ width: 180 }}>
+                <button type="button" className="secondary" onClick={() => refreshHistory(activity.id)}>
+                  歷史紀錄
+                </button>
+              </div>
+            </div>
           </div>
         ))}
       </div>
+
+      <div className="card">
+        <h2>歷史紀錄</h2>
+        {history.length === 0 ? <small>暫無歷史紀錄</small> : null}
+        {history.map((item) => (
+          <div key={item.sessionId} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
+            <strong>{item.activityTitle ?? item.activityId}</strong>
+            <div>
+              <small>
+                Session: {item.sessionId} / Phase {item.currentStep} / 訊息數 {item.messageCount}
+              </small>
+            </div>
+            <div style={{ marginTop: 6, width: 180 }}>
+              <button type="button" className="secondary" onClick={() => openHistorySession(item.sessionId)}>
+                開啟對話
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {session ? (
+        <>
+          <div className="card">
+            <h2>Phase{session.currentStep} 對話頁</h2>
+            <div>
+              <small>
+                任務：{session.activityTitle ?? "未命名"} / Session: {session.id}
+              </small>
+            </div>
+            <div className="row" style={{ marginTop: 8 }}>
+              <div style={{ width: 180 }}>
+                <button type="button" className="secondary" onClick={nextPhase}>
+                  下一階段
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="card">
+            <h2>聊天室（Phase1~5 均保留輸入）</h2>
+            <form onSubmit={sendMessage}>
+              <label>訊息</label>
+              <textarea value={text} onChange={(e) => setText(e.target.value)} />
+              <button type="submit" style={{ marginTop: 10 }}>
+                發送訊息
+              </button>
+            </form>
+            {error ? (
+              <p>
+                <small>{error}</small>
+              </p>
+            ) : null}
+          </div>
+
+          <div className="card">
+            <h2>對話紀錄</h2>
+            {sortedMessages.map((message) => (
+              <div key={message.id} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
+                <strong>
+                  [P{message.step}] {message.role}
+                  {message.userId ? `(${message.userId})` : ""}
+                </strong>
+                <div>{message.text}</div>
+                <small>{message.at}</small>
+              </div>
+            ))}
+          </div>
+        </>
+      ) : null}
     </main>
   );
 }

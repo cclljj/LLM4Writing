@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "participants_required" }, { status: 400 });
   }
 
-  const session = createSession(participants);
+  const session = createSession({ ...payload, participants });
   await saveSession(session);
 
   return NextResponse.json(session, { status: 201 });
