@@ -18,8 +18,8 @@ const activities: Activity[] = [
     durationMinutes: 45,
     supplemental: "聚焦 AI 對日常生活的改變，先盤點正反觀點。",
     groups: [
-      { groupId: "g1", groupName: "第一組", members: ["student", "s1", "s2"] },
-      { groupId: "g2", groupName: "第二組", members: ["s3"] }
+      { groupId: "g1", groupName: "1", members: ["student", "s1", "s2"] },
+      { groupId: "g2", groupName: "2", members: ["s3"] }
     ]
   },
   {
@@ -29,7 +29,7 @@ const activities: Activity[] = [
     genre: "說明文",
     durationMinutes: 40,
     supplemental: "描述問題、提出可行方案、評估影響。",
-    groups: [{ groupId: "g1", groupName: "觀察組", members: ["student", "s3"] }]
+    groups: [{ groupId: "g1", groupName: "1", members: ["student", "s3"] }]
   }
 ];
 
@@ -177,9 +177,12 @@ export function updateActivityGroups(activityId: string, groups: ActivityGroup[]
       return true;
     });
 
+    const parsed = Number.parseInt((group.groupName ?? "").replace(/\D+/g, ""), 10);
+    const numericName = Number.isFinite(parsed) && parsed > 0 ? String(parsed) : String(idx + 1);
+
     return {
       groupId: group.groupId || `g${idx + 1}`,
-      groupName: group.groupName || `第${idx + 1}組`,
+      groupName: numericName,
       members: uniqueMembers
     };
   });

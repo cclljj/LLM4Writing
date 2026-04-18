@@ -694,6 +694,18 @@ export default function TeacherPage() {
     await refreshAll();
   }
 
+  function addGroup() {
+    const next = editableGroups.length + 1;
+    setEditableGroups((prev) => [
+      ...prev,
+      {
+        groupId: `g${next}`,
+        groupName: String(next),
+        members: []
+      }
+    ]);
+  }
+
   function patchPrompt(
     target: PromptConfig,
     type: "step" | "substep" | "bank",
@@ -1616,9 +1628,18 @@ export default function TeacherPage() {
                   </select>
                 </div>
                 <div className="col" style={{ alignSelf: "end" }}>
-                  <button type="button" onClick={saveGroups}>
-                    儲存分組
-                  </button>
+                  <div className="row">
+                    <div style={{ width: 140 }}>
+                      <button type="button" className="secondary" onClick={addGroup}>
+                        新增組別
+                      </button>
+                    </div>
+                    <div style={{ width: 140 }}>
+                      <button type="button" onClick={saveGroups}>
+                        儲存分組
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -1650,7 +1671,7 @@ export default function TeacherPage() {
                     onDragOver={(e) => e.preventDefault()}
                     onDrop={dropToGroup(group.groupId)}
                   >
-                    <strong>{group.groupName}</strong>
+                    <strong>組別 {group.groupName}</strong>
                     {group.members.map((username) => (
                       <div
                         key={username}
