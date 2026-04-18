@@ -526,7 +526,8 @@ export default function TeacherPage() {
     },${editingUser.ownerTeacherUsername}`;
     const validationErrors = validateCsvRows([row], {
       skipPasswordLength: !editingUser.password,
-      isAdmin: loginRole === "admin"
+      isAdmin: loginRole === "admin",
+      skipUsernameFormat: true
     });
     if (validationErrors.length > 0) {
       setAccountError(validationErrors[0]!);
@@ -636,7 +637,10 @@ export default function TeacherPage() {
     await refreshAll();
   }
 
-  function validateCsvRows(lines: string[], options?: { skipPasswordLength?: boolean; isAdmin?: boolean }): string[] {
+  function validateCsvRows(
+    lines: string[],
+    options?: { skipPasswordLength?: boolean; isAdmin?: boolean; skipUsernameFormat?: boolean }
+  ): string[] {
     const errors: string[] = [];
     const seen = new Set<string>();
     const teacherUsernames = users.filter((item) => item.role === "teacher").map((item) => item.username);
@@ -654,7 +658,7 @@ export default function TeacherPage() {
         errors.push(`第 ${idx + 1} 列有必填欄位為空`);
         return;
       }
-      if (!/^[A-Za-z0-9._-]{3,32}$/.test(username)) {
+      if (!options?.skipUsernameFormat && !/^[A-Za-z0-9._-]{3,32}$/.test(username)) {
         errors.push(`第 ${idx + 1} 列 username 格式錯誤`);
       }
       if (!["student", "teacher"].includes(role)) {
