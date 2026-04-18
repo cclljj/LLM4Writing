@@ -1,108 +1,66 @@
-# llm4rwiting
+# LLM4Writing (Vercel-native)
 
-[![Java](https://img.shields.io/badge/Java-17-blue)](https://adoptium.net/)
-[![Maven](https://img.shields.io/badge/Build-Maven-C71A36)](https://maven.apache.org/)
-[![Framework](https://img.shields.io/badge/Web-Apache%20Wicket-6A1B9A)](https://wicket.apache.org/)
-[![Status](https://img.shields.io/badge/Status-Active%20Development-orange)](https://github.com/cclljj/llm4writing_fork)
+LLM4Writing 已改造成可直接部署於 Vercel 的原生架構版本。
 
-AI-assisted writing learning platform built with Java + Wicket.  
-這是一個以 Java + Wicket 實作的 AI 輔助寫作學習平台。
+## 專案定位
 
-## Overview | 專案概覽
+- 來源：Fork from https://github.com/Shengche/llm4rwiting
+- 既有 Java/Wicket 程式碼仍保留於 `libs/` 與 `llm4class-web/`（作為歷史參考）
+- 現行可部署主應用為 root 的 Next.js App Router + Serverless API
 
-- Student side: staged AI-assisted writing workflow  
-  學生端：分階段寫作學習流程（含 AI 對話）
-- Teacher side: topic/class/group management  
-  教師端：題目、開課、分組管理
-- Infra: MySQL + MongoDB + OpenAI API  
-  基礎設施：MySQL + MongoDB + OpenAI API
+## 架構
 
-## Current Status | 目前狀態
+- Frontend: Next.js (`app/`)
+- Backend: Next.js Route Handlers (`app/api/**`)
+- Runtime: Vercel Serverless Functions
+- Data (current MVP): in-memory session store (`src/lib/store.ts`)
 
-This repository is a partially implemented production-style system.
-目前為「部分落地」版本，核心功能可運作，但尚未完整對齊 10 步驟目標規格。
+## 對應 SPEC 核心規則
 
-Implemented now | 目前已完成：
+目前已在 API 引擎實作以下不變量：
 
-- Student flow up to `Phase1 ~ Phase5`
-- Teacher course management (topic/class/group)
-- Realtime chat updates via WebSocket
+1. 教師端可切換全班步驟（`POST /api/teacher/step`）
+2. 四種互動模式（小組互動、個人互動、無互動、個人反思）
+3. 小組互動步驟需所有組員回覆後，AI 才回覆
+4. 無互動步驟會自動產生一次性報告
+5. 個人反思步驟採系統固定題，不觸發 AI 回覆
 
-Not fully implemented yet | 尚未完整落地：
-
-- Full `Phase6 ~ Phase10` pages
-- Teacher classroom monitoring/control pages
-- Complete Prompt/Question Bank UI flow
-
-## Documentation | 文件
-
-- Product spec: [SPEC.md](./SPEC.md)
-- AI-generated system understanding: [SPEC_generated_by_AI.md](./SPEC_generated_by_AI.md)
-- Spec gap report: [SPEC_diff.md](./SPEC_diff.md)
-
-## Tech Stack | 技術棧
-
-- Java 17
-- Apache Wicket
-- Jakarta EE / CDI / JPA
-- MySQL
-- MongoDB
-- OpenAI API (Responses / Audio Transcription)
-- Maven
-
-## Repository Structure | 目錄結構
-
-```text
-.
-├── libs/                 # domain/services/repositories/OpenAI integration
-├── llm4class-web/        # Wicket web application (pages/panels/modals/assets)
-├── database/
-│   ├── mysql/            # MySQL schema/dump
-│   └── mongodb/          # Mongo init script
-├── SPEC.md
-├── SPEC_generated_by_AI.md
-└── SPEC_diff.md
-```
-
-## Quick Start | 快速開始
-
-> Note: there is no root aggregator `pom.xml` in this repo currently.  
-> 注意：目前 repo 根目錄沒有 aggregator `pom.xml`，請分模組建置。
-
-### 1) Build shared library module
+## 本機開發
 
 ```bash
-mvn -f libs/pom.xml clean package
+npm install
+npm run dev
 ```
 
-### 2) Build web module
+開啟 `http://localhost:3000`
+
+## Vercel 部署
 
 ```bash
-mvn -f llm4class-web/pom.xml clean package
+npx --yes vercel --prod
 ```
 
-## Runtime Requirements | 執行需求
+已設定/可用頁面：
 
-- JDK 17+
-- Maven 3.8+
-- MySQL
-- MongoDB
-- OpenAI API key and environment configuration
-- Jakarta-compatible servlet/app server for WAR deployment
+- `/` 首頁
+- `/student` 學生端操作頁
+- `/teacher` 教師端操作頁
 
-## Release / Tag Notes | 版本註記
+## API 一覽
 
-- `1.0`: baseline version without `SPEC*.md` files  
-  message: `Fork from https://github.com/Shengche/llm4rwiting`
+- `GET /api/health`
+- `GET /api/spec`
+- `POST /api/session/start`
+- `GET /api/session/:sessionId`
+- `POST /api/chat/send`
+- `POST /api/teacher/step`
 
-## Roadmap (Suggested) | 建議開發路線
+## 重要限制（目前版本）
 
-1. Implement `Phase6 ~ Phase10` + mode-specific UI/behavior
-2. Finish teacher monitoring/progress control pages
-3. Fully wire Prompt & Question Bank admin workflow
-4. Add end-to-end validations for group isolation and stage control
+- 目前 session 儲存為 in-memory，適合 MVP 與流程驗證，不適合正式 production（無持久化、多實例不同步）
+- 若要 production-grade，下一步建議接 Vercel Postgres/Neon 或外部 Redis/KV
 
-## Contributing | 貢獻
+## 版本
 
-Pull requests and issue reports are welcome.  
-歡迎提出 Issue 與 PR。
+- `1.0`：無 `SPEC*.md` 的基準版本（已加註 fork 訊息）
+- `2.0`：Vercel-native 架構起始版本（本次改造）
