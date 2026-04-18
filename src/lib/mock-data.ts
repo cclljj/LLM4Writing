@@ -158,6 +158,101 @@ function cloneState(): DomainState {
   };
 }
 
+function normalizePromptConfig(input: unknown): PromptConfig {
+  const value = (input ?? {}) as {
+    stepPrompts?: Record<string, string>;
+    subStepPrompts?: Record<string, string>;
+    questionBanks?: Record<string, string[]>;
+  };
+  return {
+    stepPrompts: { ...(value.stepPrompts ?? {}) },
+    subStepPrompts: { ...(value.subStepPrompts ?? {}) },
+    questionBanks: Object.fromEntries(
+      Object.entries(value.questionBanks ?? {}).map(([key, list]) => [key, Array.isArray(list) ? list.filter((q) => typeof q === "string") : []])
+    )
+  };
+}
+
+function normalizeDomainState(input: unknown): DomainState {
+  const base = cloneState();
+  if (!input || typeof input !== "object") {
+    return base;
+  }
+
+  const raw = input as Partial<DomainState>;
+
+  const usersFromPayload = Array.isArray(raw.users)
+    ? raw.users.filter((user): user is UserAccount => Boolean(user && typeof user.username === "string"))
+    : [];
+  const mergedUsers = [...base.users];
+  usersFromPayload.forEach((user) => {
+    const idx = mergedUsers.findIndex((item) => item.username === user.username);
+    if (idx >= 0) mergedUsers[idx] = { ...mergedUsers[idx], ...user };
+    else mergedUsers.push({ ...user });
+  });
+
+  const userPasswordsFromPayload = raw.userPasswords && typeof raw.userPasswords === "object" ? raw.userPasswords : {};
+  const mergedUserPasswords = { ...base.userPasswords, ...(userPasswordsFromPayload as Record<string, string>) };
+
+  const essaysFromPayload = Array.isArray(raw.essays)
+    ? raw.essays.filter((essay): essay is Essay => Boolean(essay && typeof essay.id === "string"))
+    : [];
+  const mergedEssays = [...base.essays];
+  essaysFromPayload.forEach((essay) => {
+    const idx = mergedEssays.findIndex((item) => item.id === essay.id);
+    if (idx >= 0) mergedEssays[idx] = { ...mergedEssays[idx], ...essay };
+    else mergedEssays.push({ ...essay });
+  });
+
+  const openClassesFromPayload = Array.isArray(raw.openClasses)
+    ? raw.openClasses.filter((openClass): openClass is OpenClassTask => Boolean(openClass && typeof openClass.id === "string"))
+    : [];
+  const mergedOpenClasses = [...base.openClasses];
+  openClassesFromPayload.forEach((openClass) => {
+    const idx = mergedOpenClasses.findIndex((item) => item.id === openClass.id);
+    if (idx >= 0) mergedOpenClasses[idx] = { ...mergedOpenClasses[idx], ...openClass };
+    else mergedOpenClasses.push({ ...openClass });
+  });
+
+  const rawGroups = raw.activityGroupMap && typeof raw.activityGroupMap === "object" ? raw.activityGroupMap : {};
+  const mergedActivityGroupMap: Record<string, ActivityGroup[]> = { ...base.activityGroupMap };
+  Object.entries(rawGroups as Record<string, ActivityGroup[]>).forEach(([key, groups]) => {
+    mergedActivityGroupMap[key] = Array.isArray(groups)
+      ? groups.map((group) => ({
+          groupId: group.groupId,
+          groupName: group.groupName,
+          members: Array.isArray(group.members) ? group.members.filter((m) => typeof m === "string") : []
+        }))
+      : [];
+  });
+
+  const rawCourseStatus = raw.courseStatusMap && typeof raw.courseStatusMap === "object" ? raw.courseStatusMap : {};
+  const mergedCourseStatusMap = { ...base.courseStatusMap, ...(rawCourseStatus as Record<string, "not_started" | "in_progress" | "ended">) };
+
+  const rawEssayPrompts = raw.essayPromptConfigs && typeof raw.essayPromptConfigs === "object" ? raw.essayPromptConfigs : {};
+  const mergedEssayPrompts: Record<string, PromptConfig> = { ...base.essayPromptConfigs };
+  Object.entries(rawEssayPrompts as Record<string, unknown>).forEach(([key, value]) => {
+    mergedEssayPrompts[key] = normalizePromptConfig(value);
+  });
+
+  const rawOpenClassPrompts = raw.openClassPromptConfigs && typeof raw.openClassPromptConfigs === "object" ? raw.openClassPromptConfigs : {};
+  const mergedOpenClassPrompts: Record<string, PromptConfig> = { ...base.openClassPromptConfigs };
+  Object.entries(rawOpenClassPrompts as Record<string, unknown>).forEach(([key, value]) => {
+    mergedOpenClassPrompts[key] = normalizePromptConfig(value);
+  });
+
+  return {
+    users: mergedUsers,
+    userPasswords: mergedUserPasswords,
+    essays: mergedEssays,
+    openClasses: mergedOpenClasses,
+    activityGroupMap: mergedActivityGroupMap,
+    courseStatusMap: mergedCourseStatusMap,
+    essayPromptConfigs: mergedEssayPrompts,
+    openClassPromptConfigs: mergedOpenClassPrompts
+  };
+}
+
 function getState(): DomainState {
   const globalScope = globalThis as unknown as Record<string, DomainState | undefined>;
   if (!globalScope[KEY]) {
@@ -266,7 +361,7 @@ export async function hydrateDomainState(): Promise<void> {
   if (!isPostgresEnabled()) return;
   await ensureDomainTable();
   const sql = getSqlClient();
-  const rows = await sql<{ payload: DomainState }[]>`
+  const rows = await sql<{ payload: unknown }[]>`
     SELECT payload
     FROM llm4writing_domain
     WHERE id = 'singleton'
@@ -277,7 +372,8 @@ export async function hydrateDomainState(): Promise<void> {
     await flushDomainState();
     return;
   }
-  applyState(row.payload);
+  const normalized = normalizeDomainState(row.payload);
+  applyState(normalized);
 }
 
 export async function flushDomainState(): Promise<void> {
