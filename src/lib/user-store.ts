@@ -111,6 +111,20 @@ function stripPassword(user: StoredUser): UserAccount {
   return safe;
 }
 
+function normalizePayload(payload: unknown): UserAccount {
+  if (typeof payload === "string") {
+    try {
+      return JSON.parse(payload) as UserAccount;
+    } catch {
+      return {} as UserAccount;
+    }
+  }
+  if (payload && typeof payload === "object") {
+    return payload as UserAccount;
+  }
+  return {} as UserAccount;
+}
+
 export async function listUsersStore(): Promise<UserAccount[]> {
   if (!isPostgresEnabled()) {
     return Array.from(getMemoryStore().values()).map(stripPassword);
@@ -118,13 +132,13 @@ export async function listUsersStore(): Promise<UserAccount[]> {
 
   await ensureUserTable();
   const sql = getSqlClient();
-  const rows = await sql<{ payload: UserAccount; password: string }[]>`
+  const rows = await sql<{ payload: unknown; password: string }[]>`
     SELECT payload, password
     FROM llm4writing_users
     ORDER BY username ASC
   `;
 
-  return rows.map((row) => ({ ...row.payload }));
+  return rows.map((row) => normalizePayload(row.payload));
 }
 
 export async function getUserStore(username: string): Promise<UserAccount | undefined> {
@@ -135,14 +149,14 @@ export async function getUserStore(username: string): Promise<UserAccount | unde
 
   await ensureUserTable();
   const sql = getSqlClient();
-  const rows = await sql<{ payload: UserAccount }[]>`
+  const rows = await sql<{ payload: unknown }[]>`
     SELECT payload
     FROM llm4writing_users
     WHERE username = ${username}
     LIMIT 1
   `;
 
-  return rows[0]?.payload;
+  return rows[0] ? normalizePayload(rows[0].payload) : undefined;
 }
 
 export async function validateUserCredentialStore(username: string, password: string): Promise<UserAccount | undefined> {
@@ -154,7 +168,7 @@ export async function validateUserCredentialStore(username: string, password: st
 
   await ensureUserTable();
   const sql = getSqlClient();
-  const rows = await sql<{ payload: UserAccount; password: string }[]>`
+  const rows = await sql<{ payload: unknown; password: string }[]>`
     SELECT payload, password
     FROM llm4writing_users
     WHERE username = ${username}
@@ -163,7 +177,7 @@ export async function validateUserCredentialStore(username: string, password: st
 
   const row = rows[0];
   if (!row || row.password !== password) return undefined;
-  return row.payload;
+  return normalizePayload(row.payload);
 }
 
 export async function resetUserPasswordStore(username: string, newPassword: string): Promise<boolean> {
