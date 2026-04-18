@@ -16,6 +16,12 @@ type ActivityRow = {
   groups: ActivityGroup[];
 };
 
+type PromptConfig = {
+  stepPrompts: Record<string, string>;
+  subStepPrompts: Record<string, string>;
+  questionBanks: Record<string, string[]>;
+};
+
 type MonitorSession = {
   sessionId: string;
   activityId?: string;
@@ -59,6 +65,11 @@ export default function TeacherPage() {
     Array<{ id: string; role: string; userId?: string; text: string; at: string; step: number }>
   >([]);
 
+  const [selectedEssayForPrompt, setSelectedEssayForPrompt] = useState("");
+  const [essayPromptConfig, setEssayPromptConfig] = useState<PromptConfig>({ stepPrompts: {}, subStepPrompts: {}, questionBanks: {} });
+  const [selectedOpenClassForPrompt, setSelectedOpenClassForPrompt] = useState("");
+  const [openClassPromptConfig, setOpenClassPromptConfig] = useState<PromptConfig>({ stepPrompts: {}, subStepPrompts: {}, questionBanks: {} });
+
   const studentUsers = useMemo(
     () => users.filter((user) => user.role === "student").map((user) => user.username),
     [users]
@@ -87,6 +98,26 @@ export default function TeacherPage() {
     setUnassignedStudents(studentUsers.filter((username) => !assigned.has(username)));
   }, [selectedActivityId, activities, studentUsers]);
 
+  useEffect(() => {
+    if (!selectedEssayForPrompt) return;
+    fetch(`/api/admin/prompts/essay?essayId=${encodeURIComponent(selectedEssayForPrompt)}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.config) setEssayPromptConfig(data.config);
+      })
+      .catch(() => undefined);
+  }, [selectedEssayForPrompt]);
+
+  useEffect(() => {
+    if (!selectedOpenClassForPrompt) return;
+    fetch(`/api/admin/prompts/openclass?openClassId=${encodeURIComponent(selectedOpenClassForPrompt)}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.config) setOpenClassPromptConfig(data.config);
+      })
+      .catch(() => undefined);
+  }, [selectedOpenClassForPrompt]);
+
   async function refreshAll() {
     const [u, e, o, m, a] = await Promise.all([
       fetch("/api/admin/users"),
@@ -97,8 +128,16 @@ export default function TeacherPage() {
     ]);
 
     if (u.ok) setUsers((await u.json()).users ?? []);
-    if (e.ok) setEssays((await e.json()).essays ?? []);
-    if (o.ok) setOpenClasses((await o.json()).openClasses ?? []);
+    if (e.ok) {
+      const list = (await e.json()).essays ?? [];
+      setEssays(list);
+      if (!selectedEssayForPrompt && list[0]?.id) setSelectedEssayForPrompt(list[0].id);
+    }
+    if (o.ok) {
+      const list = (await o.json()).openClasses ?? [];
+      setOpenClasses(list);
+      if (!selectedOpenClassForPrompt && list[0]?.id) setSelectedOpenClassForPrompt(list[0].id);
+    }
     if (m.ok) setMonitorSessions((await m.json()).sessions ?? []);
     if (a.ok) {
       const list = (await a.json()).activities ?? [];
@@ -252,6 +291,52 @@ export default function TeacherPage() {
       body: JSON.stringify({ activityId: selectedActivityId, groups: editableGroups })
     });
     await refreshAll();
+  }
+
+  function patchPrompt(
+    target: PromptConfig,
+    type: "step" | "substep" | "bank",
+    key: string,
+    value: string
+  ): PromptConfig {
+    if (type === "step") {
+      return { ...target, stepPrompts: { ...target.stepPrompts, [key]: value } };
+    }
+
+    if (type === "substep") {
+      return { ...target, subStepPrompts: { ...target.subStepPrompts, [key]: value } };
+    }
+
+    return {
+      ...target,
+      questionBanks: {
+        ...target.questionBanks,
+        [key]: value
+          .split("\n")
+          .map((line) => line.trim())
+          .filter(Boolean)
+      }
+    };
+  }
+
+  async function saveEssayPromptConfig() {
+    if (!selectedEssayForPrompt) return;
+    await fetch("/api/admin/prompts/essay", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ essayId: selectedEssayForPrompt, config: essayPromptConfig })
+    });
+    alert("已儲存寫作主題 Prompt/問題庫");
+  }
+
+  async function saveOpenClassPromptConfig() {
+    if (!selectedOpenClassForPrompt) return;
+    await fetch("/api/admin/prompts/openclass", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ openClassId: selectedOpenClassForPrompt, config: openClassPromptConfig })
+    });
+    alert("已儲存班級任務 Prompt 覆蓋設定");
   }
 
   return (
@@ -446,6 +531,57 @@ export default function TeacherPage() {
           </div>
 
           <div className="card">
+            <h2>寫作主題 Prompt / 問題庫</h2>
+            <div className="row">
+              <div className="col">
+                <label>選擇主題</label>
+                <select value={selectedEssayForPrompt} onChange={(e) => setSelectedEssayForPrompt(e.target.value)}>
+                  <option value="">請選擇</option>
+                  {essays.map((essay) => (
+                    <option key={essay.id} value={essay.id}>
+                      {essay.id} / {essay.title}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="row" style={{ marginTop: 10 }}>
+              <div className="col">
+                <label>步驟 1 Prompt</label>
+                <textarea
+                  value={essayPromptConfig.stepPrompts["1"] ?? ""}
+                  onChange={(e) =>
+                    setEssayPromptConfig((prev) => patchPrompt(prev, "step", "1", e.target.value))
+                  }
+                />
+              </div>
+              <div className="col">
+                <label>子步驟 1-3 Prompt</label>
+                <textarea
+                  value={essayPromptConfig.subStepPrompts["1-3"] ?? ""}
+                  onChange={(e) =>
+                    setEssayPromptConfig((prev) => patchPrompt(prev, "substep", "1-3", e.target.value))
+                  }
+                />
+              </div>
+              <div className="col">
+                <label>問題庫 1-1（每行一題）</label>
+                <textarea
+                  value={(essayPromptConfig.questionBanks["1-1"] ?? []).join("\n")}
+                  onChange={(e) =>
+                    setEssayPromptConfig((prev) => patchPrompt(prev, "bank", "1-1", e.target.value))
+                  }
+                />
+              </div>
+            </div>
+            <div style={{ width: 220, marginTop: 10 }}>
+              <button type="button" onClick={saveEssayPromptConfig}>
+                儲存主題 Prompt/問題庫
+              </button>
+            </div>
+          </div>
+
+          <div className="card">
             <h2>開課管理（Openclass CRUD）</h2>
             <form onSubmit={saveOpenClass} className="row">
               <div className="col">
@@ -488,6 +624,48 @@ export default function TeacherPage() {
                 {openClass.id} / {openClass.className} / {openClass.essayTitle} / {openClass.durationMinutes} 分鐘 / {openClass.supplemental}
               </div>
             ))}
+          </div>
+
+          <div className="card">
+            <h2>班級任務 Prompt 覆蓋（優先於主題 Prompt）</h2>
+            <div className="row">
+              <div className="col">
+                <label>選擇班級任務</label>
+                <select value={selectedOpenClassForPrompt} onChange={(e) => setSelectedOpenClassForPrompt(e.target.value)}>
+                  <option value="">請選擇</option>
+                  {openClasses.map((openClass) => (
+                    <option key={openClass.id} value={openClass.id}>
+                      {openClass.id} / {openClass.className}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="row" style={{ marginTop: 10 }}>
+              <div className="col">
+                <label>步驟 1 Prompt 覆蓋</label>
+                <textarea
+                  value={openClassPromptConfig.stepPrompts["1"] ?? ""}
+                  onChange={(e) =>
+                    setOpenClassPromptConfig((prev) => patchPrompt(prev, "step", "1", e.target.value))
+                  }
+                />
+              </div>
+              <div className="col">
+                <label>子步驟 2-1 Prompt 覆蓋</label>
+                <textarea
+                  value={openClassPromptConfig.subStepPrompts["2-1"] ?? ""}
+                  onChange={(e) =>
+                    setOpenClassPromptConfig((prev) => patchPrompt(prev, "substep", "2-1", e.target.value))
+                  }
+                />
+              </div>
+            </div>
+            <div style={{ width: 220, marginTop: 10 }}>
+              <button type="button" onClick={saveOpenClassPromptConfig}>
+                儲存班級 Prompt 覆蓋
+              </button>
+            </div>
           </div>
 
           <div className="card">

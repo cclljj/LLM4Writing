@@ -44,6 +44,7 @@ export default function StudentPage() {
   const [session, setSession] = useState<SessionState | null>(null);
   const [text, setText] = useState("");
   const [error, setError] = useState("");
+  const [detailActivity, setDetailActivity] = useState<Activity | null>(null);
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -103,6 +104,7 @@ export default function StudentPage() {
     }
 
     setSession(data);
+    setDetailActivity(null);
     await refreshHistory(activityId);
   }
 
@@ -179,7 +181,7 @@ export default function StudentPage() {
             </div>
             <div className="row" style={{ marginTop: 8 }}>
               <div style={{ width: 180 }}>
-                <button type="button" onClick={() => joinActivity(activity.id)}>
+                <button type="button" onClick={() => setDetailActivity(activity)}>
                   加入討論
                 </button>
               </div>
@@ -212,6 +214,31 @@ export default function StudentPage() {
           </div>
         ))}
       </div>
+
+      {detailActivity ? (
+        <div className="card" style={{ borderColor: "#93c5fd", background: "#eff6ff" }}>
+          <h2>CourseDetailModal（任務詳情）</h2>
+          <p>
+            <strong>{detailActivity.title}</strong>
+          </p>
+          <p>
+            班級：{detailActivity.className} / 文體：{detailActivity.genre} / 討論時長：{detailActivity.durationMinutes} 分鐘
+          </p>
+          <p>補充資料：{detailActivity.supplemental}</p>
+          <div className="row">
+            <div style={{ width: 180 }}>
+              <button type="button" onClick={() => joinActivity(detailActivity.id)}>
+                確認加入討論
+              </button>
+            </div>
+            <div style={{ width: 180 }}>
+              <button type="button" className="secondary" onClick={() => setDetailActivity(null)}>
+                取消
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {session ? (
         <>

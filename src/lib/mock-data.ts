@@ -50,6 +50,42 @@ const openClasses = [
   { id: "oc-002", className: "702", essayTitle: "我的校園角落", durationMinutes: 40, supplemental: "觀察與提案" }
 ];
 
+export type PromptConfig = {
+  stepPrompts: Record<string, string>;
+  subStepPrompts: Record<string, string>;
+  questionBanks: Record<string, string[]>;
+};
+
+const essayPromptConfigs: Record<string, PromptConfig> = {
+  "essay-1": {
+    stepPrompts: {
+      "1": "你是引導討論助教，請聚焦題意澄清。",
+      "2": "引導蒐集論據，提醒資料來源。",
+      "3": "協助產生可辯護的論點。"
+    },
+    subStepPrompts: {
+      "1-3": "請從立場差異切入，提出追問。",
+      "2-1": "引導學生先列出可查證資料類型。"
+    },
+    questionBanks: {
+      "1-1": ["題目中的關鍵詞有哪些？", "這個題目要解決什麼問題？"],
+      "1-2": ["你目前最直覺的立場是什麼？", "有沒有可能的反方觀點？"],
+      "1-5": ["請總結你們小組目前的共同結論。"],
+      "2-4": ["請分享一則可支持你論點的具體案例。"]
+    }
+  }
+};
+
+const openClassPromptConfigs: Record<string, PromptConfig> = {
+  "oc-001": {
+    stepPrompts: {
+      "1": "701 班專用：先釐清科技影響面向（學習/社交/生活）。"
+    },
+    subStepPrompts: {},
+    questionBanks: {}
+  }
+};
+
 export function getUsers(): UserAccount[] {
   return users;
 }
@@ -115,6 +151,36 @@ export function updateActivityGroups(activityId: string, groups: ActivityGroup[]
 
   activity.groups = sanitizedGroups;
   return activity;
+}
+
+export function getEssayPromptConfig(essayId: string): PromptConfig {
+  return (
+    essayPromptConfigs[essayId] ?? {
+      stepPrompts: {},
+      subStepPrompts: {},
+      questionBanks: {}
+    }
+  );
+}
+
+export function saveEssayPromptConfig(essayId: string, config: PromptConfig): PromptConfig {
+  essayPromptConfigs[essayId] = config;
+  return essayPromptConfigs[essayId];
+}
+
+export function getOpenClassPromptConfig(openClassId: string): PromptConfig {
+  return (
+    openClassPromptConfigs[openClassId] ?? {
+      stepPrompts: {},
+      subStepPrompts: {},
+      questionBanks: {}
+    }
+  );
+}
+
+export function saveOpenClassPromptConfig(openClassId: string, config: PromptConfig): PromptConfig {
+  openClassPromptConfigs[openClassId] = config;
+  return openClassPromptConfigs[openClassId];
 }
 
 export function upsertEssay(input: {
