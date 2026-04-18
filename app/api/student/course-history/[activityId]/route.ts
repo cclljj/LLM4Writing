@@ -1,0 +1,67 @@
+import { NextResponse } from "next/server";
+import { getCurrentUser } from "@/src/lib/auth-server";
+import { getAllActivities } from "@/src/lib/mock-data";
+import { listSessions } from "@/src/lib/store";
+
+export async function GET(_: Request, context: { params: Promise<{ activityId: string }> }) {
+  const user = await getCurrentUser();
+  if (!user || user.role !== "student") {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
+
+  const { activityId } = await context.params;
+  if (!activityId) {
+    return NextResponse.json({ error: "activityId_required" }, { status: 400 });
+  }
+
+  const activity = getAllActivities().find((item) => item.id === activityId);
+  if (!activity) {
+    return NextResponse.json({ error: "activity_not_found" }, { status: 404 });
+  }
+
+  const sessions = (await listSessions())
+    .filter((session) => session.workflow === "spec10")
+    .filter((session) => session.activityId === activityId)
+    .filter((session) => session.participants.includes(user.username))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+  if (sessions.length === 0) {
+    return NextResponse.json({ error: "no_participation_record" }, { status: 404 });
+  }
+
+  const latest = sessions[0]!;
+  const ownMessages = latest.messages.filter((message) => message.userId === user.username);
+  const totalMessages = sessions.reduce((sum, session) => sum + session.messages.filter((m) => m.userId === user.username).length, 0);
+  const maxStepReached = sessions.reduce((max, session) => Math.max(max, session.currentStep), 1);
+
+  return NextResponse.json({
+    activity: {
+      id: activity.id,
+      title: activity.title,
+      classNumber: activity.classNumber,
+      genre: activity.genre,
+      durationMinutes: activity.durationMinutes
+    },
+    summary: {
+      sessionCount: sessions.length,
+      lastSessionId: latest.id,
+      lastParticipatedAt: latest.createdAt,
+      maxStepReached,
+      totalOwnMessages: totalMessages,
+      ownMessagesInLatestSession: ownMessages.length
+    },
+    latestWork: {
+      outline: latest.outlines[user.username] ?? "",
+      draftStep6: latest.draftStep6[user.username] ?? "",
+      draftStep8: latest.draftStep8[user.username] ?? "",
+      step7Report: latest.reports.step7[user.username] ?? "",
+      step10Report: latest.reports.step10[user.username] ?? ""
+    },
+    sessions: sessions.map((session) => ({
+      sessionId: session.id,
+      createdAt: session.createdAt,
+      currentStep: session.currentStep,
+      ownMessageCount: session.messages.filter((message) => message.userId === user.username).length
+    }))
+  });
+}

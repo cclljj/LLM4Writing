@@ -1,16 +1,28 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 
 type InteractionMode = "group_interaction" | "personal_interaction" | "non_interactive" | "personal_reflection";
 
-type Activity = {
+type Course = {
   id: string;
   classNumber: string;
   title: string;
   genre: string;
   durationMinutes: number;
   supplemental: string;
+  courseStatus?: "not_started" | "in_progress" | "ended";
+};
+
+type ParticipatedCourse = {
+  activityId: string;
+  title: string;
+  classNumber: string;
+  lastSessionId: string;
+  lastStep: number;
+  lastParticipatedAt: string;
+  sessionCount: number;
 };
 
 type SessionState = {
@@ -35,15 +47,6 @@ type SessionState = {
   }>;
 };
 
-type HistoryItem = {
-  sessionId: string;
-  activityId?: string;
-  activityTitle?: string;
-  currentStep: number;
-  messageCount: number;
-  createdAt: string;
-};
-
 const stepNameMap: Record<number, string> = {
   1: "審視題目",
   2: "蒐集資料",
@@ -65,13 +68,16 @@ function getMode(step: number): InteractionMode {
 }
 
 export default function StudentPage() {
+  const router = useRouter();
   const [loginUser, setLoginUser] = useState("");
-  const [activities, setActivities] = useState<Activity[]>([]);
-  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [profile, setProfile] = useState<{ school?: string; classNumber?: string; ownerTeacherUsername?: string } | null>(null);
+  const [missingFields, setMissingFields] = useState<string[]>([]);
+  const [upcomingCourses, setUpcomingCourses] = useState<Course[]>([]);
+  const [participatedCourses, setParticipatedCourses] = useState<ParticipatedCourse[]>([]);
+  const [preparingCourse, setPreparingCourse] = useState<Course | null>(null);
   const [session, setSession] = useState<SessionState | null>(null);
   const [text, setText] = useState("");
   const [error, setError] = useState("");
-  const [detailActivity, setDetailActivity] = useState<Activity | null>(null);
 
   const [outlineText, setOutlineText] = useState("");
   const [draftText, setDraftText] = useState("");
@@ -93,8 +99,7 @@ export default function StudentPage() {
   }, []);
 
   useEffect(() => {
-    refreshActivities();
-    refreshHistory();
+    refreshOverview();
   }, []);
 
   useEffect(() => {
@@ -136,8 +141,12 @@ export default function StudentPage() {
     [session]
   );
   const currentActivity = useMemo(
-    () => activities.find((item) => item.id === session?.activityId),
-    [activities, session?.activityId]
+    () => {
+      const all = [...upcomingCourses];
+      if (preparingCourse) all.push(preparingCourse);
+      return all.find((item) => item.id === session?.activityId) ?? preparingCourse;
+    },
+    [upcomingCourses, preparingCourse, session?.activityId]
   );
   const teammateUsers = useMemo(() => {
     if (!session) return [];
@@ -153,21 +162,19 @@ export default function StudentPage() {
     window.location.href = "/login";
   }
 
-  async function refreshActivities() {
-    const response = await fetch("/api/student/activities");
+  async function refreshOverview() {
+    const response = await fetch("/api/student/overview");
     const data = await response.json();
-    if (response.ok) {
-      setActivities(data.activities ?? []);
+    if (!response.ok) {
+      setError(data.error ?? "overview_failed");
+      return;
     }
-  }
 
-  async function refreshHistory(activityId?: string) {
-    const url = activityId ? `/api/student/history?activityId=${encodeURIComponent(activityId)}` : "/api/student/history";
-    const response = await fetch(url);
-    const data = await response.json();
-    if (response.ok) {
-      setHistory(data.history ?? []);
-    }
+    setProfile(data.profile ?? null);
+    setMissingFields(data.missingFields ?? []);
+    setUpcomingCourses(data.upcomingCourses ?? []);
+    setParticipatedCourses(data.participatedCourses ?? []);
+    setError("");
   }
 
   async function joinActivity(activityId: string) {
@@ -180,23 +187,21 @@ export default function StudentPage() {
 
     const data = await response.json();
     if (!response.ok) {
+      if (data.error === "course_not_started") {
+        setError("課程尚未開始，請等待老師開始上課後再進入討論。");
+        return;
+      }
+      if (data.error === "course_ended") {
+        setError("課程已結束，無法再進入討論。");
+        return;
+      }
       setError(data.error ?? "join_failed");
       return;
     }
 
     setSession(data);
-    setDetailActivity(null);
-    await refreshHistory(activityId);
-  }
-
-  async function openHistorySession(sessionId: string) {
-    const response = await fetch(`/api/session/${sessionId}`);
-    const data = await response.json();
-    if (!response.ok) {
-      setError(data.error ?? "fetch_failed");
-      return;
-    }
-    setSession(data);
+    setPreparingCourse(null);
+    await refreshOverview();
   }
 
   async function sendMessage(e: FormEvent) {
@@ -251,7 +256,7 @@ export default function StudentPage() {
     <main>
       <div className="card">
         <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
-          <h1 style={{ marginBottom: 0 }}>學生端活動列表</h1>
+          <h1 style={{ marginBottom: 0 }}>學生端課程首頁</h1>
           <div>
             <span className="badge" style={{ marginRight: 8 }}>
               {loginUser ? `登入者: ${loginUser}` : "學生"}
@@ -263,24 +268,31 @@ export default function StudentPage() {
         </div>
       </div>
 
+      {missingFields.length > 0 ? (
+        <div className="card" style={{ borderColor: "#fecaca", background: "#fff1f2" }}>
+          <h2>資料警告</h2>
+          <small>
+            你的帳號資料不完整（{missingFields.join(", ")}），請向老師反映。
+          </small>
+        </div>
+      ) : null}
+
       <div className="card">
-        <h2>可參與任務（ActivityPage）</h2>
-        {activities.length === 0 ? <small>目前沒有可加入的任務。</small> : null}
-        {activities.map((activity) => (
-          <div key={activity.id} style={{ borderTop: "1px solid #e5e7eb", padding: "10px 0" }}>
-            <strong>{activity.title}</strong>（班級 {activity.classNumber} / {activity.genre} / {activity.durationMinutes} 分鐘）
+        <h2>尚未開始課程（本班）</h2>
+        <small>
+          班級：{profile?.classNumber ?? "—"} / 學校：{profile?.school ?? "—"}
+        </small>
+        {upcomingCourses.length === 0 ? <small style={{ display: "block", marginTop: 8 }}>目前沒有尚未開始課程。</small> : null}
+        {upcomingCourses.map((course) => (
+          <div key={course.id} style={{ borderTop: "1px solid #e5e7eb", padding: "10px 0" }}>
+            <strong>{course.title}</strong>（班級 {course.classNumber} / {course.genre} / {course.durationMinutes} 分鐘）
             <div>
-              <small>{activity.supplemental}</small>
+              <small>{course.supplemental}</small>
             </div>
             <div className="row" style={{ marginTop: 8 }}>
               <div style={{ width: 180 }}>
-                <button type="button" onClick={() => setDetailActivity(activity)}>
-                  加入討論
-                </button>
-              </div>
-              <div style={{ width: 180 }}>
-                <button type="button" className="secondary" onClick={() => refreshHistory(activity.id)}>
-                  歷史紀錄
+                <button type="button" onClick={() => setPreparingCourse(course)}>
+                  進入課程
                 </button>
               </div>
             </div>
@@ -289,44 +301,50 @@ export default function StudentPage() {
       </div>
 
       <div className="card">
-        <h2>歷史紀錄</h2>
-        {history.length === 0 ? <small>暫無歷史紀錄</small> : null}
-        {history.map((item) => (
-          <div key={item.sessionId} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
-            <strong>{item.activityTitle ?? item.activityId}</strong>
+        <h2>自己參與過的課程清單</h2>
+        {participatedCourses.length === 0 ? <small>目前沒有已參與課程紀錄。</small> : null}
+        {participatedCourses.map((course) => (
+          <div key={course.activityId} style={{ borderTop: "1px solid #e5e7eb", padding: "10px 0" }}>
+            <strong>{course.title}</strong>（班級 {course.classNumber}）
             <div>
               <small>
-                Session: {item.sessionId} / Step {item.currentStep} / 訊息數 {item.messageCount}
+                最近參與：{new Date(course.lastParticipatedAt).toLocaleString("zh-TW")} / 最近步驟 Step {course.lastStep} / 參與次數 {course.sessionCount}
               </small>
             </div>
-            <div style={{ marginTop: 6, width: 180 }}>
-              <button type="button" className="secondary" onClick={() => openHistorySession(item.sessionId)}>
-                開啟對話
+            <div style={{ width: 180, marginTop: 8 }}>
+              <button type="button" className="secondary" onClick={() => router.push(`/student/history/${course.activityId}`)}>
+                查詢紀錄
               </button>
             </div>
           </div>
         ))}
       </div>
 
-      {detailActivity ? (
+      {preparingCourse ? (
         <div className="card" style={{ borderColor: "#93c5fd", background: "#eff6ff" }}>
-          <h2>CourseDetailModal（任務詳情）</h2>
+          <h2>準備開始上課</h2>
           <p>
-            <strong>{detailActivity.title}</strong>
+            <strong>{preparingCourse.title}</strong>
           </p>
           <p>
-            班級：{detailActivity.classNumber} / 文體：{detailActivity.genre} / 討論時長：{detailActivity.durationMinutes} 分鐘
+            班級：{preparingCourse.classNumber} / 文體：{preparingCourse.genre} / 討論時長：{preparingCourse.durationMinutes} 分鐘
           </p>
-          <p>補充資料：{detailActivity.supplemental}</p>
-          <div className="row">
-            <div style={{ width: 180 }}>
-              <button type="button" onClick={() => joinActivity(detailActivity.id)}>
-                確認加入討論
+          <p>補充資料：{preparingCourse.supplemental}</p>
+          <small>你已進入準備階段，請等待老師點選「開始上課」。</small>
+          <div className="row" style={{ marginTop: 10 }}>
+            <div style={{ width: 220 }}>
+              <button type="button" onClick={() => joinActivity(preparingCourse.id)}>
+                檢查並進入討論
               </button>
             </div>
             <div style={{ width: 180 }}>
-              <button type="button" className="secondary" onClick={() => setDetailActivity(null)}>
-                取消
+              <button type="button" className="secondary" onClick={() => refreshOverview()}>
+                重新整理狀態
+              </button>
+            </div>
+            <div style={{ width: 180 }}>
+              <button type="button" className="secondary" onClick={() => setPreparingCourse(null)}>
+                離開準備
               </button>
             </div>
           </div>

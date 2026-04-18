@@ -86,6 +86,11 @@ const activityGroupMap: Record<string, ActivityGroup[]> = {
   "oc-002": [{ groupId: "g1", groupName: "1", members: ["student", "s3"] }]
 };
 
+const courseStatusMap: Record<string, "not_started" | "in_progress" | "ended"> = {
+  "oc-001": "not_started",
+  "oc-002": "not_started"
+};
+
 const essayPromptConfigs: Record<string, PromptConfig> = {
   "essay-1": {
     stepPrompts: {
@@ -160,8 +165,46 @@ function toActivity(openClass: OpenClassTask): Activity {
     genre: detail.essayGenre,
     durationMinutes: openClass.durationMinutes,
     supplemental: openClass.supplemental,
-    groups: groups.map((group) => ({ ...group, members: [...group.members] }))
+    groups: groups.map((group) => ({ ...group, members: [...group.members] })),
+    courseStatus: getCourseStatus(openClass.id)
   };
+}
+
+export function getCourseStatus(activityId: string): "not_started" | "in_progress" | "ended" {
+  return courseStatusMap[activityId] ?? "not_started";
+}
+
+export function startCourse(activityId: string): { ok: true; status: "in_progress" } | { ok: false; error: string } {
+  const activity = findActivity(activityId);
+  if (!activity) {
+    return { ok: false, error: "activity_not_found" };
+  }
+
+  const current = getCourseStatus(activityId);
+  if (current !== "not_started") {
+    return { ok: false, error: "course_already_started" };
+  }
+
+  courseStatusMap[activityId] = "in_progress";
+  return { ok: true, status: "in_progress" };
+}
+
+export function endCourse(activityId: string): { ok: true; status: "ended" } | { ok: false; error: string } {
+  const activity = findActivity(activityId);
+  if (!activity) {
+    return { ok: false, error: "activity_not_found" };
+  }
+
+  const current = getCourseStatus(activityId);
+  if (current === "not_started") {
+    return { ok: false, error: "course_not_started" };
+  }
+  if (current === "ended") {
+    return { ok: false, error: "course_already_ended" };
+  }
+
+  courseStatusMap[activityId] = "ended";
+  return { ok: true, status: "ended" };
 }
 
 function getTeacherProfile(teacherUsername: string): UserAccount | undefined {
@@ -409,6 +452,7 @@ export function upsertOpenClass(input: {
   };
   openClasses.push(created);
   activityGroupMap[created.id] = activityGroupMap[created.id] ?? [];
+  courseStatusMap[created.id] = "not_started";
   return { ok: true as const, saved: toOpenClassView(created) };
 }
 

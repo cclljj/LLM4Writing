@@ -17,6 +17,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "activity_not_found" }, { status: 404 });
   }
 
+  if (activity.courseStatus === "not_started") {
+    return NextResponse.json({ error: "course_not_started" }, { status: 400 });
+  }
+  if (activity.courseStatus === "ended") {
+    return NextResponse.json({ error: "course_ended" }, { status: 400 });
+  }
+
   const group = activity.groups.find((g) => g.members.includes(user.username));
   if (!group) {
     return NextResponse.json({ error: "not_group_member" }, { status: 403 });

@@ -25,6 +25,7 @@ type ActivityRow = {
   supplemental: string;
   groups: ActivityGroup[];
   studentCandidates?: string[];
+  courseStatus?: "not_started" | "in_progress" | "ended";
 };
 
 type PromptConfig = {
@@ -118,6 +119,8 @@ export default function TeacherPage() {
   const [groupCount, setGroupCount] = useState(2);
 
   const [progressSessionId, setProgressSessionId] = useState("");
+  const [selectedLearningActivityId, setSelectedLearningActivityId] = useState("");
+  const [showCourseStatusView, setShowCourseStatusView] = useState(false);
   const [progressRows, setProgressRows] = useState<PersonalProgressRow[]>([]);
   const [selectedProgressUser, setSelectedProgressUser] = useState("");
   const [personalViewStep, setPersonalViewStep] = useState<number>(3);
@@ -184,6 +187,19 @@ export default function TeacherPage() {
     [personalMessages, personalViewStep]
   );
 
+  const selectedLearningActivity = useMemo(
+    () => activities.find((activity) => activity.id === selectedLearningActivityId),
+    [activities, selectedLearningActivityId]
+  );
+
+  const filteredMonitorSessions = useMemo(
+    () =>
+      selectedLearningActivityId
+        ? monitorSessions.filter((session) => session.activityId === selectedLearningActivityId)
+        : [],
+    [monitorSessions, selectedLearningActivityId]
+  );
+
   useEffect(() => {
     fetch("/api/auth/me")
       .then((res) => res.json())
@@ -223,6 +239,16 @@ export default function TeacherPage() {
       .catch(() => undefined);
   }, [selectedEssayForPrompt]);
 
+  useEffect(() => {
+    setShowCourseStatusView(false);
+    setMonitorSelected(null);
+    setProgressRows([]);
+    setPersonalMessages([]);
+    setSelectedProgressUser("");
+    setProgressSessionId("");
+    setSessionId("");
+  }, [selectedLearningActivityId]);
+
   async function refreshAll() {
     const [u, e, o, m, a] = await Promise.all([
       fetch("/api/admin/users"),
@@ -249,7 +275,34 @@ export default function TeacherPage() {
       if (!selectedActivityId && list[0]?.id) {
         setSelectedActivityId(list[0].id);
       }
+      if (!selectedLearningActivityId && list[0]?.id) {
+        setSelectedLearningActivityId(list[0].id);
+      }
     }
+  }
+
+  function getCourseStatusLabel(status?: "not_started" | "in_progress" | "ended") {
+    if (status === "in_progress") return "進行中";
+    if (status === "ended") return "已結束";
+    return "尚未開始";
+  }
+
+  async function handleCourseLifecycle(action: "start" | "end") {
+    if (!selectedLearningActivityId) return;
+
+    const response = await fetch("/api/teacher/course-control", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ activityId: selectedLearningActivityId, action })
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      setError(data.error ?? "course_lifecycle_failed");
+      return;
+    }
+
+    setError("");
+    await refreshAll();
   }
 
   async function logout() {
@@ -869,13 +922,13 @@ export default function TeacherPage() {
 
       <div className="card row">
         <div style={{ width: 180 }}>
-          <button type="button" className={tab === "system" ? "" : "secondary"} onClick={() => setTab("system")}>系統管理</button>
-        </div>
-        <div style={{ width: 180 }}>
-          <button type="button" className={tab === "learning" ? "" : "secondary"} onClick={() => setTab("learning")}>學習管理</button>
+          <button type="button" className={tab === "system" ? "" : "secondary"} onClick={() => setTab("system")}>帳號管理</button>
         </div>
         <div style={{ width: 180 }}>
           <button type="button" className={tab === "course" ? "" : "secondary"} onClick={() => setTab("course")}>課程管理</button>
+        </div>
+        <div style={{ width: 180 }}>
+          <button type="button" className={tab === "learning" ? "" : "secondary"} onClick={() => setTab("learning")}>學習管理</button>
         </div>
       </div>
 
@@ -900,25 +953,6 @@ export default function TeacherPage() {
             <div className="col card" style={{ marginBottom: 0, padding: 12 }}>
               <small>學生帳號</small>
               <div style={{ fontSize: 22, fontWeight: 700 }}>{users.filter((user) => user.role === "student").length}</div>
-            </div>
-          </div>
-
-          <div className="row" style={{ marginBottom: 10 }}>
-            <div className="col">
-              <label>搜尋（帳號 / 姓名 / 學校）</label>
-              <input value={userQuery} onChange={(e) => setUserQuery(e.target.value)} placeholder="輸入關鍵字" />
-            </div>
-            <div className="col">
-              <label>角色篩選</label>
-              <select
-                value={roleFilter}
-                onChange={(e) => setRoleFilter(e.target.value as "all" | "teacher" | "student" | "admin")}
-              >
-                <option value="all">全部</option>
-                {loginRole === "admin" ? <option value="admin">管理員</option> : null}
-                <option value="teacher">教師</option>
-                <option value="student">學生</option>
-              </select>
             </div>
           </div>
 
@@ -1116,6 +1150,25 @@ export default function TeacherPage() {
           {accountError ? <small style={{ color: "#b91c1c", display: "block", marginBottom: 8 }}>{accountError}</small> : null}
           {accountSuccess ? <small style={{ color: "#166534", display: "block", marginBottom: 8 }}>{accountSuccess}</small> : null}
 
+          <div className="row" style={{ marginBottom: 10 }}>
+            <div className="col">
+              <label>搜尋（帳號 / 姓名 / 學校）</label>
+              <input value={userQuery} onChange={(e) => setUserQuery(e.target.value)} placeholder="輸入關鍵字" />
+            </div>
+            <div className="col">
+              <label>角色篩選</label>
+              <select
+                value={roleFilter}
+                onChange={(e) => setRoleFilter(e.target.value as "all" | "teacher" | "student" | "admin")}
+              >
+                <option value="all">全部</option>
+                {loginRole === "admin" ? <option value="admin">管理員</option> : null}
+                <option value="teacher">教師</option>
+                <option value="student">學生</option>
+              </select>
+            </div>
+          </div>
+
           <div style={{ overflowX: "auto" }}>
             <table className="pro-table">
               <thead>
@@ -1296,206 +1349,274 @@ export default function TeacherPage() {
       {tab === "learning" ? (
         <>
           <div className="card">
-            <h2>課堂觀察（檢視學習進度）</h2>
-            <div style={{ overflowX: "auto" }}>
-              <table className="pro-table">
-                <thead>
-                  <tr>
-                    <th>序號</th>
-                    <th>寫作任務</th>
-                    <th>小組名稱</th>
-                    <th>成員名單</th>
-                    <th>小組進度</th>
-                    <th>動作</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {monitorSessions.map((session, idx) => (
-                    <tr key={session.sessionId}>
-                      <td>{idx + 1}</td>
-                      <td>{session.activityTitle ?? session.activityId}</td>
-                      <td>{session.groupName ?? session.groupId ?? "未命名組"}</td>
-                      <td>{session.participants.join(", ")}</td>
-                      <td>Step {session.currentStep}</td>
-                      <td>
-                        <div className="row" style={{ gap: 8 }}>
-                          <button
-                            type="button"
-                            className="secondary"
-                            style={{ width: "auto" }}
-                            onClick={() => {
-                              setMonitorSelected(session);
-                              setGroupViewStep("all");
-                              setProgressSessionId(session.sessionId);
-                              setSessionId(session.sessionId);
-                            }}
-                          >
-                            查看小組對話
-                          </button>
-                          <button
-                            type="button"
-                            className="secondary"
-                            style={{ width: "auto" }}
-                            onClick={() => {
-                              setProgressSessionId(session.sessionId);
-                              loadProgress(session.sessionId);
-                            }}
-                          >
-                            查看個人進度
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div className="card">
-            <h2>檢視學習進度 / 切換步驟</h2>
-            <form onSubmit={handleSwitch} className="row">
+            <h2>學習管理</h2>
+            <div className="row">
               <div className="col">
-                <label>Session ID</label>
-                <input list="session-id-options" value={sessionId} onChange={(e) => setSessionId(e.target.value)} />
-                <small>可直接輸入，或從建議清單挑選既有 Session ID。</small>
-              </div>
-              <div className="col">
-                <label>Step</label>
-                <select value={step} onChange={(e) => setStep(Number(e.target.value))}>
-                  {Array.from({ length: 10 }, (_, i) => i + 1).map((v) => (
-                    <option key={v} value={v}>
-                      Step {v}
+                <label>課程清單（班級 + 主題）</label>
+                <select
+                  value={selectedLearningActivityId}
+                  onChange={(e) => setSelectedLearningActivityId(e.target.value)}
+                >
+                  <option value="">請選擇課程</option>
+                  {activities.map((activity) => (
+                    <option key={activity.id} value={activity.id}>
+                      {activity.classNumber} 班 / {activity.title}
                     </option>
                   ))}
                 </select>
               </div>
               <div className="col" style={{ alignSelf: "end" }}>
-                <button type="submit">切換步驟</button>
+                <small>
+                  目前狀態：{selectedLearningActivity ? getCourseStatusLabel(selectedLearningActivity.courseStatus) : "未選擇課程"}
+                </small>
               </div>
-            </form>
-            <div className="row" style={{ marginTop: 8 }}>
-              {sessionHints.slice(0, 6).map((id) => (
-                <button
-                  key={id}
-                  type="button"
-                  className="secondary"
-                  style={{ width: "auto" }}
-                  onClick={() => setSessionId(id)}
-                >
-                  {id}
-                </button>
-              ))}
+            </div>
+            <div className="row" style={{ marginTop: 10, gap: 8 }}>
+              <button
+                type="button"
+                style={{ width: "auto" }}
+                disabled={!selectedLearningActivity || selectedLearningActivity.courseStatus !== "not_started"}
+                onClick={() => handleCourseLifecycle("start")}
+              >
+                開始上課
+              </button>
+              <button
+                type="button"
+                style={{ width: "auto" }}
+                disabled={!selectedLearningActivity || selectedLearningActivity.courseStatus !== "in_progress"}
+                onClick={() => handleCourseLifecycle("end")}
+              >
+                結束上課
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                style={{ width: "auto" }}
+                disabled={!selectedLearningActivity || selectedLearningActivity.courseStatus === "not_started"}
+                onClick={() => setShowCourseStatusView(true)}
+              >
+                查看狀態
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                style={{ width: "auto" }}
+                onClick={() => refreshAll()}
+              >
+                重新整理
+              </button>
             </div>
             {error ? <small>{error}</small> : null}
           </div>
 
-          <div className="card">
-            <h2>個人進度表</h2>
-            <div className="row">
-              <div className="col">
-                <label>Session ID</label>
-                <input
-                  list="session-id-options"
-                  value={progressSessionId}
-                  onChange={(e) => setProgressSessionId(e.target.value)}
-                />
+          {showCourseStatusView ? (
+            <>
+              <div className="card">
+                <h2>課程狀態內容（即時 / 歷史）</h2>
+                <div style={{ overflowX: "auto" }}>
+                  <table className="pro-table">
+                    <thead>
+                      <tr>
+                        <th>序號</th>
+                        <th>寫作任務</th>
+                        <th>小組名稱</th>
+                        <th>成員名單</th>
+                        <th>小組進度</th>
+                        <th>動作</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredMonitorSessions.map((session, idx) => (
+                        <tr key={session.sessionId}>
+                          <td>{idx + 1}</td>
+                          <td>{session.activityTitle ?? session.activityId}</td>
+                          <td>{session.groupName ?? session.groupId ?? "未命名組"}</td>
+                          <td>{session.participants.join(", ")}</td>
+                          <td>Step {session.currentStep}</td>
+                          <td>
+                            <div className="row" style={{ gap: 8 }}>
+                              <button
+                                type="button"
+                                className="secondary"
+                                style={{ width: "auto" }}
+                                onClick={() => {
+                                  setMonitorSelected(session);
+                                  setGroupViewStep("all");
+                                  setProgressSessionId(session.sessionId);
+                                  setSessionId(session.sessionId);
+                                }}
+                              >
+                                查看小組對話
+                              </button>
+                              <button
+                                type="button"
+                                className="secondary"
+                                style={{ width: "auto" }}
+                                onClick={() => {
+                                  setProgressSessionId(session.sessionId);
+                                  loadProgress(session.sessionId);
+                                }}
+                              >
+                                查看個人進度
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {filteredMonitorSessions.length === 0 ? (
+                  <small>此課程目前沒有 session。開始上課後，學生加入討論即會出現即時或歷史內容。</small>
+                ) : null}
               </div>
-              <div className="col" style={{ alignSelf: "end" }}>
-                <button type="button" className="secondary" onClick={() => loadProgress()}>
-                  載入個人進度
-                </button>
-              </div>
-            </div>
-            <div style={{ overflowX: "auto", marginTop: 10 }}>
-              <table className="pro-table">
-                <thead>
-                  <tr>
-                    <th>序號</th>
-                    <th>姓名</th>
-                    <th>個人進度</th>
-                    <th>發言數</th>
-                    <th>最後發言時間</th>
-                    <th>動作</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {progressRows.map((row, idx) => (
-                    <tr key={row.username}>
-                      <td>{idx + 1}</td>
-                      <td>{row.username}</td>
-                      <td>Step {row.currentStep}</td>
-                      <td>{row.messageCount}</td>
-                      <td>{row.lastMessageAt ? new Date(row.lastMessageAt).toLocaleString("zh-TW") : "—"}</td>
-                      <td>
-                        <button
-                          type="button"
-                          className="secondary"
-                          style={{ width: "auto" }}
-                          onClick={() => loadProgress(progressSessionId, row.username)}
-                        >
-                          查看 3/6/8 對話
-                        </button>
-                      </td>
-                    </tr>
+
+              <div className="card">
+                <h2>檢視學習進度 / 切換步驟</h2>
+                <form onSubmit={handleSwitch} className="row">
+                  <div className="col">
+                    <label>Session ID</label>
+                    <input list="session-id-options" value={sessionId} onChange={(e) => setSessionId(e.target.value)} />
+                    <small>可直接輸入，或從建議清單挑選既有 Session ID。</small>
+                  </div>
+                  <div className="col">
+                    <label>Step</label>
+                    <select value={step} onChange={(e) => setStep(Number(e.target.value))}>
+                      {Array.from({ length: 10 }, (_, i) => i + 1).map((v) => (
+                        <option key={v} value={v}>
+                          Step {v}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="col" style={{ alignSelf: "end" }}>
+                    <button type="submit">切換步驟</button>
+                  </div>
+                </form>
+                <div className="row" style={{ marginTop: 8 }}>
+                  {sessionHints.slice(0, 6).map((id) => (
+                    <button
+                      key={id}
+                      type="button"
+                      className="secondary"
+                      style={{ width: "auto" }}
+                      onClick={() => setSessionId(id)}
+                    >
+                      {id}
+                    </button>
                   ))}
-                </tbody>
-              </table>
-            </div>
-            {selectedProgressUser ? <small>目前檢視：{selectedProgressUser}</small> : null}
-          </div>
-
-          {monitorSelected ? (
-            <div className="card">
-              <h2>小組對話紀錄</h2>
-              <div className="row" style={{ marginBottom: 8 }}>
-                <div className="col">
-                  <label>步驟篩選（僅小組互動步驟）</label>
-                  <select value={groupViewStep} onChange={(e) => setGroupViewStep(e.target.value)}>
-                    <option value="all">全部（1/2/4）</option>
-                    <option value="1">Step 1</option>
-                    <option value="2">Step 2</option>
-                    <option value="4">Step 4</option>
-                  </select>
                 </div>
+                {error ? <small>{error}</small> : null}
               </div>
-              {groupMessages.map((message) => (
-                <div key={message.id} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
-                  <strong>
-                    [S{message.step}] {message.role}
-                    {message.userId ? `(${message.userId})` : ""}
-                  </strong>
-                  <div>{message.text}</div>
-                </div>
-              ))}
-              {groupMessages.length === 0 ? <small>目前此篩選條件下沒有 1/2/4 步驟對話。</small> : null}
-            </div>
-          ) : null}
 
-          {personalMessages.length > 0 ? (
-            <div className="card">
-              <h2>個人對話紀錄</h2>
-              <div className="row" style={{ marginBottom: 8 }}>
-                <div className="col">
-                  <label>步驟篩選（僅個人互動步驟）</label>
-                  <select value={personalViewStep} onChange={(e) => setPersonalViewStep(Number(e.target.value))}>
-                    <option value={3}>Step 3</option>
-                    <option value={6}>Step 6</option>
-                    <option value={8}>Step 8</option>
-                  </select>
+              <div className="card">
+                <h2>個人進度表</h2>
+                <div className="row">
+                  <div className="col">
+                    <label>Session ID</label>
+                    <input
+                      list="session-id-options"
+                      value={progressSessionId}
+                      onChange={(e) => setProgressSessionId(e.target.value)}
+                    />
+                  </div>
+                  <div className="col" style={{ alignSelf: "end" }}>
+                    <button type="button" className="secondary" onClick={() => loadProgress()}>
+                      載入個人進度
+                    </button>
+                  </div>
                 </div>
+                <div style={{ overflowX: "auto", marginTop: 10 }}>
+                  <table className="pro-table">
+                    <thead>
+                      <tr>
+                        <th>序號</th>
+                        <th>姓名</th>
+                        <th>個人進度</th>
+                        <th>發言數</th>
+                        <th>最後發言時間</th>
+                        <th>動作</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {progressRows.map((row, idx) => (
+                        <tr key={row.username}>
+                          <td>{idx + 1}</td>
+                          <td>{row.username}</td>
+                          <td>Step {row.currentStep}</td>
+                          <td>{row.messageCount}</td>
+                          <td>{row.lastMessageAt ? new Date(row.lastMessageAt).toLocaleString("zh-TW") : "—"}</td>
+                          <td>
+                            <button
+                              type="button"
+                              className="secondary"
+                              style={{ width: "auto" }}
+                              onClick={() => loadProgress(progressSessionId, row.username)}
+                            >
+                              查看 3/6/8 對話
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {selectedProgressUser ? <small>目前檢視：{selectedProgressUser}</small> : null}
               </div>
-              {personalFilteredMessages.map((message) => (
-                <div key={message.id} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
-                  <strong>
-                    [S{message.step}] {message.role}
-                    {message.userId ? `(${message.userId})` : ""}
-                  </strong>
-                  <div>{message.text}</div>
+
+              {monitorSelected ? (
+                <div className="card">
+                  <h2>小組對話紀錄</h2>
+                  <div className="row" style={{ marginBottom: 8 }}>
+                    <div className="col">
+                      <label>步驟篩選（僅小組互動步驟）</label>
+                      <select value={groupViewStep} onChange={(e) => setGroupViewStep(e.target.value)}>
+                        <option value="all">全部（1/2/4）</option>
+                        <option value="1">Step 1</option>
+                        <option value="2">Step 2</option>
+                        <option value="4">Step 4</option>
+                      </select>
+                    </div>
+                  </div>
+                  {groupMessages.map((message) => (
+                    <div key={message.id} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
+                      <strong>
+                        [S{message.step}] {message.role}
+                        {message.userId ? `(${message.userId})` : ""}
+                      </strong>
+                      <div>{message.text}</div>
+                    </div>
+                  ))}
+                  {groupMessages.length === 0 ? <small>目前此篩選條件下沒有 1/2/4 步驟對話。</small> : null}
                 </div>
-              ))}
-              {personalFilteredMessages.length === 0 ? <small>目前此學生在所選步驟沒有可顯示對話。</small> : null}
-            </div>
+              ) : null}
+
+              {personalMessages.length > 0 ? (
+                <div className="card">
+                  <h2>個人對話紀錄</h2>
+                  <div className="row" style={{ marginBottom: 8 }}>
+                    <div className="col">
+                      <label>步驟篩選（僅個人互動步驟）</label>
+                      <select value={personalViewStep} onChange={(e) => setPersonalViewStep(Number(e.target.value))}>
+                        <option value={3}>Step 3</option>
+                        <option value={6}>Step 6</option>
+                        <option value={8}>Step 8</option>
+                      </select>
+                    </div>
+                  </div>
+                  {personalFilteredMessages.map((message) => (
+                    <div key={message.id} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
+                      <strong>
+                        [S{message.step}] {message.role}
+                        {message.userId ? `(${message.userId})` : ""}
+                      </strong>
+                      <div>{message.text}</div>
+                    </div>
+                  ))}
+                  {personalFilteredMessages.length === 0 ? <small>目前此學生在所選步驟沒有可顯示對話。</small> : null}
+                </div>
+              ) : null}
+            </>
           ) : null}
         </>
       ) : null}
