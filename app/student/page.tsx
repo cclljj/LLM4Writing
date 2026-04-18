@@ -6,7 +6,7 @@ type InteractionMode = "group_interaction" | "personal_interaction" | "non_inter
 
 type Activity = {
   id: string;
-  className: string;
+  classNumber: string;
   title: string;
   genre: string;
   durationMinutes: number;
@@ -268,7 +268,7 @@ export default function StudentPage() {
         {activities.length === 0 ? <small>目前沒有可加入的任務。</small> : null}
         {activities.map((activity) => (
           <div key={activity.id} style={{ borderTop: "1px solid #e5e7eb", padding: "10px 0" }}>
-            <strong>{activity.title}</strong>（{activity.className} / {activity.genre} / {activity.durationMinutes} 分鐘）
+            <strong>{activity.title}</strong>（班級 {activity.classNumber} / {activity.genre} / {activity.durationMinutes} 分鐘）
             <div>
               <small>{activity.supplemental}</small>
             </div>
@@ -315,7 +315,7 @@ export default function StudentPage() {
             <strong>{detailActivity.title}</strong>
           </p>
           <p>
-            班級：{detailActivity.className} / 文體：{detailActivity.genre} / 討論時長：{detailActivity.durationMinutes} 分鐘
+            班級：{detailActivity.classNumber} / 文體：{detailActivity.genre} / 討論時長：{detailActivity.durationMinutes} 分鐘
           </p>
           <p>補充資料：{detailActivity.supplemental}</p>
           <div className="row">
@@ -374,7 +374,7 @@ export default function StudentPage() {
                 <strong>{session.activityTitle ?? "未命名任務"}</strong>
               </p>
               <p>
-                班級：{currentActivity?.className ?? "—"} / 文體：{currentActivity?.genre ?? "—"} / 討論時長：
+                班級：{currentActivity?.classNumber ?? "—"} / 文體：{currentActivity?.genre ?? "—"} / 討論時長：
                 {currentActivity?.durationMinutes ?? "—"} 分鐘
               </p>
               <p>寫作引導說明：{currentActivity?.supplemental ?? "—"}</p>

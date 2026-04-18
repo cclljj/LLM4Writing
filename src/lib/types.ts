@@ -88,7 +88,9 @@ export interface ActivityGroup {
 
 export interface Activity {
   id: string;
-  className: string;
+  school: string;
+  classNumber: string;
+  essayId: string;
   title: string;
   genre: string;
   durationMinutes: number;
@@ -102,4 +104,5 @@ export interface UserAccount {
   school: string;
   role: "student" | "teacher" | "admin";
   ownerTeacherUsername?: string;
+  classNumber?: string;
 }

@@ -15,6 +15,7 @@ const defaultUsers: StoredUser[] = [
     school: "Demo High",
     role: "student",
     ownerTeacherUsername: "teacher",
+    classNumber: "701",
     password: "student123"
   },
   {
@@ -23,6 +24,7 @@ const defaultUsers: StoredUser[] = [
     school: "Demo High",
     role: "student",
     ownerTeacherUsername: "teacher",
+    classNumber: "701",
     password: "student123"
   },
   {
@@ -31,6 +33,7 @@ const defaultUsers: StoredUser[] = [
     school: "Demo High",
     role: "student",
     ownerTeacherUsername: "teacher",
+    classNumber: "701",
     password: "student123"
   },
   {
@@ -39,6 +42,7 @@ const defaultUsers: StoredUser[] = [
     school: "Demo High",
     role: "student",
     ownerTeacherUsername: "teacher",
+    classNumber: "702",
     password: "student123"
   }
 ];
@@ -207,14 +211,27 @@ export async function createUserStore(input: {
   role: "student" | "teacher" | "admin";
   password: string;
   ownerTeacherUsername?: string;
+  classNumber?: string;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   const exists = await getUserStore(input.username);
   if (exists) return { ok: false, error: "username_exists" };
 
   if (input.role === "student") {
     if (!input.ownerTeacherUsername) return { ok: false, error: "missing_owner_teacher" };
+    if (!input.classNumber) return { ok: false, error: "missing_class_number" };
     const owner = await getUserStore(input.ownerTeacherUsername);
     if (!owner || owner.role !== "teacher") return { ok: false, error: "owner_teacher_not_found" };
+
+    const users = await listUsersStore();
+    const hasTeacherConflict = users.some(
+      (user) =>
+        user.role === "student" &&
+        user.school === input.school &&
+        user.classNumber === input.classNumber &&
+        user.ownerTeacherUsername &&
+        user.ownerTeacherUsername !== input.ownerTeacherUsername
+    );
+    if (hasTeacherConflict) return { ok: false, error: "class_owner_teacher_conflict" };
   }
 
   const safePayload: UserAccount = {
@@ -222,7 +239,8 @@ export async function createUserStore(input: {
     name: input.name,
     school: input.school,
     role: input.role,
-    ownerTeacherUsername: input.role === "student" ? input.ownerTeacherUsername : undefined
+    ownerTeacherUsername: input.role === "student" ? input.ownerTeacherUsername : undefined,
+    classNumber: input.role === "student" ? input.classNumber : undefined
   };
 
   if (!isPostgresEnabled()) {
@@ -248,6 +266,7 @@ export async function updateUserStore(
     role?: "student" | "teacher" | "admin";
     password?: string;
     ownerTeacherUsername?: string;
+    classNumber?: string;
   }
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const existing = await getUserStore(username);
@@ -256,11 +275,25 @@ export async function updateUserStore(
   const nextRole = patch.role ?? existing.role;
   const nextOwnerTeacherUsername =
     patch.ownerTeacherUsername !== undefined ? patch.ownerTeacherUsername : existing.ownerTeacherUsername;
+  const nextClassNumber = patch.classNumber !== undefined ? patch.classNumber : existing.classNumber;
 
   if (nextRole === "student") {
     if (!nextOwnerTeacherUsername) return { ok: false, error: "missing_owner_teacher" };
+    if (!nextClassNumber) return { ok: false, error: "missing_class_number" };
     const owner = await getUserStore(nextOwnerTeacherUsername);
     if (!owner || owner.role !== "teacher") return { ok: false, error: "owner_teacher_not_found" };
+
+    const users = await listUsersStore();
+    const hasTeacherConflict = users.some(
+      (user) =>
+        user.username !== username &&
+        user.role === "student" &&
+        user.school === (patch.school ?? existing.school) &&
+        user.classNumber === nextClassNumber &&
+        user.ownerTeacherUsername &&
+        user.ownerTeacherUsername !== nextOwnerTeacherUsername
+    );
+    if (hasTeacherConflict) return { ok: false, error: "class_owner_teacher_conflict" };
   }
 
   const nextPayload: UserAccount = {
@@ -268,7 +301,8 @@ export async function updateUserStore(
     name: patch.name ?? existing.name,
     school: patch.school ?? existing.school,
     role: nextRole,
-    ownerTeacherUsername: nextRole === "student" ? nextOwnerTeacherUsername : undefined
+    ownerTeacherUsername: nextRole === "student" ? nextOwnerTeacherUsername : undefined,
+    classNumber: nextRole === "student" ? nextClassNumber : undefined
   };
 
   if (!isPostgresEnabled()) {

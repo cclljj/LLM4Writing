@@ -22,6 +22,7 @@ type UserInput = {
   role?: string;
   password?: string;
   ownerTeacherUsername?: string;
+  classNumber?: string;
 };
 
 export async function GET() {
@@ -128,6 +129,7 @@ export async function POST(request: NextRequest) {
       role: "student" | "teacher" | "admin";
       password: string;
       ownerTeacherUsername?: string;
+      classNumber?: string;
     }> = [];
 
     for (const row of parsed.rows) {
@@ -191,7 +193,7 @@ export async function PUT(request: NextRequest) {
 
   const body = (await request.json()) as {
     username?: string;
-    patch?: { name?: string; school?: string; role?: string; password?: string; ownerTeacherUsername?: string };
+    patch?: { name?: string; school?: string; role?: string; password?: string; ownerTeacherUsername?: string; classNumber?: string };
   };
 
   if (!body.username || !body.patch) {
@@ -213,6 +215,7 @@ export async function PUT(request: NextRequest) {
     role?: "student" | "teacher" | "admin";
     password?: string;
     ownerTeacherUsername?: string;
+    classNumber?: string;
   } = {};
 
   if (body.patch.name !== undefined) patch.name = body.patch.name.trim();
@@ -233,6 +236,9 @@ export async function PUT(request: NextRequest) {
 
   if (body.patch.ownerTeacherUsername !== undefined) {
     patch.ownerTeacherUsername = body.patch.ownerTeacherUsername.trim();
+  }
+  if (body.patch.classNumber !== undefined) {
+    patch.classNumber = body.patch.classNumber.trim();
   }
 
   if (requester.role === "teacher") {
@@ -338,6 +344,7 @@ async function validateUserFields(input: UserInput): Promise<
         role: "student" | "teacher" | "admin";
         password: string;
         ownerTeacherUsername?: string;
+        classNumber?: string;
       };
     }
   | { ok: false; error: string }
@@ -348,6 +355,7 @@ async function validateUserFields(input: UserInput): Promise<
   const role = (input.role ?? "").trim();
   const password = input.password ?? "";
   const ownerTeacherUsername = (input.ownerTeacherUsername ?? "").trim();
+  const classNumber = (input.classNumber ?? "").trim();
 
   if (!username || !name || !school || !role || !password) {
     return { ok: false, error: "missing_required_fields" };
@@ -360,6 +368,9 @@ async function validateUserFields(input: UserInput): Promise<
   }
   if (password.length < 6) {
     return { ok: false, error: "password_too_short" };
+  }
+  if (role === "student" && !classNumber) {
+    return { ok: false, error: "missing_class_number" };
   }
   if (role === "student" && ownerTeacherUsername) {
     const teachers = await getTeacherUsersStore();
@@ -377,7 +388,8 @@ async function validateUserFields(input: UserInput): Promise<
       school,
       role,
       password,
-      ownerTeacherUsername: role === "student" ? ownerTeacherUsername : undefined
+      ownerTeacherUsername: role === "student" ? ownerTeacherUsername : undefined,
+      classNumber: role === "student" ? classNumber : undefined
     }
   };
 }
@@ -393,6 +405,7 @@ function parseUserCsv(csvText: string):
           school?: string;
           role?: string;
           password?: string;
+          classNumber?: string;
           ownerTeacherUsername?: string;
         };
       }>;
@@ -411,10 +424,12 @@ function parseUserCsv(csvText: string):
   const header = splitCsvLine(lines[0]!);
   const normalizedHeader = header.map((h) => h.toLowerCase());
   const headerMatches5 = normalizedHeader.join(",") === "username,name,school,role,password";
-  const headerMatches6 = normalizedHeader.join(",") === "username,name,school,role,password,ownerteacherusername";
+  const headerMatches6 = normalizedHeader.join(",") === "username,name,school,role,password,classnumber";
+  const headerMatches7 = normalizedHeader.join(",") === "username,name,school,role,password,classnumber,ownerteacherusername";
   const headerMatchesZh5 = header.join(",") === "帳號,姓名,學校,角色,密碼";
-  const headerMatchesZh6 = header.join(",") === "帳號,姓名,學校,角色,密碼,綁定教師";
-  if (headerMatches5 || headerMatches6 || headerMatchesZh5 || headerMatchesZh6) {
+  const headerMatchesZh6 = header.join(",") === "帳號,姓名,學校,角色,密碼,班級號碼";
+  const headerMatchesZh7 = header.join(",") === "帳號,姓名,學校,角色,密碼,班級號碼,綁定教師";
+  if (headerMatches5 || headerMatches6 || headerMatches7 || headerMatchesZh5 || headerMatchesZh6 || headerMatchesZh7) {
     startIndex = 1;
   }
 
@@ -426,15 +441,19 @@ function parseUserCsv(csvText: string):
       school?: string;
       role?: string;
       password?: string;
+      classNumber?: string;
       ownerTeacherUsername?: string;
     };
   }> = [];
 
   for (let idx = startIndex; idx < lines.length; idx += 1) {
     const cells = splitCsvLine(lines[idx]!);
-    if (cells.length !== 5 && cells.length !== 6) {
+    if (cells.length !== 5 && cells.length !== 6 && cells.length !== 7) {
       return { ok: false, error: `csv_invalid_column_count_line_${idx + 1}` };
     }
+
+    const hasClassNumber = cells.length >= 6;
+    const hasOwner = cells.length >= 7;
 
     rows.push({
       line: idx + 1,
@@ -444,7 +463,8 @@ function parseUserCsv(csvText: string):
         school: cells[2],
         role: cells[3],
         password: cells[4],
-        ownerTeacherUsername: cells[5] ?? ""
+        classNumber: hasClassNumber ? cells[5] : "",
+        ownerTeacherUsername: hasOwner ? cells[6] : ""
       }
     });
   }

@@ -1,35 +1,61 @@
 import { Activity, ActivityGroup, PromptConfig, UserAccount } from "@/src/lib/types";
 
+type Essay = {
+  id: string;
+  title: string;
+  genre: string;
+  description: string;
+  enabled: boolean;
+};
+
+type OpenClassTask = {
+  id: string;
+  school: string;
+  classNumber: string;
+  essayId: string;
+  durationMinutes: number;
+  supplemental: string;
+};
+
+type OpenClassView = OpenClassTask & {
+  essayTitle: string;
+  essayGenre: string;
+};
+
 const users: UserAccount[] = [
   { username: "admin", name: "System Admin", school: "Demo High", role: "admin" },
   { username: "teacher", name: "Teacher One", school: "Demo High", role: "teacher" },
-  { username: "student", name: "Student One", school: "Demo High", role: "student", ownerTeacherUsername: "teacher" },
-  { username: "s1", name: "S1", school: "Demo High", role: "student", ownerTeacherUsername: "teacher" },
-  { username: "s2", name: "S2", school: "Demo High", role: "student", ownerTeacherUsername: "teacher" },
-  { username: "s3", name: "S3", school: "Demo High", role: "student", ownerTeacherUsername: "teacher" }
-];
-
-const activities: Activity[] = [
   {
-    id: "oc-001",
-    className: "701",
-    title: "科技與生活",
-    genre: "議論文",
-    durationMinutes: 45,
-    supplemental: "聚焦 AI 對日常生活的改變，先盤點正反觀點。",
-    groups: [
-      { groupId: "g1", groupName: "1", members: ["student", "s1", "s2"] },
-      { groupId: "g2", groupName: "2", members: ["s3"] }
-    ]
+    username: "student",
+    name: "Student One",
+    school: "Demo High",
+    role: "student",
+    ownerTeacherUsername: "teacher",
+    classNumber: "701"
   },
   {
-    id: "oc-002",
-    className: "702",
-    title: "我最想改變的校園角落",
-    genre: "說明文",
-    durationMinutes: 40,
-    supplemental: "描述問題、提出可行方案、評估影響。",
-    groups: [{ groupId: "g1", groupName: "1", members: ["student", "s3"] }]
+    username: "s1",
+    name: "S1",
+    school: "Demo High",
+    role: "student",
+    ownerTeacherUsername: "teacher",
+    classNumber: "701"
+  },
+  {
+    username: "s2",
+    name: "S2",
+    school: "Demo High",
+    role: "student",
+    ownerTeacherUsername: "teacher",
+    classNumber: "701"
+  },
+  {
+    username: "s3",
+    name: "S3",
+    school: "Demo High",
+    role: "student",
+    ownerTeacherUsername: "teacher",
+    classNumber: "702"
   }
 ];
 
@@ -42,15 +68,23 @@ const userPasswords: Record<string, string> = {
   teacher: "teacher123"
 };
 
-const essays = [
+const essays: Essay[] = [
   { id: "essay-1", title: "科技與生活", genre: "議論文", description: "科技改變生活的利弊分析", enabled: true },
   { id: "essay-2", title: "我的校園角落", genre: "說明文", description: "校園問題觀察與改善", enabled: true }
 ];
 
-const openClasses = [
-  { id: "oc-001", className: "701", essayTitle: "科技與生活", durationMinutes: 45, supplemental: "AI 與日常" },
-  { id: "oc-002", className: "702", essayTitle: "我的校園角落", durationMinutes: 40, supplemental: "觀察與提案" }
+const openClasses: OpenClassTask[] = [
+  { id: "oc-001", school: "Demo High", classNumber: "701", essayId: "essay-1", durationMinutes: 45, supplemental: "AI 與日常" },
+  { id: "oc-002", school: "Demo High", classNumber: "702", essayId: "essay-2", durationMinutes: 40, supplemental: "觀察與提案" }
 ];
+
+const activityGroupMap: Record<string, ActivityGroup[]> = {
+  "oc-001": [
+    { groupId: "g1", groupName: "1", members: ["student", "s1", "s2"] },
+    { groupId: "g2", groupName: "2", members: ["s3"] }
+  ],
+  "oc-002": [{ groupId: "g1", groupName: "1", members: ["student", "s3"] }]
+};
 
 const essayPromptConfigs: Record<string, PromptConfig> = {
   "essay-1": {
@@ -100,9 +134,47 @@ function mergePromptConfig(base: PromptConfig, override: PromptConfig): PromptCo
   };
 }
 
+function findEssay(essayId: string): Essay | undefined {
+  return essays.find((essay) => essay.id === essayId);
+}
+
+function toOpenClassView(openClass: OpenClassTask): OpenClassView {
+  const essay = findEssay(openClass.essayId);
+  return {
+    ...openClass,
+    essayTitle: essay?.title ?? "未知主題",
+    essayGenre: essay?.genre ?? "未知文體"
+  };
+}
+
+function toActivity(openClass: OpenClassTask): Activity {
+  const detail = toOpenClassView(openClass);
+  const groups = activityGroupMap[openClass.id] ?? [];
+
+  return {
+    id: openClass.id,
+    school: openClass.school,
+    classNumber: openClass.classNumber,
+    essayId: openClass.essayId,
+    title: detail.essayTitle,
+    genre: detail.essayGenre,
+    durationMinutes: openClass.durationMinutes,
+    supplemental: openClass.supplemental,
+    groups: groups.map((group) => ({ ...group, members: [...group.members] }))
+  };
+}
+
+function getTeacherProfile(teacherUsername: string): UserAccount | undefined {
+  return users.find((user) => user.username === teacherUsername && user.role === "teacher");
+}
+
+function getStudentsBySchoolAndClass(school: string, classNumber: string): UserAccount[] {
+  return users.filter((user) => user.role === "student" && user.school === school && user.classNumber === classNumber);
+}
+
 export function resolvePromptConfigForActivity(activityId: string): PromptConfig {
   const openClass = openClasses.find((item) => item.id === activityId);
-  const essay = essays.find((item) => item.title === openClass?.essayTitle);
+  const essay = openClass ? findEssay(openClass.essayId) : undefined;
 
   const base: PromptConfig = essay ? getEssayPromptConfig(essay.id) : { stepPrompts: {}, subStepPrompts: {}, questionBanks: {} };
   const override: PromptConfig = openClass ? getOpenClassPromptConfig(openClass.id) : { stepPrompts: {}, subStepPrompts: {}, questionBanks: {} };
@@ -129,6 +201,23 @@ export function getUsersVisibleToTeacher(teacherUsername: string): UserAccount[]
   });
 }
 
+export function getClassNumbersForTeacher(teacherUsername: string): string[] {
+  return Array.from(
+    new Set(
+      users
+        .filter((user) => user.role === "student" && user.ownerTeacherUsername === teacherUsername)
+        .map((user) => user.classNumber)
+        .filter((value): value is string => Boolean(value))
+    )
+  ).sort();
+}
+
+export function getClassStudentsForTeacher(teacherUsername: string, classNumber: string): UserAccount[] {
+  return users.filter(
+    (user) => user.role === "student" && user.ownerTeacherUsername === teacherUsername && user.classNumber === classNumber
+  );
+}
+
 export function getUser(username: string): UserAccount | undefined {
   return users.find((user) => user.username === username);
 }
@@ -145,33 +234,68 @@ export function getEssays() {
 }
 
 export function getOpenClasses() {
-  return openClasses;
+  return openClasses.map((openClass) => toOpenClassView(openClass));
+}
+
+export function getOpenClassesVisibleToTeacher(teacherUsername: string) {
+  const teacher = getTeacherProfile(teacherUsername);
+  if (!teacher) return [];
+
+  const allowedClassNumbers = new Set(getClassNumbersForTeacher(teacherUsername));
+  return getOpenClasses().filter(
+    (item) => item.school === teacher.school && allowedClassNumbers.has(item.classNumber)
+  );
 }
 
 export function getActivitiesForStudent(username: string): Activity[] {
-  return activities.filter((activity) => activity.groups.some((group) => group.members.includes(username)));
+  return getAllActivities().filter((activity) => activity.groups.some((group) => group.members.includes(username)));
 }
 
 export function getAllActivities(): Activity[] {
-  return activities;
+  return openClasses.map((openClass) => toActivity(openClass));
+}
+
+export function getActivitiesVisibleToTeacher(teacherUsername: string): Activity[] {
+  const teacher = getTeacherProfile(teacherUsername);
+  if (!teacher) return [];
+
+  const allowedClassNumbers = new Set(getClassNumbersForTeacher(teacherUsername));
+  return getAllActivities().filter(
+    (activity) => activity.school === teacher.school && allowedClassNumbers.has(activity.classNumber)
+  );
 }
 
 export function findActivity(activityId: string): Activity | undefined {
-  return activities.find((activity) => activity.id === activityId);
+  const openClass = openClasses.find((item) => item.id === activityId);
+  if (!openClass) return undefined;
+  return toActivity(openClass);
 }
 
-export function updateActivityGroups(activityId: string, groups: ActivityGroup[]): Activity | undefined {
+export function getGroupCandidatesForActivity(activityId: string, requester: { role: "teacher" | "admin"; username: string }): UserAccount[] {
+  const activity = findActivity(activityId);
+  if (!activity) return [];
+
+  if (requester.role === "admin") {
+    return getStudentsBySchoolAndClass(activity.school, activity.classNumber);
+  }
+
+  return getClassStudentsForTeacher(requester.username, activity.classNumber).filter(
+    (student) => student.school === activity.school
+  );
+}
+
+export function updateActivityGroups(activityId: string, groups: ActivityGroup[], allowedStudents?: string[]): Activity | undefined {
   const activity = findActivity(activityId);
   if (!activity) {
     return undefined;
   }
 
-  const studentSet = new Set(getStudentUsers().map((student) => student.username));
+  const validStudents = new Set(allowedStudents ?? getStudentUsers().map((student) => student.username));
   const seen = new Set<string>();
 
   const sanitizedGroups = groups.map((group, idx) => {
     const uniqueMembers = group.members.filter((member) => {
-      if (!studentSet.has(member)) return false;
+      if (!validStudents.has(member)) return false;
       if (seen.has(member)) return false;
       seen.add(member);
       return true;
@@ -187,8 +311,8 @@ export function updateActivityGroups(activityId: string, groups: ActivityGroup[]
     };
   });
 
-  activity.groups = sanitizedGroups;
-  return activity;
+  activityGroupMap[activityId] = sanitizedGroups;
+  return findActivity(activityId);
 }
 
 export function getEssayPromptConfig(essayId: string): PromptConfig {
@@ -252,31 +376,40 @@ export function upsertEssay(input: {
 
 export function upsertOpenClass(input: {
   id?: string;
-  className: string;
-  essayTitle: string;
+  school: string;
+  classNumber: string;
+  essayId: string;
   durationMinutes: number;
   supplemental: string;
 }) {
+  const essay = findEssay(input.essayId);
+  if (!essay) {
+    return { ok: false as const, error: "essay_not_found" };
+  }
+
   if (input.id) {
     const existing = openClasses.find((openClass) => openClass.id === input.id);
     if (existing) {
-      existing.className = input.className;
-      existing.essayTitle = input.essayTitle;
+      existing.school = input.school;
+      existing.classNumber = input.classNumber;
+      existing.essayId = input.essayId;
       existing.durationMinutes = input.durationMinutes;
       existing.supplemental = input.supplemental;
-      return existing;
+      return { ok: true as const, saved: toOpenClassView(existing) };
     }
   }
 
-  const created = {
+  const created: OpenClassTask = {
     id: `oc-${String(openClasses.length + 1).padStart(3, "0")}`,
-    className: input.className,
-    essayTitle: input.essayTitle,
+    school: input.school,
+    classNumber: input.classNumber,
+    essayId: input.essayId,
     durationMinutes: input.durationMinutes,
     supplemental: input.supplemental
   };
   openClasses.push(created);
-  return created;
+  activityGroupMap[created.id] = activityGroupMap[created.id] ?? [];
+  return { ok: true as const, saved: toOpenClassView(created) };
 }
 
 export function resetUserPassword(username: string, newPassword: string) {
@@ -294,6 +427,7 @@ export function createUserAccount(input: {
   role: "student" | "teacher" | "admin";
   password: string;
   ownerTeacherUsername?: string;
+  classNumber?: string;
 }) {
   if (users.some((user) => user.username === input.username)) {
     return { ok: false as const, error: "username_exists" };
@@ -303,9 +437,23 @@ export function createUserAccount(input: {
     if (!input.ownerTeacherUsername) {
       return { ok: false as const, error: "missing_owner_teacher" };
     }
+    if (!input.classNumber) {
+      return { ok: false as const, error: "missing_class_number" };
+    }
     const owner = users.find((user) => user.username === input.ownerTeacherUsername && user.role === "teacher");
     if (!owner) {
       return { ok: false as const, error: "owner_teacher_not_found" };
+    }
+    const hasTeacherConflict = users.some(
+      (user) =>
+        user.role === "student" &&
+        user.school === input.school &&
+        user.classNumber === input.classNumber &&
+        user.ownerTeacherUsername &&
+        user.ownerTeacherUsername !== input.ownerTeacherUsername
+    );
+    if (hasTeacherConflict) {
+      return { ok: false as const, error: "class_owner_teacher_conflict" };
     }
   }
 
@@ -314,7 +462,8 @@ export function createUserAccount(input: {
     name: input.name,
     school: input.school,
     role: input.role,
-    ownerTeacherUsername: input.role === "student" ? input.ownerTeacherUsername : undefined
+    ownerTeacherUsername: input.role === "student" ? input.ownerTeacherUsername : undefined,
+    classNumber: input.role === "student" ? input.classNumber : undefined
   });
   userPasswords[input.username] = input.password;
 
@@ -329,6 +478,7 @@ export function updateUserAccount(
     role?: "student" | "teacher" | "admin";
     password?: string;
     ownerTeacherUsername?: string;
+    classNumber?: string;
   }
 ) {
   const user = users.find((item) => item.username === username);
@@ -340,18 +490,37 @@ export function updateUserAccount(
     const nextRole = patch.role ?? user.role;
     const nextOwnerTeacherUsername =
       patch.ownerTeacherUsername !== undefined ? patch.ownerTeacherUsername : user.ownerTeacherUsername;
+    const nextClassNumber = patch.classNumber !== undefined ? patch.classNumber : user.classNumber;
 
     if (nextRole === "student") {
       if (!nextOwnerTeacherUsername) {
         return { ok: false as const, error: "missing_owner_teacher" };
       }
+      if (!nextClassNumber) {
+        return { ok: false as const, error: "missing_class_number" };
+      }
       const owner = users.find((item) => item.username === nextOwnerTeacherUsername && item.role === "teacher");
       if (!owner) {
         return { ok: false as const, error: "owner_teacher_not_found" };
       }
+      const targetSchool = patch.school ?? user.school;
+      const hasTeacherConflict = users.some(
+        (item) =>
+          item.username !== username &&
+          item.role === "student" &&
+          item.school === targetSchool &&
+          item.classNumber === nextClassNumber &&
+          item.ownerTeacherUsername &&
+          item.ownerTeacherUsername !== nextOwnerTeacherUsername
+      );
+      if (hasTeacherConflict) {
+        return { ok: false as const, error: "class_owner_teacher_conflict" };
+      }
       user.ownerTeacherUsername = nextOwnerTeacherUsername;
+      user.classNumber = nextClassNumber;
     } else {
       user.ownerTeacherUsername = undefined;
+      user.classNumber = undefined;
     }
   }
 
@@ -362,12 +531,16 @@ export function updateUserAccount(
   if (patch.ownerTeacherUsername !== undefined && user.role === "student") {
     user.ownerTeacherUsername = patch.ownerTeacherUsername;
   }
+  if (patch.classNumber !== undefined && user.role === "student") {
+    user.classNumber = patch.classNumber;
+  }
 
   if (user.role !== "student") {
-    activities.forEach((activity) => {
-      activity.groups.forEach((group) => {
-        group.members = group.members.filter((member) => member !== username);
-      });
+    Object.keys(activityGroupMap).forEach((activityId) => {
+      activityGroupMap[activityId] = (activityGroupMap[activityId] ?? []).map((group) => ({
+        ...group,
+        members: group.members.filter((member) => member !== username)
+      }));
     });
   }
 
@@ -391,10 +564,11 @@ export function deleteUserAccount(username: string) {
   users.splice(index, 1);
   delete userPasswords[username];
 
-  activities.forEach((activity) => {
-    activity.groups.forEach((group) => {
-      group.members = group.members.filter((member) => member !== username);
-    });
+  Object.keys(activityGroupMap).forEach((activityId) => {
+    activityGroupMap[activityId] = (activityGroupMap[activityId] ?? []).map((group) => ({
+      ...group,
+      members: group.members.filter((member) => member !== username)
+    }));
   });
 
   return { ok: true as const };

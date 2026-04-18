@@ -2,18 +2,29 @@
 
 import { DragEvent, FormEvent, useEffect, useMemo, useState } from "react";
 
-type UserRow = { username: string; name: string; school: string; role: string; ownerTeacherUsername?: string };
+type UserRow = { username: string; name: string; school: string; role: string; ownerTeacherUsername?: string; classNumber?: string };
 type EssayRow = { id: string; title: string; genre: string; description: string; enabled: boolean };
-type OpenClassRow = { id: string; className: string; essayTitle: string; durationMinutes: number; supplemental: string };
+type OpenClassRow = {
+  id: string;
+  school: string;
+  classNumber: string;
+  essayId: string;
+  essayTitle: string;
+  durationMinutes: number;
+  supplemental: string;
+};
 type ActivityGroup = { groupId: string; groupName: string; members: string[] };
 type ActivityRow = {
   id: string;
-  className: string;
+  school: string;
+  classNumber: string;
+  essayId: string;
   title: string;
   genre: string;
   durationMinutes: number;
   supplemental: string;
   groups: ActivityGroup[];
+  studentCandidates?: string[];
 };
 
 type PromptConfig = {
@@ -44,7 +55,7 @@ const genreOptions = ["議論文", "說明文", "抒情文", "其他"];
 const groupInteractionSteps = [1, 2, 4];
 const personalInteractionSteps = [3, 6, 8];
 
-type CourseTab = "essay" | "essay_prompt" | "openclass" | "openclass_prompt" | "group";
+type CourseTab = "essay" | "essay_prompt" | "openclass" | "group";
 
 export default function TeacherPage() {
   const [loginUser, setLoginUser] = useState("");
@@ -71,6 +82,7 @@ export default function TeacherPage() {
     school: string;
     role: "student" | "teacher";
     ownerTeacherUsername: string;
+    classNumber: string;
     password: string;
   } | null>(null);
   const [newUserForm, setNewUserForm] = useState({
@@ -79,6 +91,7 @@ export default function TeacherPage() {
     school: "",
     role: "student" as "student" | "teacher",
     ownerTeacherUsername: "",
+    classNumber: "",
     password: ""
   });
   const [csvInput, setCsvInput] = useState("");
@@ -89,11 +102,20 @@ export default function TeacherPage() {
   const [manualResetPassword, setManualResetPassword] = useState("");
 
   const [essayForm, setEssayForm] = useState({ title: "", genre: "議論文", description: "", enabled: true });
-  const [openClassForm, setOpenClassForm] = useState({ className: "", essayTitle: "", durationMinutes: 40, supplemental: "" });
+  const [openClassForm, setOpenClassForm] = useState({
+    id: "",
+    classNumber: "",
+    essayId: "",
+    durationMinutes: 40,
+    supplemental: "",
+    step1PromptOverride: "",
+    subStep21PromptOverride: ""
+  });
 
   const [selectedActivityId, setSelectedActivityId] = useState("");
   const [editableGroups, setEditableGroups] = useState<ActivityGroup[]>([]);
   const [unassignedStudents, setUnassignedStudents] = useState<string[]>([]);
+  const [groupCount, setGroupCount] = useState(2);
 
   const [progressSessionId, setProgressSessionId] = useState("");
   const [progressRows, setProgressRows] = useState<PersonalProgressRow[]>([]);
@@ -105,11 +127,17 @@ export default function TeacherPage() {
 
   const [selectedEssayForPrompt, setSelectedEssayForPrompt] = useState("");
   const [essayPromptConfig, setEssayPromptConfig] = useState<PromptConfig>({ stepPrompts: {}, subStepPrompts: {}, questionBanks: {} });
-  const [selectedOpenClassForPrompt, setSelectedOpenClassForPrompt] = useState("");
-  const [openClassPromptConfig, setOpenClassPromptConfig] = useState<PromptConfig>({ stepPrompts: {}, subStepPrompts: {}, questionBanks: {} });
 
-  const studentUsers = useMemo(
-    () => users.filter((user) => user.role === "student").map((user) => user.username),
+  const classOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          users
+            .filter((user) => user.role === "student")
+            .map((user) => user.classNumber)
+            .filter((value): value is string => Boolean(value))
+        )
+      ).sort(),
     [users]
   );
 
@@ -181,8 +209,9 @@ export default function TeacherPage() {
 
     setEditableGroups(activity.groups.map((group) => ({ ...group, members: [...group.members] })));
     const assigned = new Set(activity.groups.flatMap((group) => group.members));
-    setUnassignedStudents(studentUsers.filter((username) => !assigned.has(username)));
-  }, [selectedActivityId, activities, studentUsers]);
+    const candidates = activity.studentCandidates ?? [];
+    setUnassignedStudents(candidates.filter((username) => !assigned.has(username)));
+  }, [selectedActivityId, activities]);
 
   useEffect(() => {
     if (!selectedEssayForPrompt) return;
@@ -193,16 +222,6 @@ export default function TeacherPage() {
       })
       .catch(() => undefined);
   }, [selectedEssayForPrompt]);
-
-  useEffect(() => {
-    if (!selectedOpenClassForPrompt) return;
-    fetch(`/api/admin/prompts/openclass?openClassId=${encodeURIComponent(selectedOpenClassForPrompt)}`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (data?.config) setOpenClassPromptConfig(data.config);
-      })
-      .catch(() => undefined);
-  }, [selectedOpenClassForPrompt]);
 
   async function refreshAll() {
     const [u, e, o, m, a] = await Promise.all([
@@ -222,7 +241,6 @@ export default function TeacherPage() {
     if (o.ok) {
       const list = (await o.json()).openClasses ?? [];
       setOpenClasses(list);
-      if (!selectedOpenClassForPrompt && list[0]?.id) setSelectedOpenClassForPrompt(list[0].id);
     }
     if (m.ok) setMonitorSessions((await m.json()).sessions ?? []);
     if (a.ok) {
@@ -354,7 +372,7 @@ export default function TeacherPage() {
     setAccountSuccess("");
     const validationErrors = validateCsvRows(
       [
-        `${newUserForm.username},${newUserForm.name},${newUserForm.school},${newUserForm.role},${newUserForm.password},${newUserForm.ownerTeacherUsername}`
+        `${newUserForm.username},${newUserForm.name},${newUserForm.school},${newUserForm.role},${newUserForm.password},${newUserForm.classNumber},${newUserForm.ownerTeacherUsername}`
       ],
       { isAdmin: loginRole === "admin" }
     );
@@ -375,7 +393,8 @@ export default function TeacherPage() {
           ? loginRole === "admin"
             ? newUserForm.ownerTeacherUsername
             : loginUser
-          : ""
+          : "",
+      classNumber: newUserForm.role === "student" ? newUserForm.classNumber : ""
     };
 
     const response = await fetch("/api/admin/users", {
@@ -389,7 +408,15 @@ export default function TeacherPage() {
       return;
     }
 
-    setNewUserForm({ username: "", name: "", school: "", role: "student", ownerTeacherUsername: "", password: "" });
+    setNewUserForm({
+      username: "",
+      name: "",
+      school: "",
+      role: "student",
+      ownerTeacherUsername: "",
+      classNumber: "",
+      password: ""
+    });
     setAccountSuccess("已新增帳號。");
     await refreshAll();
   }
@@ -397,19 +424,20 @@ export default function TeacherPage() {
   function handleNewUserRoleChange(role: "student" | "teacher") {
     if (role === "student") {
       if (loginRole === "admin") {
-        setNewUserForm((prev) => ({ ...prev, role, ownerTeacherUsername: "", school: "" }));
+        setNewUserForm((prev) => ({ ...prev, role, ownerTeacherUsername: "", school: "", classNumber: "" }));
       } else {
         setNewUserForm((prev) => ({
           ...prev,
           role,
           ownerTeacherUsername: loginUser,
-          school: loginTeacherProfile?.school ?? ""
+          school: loginTeacherProfile?.school ?? "",
+          classNumber: prev.classNumber
         }));
       }
       return;
     }
 
-    setNewUserForm((prev) => ({ ...prev, role, ownerTeacherUsername: "" }));
+    setNewUserForm((prev) => ({ ...prev, role, ownerTeacherUsername: "", classNumber: "" }));
   }
 
   function handleNewStudentTeacherChange(teacherUsername: string) {
@@ -442,7 +470,7 @@ export default function TeacherPage() {
     setAccountSuccess("");
     const row = `${editingUser.username},${editingUser.name},${editingUser.school},${editingUser.role},${
       editingUser.password || "placeholder123"
-    },${editingUser.ownerTeacherUsername}`;
+    },${editingUser.classNumber},${editingUser.ownerTeacherUsername}`;
     const validationErrors = validateCsvRows([row], {
       skipPasswordLength: !editingUser.password,
       isAdmin: loginRole === "admin"
@@ -457,6 +485,7 @@ export default function TeacherPage() {
       school: string;
       role: "student" | "teacher";
       ownerTeacherUsername?: string;
+      classNumber?: string;
       password?: string;
     } = {
       name: editingUser.name,
@@ -465,6 +494,7 @@ export default function TeacherPage() {
     };
     if (editingUser.role === "student") {
       patch.ownerTeacherUsername = loginRole === "admin" ? editingUser.ownerTeacherUsername : loginUser;
+      patch.classNumber = editingUser.classNumber;
     }
     if (editingUser.password) {
       patch.password = editingUser.password;
@@ -519,8 +549,14 @@ export default function TeacherPage() {
       return;
     }
 
+    const headerLine = parsedLines[0]!.toLowerCase();
     const hasHeader =
-      parsedLines[0]!.toLowerCase() === "username,name,school,role,password" || parsedLines[0] === "帳號,姓名,學校,角色,密碼";
+      headerLine === "username,name,school,role,password" ||
+      headerLine === "username,name,school,role,password,classnumber" ||
+      headerLine === "username,name,school,role,password,classnumber,ownerteacherusername" ||
+      parsedLines[0] === "帳號,姓名,學校,角色,密碼" ||
+      parsedLines[0] === "帳號,姓名,學校,角色,密碼,班級號碼" ||
+      parsedLines[0] === "帳號,姓名,學校,角色,密碼,班級號碼,綁定教師";
     const dataLines = hasHeader ? parsedLines.slice(1) : parsedLines;
     const previewErrors = validateCsvRows(dataLines, { isAdmin: loginRole === "admin" });
     setCsvPreviewErrors(previewErrors);
@@ -556,11 +592,12 @@ export default function TeacherPage() {
 
     lines.forEach((line, idx) => {
       const cols = splitCsvLine(line);
-      if (cols.length !== 5 && cols.length !== 6) {
-        errors.push(`第 ${idx + 1} 列欄位數錯誤（需 5 或 6 欄）`);
+      if (cols.length !== 5 && cols.length !== 6 && cols.length !== 7) {
+        errors.push(`第 ${idx + 1} 列欄位數錯誤（需 5 / 6 / 7 欄）`);
         return;
       }
-      const [username, name, school, role, password, ownerTeacherUsernameRaw = ""] = cols.map((v) => v.trim());
+      const [username, name, school, role, password, classNumberRaw = "", ownerTeacherUsernameRaw = ""] = cols.map((v) => v.trim());
+      const classNumber = classNumberRaw.trim();
       const ownerTeacherUsername = ownerTeacherUsernameRaw.trim();
       if (!username || !name || !school || !role || !password) {
         errors.push(`第 ${idx + 1} 列有必填欄位為空`);
@@ -579,6 +616,9 @@ export default function TeacherPage() {
         errors.push(`第 ${idx + 1} 列 password 至少 6 碼`);
       }
       if (role === "student") {
+        if (!classNumber) {
+          errors.push(`第 ${idx + 1} 列 student 必填班級號碼`);
+        }
         if (options?.isAdmin) {
           if (!ownerTeacherUsername) {
             errors.push(`第 ${idx + 1} 列 student 必填綁定教師 username`);
@@ -627,12 +667,33 @@ export default function TeacherPage() {
 
   async function saveOpenClass(e: FormEvent) {
     e.preventDefault();
+    const promptOverride: PromptConfig = {
+      stepPrompts: openClassForm.step1PromptOverride ? { "1": openClassForm.step1PromptOverride } : {},
+      subStepPrompts: openClassForm.subStep21PromptOverride ? { "2-1": openClassForm.subStep21PromptOverride } : {},
+      questionBanks: {}
+    };
+
     await fetch("/api/admin/openclasses", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(openClassForm)
+      body: JSON.stringify({
+        id: openClassForm.id || undefined,
+        classNumber: openClassForm.classNumber,
+        essayId: openClassForm.essayId,
+        durationMinutes: openClassForm.durationMinutes,
+        supplemental: openClassForm.supplemental,
+        promptOverride
+      })
     });
-    setOpenClassForm({ className: "", essayTitle: "", durationMinutes: 40, supplemental: "" });
+    setOpenClassForm({
+      id: "",
+      classNumber: "",
+      essayId: "",
+      durationMinutes: 40,
+      supplemental: "",
+      step1PromptOverride: "",
+      subStep21PromptOverride: ""
+    });
     await refreshAll();
   }
 
@@ -698,21 +759,37 @@ export default function TeacherPage() {
     }
 
     const updated = data.updated as ActivityRow;
-    setActivities((prev) => prev.map((activity) => (activity.id === updated.id ? updated : activity)));
+    setActivities((prev) =>
+      prev.map((activity) =>
+        activity.id === updated.id ? { ...updated, studentCandidates: activity.studentCandidates ?? [] } : activity
+      )
+    );
     setEditableGroups(updated.groups.map((group) => ({ ...group, members: [...group.members] })));
     setError("");
   }
 
-  function addGroup() {
-    const next = editableGroups.length + 1;
-    setEditableGroups((prev) => [
-      ...prev,
-      {
-        groupId: `g${next}`,
-        groupName: String(next),
-        members: []
-      }
-    ]);
+  function buildEmptyGroups(count: number): ActivityGroup[] {
+    const safeCount = Math.max(1, count);
+    return Array.from({ length: safeCount }, (_, idx) => ({
+      groupId: `g${idx + 1}`,
+      groupName: String(idx + 1),
+      members: []
+    }));
+  }
+
+  function initializeGroupsForDrag() {
+    setEditableGroups(buildEmptyGroups(groupCount));
+  }
+
+  function randomAssignGroups() {
+    const safeCount = Math.max(1, groupCount);
+    const pool = [...unassignedStudents].sort(() => Math.random() - 0.5);
+    const nextGroups = buildEmptyGroups(safeCount);
+    pool.forEach((username, idx) => {
+      nextGroups[idx % safeCount]?.members.push(username);
+    });
+    setEditableGroups(nextGroups);
+    setUnassignedStudents([]);
   }
 
   function removeGroup(groupId: string) {
@@ -755,14 +832,19 @@ export default function TeacherPage() {
     alert("已儲存寫作主題 Prompt/問題庫");
   }
 
-  async function saveOpenClassPromptConfig() {
-    if (!selectedOpenClassForPrompt) return;
-    await fetch("/api/admin/prompts/openclass", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ openClassId: selectedOpenClassForPrompt, config: openClassPromptConfig })
+  async function startEditOpenClass(openClass: OpenClassRow) {
+    const response = await fetch(`/api/admin/prompts/openclass?openClassId=${encodeURIComponent(openClass.id)}`);
+    const data = await response.json();
+    const config = (data?.config ?? { stepPrompts: {}, subStepPrompts: {}, questionBanks: {} }) as PromptConfig;
+    setOpenClassForm({
+      id: openClass.id,
+      classNumber: openClass.classNumber,
+      essayId: openClass.essayId,
+      durationMinutes: openClass.durationMinutes,
+      supplemental: openClass.supplemental,
+      step1PromptOverride: config.stepPrompts["1"] ?? "",
+      subStep21PromptOverride: config.subStepPrompts["2-1"] ?? ""
     });
-    alert("已儲存班級任務 Prompt 覆蓋設定");
   }
 
   return (
@@ -901,6 +983,16 @@ export default function TeacherPage() {
                 <label>姓名</label>
                 <input value={newUserForm.name} onChange={(e) => setNewUserForm((prev) => ({ ...prev, name: e.target.value }))} />
               </div>
+              {newUserForm.role === "student" ? (
+                <div className="col">
+                  <label>班級號碼</label>
+                  <input
+                    value={newUserForm.classNumber}
+                    onChange={(e) => setNewUserForm((prev) => ({ ...prev, classNumber: e.target.value }))}
+                    placeholder="例如 701"
+                  />
+                </div>
+              ) : null}
               <div className="col">
                 <label>密碼（至少 6 碼）</label>
                 <input
@@ -920,7 +1012,7 @@ export default function TeacherPage() {
           <div className="card" style={{ marginBottom: 10 }}>
             <h3 style={{ marginBottom: 8 }}>CSV 貼上批次新增</h3>
             <small>
-              格式：`username,name,school,role,password[,ownerTeacherUsername]`。
+              格式：`username,name,school,role,password,classNumber[,ownerTeacherUsername]`。
               {loginRole === "admin"
                 ? "admin 建 student 時，必填 ownerTeacherUsername。"
                 : "teacher 建立 student 時，系統會自動綁定目前登入教師。"}
@@ -931,8 +1023,8 @@ export default function TeacherPage() {
               onChange={(e) => setCsvInput(e.target.value)}
               placeholder={
                 loginRole === "admin"
-                  ? "username,name,school,role,password,ownerTeacherUsername\nstudent10,王小明,Demo High,student,abc12345,teacher"
-                  : "username,name,school,role,password\nstudent10,王小明,Demo High,student,abc12345"
+                  ? "username,name,school,role,password,classNumber,ownerTeacherUsername\nstudent10,王小明,Demo High,student,abc12345,701,teacher"
+                  : "username,name,school,role,password,classNumber\nstudent10,王小明,Demo High,student,abc12345,701"
               }
             />
             <div className="row" style={{ marginTop: 10 }}>
@@ -948,8 +1040,8 @@ export default function TeacherPage() {
                   onClick={() =>
                     setCsvInput(
                       loginRole === "admin"
-                        ? "username,name,school,role,password,ownerTeacherUsername"
-                        : "username,name,school,role,password"
+                        ? "username,name,school,role,password,classNumber,ownerTeacherUsername"
+                        : "username,name,school,role,password,classNumber"
                     )
                   }
                 >
@@ -1034,6 +1126,7 @@ export default function TeacherPage() {
                   <th>帳號</th>
                   <th>姓名</th>
                   <th>學校</th>
+                  <th>班級號碼</th>
                   <th>角色</th>
                   <th>綁定教師</th>
                   <th style={{ width: 360 }}>操作</th>
@@ -1057,6 +1150,17 @@ export default function TeacherPage() {
                             value={editingUser.school}
                             onChange={(e) => setEditingUser((prev) => (prev ? { ...prev, school: e.target.value } : prev))}
                           />
+                        </td>
+                        <td>
+                          {editingUser.role === "student" ? (
+                            <input
+                              value={editingUser.classNumber}
+                              onChange={(e) => setEditingUser((prev) => (prev ? { ...prev, classNumber: e.target.value } : prev))}
+                              placeholder="班級號碼"
+                            />
+                          ) : (
+                            <small>—</small>
+                          )}
                         </td>
                         <td>
                           <select
@@ -1132,6 +1236,7 @@ export default function TeacherPage() {
                       <>
                         <td>{user.name}</td>
                         <td>{user.school}</td>
+                        <td>{user.role === "student" ? user.classNumber ?? "—" : "—"}</td>
                         <td>
                           <span className="badge">
                             {user.role === "teacher" ? "教師" : user.role === "admin" ? "管理員" : "學生"}
@@ -1154,6 +1259,7 @@ export default function TeacherPage() {
                                     school: user.school,
                                     role: user.role === "teacher" ? "teacher" : "student",
                                     ownerTeacherUsername: user.ownerTeacherUsername ?? "",
+                                    classNumber: user.classNumber ?? "",
                                     password: ""
                                   })
                                 }
@@ -1412,9 +1518,6 @@ export default function TeacherPage() {
               <button type="button" className={courseTab === "openclass" ? "" : "secondary"} onClick={() => setCourseTab("openclass")}>寫作任務管理</button>
               </div>
               <div style={{ width: 210 }}>
-              <button type="button" className={courseTab === "openclass_prompt" ? "" : "secondary"} onClick={() => setCourseTab("openclass_prompt")}>任務 Prompt 覆蓋</button>
-              </div>
-              <div style={{ width: 210 }}>
               <button type="button" className={courseTab === "group" ? "" : "secondary"} onClick={() => setCourseTab("group")}>組別管理</button>
               </div>
             </div>
@@ -1526,18 +1629,32 @@ export default function TeacherPage() {
               <h2>寫作任務管理</h2>
               <form onSubmit={saveOpenClass} className="row">
                 <div className="col">
-                  <label>班級</label>
-                  <input
-                    value={openClassForm.className}
-                    onChange={(e) => setOpenClassForm({ ...openClassForm, className: e.target.value })}
-                  />
+                  <label>班級號碼（由學生名單帶入）</label>
+                  <select
+                    value={openClassForm.classNumber}
+                    onChange={(e) => setOpenClassForm({ ...openClassForm, classNumber: e.target.value })}
+                  >
+                    <option value="">請選擇</option>
+                    {classOptions.map((classNumber) => (
+                      <option key={classNumber} value={classNumber}>
+                        {classNumber}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div className="col">
-                  <label>主題</label>
-                  <input
-                    value={openClassForm.essayTitle}
-                    onChange={(e) => setOpenClassForm({ ...openClassForm, essayTitle: e.target.value })}
-                  />
+                  <label>主題（含 ID）</label>
+                  <select
+                    value={openClassForm.essayId}
+                    onChange={(e) => setOpenClassForm({ ...openClassForm, essayId: e.target.value })}
+                  >
+                    <option value="">請選擇</option>
+                    {essays.map((essay) => (
+                      <option key={essay.id} value={essay.id}>
+                        {essay.id} / {essay.title}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div className="col">
                   <label>時長</label>
@@ -1554,8 +1671,22 @@ export default function TeacherPage() {
                     onChange={(e) => setOpenClassForm({ ...openClassForm, supplemental: e.target.value })}
                   />
                 </div>
+                <div className="col">
+                  <label>步驟 1 Prompt 覆蓋（編輯任務時可調整）</label>
+                  <textarea
+                    value={openClassForm.step1PromptOverride}
+                    onChange={(e) => setOpenClassForm({ ...openClassForm, step1PromptOverride: e.target.value })}
+                  />
+                </div>
+                <div className="col">
+                  <label>子步驟 2-1 Prompt 覆蓋</label>
+                  <textarea
+                    value={openClassForm.subStep21PromptOverride}
+                    onChange={(e) => setOpenClassForm({ ...openClassForm, subStep21PromptOverride: e.target.value })}
+                  />
+                </div>
                 <div className="col" style={{ alignSelf: "end" }}>
-                  <button type="submit">新增班級任務</button>
+                  <button type="submit">{openClassForm.id ? "儲存任務編輯" : "新增班級任務"}</button>
                 </div>
               </form>
               <div style={{ overflowX: "auto", marginTop: 10 }}>
@@ -1563,20 +1694,28 @@ export default function TeacherPage() {
                   <thead>
                     <tr>
                       <th>ID</th>
+                      <th>學校</th>
                       <th>班級</th>
                       <th>主題</th>
                       <th>時長</th>
                       <th>補充資料</th>
+                      <th>操作</th>
                     </tr>
                   </thead>
                   <tbody>
                     {openClasses.map((openClass) => (
                       <tr key={openClass.id}>
                         <td>{openClass.id}</td>
-                        <td>{openClass.className}</td>
+                        <td>{openClass.school}</td>
+                        <td>{openClass.classNumber}</td>
                         <td>{openClass.essayTitle}</td>
                         <td>{openClass.durationMinutes} 分鐘</td>
                         <td>{openClass.supplemental || "—"}</td>
+                        <td>
+                          <button type="button" className="secondary" style={{ width: "auto" }} onClick={() => startEditOpenClass(openClass)}>
+                            編輯
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -1585,49 +1724,9 @@ export default function TeacherPage() {
             </div>
           ) : null}
 
-          {courseTab === "openclass_prompt" ? (
-            <div className="card">
-              <h2>班級任務 Prompt 覆蓋（優先於主題 Prompt）</h2>
-              <div className="row">
-                <div className="col">
-                  <label>選擇班級任務</label>
-                  <select value={selectedOpenClassForPrompt} onChange={(e) => setSelectedOpenClassForPrompt(e.target.value)}>
-                    <option value="">請選擇</option>
-                    {openClasses.map((openClass) => (
-                      <option key={openClass.id} value={openClass.id}>
-                        {openClass.id} / {openClass.className}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div className="row" style={{ marginTop: 10 }}>
-                <div className="col">
-                  <label>步驟 1 Prompt 覆蓋</label>
-                  <textarea
-                    value={openClassPromptConfig.stepPrompts["1"] ?? ""}
-                    onChange={(e) => setOpenClassPromptConfig((prev) => patchPrompt(prev, "step", "1", e.target.value))}
-                  />
-                </div>
-                <div className="col">
-                  <label>子步驟 2-1 Prompt 覆蓋</label>
-                  <textarea
-                    value={openClassPromptConfig.subStepPrompts["2-1"] ?? ""}
-                    onChange={(e) => setOpenClassPromptConfig((prev) => patchPrompt(prev, "substep", "2-1", e.target.value))}
-                  />
-                </div>
-              </div>
-              <div style={{ width: 220, marginTop: 10 }}>
-                <button type="button" onClick={saveOpenClassPromptConfig}>
-                  儲存班級 Prompt 覆蓋
-                </button>
-              </div>
-            </div>
-          ) : null}
-
           {courseTab === "group" ? (
             <div className="card">
-              <h2>組別管理（拖曳分組）</h2>
+              <h2>組別管理</h2>
               <div className="row">
                 <div className="col">
                   <label>選擇任務</label>
@@ -1635,16 +1734,25 @@ export default function TeacherPage() {
                     <option value="">請選擇</option>
                     {activities.map((activity) => (
                       <option key={activity.id} value={activity.id}>
-                        {activity.id} / {activity.title}
+                        {activity.classNumber} 班 / {activity.title} ({activity.id})
                       </option>
                     ))}
                   </select>
                 </div>
+                <div className="col">
+                  <label>小組數量</label>
+                  <input type="number" min={1} value={groupCount} onChange={(e) => setGroupCount(Number(e.target.value) || 1)} />
+                </div>
                 <div className="col" style={{ alignSelf: "end" }}>
                   <div className="row">
                     <div style={{ width: 140 }}>
-                      <button type="button" className="secondary" onClick={addGroup}>
-                        新增組別
+                      <button type="button" className="secondary" onClick={randomAssignGroups}>
+                        隨機平均分組
+                      </button>
+                    </div>
+                    <div style={{ width: 140 }}>
+                      <button type="button" className="secondary" onClick={initializeGroupsForDrag}>
+                        先建空組拖曳
                       </button>
                     </div>
                     <div style={{ width: 140 }}>
