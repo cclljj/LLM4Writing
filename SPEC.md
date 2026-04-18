@@ -69,7 +69,9 @@
   - 表：`llm4writing_domain`
   - 主鍵固定 `id='singleton'`，`payload` 存整體 domain JSON
   - 相關 API 會先 hydrate 再操作，變更後 flush 回 DB
-- 無 DB 時：使用 `globalThis` memory state
+- 無 DB 時：
+  - 優先使用檔案持久化：`.data/domain-state.json`
+  - 並同步維持 `globalThis` memory state
 
 ---
 
@@ -628,7 +630,7 @@ Behavior:
 
 ## 11. 已知限制（現況）
 
-1. 無 DB 環境下，domain 仍為 in-memory，重啟後回預設
+1. 無 DB 環境下，domain 依賴本機檔案 `.data/domain-state.json`；若檔案不可寫或被清空，會回預設
 2. 群組隨機分配採前端簡單亂數，不含種子與可重現性
 3. 提示詞編輯 UI 目前僅暴露部分 key（step1 / 2-1 / 1-3 / 1-1 等）
 

@@ -1,5 +1,7 @@
 import { Activity, ActivityGroup, PromptConfig, UserAccount } from "@/src/lib/types";
 import postgres, { Sql } from "postgres";
+import { promises as fs } from "node:fs";
+import path from "node:path";
 
 type Essay = {
   id: string;
@@ -174,6 +176,14 @@ function normalizePromptConfig(input: unknown): PromptConfig {
 }
 
 function normalizeDomainState(input: unknown): DomainState {
+  if (typeof input === "string") {
+    try {
+      return normalizeDomainState(JSON.parse(input));
+    } catch {
+      return cloneState();
+    }
+  }
+
   const base = cloneState();
   if (!input || typeof input !== "object") {
     return base;
@@ -270,6 +280,7 @@ const activityGroupMap = state.activityGroupMap;
 const courseStatusMap = state.courseStatusMap;
 const essayPromptConfigs = state.essayPromptConfigs;
 const openClassPromptConfigs = state.openClassPromptConfigs;
+const DOMAIN_FILE = path.join(process.cwd(), ".data", "domain-state.json");
 
 function getPostgresUrl(): string | undefined {
   return process.env.POSTGRES_URL ?? process.env.DATABASE_URL;
@@ -358,7 +369,18 @@ function snapshotState(): DomainState {
 }
 
 export async function hydrateDomainState(): Promise<void> {
-  if (!isPostgresEnabled()) return;
+  if (!isPostgresEnabled()) {
+    try {
+      const raw = await fs.readFile(DOMAIN_FILE, "utf8");
+      const payload = JSON.parse(raw) as unknown;
+      const normalized = normalizeDomainState(payload);
+      applyState(normalized);
+      return;
+    } catch {
+      await flushDomainState();
+      return;
+    }
+  }
   await ensureDomainTable();
   const sql = getSqlClient();
   const rows = await sql<{ payload: unknown }[]>`
@@ -374,15 +396,24 @@ export async function hydrateDomainState(): Promise<void> {
   }
   const normalized = normalizeDomainState(row.payload);
   applyState(normalized);
+  if (typeof row.payload === "string") {
+    // Migrate legacy double-encoded JSON payload to proper JSON object format.
+    await flushDomainState();
+  }
 }
 
 export async function flushDomainState(): Promise<void> {
-  if (!isPostgresEnabled()) return;
+  if (!isPostgresEnabled()) {
+    await fs.mkdir(path.dirname(DOMAIN_FILE), { recursive: true });
+    await fs.writeFile(DOMAIN_FILE, JSON.stringify(snapshotState(), null, 2), "utf8");
+    return;
+  }
   await ensureDomainTable();
   const sql = getSqlClient();
+  const snapshot = snapshotState();
   await sql`
     INSERT INTO llm4writing_domain (id, payload)
-    VALUES ('singleton', ${JSON.stringify(snapshotState())}::jsonb)
+    VALUES ('singleton', ${snapshot}::jsonb)
     ON CONFLICT (id)
     DO UPDATE SET
       payload = EXCLUDED.payload,
