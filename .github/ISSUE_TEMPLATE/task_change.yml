@@ -1,0 +1,62 @@
+name: Task Change
+description: New feature, bug fix, or behavior change task
+title: "[Task] "
+labels:
+  - task
+body:
+  - type: textarea
+    id: background
+    attributes:
+      label: 背景 / 問題
+      description: 這次需求要解決什麼問題？
+      placeholder: 請描述現況與痛點
+    validations:
+      required: true
+  - type: textarea
+    id: objective
+    attributes:
+      label: 目標
+      description: 完成後應達到的狀態
+      placeholder: 列出可驗證的成果
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: 範圍
+      description: 本次要做什麼、不做什麼
+      placeholder: 功能範圍與排除項目
+    validations:
+      required: true
+  - type: checkboxes
+    id: spec_check
+    attributes:
+      label: SPEC.md 檢查
+      options:
+        - label: 我已檢查是否需要更新 SPEC.md
+          required: true
+  - type: dropdown
+    id: spec_need_update
+    attributes:
+      label: SPEC.md 是否需要更新
+      options:
+        - Yes
+        - No
+    validations:
+      required: true
+  - type: textarea
+    id: spec_sections
+    attributes:
+      label: 若需更新 SPEC.md，請列出章節
+      placeholder: 例如：6.2 /student、7.2 Student APIs
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 驗收條件
+      placeholder: 使用核取清單描述驗收條件
+      value: |
+        - [ ] 功能符合需求
+        - [ ] 已完成基本驗證（例如 npm run build）
+    validations:
+      required: true
+

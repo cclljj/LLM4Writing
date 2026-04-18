@@ -7,7 +7,16 @@ LLM4Writing 已改造成可直接部署於 Vercel 的原生架構版本。
 - 來源：Fork from https://github.com/Shengche/llm4rwiting
 - 既有 Java/Wicket 程式碼仍保留於 `libs/` 與 `llm4class-web/`（作為歷史參考）
 - 現行可部署主應用為 root 的 Next.js App Router + Serverless API
-- 目前功能對齊基準：`SPEC_generated_by_AI.md`（現況版）
+- 目前功能對齊基準：`SPEC.md`（現況版）
+
+## 協作流程
+
+- 所有需求必須先開 GitHub Issue 再實作
+- 每次任務都要先檢查是否需要更新 `SPEC.md`
+- 完整流程請見 [`TASK.md`](TASK.md)
+- GitHub 模板：
+  - Issue: `.github/ISSUE_TEMPLATE/task_change.yml`
+  - PR: `.github/pull_request_template.md`
 
 ## 架構
 
