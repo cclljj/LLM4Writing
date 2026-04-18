@@ -12,7 +12,7 @@
 本系統是 AI 輔助寫作教學平台，包含三種角色：
 
 - `student`：加入寫作任務、進行 10 步驟學習互動、儲存草稿與大綱
-- `teacher`：管理自己管轄的學生/任務、切換步驟、檢視進度、分組
+- `teacher`：管理自己管轄的學生/任務、控制課程狀態（開始/結束）、切換步驟、檢視進度、分組
 - `admin`：跨教師全域管理帳號與任務
 
 核心組成：
@@ -137,6 +137,7 @@ API 輸出給學習/分組流程使用：
   durationMinutes: number;
   supplemental: string;
   groups: ActivityGroup[];
+  courseStatus?: "not_started" | "in_progress" | "ended";
 }
 ```
 
@@ -278,37 +279,46 @@ student 可儲存三種內容：
 
 主要能力：
 
-1. 顯示可加入的活動列表（只會看到自己所屬 group 的任務）
-2. 點「加入討論」：
-   - 若已有同 activity 的 `spec10` session 且自己在 participants，直接回傳舊 session
-   - 否則建立新 session（participants = 自己所在 group members）
-3. 顯示聊天訊息、步驟資訊、寫作主題資訊
-4. 可儲存 outline/draft6/draft8
-5. 可查歷史 session
-
-畫面文案目前用「班級號碼」顯示任務班級。
+1. 首頁只顯示兩類清單：
+   - 「尚未開始課程（本班）」（來自 `/api/student/overview`，條件為同校同班且 `courseStatus=not_started`）
+   - 「自己參與過的課程清單」（依最近參與時間排序）
+2. 若學生資料缺漏（`school` / `classNumber` / `ownerTeacherUsername`），顯示警告訊息提醒向老師反映。
+3. 點尚未開始課程的「進入課程」可進入準備階段；在準備階段按「檢查並進入討論」才呼叫 `/api/student/join`。
+4. 若課程尚未開始或已結束，`/api/student/join` 會回傳錯誤，前端顯示對應提示。
+5. 點已參與課程的「查詢紀錄」導向 `/student/history/[activityId]`，顯示該課參與摘要、歷次 session 與個人最後作品/回饋。
+6. 進入 session 後維持原有 spec10 互動流程（步驟顯示、訊息區、artifact 儲存）。
 
 ## 6.3 `/teacher`
 
-三大分頁：
+三大分頁（目前順序）：
 
-- 系統管理
-- 學習管理
+- 帳號管理
 - 課程管理
+- 學習管理
 
-### 系統管理
+### 帳號管理
 
 - 帳號 CRUD（teacher/admin 依權限限制）
 - reset password
 - CSV 批次建帳
 - student 帳號必填 `classNumber`
+- 使用者清單角色顯示統一中文（學生/教師/管理員）
+- 搜尋區塊位於使用者清單上方
+- CSV 欄位順序為 `classnumber` 第一欄：
+  - `classnumber,username,name,school,role,password`
+  - `classnumber,username,name,school,role,password,ownerTeacherUsername`
 
 ### 學習管理
 
-- 監看 `spec10` sessions
-- 教師可切換步驟（`/api/teacher/step`）
-- 看小組訊息（1/2/4）
-- 看個人互動訊息（3/6/8）與個人進度
+- 先選課程（班級 + 主題）後，依 `courseStatus` 控制按鈕可用狀態：
+  - `not_started`：僅可按「開始上課」
+  - `in_progress`：可按「結束上課」「查看狀態」，不可再按「開始上課」
+  - `ended`：僅可按「查看狀態」
+- 「開始上課 / 結束上課」呼叫 `/api/teacher/course-control`
+- 「查看狀態」可查看該課程即時或歷史 session 內容，並可繼續使用：
+  - 步驟切換（`/api/teacher/step`）
+  - 小組訊息檢視（1/2/4）
+  - 個人進度與個人互動訊息（3/6/8）
 
 ### 課程管理
 
@@ -368,6 +378,15 @@ Error:
 - 權限：student
 - 回傳自己可參與 activities
 
+### `GET /api/student/overview`
+
+- 權限：student
+- 回傳：
+  - `profile`（含 school/classNumber/ownerTeacherUsername）
+  - `missingFields`（學生資料缺漏欄位）
+  - `upcomingCourses`（同校同班且 `courseStatus=not_started`）
+  - `participatedCourses`（自己曾參與過課程，依最近參與時間排序）
+
 ### `POST /api/student/join`
 
 Request:
@@ -387,10 +406,20 @@ Error:
 - `403 forbidden`
 - `404 activity_not_found`
 - `403 not_group_member`
+- `400 course_not_started`
+- `400 course_ended`
 
 ### `GET /api/student/history?activityId=...`
 
 - 回傳該 student 參與過的 sessions（可選 activity 過濾）
+
+### `GET /api/student/course-history/[activityId]`
+
+- 權限：student
+- 回傳指定課程的：
+  - `summary`（參與次數、最近參與時間、最高步驟、個人發言統計）
+  - `latestWork`（outline / draft6 / draft8 / step7Report / step10Report）
+  - `sessions`（歷次參與紀錄）
 
 ## 7.3 Session & Chat
 
@@ -451,6 +480,19 @@ Request:
 - 回傳 participant 的個人進度統計
 - `username` 有值時回傳個人訊息串
 
+### `POST /api/teacher/course-control`
+
+Request:
+
+```json
+{ "activityId": "oc-001", "action": "start|end" }
+```
+
+- 權限：teacher/admin
+- 需在可見課程範圍內
+- `start`：`not_started -> in_progress`
+- `end`：`in_progress -> ended`
+
 ## 7.5 Admin/Course APIs
 
 ### `GET/POST /api/admin/essays`
@@ -505,7 +547,7 @@ Behavior:
   - teacher 只能管理自己與自己學生
   - student 必須有 `ownerTeacherUsername` + `classNumber`
   - 禁止自刪、禁止不合法角色變更
-  - 支援 CSV 批次建立（5/6/7 欄格式）
+  - 支援 CSV 批次建立（6/7 欄，且 `classnumber` 必為第一欄）
 
 ---
 
@@ -563,6 +605,7 @@ Behavior:
 6. Step5/7/10 必須是 non-interactive（學生送訊息會報錯）
 7. student artifact 只能存到自己參與的 session
 8. session/user store 必須維持「有 DB 用 DB，無 DB 用 memory」雙模式
+9. student 透過 `/api/student/join` 加入時必須遵守課程狀態限制（未開始/已結束不可加入）
 
 ---
 
