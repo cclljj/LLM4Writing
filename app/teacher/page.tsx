@@ -38,9 +38,14 @@ type PersonalProgressRow = {
   lastMessageAt: string | null;
 };
 
+const genreOptions = ["議論文", "說明文", "抒情文", "其他"];
+
+type CourseTab = "essay" | "essay_prompt" | "openclass" | "openclass_prompt" | "group";
+
 export default function TeacherPage() {
   const [loginUser, setLoginUser] = useState("");
   const [tab, setTab] = useState<"system" | "learning" | "course">("system");
+  const [courseTab, setCourseTab] = useState<CourseTab>("essay");
   const [users, setUsers] = useState<UserRow[]>([]);
   const [essays, setEssays] = useState<EssayRow[]>([]);
   const [openClasses, setOpenClasses] = useState<OpenClassRow[]>([]);
@@ -51,7 +56,7 @@ export default function TeacherPage() {
   const [step, setStep] = useState(1);
   const [error, setError] = useState("");
 
-  const [essayForm, setEssayForm] = useState({ title: "", genre: "", description: "", enabled: true });
+  const [essayForm, setEssayForm] = useState({ title: "", genre: "議論文", description: "", enabled: true });
   const [openClassForm, setOpenClassForm] = useState({ className: "", essayTitle: "", durationMinutes: 40, supplemental: "" });
 
   const [selectedActivityId, setSelectedActivityId] = useState("");
@@ -73,6 +78,11 @@ export default function TeacherPage() {
   const studentUsers = useMemo(
     () => users.filter((user) => user.role === "student").map((user) => user.username),
     [users]
+  );
+
+  const sessionHints = useMemo(
+    () => Array.from(new Set(monitorSessions.map((session) => session.sessionId))),
+    [monitorSessions]
   );
 
   useEffect(() => {
@@ -220,7 +230,7 @@ export default function TeacherPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(essayForm)
     });
-    setEssayForm({ title: "", genre: "", description: "", enabled: true });
+    setEssayForm({ title: "", genre: "議論文", description: "", enabled: true });
     await refreshAll();
   }
 
@@ -343,7 +353,7 @@ export default function TeacherPage() {
     <main>
       <div className="card">
         <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
-          <h1 style={{ marginBottom: 0 }}>教師端管理台（現況版回補）</h1>
+          <h1 style={{ marginBottom: 0 }}>教師端管理台</h1>
           <div>
             <span className="badge" style={{ marginRight: 8 }}>
               {loginUser ? `登入者: ${loginUser}` : "教師"}
@@ -355,38 +365,69 @@ export default function TeacherPage() {
         </div>
       </div>
 
+      <datalist id="session-id-options">
+        {sessionHints.map((id) => (
+          <option key={id} value={id} />
+        ))}
+      </datalist>
+
       <div className="card row">
         <div style={{ width: 180 }}>
-          <button type="button" onClick={() => setTab("system")}>系統管理</button>
+          <button type="button" className={tab === "system" ? "" : "secondary"} onClick={() => setTab("system")}>系統管理</button>
         </div>
         <div style={{ width: 180 }}>
-          <button type="button" onClick={() => setTab("learning")}>學習管理</button>
+          <button type="button" className={tab === "learning" ? "" : "secondary"} onClick={() => setTab("learning")}>學習管理</button>
         </div>
         <div style={{ width: 180 }}>
-          <button type="button" onClick={() => setTab("course")}>課程管理</button>
+          <button type="button" className={tab === "course" ? "" : "secondary"} onClick={() => setTab("course")}>課程管理</button>
         </div>
       </div>
 
       {tab === "system" ? (
         <div className="card">
           <h2>帳號管理</h2>
-          {users.map((user, idx) => (
-            <div key={user.username} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
-              #{idx + 1} / {user.username} / {user.name} / {user.school} / {user.role}
-              <div style={{ marginTop: 6, width: 180 }}>
-                <button type="button" className="secondary" onClick={() => resetPassword(user.username)}>
-                  修改密碼
-                </button>
-              </div>
-            </div>
-          ))}
+          <div style={{ overflowX: "auto" }}>
+            <table className="pro-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>帳號</th>
+                  <th>姓名</th>
+                  <th>學校</th>
+                  <th>角色</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {users.map((user, idx) => (
+                  <tr key={user.username}>
+                    <td>{idx + 1}</td>
+                    <td>{user.username}</td>
+                    <td>{user.name}</td>
+                    <td>{user.school}</td>
+                    <td>{user.role}</td>
+                    <td>
+                      <button
+                        type="button"
+                        className="secondary"
+                        style={{ width: "auto", minWidth: 96 }}
+                        onClick={() => resetPassword(user.username)}
+                      >
+                        修改密碼
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       ) : null}
 
       {tab === "learning" ? (
         <>
           <div className="card">
-            <h2>課堂觀察（MonitorPage）</h2>
+            <h2>課堂觀察</h2>
             {monitorSessions.map((session) => (
               <div key={session.sessionId} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
                 <strong>{session.activityTitle ?? session.activityId}</strong>
@@ -403,6 +444,7 @@ export default function TeacherPage() {
                       onClick={() => {
                         setMonitorSelected(session);
                         setProgressSessionId(session.sessionId);
+                        setSessionId(session.sessionId);
                       }}
                     >
                       查看小組對話
@@ -418,7 +460,7 @@ export default function TeacherPage() {
             <form onSubmit={handleSwitch} className="row">
               <div className="col">
                 <label>Session ID</label>
-                <input value={sessionId} onChange={(e) => setSessionId(e.target.value)} />
+                <input list="session-id-options" value={sessionId} onChange={(e) => setSessionId(e.target.value)} />
               </div>
               <div className="col">
                 <label>Step</label>
@@ -438,11 +480,15 @@ export default function TeacherPage() {
           </div>
 
           <div className="card">
-            <h2>個人進度表（LearningPacePage）</h2>
+            <h2>個人進度表</h2>
             <div className="row">
               <div className="col">
                 <label>Session ID</label>
-                <input value={progressSessionId} onChange={(e) => setProgressSessionId(e.target.value)} />
+                <input
+                  list="session-id-options"
+                  value={progressSessionId}
+                  onChange={(e) => setProgressSessionId(e.target.value)}
+                />
               </div>
               <div className="col" style={{ alignSelf: "end" }}>
                 <button type="button" className="secondary" onClick={() => loadProgress()}>
@@ -501,237 +547,259 @@ export default function TeacherPage() {
 
       {tab === "course" ? (
         <>
-          <div className="card">
-            <h2>寫作主題管理（Essay CRUD）</h2>
-            <form onSubmit={saveEssay} className="row">
-              <div className="col">
-                <label>標題</label>
-                <input value={essayForm.title} onChange={(e) => setEssayForm({ ...essayForm, title: e.target.value })} />
-              </div>
-              <div className="col">
-                <label>文體</label>
-                <input value={essayForm.genre} onChange={(e) => setEssayForm({ ...essayForm, genre: e.target.value })} />
-              </div>
-              <div className="col">
-                <label>說明</label>
-                <input
-                  value={essayForm.description}
-                  onChange={(e) => setEssayForm({ ...essayForm, description: e.target.value })}
-                />
-              </div>
-              <div className="col" style={{ alignSelf: "end" }}>
-                <button type="submit">新增主題</button>
-              </div>
-            </form>
-            {essays.map((essay) => (
-              <div key={essay.id} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
-                {essay.id} / {essay.title} / {essay.genre} / {essay.description}
-              </div>
-            ))}
-          </div>
-
-          <div className="card">
-            <h2>寫作主題 Prompt / 問題庫</h2>
-            <div className="row">
-              <div className="col">
-                <label>選擇主題</label>
-                <select value={selectedEssayForPrompt} onChange={(e) => setSelectedEssayForPrompt(e.target.value)}>
-                  <option value="">請選擇</option>
-                  {essays.map((essay) => (
-                    <option key={essay.id} value={essay.id}>
-                      {essay.id} / {essay.title}
-                    </option>
-                  ))}
-                </select>
-              </div>
+          <div className="card row">
+            <div style={{ width: 210 }}>
+              <button type="button" className={courseTab === "essay" ? "" : "secondary"} onClick={() => setCourseTab("essay")}>寫作主題管理</button>
             </div>
-            <div className="row" style={{ marginTop: 10 }}>
-              <div className="col">
-                <label>步驟 1 Prompt</label>
-                <textarea
-                  value={essayPromptConfig.stepPrompts["1"] ?? ""}
-                  onChange={(e) =>
-                    setEssayPromptConfig((prev) => patchPrompt(prev, "step", "1", e.target.value))
-                  }
-                />
-              </div>
-              <div className="col">
-                <label>子步驟 1-3 Prompt</label>
-                <textarea
-                  value={essayPromptConfig.subStepPrompts["1-3"] ?? ""}
-                  onChange={(e) =>
-                    setEssayPromptConfig((prev) => patchPrompt(prev, "substep", "1-3", e.target.value))
-                  }
-                />
-              </div>
-              <div className="col">
-                <label>問題庫 1-1（每行一題）</label>
-                <textarea
-                  value={(essayPromptConfig.questionBanks["1-1"] ?? []).join("\n")}
-                  onChange={(e) =>
-                    setEssayPromptConfig((prev) => patchPrompt(prev, "bank", "1-1", e.target.value))
-                  }
-                />
-              </div>
+            <div style={{ width: 210 }}>
+              <button type="button" className={courseTab === "essay_prompt" ? "" : "secondary"} onClick={() => setCourseTab("essay_prompt")}>主題 Prompt/問題庫</button>
             </div>
-            <div style={{ width: 220, marginTop: 10 }}>
-              <button type="button" onClick={saveEssayPromptConfig}>
-                儲存主題 Prompt/問題庫
-              </button>
+            <div style={{ width: 210 }}>
+              <button type="button" className={courseTab === "openclass" ? "" : "secondary"} onClick={() => setCourseTab("openclass")}>寫作任務管理</button>
+            </div>
+            <div style={{ width: 210 }}>
+              <button type="button" className={courseTab === "openclass_prompt" ? "" : "secondary"} onClick={() => setCourseTab("openclass_prompt")}>任務 Prompt 覆蓋</button>
+            </div>
+            <div style={{ width: 210 }}>
+              <button type="button" className={courseTab === "group" ? "" : "secondary"} onClick={() => setCourseTab("group")}>組別管理</button>
             </div>
           </div>
 
-          <div className="card">
-            <h2>開課管理（Openclass CRUD）</h2>
-            <form onSubmit={saveOpenClass} className="row">
-              <div className="col">
-                <label>班級</label>
-                <input
-                  value={openClassForm.className}
-                  onChange={(e) => setOpenClassForm({ ...openClassForm, className: e.target.value })}
-                />
-              </div>
-              <div className="col">
-                <label>主題</label>
-                <input
-                  value={openClassForm.essayTitle}
-                  onChange={(e) => setOpenClassForm({ ...openClassForm, essayTitle: e.target.value })}
-                />
-              </div>
-              <div className="col">
-                <label>時長</label>
-                <input
-                  type="number"
-                  value={openClassForm.durationMinutes}
-                  onChange={(e) =>
-                    setOpenClassForm({ ...openClassForm, durationMinutes: Number(e.target.value) || 0 })
-                  }
-                />
-              </div>
-              <div className="col">
-                <label>補充資料</label>
-                <input
-                  value={openClassForm.supplemental}
-                  onChange={(e) => setOpenClassForm({ ...openClassForm, supplemental: e.target.value })}
-                />
-              </div>
-              <div className="col" style={{ alignSelf: "end" }}>
-                <button type="submit">新增班級任務</button>
-              </div>
-            </form>
-            {openClasses.map((openClass) => (
-              <div key={openClass.id} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
-                {openClass.id} / {openClass.className} / {openClass.essayTitle} / {openClass.durationMinutes} 分鐘 / {openClass.supplemental}
-              </div>
-            ))}
-          </div>
+          {courseTab === "essay" ? (
+            <div className="card">
+              <h2>寫作主題管理</h2>
+              <form onSubmit={saveEssay} className="row">
+                <div className="col">
+                  <label>標題</label>
+                  <input value={essayForm.title} onChange={(e) => setEssayForm({ ...essayForm, title: e.target.value })} />
+                </div>
+                <div className="col">
+                  <label>文體</label>
+                  <select value={essayForm.genre} onChange={(e) => setEssayForm({ ...essayForm, genre: e.target.value })}>
+                    {genreOptions.map((genre) => (
+                      <option key={genre} value={genre}>
+                        {genre}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="col">
+                  <label>說明</label>
+                  <input
+                    value={essayForm.description}
+                    onChange={(e) => setEssayForm({ ...essayForm, description: e.target.value })}
+                  />
+                </div>
+                <div className="col" style={{ alignSelf: "end" }}>
+                  <button type="submit">新增主題</button>
+                </div>
+              </form>
+              {essays.map((essay) => (
+                <div key={essay.id} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
+                  {essay.id} / {essay.title} / {essay.genre} / {essay.description}
+                </div>
+              ))}
+            </div>
+          ) : null}
 
-          <div className="card">
-            <h2>班級任務 Prompt 覆蓋（優先於主題 Prompt）</h2>
-            <div className="row">
-              <div className="col">
-                <label>選擇班級任務</label>
-                <select value={selectedOpenClassForPrompt} onChange={(e) => setSelectedOpenClassForPrompt(e.target.value)}>
-                  <option value="">請選擇</option>
-                  {openClasses.map((openClass) => (
-                    <option key={openClass.id} value={openClass.id}>
-                      {openClass.id} / {openClass.className}
-                    </option>
-                  ))}
-                </select>
+          {courseTab === "essay_prompt" ? (
+            <div className="card">
+              <h2>寫作主題 Prompt / 問題庫</h2>
+              <div className="row">
+                <div className="col">
+                  <label>選擇主題</label>
+                  <select value={selectedEssayForPrompt} onChange={(e) => setSelectedEssayForPrompt(e.target.value)}>
+                    <option value="">請選擇</option>
+                    {essays.map((essay) => (
+                      <option key={essay.id} value={essay.id}>
+                        {essay.id} / {essay.title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
-            </div>
-            <div className="row" style={{ marginTop: 10 }}>
-              <div className="col">
-                <label>步驟 1 Prompt 覆蓋</label>
-                <textarea
-                  value={openClassPromptConfig.stepPrompts["1"] ?? ""}
-                  onChange={(e) =>
-                    setOpenClassPromptConfig((prev) => patchPrompt(prev, "step", "1", e.target.value))
-                  }
-                />
+              <div className="row" style={{ marginTop: 10 }}>
+                <div className="col">
+                  <label>步驟 1 Prompt</label>
+                  <textarea
+                    value={essayPromptConfig.stepPrompts["1"] ?? ""}
+                    onChange={(e) => setEssayPromptConfig((prev) => patchPrompt(prev, "step", "1", e.target.value))}
+                  />
+                </div>
+                <div className="col">
+                  <label>子步驟 1-3 Prompt</label>
+                  <textarea
+                    value={essayPromptConfig.subStepPrompts["1-3"] ?? ""}
+                    onChange={(e) => setEssayPromptConfig((prev) => patchPrompt(prev, "substep", "1-3", e.target.value))}
+                  />
+                </div>
+                <div className="col">
+                  <label>問題庫 1-1（每行一題）</label>
+                  <textarea
+                    value={(essayPromptConfig.questionBanks["1-1"] ?? []).join("\n")}
+                    onChange={(e) => setEssayPromptConfig((prev) => patchPrompt(prev, "bank", "1-1", e.target.value))}
+                  />
+                </div>
               </div>
-              <div className="col">
-                <label>子步驟 2-1 Prompt 覆蓋</label>
-                <textarea
-                  value={openClassPromptConfig.subStepPrompts["2-1"] ?? ""}
-                  onChange={(e) =>
-                    setOpenClassPromptConfig((prev) => patchPrompt(prev, "substep", "2-1", e.target.value))
-                  }
-                />
-              </div>
-            </div>
-            <div style={{ width: 220, marginTop: 10 }}>
-              <button type="button" onClick={saveOpenClassPromptConfig}>
-                儲存班級 Prompt 覆蓋
-              </button>
-            </div>
-          </div>
-
-          <div className="card">
-            <h2>組別管理（拖曳分組）</h2>
-            <div className="row">
-              <div className="col">
-                <label>選擇任務</label>
-                <select value={selectedActivityId} onChange={(e) => setSelectedActivityId(e.target.value)}>
-                  <option value="">請選擇</option>
-                  {activities.map((activity) => (
-                    <option key={activity.id} value={activity.id}>
-                      {activity.id} / {activity.title}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="col" style={{ alignSelf: "end" }}>
-                <button type="button" onClick={saveGroups}>
-                  儲存分組
+              <div style={{ width: 220, marginTop: 10 }}>
+                <button type="button" onClick={saveEssayPromptConfig}>
+                  儲存主題 Prompt/問題庫
                 </button>
               </div>
             </div>
+          ) : null}
 
-            <div className="row" style={{ marginTop: 12 }}>
-              <div
-                className="col"
-                style={{ minHeight: 120, border: "1px dashed #94a3b8", borderRadius: 8, padding: 10 }}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={dropToUnassigned}
-              >
-                <strong>未分配學生</strong>
-                {unassignedStudents.map((username) => (
-                  <div
-                    key={username}
-                    draggable
-                    onDragStart={onDragStart(username, "unassigned")}
-                    style={{ padding: "6px 8px", marginTop: 6, border: "1px solid #cbd5e1", borderRadius: 6 }}
-                  >
-                    {username}
-                  </div>
-                ))}
+          {courseTab === "openclass" ? (
+            <div className="card">
+              <h2>寫作任務管理</h2>
+              <form onSubmit={saveOpenClass} className="row">
+                <div className="col">
+                  <label>班級</label>
+                  <input
+                    value={openClassForm.className}
+                    onChange={(e) => setOpenClassForm({ ...openClassForm, className: e.target.value })}
+                  />
+                </div>
+                <div className="col">
+                  <label>主題</label>
+                  <input
+                    value={openClassForm.essayTitle}
+                    onChange={(e) => setOpenClassForm({ ...openClassForm, essayTitle: e.target.value })}
+                  />
+                </div>
+                <div className="col">
+                  <label>時長</label>
+                  <input
+                    type="number"
+                    value={openClassForm.durationMinutes}
+                    onChange={(e) => setOpenClassForm({ ...openClassForm, durationMinutes: Number(e.target.value) || 0 })}
+                  />
+                </div>
+                <div className="col">
+                  <label>補充資料</label>
+                  <input
+                    value={openClassForm.supplemental}
+                    onChange={(e) => setOpenClassForm({ ...openClassForm, supplemental: e.target.value })}
+                  />
+                </div>
+                <div className="col" style={{ alignSelf: "end" }}>
+                  <button type="submit">新增班級任務</button>
+                </div>
+              </form>
+              {openClasses.map((openClass) => (
+                <div key={openClass.id} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
+                  {openClass.id} / {openClass.className} / {openClass.essayTitle} / {openClass.durationMinutes} 分鐘 / {openClass.supplemental}
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          {courseTab === "openclass_prompt" ? (
+            <div className="card">
+              <h2>班級任務 Prompt 覆蓋（優先於主題 Prompt）</h2>
+              <div className="row">
+                <div className="col">
+                  <label>選擇班級任務</label>
+                  <select value={selectedOpenClassForPrompt} onChange={(e) => setSelectedOpenClassForPrompt(e.target.value)}>
+                    <option value="">請選擇</option>
+                    {openClasses.map((openClass) => (
+                      <option key={openClass.id} value={openClass.id}>
+                        {openClass.id} / {openClass.className}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="row" style={{ marginTop: 10 }}>
+                <div className="col">
+                  <label>步驟 1 Prompt 覆蓋</label>
+                  <textarea
+                    value={openClassPromptConfig.stepPrompts["1"] ?? ""}
+                    onChange={(e) => setOpenClassPromptConfig((prev) => patchPrompt(prev, "step", "1", e.target.value))}
+                  />
+                </div>
+                <div className="col">
+                  <label>子步驟 2-1 Prompt 覆蓋</label>
+                  <textarea
+                    value={openClassPromptConfig.subStepPrompts["2-1"] ?? ""}
+                    onChange={(e) => setOpenClassPromptConfig((prev) => patchPrompt(prev, "substep", "2-1", e.target.value))}
+                  />
+                </div>
+              </div>
+              <div style={{ width: 220, marginTop: 10 }}>
+                <button type="button" onClick={saveOpenClassPromptConfig}>
+                  儲存班級 Prompt 覆蓋
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          {courseTab === "group" ? (
+            <div className="card">
+              <h2>組別管理（拖曳分組）</h2>
+              <div className="row">
+                <div className="col">
+                  <label>選擇任務</label>
+                  <select value={selectedActivityId} onChange={(e) => setSelectedActivityId(e.target.value)}>
+                    <option value="">請選擇</option>
+                    {activities.map((activity) => (
+                      <option key={activity.id} value={activity.id}>
+                        {activity.id} / {activity.title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="col" style={{ alignSelf: "end" }}>
+                  <button type="button" onClick={saveGroups}>
+                    儲存分組
+                  </button>
+                </div>
               </div>
 
-              {editableGroups.map((group) => (
+              <div className="row" style={{ marginTop: 12 }}>
                 <div
-                  key={group.groupId}
                   className="col"
                   style={{ minHeight: 120, border: "1px dashed #94a3b8", borderRadius: 8, padding: 10 }}
                   onDragOver={(e) => e.preventDefault()}
-                  onDrop={dropToGroup(group.groupId)}
+                  onDrop={dropToUnassigned}
                 >
-                  <strong>{group.groupName}</strong>
-                  {group.members.map((username) => (
+                  <strong>未分配學生</strong>
+                  {unassignedStudents.map((username) => (
                     <div
                       key={username}
                       draggable
-                      onDragStart={onDragStart(username, group.groupId)}
+                      onDragStart={onDragStart(username, "unassigned")}
                       style={{ padding: "6px 8px", marginTop: 6, border: "1px solid #cbd5e1", borderRadius: 6 }}
                     >
                       {username}
                     </div>
                   ))}
                 </div>
-              ))}
+
+                {editableGroups.map((group) => (
+                  <div
+                    key={group.groupId}
+                    className="col"
+                    style={{ minHeight: 120, border: "1px dashed #94a3b8", borderRadius: 8, padding: 10 }}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={dropToGroup(group.groupId)}
+                  >
+                    <strong>{group.groupName}</strong>
+                    {group.members.map((username) => (
+                      <div
+                        key={username}
+                        draggable
+                        onDragStart={onDragStart(username, group.groupId)}
+                        style={{ padding: "6px 8px", marginTop: 6, border: "1px solid #cbd5e1", borderRadius: 6 }}
+                      >
+                        {username}
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
+          ) : null}
         </>
       ) : null}
     </main>

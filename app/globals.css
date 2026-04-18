@@ -118,3 +118,23 @@ a {
     padding: 16px 12px 40px;
   }
 }
+
+.pro-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.93rem;
+}
+
+.pro-table th,
+.pro-table td {
+  border-bottom: 1px solid #e5e7eb;
+  text-align: left;
+  padding: 10px 8px;
+  vertical-align: middle;
+}
+
+.pro-table thead th {
+  background: #f8fafc;
+  color: #334155;
+  font-weight: 700;
+}
