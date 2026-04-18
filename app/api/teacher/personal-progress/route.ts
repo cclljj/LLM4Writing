@@ -1,0 +1,42 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getCurrentUser } from "@/src/lib/auth-server";
+import { getSession } from "@/src/lib/store";
+
+export async function GET(request: NextRequest) {
+  const user = await getCurrentUser();
+  if (!user || user.role !== "teacher") {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
+
+  const sessionId = request.nextUrl.searchParams.get("sessionId") ?? "";
+  const username = request.nextUrl.searchParams.get("username") ?? "";
+
+  const session = await getSession(sessionId);
+  if (!session) {
+    return NextResponse.json({ error: "session_not_found" }, { status: 404 });
+  }
+
+  const progress = session.participants.map((participant) => {
+    const ownMessages = session.messages.filter((message) => message.userId === participant);
+    const last = ownMessages[ownMessages.length - 1];
+    return {
+      username: participant,
+      currentStep: last?.step ?? session.currentStep,
+      messageCount: ownMessages.length,
+      lastMessageAt: last?.at ?? null
+    };
+  });
+
+  const personalMessages = username
+    ? session.messages.filter(
+        (message) => message.userId === username || message.role === "ai" || message.role === "system"
+      )
+    : [];
+
+  return NextResponse.json({
+    sessionId: session.id,
+    activityTitle: session.activityTitle,
+    progress,
+    personalMessages
+  });
+}

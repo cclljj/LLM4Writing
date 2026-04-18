@@ -1,3 +1,5 @@
+import { validateUserCredential } from "@/src/lib/mock-data";
+
 export type AuthRole = "student" | "teacher";
 
 export interface AuthUser {
@@ -5,21 +7,13 @@ export interface AuthUser {
   role: AuthRole;
 }
 
-const DEFAULT_STUDENT_USER = process.env.DEFAULT_STUDENT_USER ?? "student";
-const DEFAULT_STUDENT_PASS = process.env.DEFAULT_STUDENT_PASS ?? "student123";
-const DEFAULT_TEACHER_USER = process.env.DEFAULT_TEACHER_USER ?? "teacher";
-const DEFAULT_TEACHER_PASS = process.env.DEFAULT_TEACHER_PASS ?? "teacher123";
-
 export function validateCredential(username: string, password: string): AuthUser | undefined {
-  if (username === DEFAULT_STUDENT_USER && password === DEFAULT_STUDENT_PASS) {
-    return { username, role: "student" };
+  const user = validateUserCredential(username, password);
+  if (!user) {
+    return undefined;
   }
 
-  if (username === DEFAULT_TEACHER_USER && password === DEFAULT_TEACHER_PASS) {
-    return { username, role: "teacher" };
-  }
-
-  return undefined;
+  return { username: user.username, role: user.role };
 }
 
 export const AUTH_COOKIE_USER = "llm4w_user";

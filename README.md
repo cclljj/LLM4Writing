@@ -76,6 +76,9 @@ npx --yes vercel --prod
   - `GET/POST /api/admin/users`
   - `GET/POST /api/admin/essays`
   - `GET/POST /api/admin/openclasses`
+  - `GET /api/admin/activities`
+  - `POST /api/admin/groups`
+  - `GET /api/teacher/personal-progress`
 
 ## Postgres 注意事項
 

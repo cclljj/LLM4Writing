@@ -1,4 +1,4 @@
-import { Activity, UserAccount } from "@/src/lib/types";
+import { Activity, ActivityGroup, UserAccount } from "@/src/lib/types";
 
 const users: UserAccount[] = [
   { username: "student", name: "Student One", school: "Demo High", role: "student" },
@@ -32,7 +32,6 @@ const activities: Activity[] = [
   }
 ];
 
-
 const userPasswords: Record<string, string> = {
   student: "student123",
   s1: "student123",
@@ -55,6 +54,21 @@ export function getUsers(): UserAccount[] {
   return users;
 }
 
+export function getStudentUsers(): UserAccount[] {
+  return users.filter((user) => user.role === "student");
+}
+
+export function getUser(username: string): UserAccount | undefined {
+  return users.find((user) => user.username === username);
+}
+
+export function validateUserCredential(username: string, password: string): UserAccount | undefined {
+  const user = getUser(username);
+  if (!user) return undefined;
+  if (userPasswords[username] !== password) return undefined;
+  return user;
+}
+
 export function getEssays() {
   return essays;
 }
@@ -73,6 +87,34 @@ export function getAllActivities(): Activity[] {
 
 export function findActivity(activityId: string): Activity | undefined {
   return activities.find((activity) => activity.id === activityId);
+}
+
+export function updateActivityGroups(activityId: string, groups: ActivityGroup[]): Activity | undefined {
+  const activity = findActivity(activityId);
+  if (!activity) {
+    return undefined;
+  }
+
+  const studentSet = new Set(getStudentUsers().map((student) => student.username));
+  const seen = new Set<string>();
+
+  const sanitizedGroups = groups.map((group, idx) => {
+    const uniqueMembers = group.members.filter((member) => {
+      if (!studentSet.has(member)) return false;
+      if (seen.has(member)) return false;
+      seen.add(member);
+      return true;
+    });
+
+    return {
+      groupId: group.groupId || `g${idx + 1}`,
+      groupName: group.groupName || `第${idx + 1}組`,
+      members: uniqueMembers
+    };
+  });
+
+  activity.groups = sanitizedGroups;
+  return activity;
 }
 
 export function upsertEssay(input: {
@@ -132,7 +174,6 @@ export function upsertOpenClass(input: {
   openClasses.push(created);
   return created;
 }
-
 
 export function resetUserPassword(username: string, newPassword: string) {
   if (!users.some((user) => user.username === username)) {

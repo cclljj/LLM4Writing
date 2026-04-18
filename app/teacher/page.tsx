@@ -1,10 +1,20 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { DragEvent, FormEvent, useEffect, useMemo, useState } from "react";
 
 type UserRow = { username: string; name: string; school: string; role: string };
 type EssayRow = { id: string; title: string; genre: string; description: string; enabled: boolean };
 type OpenClassRow = { id: string; className: string; essayTitle: string; durationMinutes: number; supplemental: string };
+type ActivityGroup = { groupId: string; groupName: string; members: string[] };
+type ActivityRow = {
+  id: string;
+  className: string;
+  title: string;
+  genre: string;
+  durationMinutes: number;
+  supplemental: string;
+  groups: ActivityGroup[];
+};
 
 type MonitorSession = {
   sessionId: string;
@@ -15,12 +25,20 @@ type MonitorSession = {
   messages: Array<{ id: string; role: string; userId?: string; text: string; at: string; step: number }>;
 };
 
+type PersonalProgressRow = {
+  username: string;
+  currentStep: number;
+  messageCount: number;
+  lastMessageAt: string | null;
+};
+
 export default function TeacherPage() {
   const [loginUser, setLoginUser] = useState("");
   const [tab, setTab] = useState<"system" | "learning" | "course">("system");
   const [users, setUsers] = useState<UserRow[]>([]);
   const [essays, setEssays] = useState<EssayRow[]>([]);
   const [openClasses, setOpenClasses] = useState<OpenClassRow[]>([]);
+  const [activities, setActivities] = useState<ActivityRow[]>([]);
   const [monitorSessions, setMonitorSessions] = useState<MonitorSession[]>([]);
   const [monitorSelected, setMonitorSelected] = useState<MonitorSession | null>(null);
   const [sessionId, setSessionId] = useState("");
@@ -29,6 +47,22 @@ export default function TeacherPage() {
 
   const [essayForm, setEssayForm] = useState({ title: "", genre: "", description: "", enabled: true });
   const [openClassForm, setOpenClassForm] = useState({ className: "", essayTitle: "", durationMinutes: 40, supplemental: "" });
+
+  const [selectedActivityId, setSelectedActivityId] = useState("");
+  const [editableGroups, setEditableGroups] = useState<ActivityGroup[]>([]);
+  const [unassignedStudents, setUnassignedStudents] = useState<string[]>([]);
+
+  const [progressSessionId, setProgressSessionId] = useState("");
+  const [progressRows, setProgressRows] = useState<PersonalProgressRow[]>([]);
+  const [selectedProgressUser, setSelectedProgressUser] = useState("");
+  const [personalMessages, setPersonalMessages] = useState<
+    Array<{ id: string; role: string; userId?: string; text: string; at: string; step: number }>
+  >([]);
+
+  const studentUsers = useMemo(
+    () => users.filter((user) => user.role === "student").map((user) => user.username),
+    [users]
+  );
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -43,18 +77,36 @@ export default function TeacherPage() {
     refreshAll();
   }, []);
 
+  useEffect(() => {
+    if (!selectedActivityId || activities.length === 0) return;
+    const activity = activities.find((item) => item.id === selectedActivityId);
+    if (!activity) return;
+
+    setEditableGroups(activity.groups.map((group) => ({ ...group, members: [...group.members] })));
+    const assigned = new Set(activity.groups.flatMap((group) => group.members));
+    setUnassignedStudents(studentUsers.filter((username) => !assigned.has(username)));
+  }, [selectedActivityId, activities, studentUsers]);
+
   async function refreshAll() {
-    const [u, e, o, m] = await Promise.all([
+    const [u, e, o, m, a] = await Promise.all([
       fetch("/api/admin/users"),
       fetch("/api/admin/essays"),
       fetch("/api/admin/openclasses"),
-      fetch("/api/teacher/monitor")
+      fetch("/api/teacher/monitor"),
+      fetch("/api/admin/activities")
     ]);
 
     if (u.ok) setUsers((await u.json()).users ?? []);
     if (e.ok) setEssays((await e.json()).essays ?? []);
     if (o.ok) setOpenClasses((await o.json()).openClasses ?? []);
     if (m.ok) setMonitorSessions((await m.json()).sessions ?? []);
+    if (a.ok) {
+      const list = (await a.json()).activities ?? [];
+      setActivities(list);
+      if (!selectedActivityId && list[0]?.id) {
+        setSelectedActivityId(list[0].id);
+      }
+    }
   }
 
   async function logout() {
@@ -90,7 +142,28 @@ export default function TeacherPage() {
     await refreshAll();
   }
 
+  async function loadProgress(sessionTarget?: string, username?: string) {
+    const sid = sessionTarget ?? progressSessionId;
+    if (!sid) return;
 
+    const q = new URLSearchParams({ sessionId: sid });
+    if (username) {
+      q.set("username", username);
+    }
+
+    const response = await fetch(`/api/teacher/personal-progress?${q.toString()}`);
+    const data = await response.json();
+    if (!response.ok) {
+      setError(data.error ?? "progress_failed");
+      return;
+    }
+
+    setProgressRows(data.progress ?? []);
+    setPersonalMessages(data.personalMessages ?? []);
+    if (username) {
+      setSelectedProgressUser(username);
+    }
+  }
 
   async function resetPassword(username: string) {
     await fetch("/api/admin/users", {
@@ -120,6 +193,64 @@ export default function TeacherPage() {
       body: JSON.stringify(openClassForm)
     });
     setOpenClassForm({ className: "", essayTitle: "", durationMinutes: 40, supplemental: "" });
+    await refreshAll();
+  }
+
+  function onDragStart(username: string, sourceGroupId: string) {
+    return (event: DragEvent) => {
+      event.dataTransfer.setData("application/json", JSON.stringify({ username, sourceGroupId }));
+      event.dataTransfer.effectAllowed = "move";
+    };
+  }
+
+  function removeFromSource(username: string, sourceGroupId: string) {
+    if (sourceGroupId === "unassigned") {
+      setUnassignedStudents((prev) => prev.filter((item) => item !== username));
+      return;
+    }
+    setEditableGroups((prev) =>
+      prev.map((group) =>
+        group.groupId === sourceGroupId ? { ...group, members: group.members.filter((item) => item !== username) } : group
+      )
+    );
+  }
+
+  function dropToGroup(targetGroupId: string) {
+    return (event: DragEvent) => {
+      event.preventDefault();
+      const raw = event.dataTransfer.getData("application/json");
+      if (!raw) return;
+
+      const { username, sourceGroupId } = JSON.parse(raw) as { username: string; sourceGroupId: string };
+      removeFromSource(username, sourceGroupId);
+
+      setEditableGroups((prev) =>
+        prev.map((group) => {
+          if (group.groupId !== targetGroupId) return group;
+          if (group.members.includes(username)) return group;
+          return { ...group, members: [...group.members, username] };
+        })
+      );
+    };
+  }
+
+  function dropToUnassigned(event: DragEvent) {
+    event.preventDefault();
+    const raw = event.dataTransfer.getData("application/json");
+    if (!raw) return;
+
+    const { username, sourceGroupId } = JSON.parse(raw) as { username: string; sourceGroupId: string };
+    removeFromSource(username, sourceGroupId);
+    setUnassignedStudents((prev) => (prev.includes(username) ? prev : [...prev, username]));
+  }
+
+  async function saveGroups() {
+    if (!selectedActivityId) return;
+    await fetch("/api/admin/groups", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ activityId: selectedActivityId, groups: editableGroups })
+    });
     await refreshAll();
   }
 
@@ -181,7 +312,14 @@ export default function TeacherPage() {
                 </div>
                 <div className="row" style={{ marginTop: 8 }}>
                   <div style={{ width: 180 }}>
-                    <button type="button" className="secondary" onClick={() => setMonitorSelected(session)}>
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() => {
+                        setMonitorSelected(session);
+                        setProgressSessionId(session.sessionId);
+                      }}
+                    >
                       查看小組對話
                     </button>
                   </div>
@@ -214,10 +352,55 @@ export default function TeacherPage() {
             {error ? <small>{error}</small> : null}
           </div>
 
+          <div className="card">
+            <h2>個人進度表（LearningPacePage）</h2>
+            <div className="row">
+              <div className="col">
+                <label>Session ID</label>
+                <input value={progressSessionId} onChange={(e) => setProgressSessionId(e.target.value)} />
+              </div>
+              <div className="col" style={{ alignSelf: "end" }}>
+                <button type="button" className="secondary" onClick={() => loadProgress()}>
+                  載入個人進度
+                </button>
+              </div>
+            </div>
+            {progressRows.map((row, idx) => (
+              <div key={row.username} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
+                #{idx + 1} / {row.username} / 進度 Phase {row.currentStep} / 發言數 {row.messageCount}
+                <div style={{ marginTop: 6, width: 180 }}>
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => loadProgress(progressSessionId, row.username)}
+                  >
+                    查看個人對話
+                  </button>
+                </div>
+              </div>
+            ))}
+            {selectedProgressUser ? <small>目前檢視：{selectedProgressUser}</small> : null}
+          </div>
+
           {monitorSelected ? (
             <div className="card">
               <h2>小組對話紀錄</h2>
               {monitorSelected.messages.map((message) => (
+                <div key={message.id} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
+                  <strong>
+                    [P{message.step}] {message.role}
+                    {message.userId ? `(${message.userId})` : ""}
+                  </strong>
+                  <div>{message.text}</div>
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          {personalMessages.length > 0 ? (
+            <div className="card">
+              <h2>個人對話紀錄</h2>
+              {personalMessages.map((message) => (
                 <div key={message.id} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
                   <strong>
                     [P{message.step}] {message.role}
@@ -305,6 +488,71 @@ export default function TeacherPage() {
                 {openClass.id} / {openClass.className} / {openClass.essayTitle} / {openClass.durationMinutes} 分鐘 / {openClass.supplemental}
               </div>
             ))}
+          </div>
+
+          <div className="card">
+            <h2>組別管理（拖曳分組）</h2>
+            <div className="row">
+              <div className="col">
+                <label>選擇任務</label>
+                <select value={selectedActivityId} onChange={(e) => setSelectedActivityId(e.target.value)}>
+                  <option value="">請選擇</option>
+                  {activities.map((activity) => (
+                    <option key={activity.id} value={activity.id}>
+                      {activity.id} / {activity.title}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="col" style={{ alignSelf: "end" }}>
+                <button type="button" onClick={saveGroups}>
+                  儲存分組
+                </button>
+              </div>
+            </div>
+
+            <div className="row" style={{ marginTop: 12 }}>
+              <div
+                className="col"
+                style={{ minHeight: 120, border: "1px dashed #94a3b8", borderRadius: 8, padding: 10 }}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={dropToUnassigned}
+              >
+                <strong>未分配學生</strong>
+                {unassignedStudents.map((username) => (
+                  <div
+                    key={username}
+                    draggable
+                    onDragStart={onDragStart(username, "unassigned")}
+                    style={{ padding: "6px 8px", marginTop: 6, border: "1px solid #cbd5e1", borderRadius: 6 }}
+                  >
+                    {username}
+                  </div>
+                ))}
+              </div>
+
+              {editableGroups.map((group) => (
+                <div
+                  key={group.groupId}
+                  className="col"
+                  style={{ minHeight: 120, border: "1px dashed #94a3b8", borderRadius: 8, padding: 10 }}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={dropToGroup(group.groupId)}
+                >
+                  <strong>{group.groupName}</strong>
+                  {group.members.map((username) => (
+                    <div
+                      key={username}
+                      draggable
+                      onDragStart={onDragStart(username, group.groupId)}
+                      style={{ padding: "6px 8px", marginTop: 6, border: "1px solid #cbd5e1", borderRadius: 6 }}
+                    >
+                      {username}
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
           </div>
         </>
       ) : null}
