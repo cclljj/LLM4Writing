@@ -19,6 +19,7 @@ Convert the project from Java/Wicket monolith deployment model to Vercel-native 
   - `POST /api/chat/send`
   - `POST /api/teacher/step`
 - Core interaction engine implemented for all 10 steps with 4 interaction modes
+- Session store upgraded to Postgres persistence (`llm4writing_sessions`)
 
 ## Rule Mapping from SPEC
 
@@ -37,20 +38,20 @@ Convert the project from Java/Wicket monolith deployment model to Vercel-native 
 5. Personal reflection step (9)
 - System asks fixed questions; no AI reply
 
-## Not Yet Production-Grade
+## Persistence Status
 
-- Persistence is currently in-memory (`src/lib/store.ts`)
-- Multi-instance consistency is not guaranteed
-- Authentication and role-based authorization are not added yet
-- Legacy DB schema (MySQL/Mongo) has not been fully migrated to a Vercel-friendly data layer
+- Primary: Postgres via `postgres` driver (Vercel/Neon compatible)
+- Table auto-init on first access:
+  - `llm4writing_sessions(id text primary key, payload jsonb, created_at, updated_at)`
+- Local fallback: memory store when `POSTGRES_URL`/`DATABASE_URL` is not set
 
-## Recommended Next Migration Steps
+## Remaining Work to Reach Full Production
 
-1. Replace in-memory store with managed DB (Vercel Postgres/Neon + Prisma)
-2. Add auth (NextAuth/Auth.js or custom JWT)
-3. Port teacher/student management screens from legacy app
-4. Migrate essay/tree/report data models and historical logs
-5. Add test suites for step transitions and mode constraints
+1. Add authentication and role-based authorization
+2. Port teacher/student management screens from legacy app
+3. Migrate essay/tree/report data models and historical logs
+4. Add test suites for step transitions and mode constraints
+5. Add observability and retention policy for logs/session data
 
 ## Legacy Code Status
 

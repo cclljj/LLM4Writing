@@ -13,7 +13,7 @@ LLM4Writing 已改造成可直接部署於 Vercel 的原生架構版本。
 - Frontend: Next.js (`app/`)
 - Backend: Next.js Route Handlers (`app/api/**`)
 - Runtime: Vercel Serverless Functions
-- Data (current MVP): in-memory session store (`src/lib/store.ts`)
+- Storage: Postgres（支援 Vercel/Neon 連線字串；無 DB 環境時自動 fallback memory）
 
 ## 對應 SPEC 核心規則
 
@@ -28,6 +28,7 @@ LLM4Writing 已改造成可直接部署於 Vercel 的原生架構版本。
 ## 本機開發
 
 ```bash
+cp .env.example .env.local
 npm install
 npm run dev
 ```
@@ -55,12 +56,14 @@ npx --yes vercel --prod
 - `POST /api/chat/send`
 - `POST /api/teacher/step`
 
-## 重要限制（目前版本）
+## Postgres 注意事項
 
-- 目前 session 儲存為 in-memory，適合 MVP 與流程驗證，不適合正式 production（無持久化、多實例不同步）
-- 若要 production-grade，下一步建議接 Vercel Postgres/Neon 或外部 Redis/KV
+- 首次使用時，系統會自動建立 `llm4writing_sessions` table
+- `payload` 以 `JSONB` 儲存完整 session 狀態
+- 若未設定 `POSTGRES_URL` 或 `DATABASE_URL`，會自動使用 in-memory store（重啟即遺失）
 
 ## 版本
 
 - `1.0`：無 `SPEC*.md` 的基準版本（已加註 fork 訊息）
-- `2.0`：Vercel-native 架構起始版本（本次改造）
+- `2.0`：Vercel-native 架構起始版本
+- `2.1`：加入 Postgres 持久化

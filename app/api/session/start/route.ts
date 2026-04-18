@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
   }
 
   const session = createSession(participants);
-  saveSession(session);
+  await saveSession(session);
 
   return NextResponse.json(session, { status: 201 });
 }

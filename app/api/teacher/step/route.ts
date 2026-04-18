@@ -5,7 +5,7 @@ import { SwitchStepPayload } from "@/src/lib/types";
 
 export async function POST(request: NextRequest) {
   const payload = (await request.json()) as SwitchStepPayload;
-  const session = getSession(payload.sessionId);
+  const session = await getSession(payload.sessionId);
 
   if (!session) {
     return NextResponse.json({ error: "session_not_found" }, { status: 404 });
@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const updated = switchStep(session, payload.step);
-    saveSession(updated);
+    await saveSession(updated);
     return NextResponse.json(updated);
   } catch (error) {
     return NextResponse.json(
