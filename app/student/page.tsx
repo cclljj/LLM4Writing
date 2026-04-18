@@ -2,6 +2,8 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
+type InteractionMode = "group_interaction" | "personal_interaction" | "non_interactive" | "personal_reflection";
+
 type Activity = {
   id: string;
   className: string;
@@ -37,6 +39,26 @@ type HistoryItem = {
   createdAt: string;
 };
 
+const stepNameMap: Record<number, string> = {
+  1: "審視題目",
+  2: "蒐集資料",
+  3: "生成論點",
+  4: "對比修正",
+  5: "摘要報告",
+  6: "撰寫初稿",
+  7: "分析回饋",
+  8: "修改潤飾",
+  9: "個人反思",
+  10: "總結報告"
+};
+
+function getMode(step: number): InteractionMode {
+  if ([1, 2, 4].includes(step)) return "group_interaction";
+  if ([3, 6, 8].includes(step)) return "personal_interaction";
+  if ([5, 7, 10].includes(step)) return "non_interactive";
+  return "personal_reflection";
+}
+
 export default function StudentPage() {
   const [loginUser, setLoginUser] = useState("");
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -62,10 +84,27 @@ export default function StudentPage() {
     refreshHistory();
   }, []);
 
+  useEffect(() => {
+    if (!session) return;
+    const timer = window.setInterval(() => {
+      fetch(`/api/session/${session.id}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data?.id) setSession(data);
+        })
+        .catch(() => undefined);
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [session?.id]);
+
   const sortedMessages = useMemo(
     () => [...(session?.messages ?? [])].sort((a, b) => a.at.localeCompare(b.at)),
     [session]
   );
+
+  const currentStep = session?.currentStep ?? 1;
+  const currentMode = getMode(currentStep);
+  const isInputEnabled = currentMode !== "non_interactive";
 
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -120,7 +159,7 @@ export default function StudentPage() {
 
   async function sendMessage(e: FormEvent) {
     e.preventDefault();
-    if (!session || !text.trim()) return;
+    if (!session || !text.trim() || !isInputEnabled) return;
     setError("");
 
     const response = await fetch("/api/chat/send", {
@@ -137,21 +176,6 @@ export default function StudentPage() {
 
     setSession(data);
     setText("");
-  }
-
-  async function nextPhase() {
-    if (!session) return;
-    const response = await fetch("/api/session/advance-phase", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionId: session.id })
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      setError(data.error ?? "advance_failed");
-      return;
-    }
-    setSession(data);
   }
 
   return (
@@ -203,7 +227,7 @@ export default function StudentPage() {
             <strong>{item.activityTitle ?? item.activityId}</strong>
             <div>
               <small>
-                Session: {item.sessionId} / Phase {item.currentStep} / 訊息數 {item.messageCount}
+                Session: {item.sessionId} / Step {item.currentStep} / 訊息數 {item.messageCount}
               </small>
             </div>
             <div style={{ marginTop: 6, width: 180 }}>
@@ -243,30 +267,58 @@ export default function StudentPage() {
       {session ? (
         <>
           <div className="card">
-            <h2>Phase{session.currentStep} 對話頁</h2>
+            <h2>
+              Step {session.currentStep} - {stepNameMap[session.currentStep] ?? "未知步驟"}
+            </h2>
             <div>
               <small>
                 任務：{session.activityTitle ?? "未命名"} / Session: {session.id}
               </small>
             </div>
-            <div className="row" style={{ marginTop: 8 }}>
-              <div style={{ width: 180 }}>
-                <button type="button" className="secondary" onClick={nextPhase}>
-                  下一階段
-                </button>
-              </div>
+            <div style={{ marginTop: 8 }}>
+              <span className="badge">
+                模式：
+                {currentMode === "group_interaction"
+                  ? "小組互動"
+                  : currentMode === "personal_interaction"
+                    ? "個人互動"
+                    : currentMode === "non_interactive"
+                      ? "無互動"
+                      : "個人反思"}
+              </span>
             </div>
+            <p>
+              <small>步驟切換由教師端控制，你的頁面會自動同步。</small>
+            </p>
           </div>
 
           <div className="card">
-            <h2>聊天室（Phase1~5 均保留輸入）</h2>
-            <form onSubmit={sendMessage}>
-              <label>訊息</label>
-              <textarea value={text} onChange={(e) => setText(e.target.value)} />
-              <button type="submit" style={{ marginTop: 10 }}>
-                發送訊息
-              </button>
-            </form>
+            <h2>寫作主題</h2>
+            <p>{session.activityTitle ?? "未命名任務"}</p>
+          </div>
+
+          <div className="card">
+            <h2>互動區</h2>
+            {currentMode === "non_interactive" ? (
+              <small>本步驟為無互動模式，請閱讀系統/AI 產出內容。</small>
+            ) : null}
+            {currentMode === "group_interaction" ? (
+              <small>小組互動模式：需所有組員至少回覆一次後，AI 才會回覆。</small>
+            ) : null}
+            {currentMode === "personal_reflection" ? (
+              <small>個人反思模式：系統發問，AI 不回覆。</small>
+            ) : null}
+
+            {isInputEnabled ? (
+              <form onSubmit={sendMessage}>
+                <label>訊息</label>
+                <textarea value={text} onChange={(e) => setText(e.target.value)} />
+                <button type="submit" style={{ marginTop: 10 }}>
+                  發送訊息
+                </button>
+              </form>
+            ) : null}
+
             {error ? (
               <p>
                 <small>{error}</small>
@@ -279,7 +331,7 @@ export default function StudentPage() {
             {sortedMessages.map((message) => (
               <div key={message.id} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
                 <strong>
-                  [P{message.step}] {message.role}
+                  [S{message.step}] {message.role}
                   {message.userId ? `(${message.userId})` : ""}
                 </strong>
                 <div>{message.text}</div>

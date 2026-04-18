@@ -392,7 +392,7 @@ export default function TeacherPage() {
                 <strong>{session.activityTitle ?? session.activityId}</strong>
                 <div>
                   <small>
-                    Session: {session.sessionId} / 小組：{session.participants.join(", ")} / 進度：Phase {session.currentStep}
+                    Session: {session.sessionId} / 小組：{session.participants.join(", ")} / 進度：Step {session.currentStep}
                   </small>
                 </div>
                 <div className="row" style={{ marginTop: 8 }}>
@@ -423,9 +423,9 @@ export default function TeacherPage() {
               <div className="col">
                 <label>Step</label>
                 <select value={step} onChange={(e) => setStep(Number(e.target.value))}>
-                  {Array.from({ length: 5 }, (_, i) => i + 1).map((v) => (
+                  {Array.from({ length: 10 }, (_, i) => i + 1).map((v) => (
                     <option key={v} value={v}>
-                      Phase {v}
+                      Step {v}
                     </option>
                   ))}
                 </select>
@@ -452,7 +452,7 @@ export default function TeacherPage() {
             </div>
             {progressRows.map((row, idx) => (
               <div key={row.username} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
-                #{idx + 1} / {row.username} / 進度 Phase {row.currentStep} / 發言數 {row.messageCount}
+                #{idx + 1} / {row.username} / 進度 Step {row.currentStep} / 發言數 {row.messageCount}
                 <div style={{ marginTop: 6, width: 180 }}>
                   <button
                     type="button"
@@ -473,7 +473,7 @@ export default function TeacherPage() {
               {monitorSelected.messages.map((message) => (
                 <div key={message.id} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
                   <strong>
-                    [P{message.step}] {message.role}
+                    [S{message.step}] {message.role}
                     {message.userId ? `(${message.userId})` : ""}
                   </strong>
                   <div>{message.text}</div>
@@ -488,7 +488,7 @@ export default function TeacherPage() {
               {personalMessages.map((message) => (
                 <div key={message.id} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
                   <strong>
-                    [P{message.step}] {message.role}
+                    [S{message.step}] {message.role}
                     {message.userId ? `(${message.userId})` : ""}
                   </strong>
                   <div>{message.text}</div>

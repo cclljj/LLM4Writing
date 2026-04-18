@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
 
   const sessions = await listSessions();
   const existing = sessions.find(
-    (s) => s.workflow === "legacy_phase" && s.activityId === activity.id && s.participants.includes(user.username)
+    (s) => s.workflow === "spec10" && s.activityId === activity.id && s.participants.includes(user.username)
   );
   if (existing) {
     return NextResponse.json(existing);
@@ -32,8 +32,8 @@ export async function POST(request: NextRequest) {
 
   const session = createSession({
     participants: group.members,
-    workflow: "legacy_phase",
-    phaseMax: 5,
+    workflow: "spec10",
+    phaseMax: 10,
     activityId: activity.id,
     activityTitle: activity.title
   });
