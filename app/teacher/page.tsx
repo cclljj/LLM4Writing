@@ -372,7 +372,7 @@ export default function TeacherPage() {
     setAccountSuccess("");
     const validationErrors = validateCsvRows(
       [
-        `${newUserForm.username},${newUserForm.name},${newUserForm.school},${newUserForm.role},${newUserForm.password},${newUserForm.classNumber},${newUserForm.ownerTeacherUsername}`
+        `${newUserForm.classNumber},${newUserForm.username},${newUserForm.name},${newUserForm.school},${newUserForm.role},${newUserForm.password},${newUserForm.ownerTeacherUsername}`
       ],
       { isAdmin: loginRole === "admin" }
     );
@@ -468,9 +468,9 @@ export default function TeacherPage() {
 
     setAccountError("");
     setAccountSuccess("");
-    const row = `${editingUser.username},${editingUser.name},${editingUser.school},${editingUser.role},${
+    const row = `${editingUser.classNumber},${editingUser.username},${editingUser.name},${editingUser.school},${editingUser.role},${
       editingUser.password || "placeholder123"
-    },${editingUser.classNumber},${editingUser.ownerTeacherUsername}`;
+    },${editingUser.ownerTeacherUsername}`;
     const validationErrors = validateCsvRows([row], {
       skipPasswordLength: !editingUser.password,
       isAdmin: loginRole === "admin"
@@ -551,12 +551,10 @@ export default function TeacherPage() {
 
     const headerLine = parsedLines[0]!.toLowerCase();
     const hasHeader =
-      headerLine === "username,name,school,role,password" ||
-      headerLine === "username,name,school,role,password,classnumber" ||
-      headerLine === "username,name,school,role,password,classnumber,ownerteacherusername" ||
-      parsedLines[0] === "帳號,姓名,學校,角色,密碼" ||
-      parsedLines[0] === "帳號,姓名,學校,角色,密碼,班級號碼" ||
-      parsedLines[0] === "帳號,姓名,學校,角色,密碼,班級號碼,綁定教師";
+      headerLine === "classnumber,username,name,school,role,password" ||
+      headerLine === "classnumber,username,name,school,role,password,ownerteacherusername" ||
+      parsedLines[0] === "班級號碼,帳號,姓名,學校,角色,密碼" ||
+      parsedLines[0] === "班級號碼,帳號,姓名,學校,角色,密碼,綁定教師";
     const dataLines = hasHeader ? parsedLines.slice(1) : parsedLines;
     const previewErrors = validateCsvRows(dataLines, { isAdmin: loginRole === "admin" });
     setCsvPreviewErrors(previewErrors);
@@ -592,11 +590,11 @@ export default function TeacherPage() {
 
     lines.forEach((line, idx) => {
       const cols = splitCsvLine(line);
-      if (cols.length !== 5 && cols.length !== 6 && cols.length !== 7) {
-        errors.push(`第 ${idx + 1} 列欄位數錯誤（需 5 / 6 / 7 欄）`);
+      if (cols.length !== 6 && cols.length !== 7) {
+        errors.push(`第 ${idx + 1} 列欄位數錯誤（需 6 或 7 欄）`);
         return;
       }
-      const [username, name, school, role, password, classNumberRaw = "", ownerTeacherUsernameRaw = ""] = cols.map((v) => v.trim());
+      const [classNumberRaw = "", username, name, school, role, password, ownerTeacherUsernameRaw = ""] = cols.map((v) => v.trim());
       const classNumber = classNumberRaw.trim();
       const ownerTeacherUsername = ownerTeacherUsernameRaw.trim();
       if (!username || !name || !school || !role || !password) {
@@ -933,8 +931,8 @@ export default function TeacherPage() {
                   value={newUserForm.role}
                   onChange={(e) => handleNewUserRoleChange(e.target.value as "student" | "teacher")}
                 >
-                  <option value="student">student</option>
-                  {loginRole === "admin" ? <option value="teacher">teacher</option> : null}
+                  <option value="student">學生</option>
+                  {loginRole === "admin" ? <option value="teacher">教師</option> : null}
                 </select>
               </div>
               {loginRole === "admin" && newUserForm.role === "student" ? (
@@ -1012,7 +1010,7 @@ export default function TeacherPage() {
           <div className="card" style={{ marginBottom: 10 }}>
             <h3 style={{ marginBottom: 8 }}>CSV 貼上批次新增</h3>
             <small>
-              格式：`username,name,school,role,password,classNumber[,ownerTeacherUsername]`。
+              格式：`classnumber,username,name,school,role,password[,ownerTeacherUsername]`。
               {loginRole === "admin"
                 ? "admin 建 student 時，必填 ownerTeacherUsername。"
                 : "teacher 建立 student 時，系統會自動綁定目前登入教師。"}
@@ -1023,8 +1021,8 @@ export default function TeacherPage() {
               onChange={(e) => setCsvInput(e.target.value)}
               placeholder={
                 loginRole === "admin"
-                  ? "username,name,school,role,password,classNumber,ownerTeacherUsername\nstudent10,王小明,Demo High,student,abc12345,701,teacher"
-                  : "username,name,school,role,password,classNumber\nstudent10,王小明,Demo High,student,abc12345,701"
+                  ? "classnumber,username,name,school,role,password,ownerTeacherUsername\n701,student10,王小明,Demo High,student,abc12345,teacher"
+                  : "classnumber,username,name,school,role,password\n701,student10,王小明,Demo High,student,abc12345"
               }
             />
             <div className="row" style={{ marginTop: 10 }}>
@@ -1040,8 +1038,8 @@ export default function TeacherPage() {
                   onClick={() =>
                     setCsvInput(
                       loginRole === "admin"
-                        ? "username,name,school,role,password,classNumber,ownerTeacherUsername"
-                        : "username,name,school,role,password,classNumber"
+                        ? "classnumber,username,name,school,role,password,ownerTeacherUsername"
+                        : "classnumber,username,name,school,role,password"
                     )
                   }
                 >
@@ -1171,9 +1169,9 @@ export default function TeacherPage() {
                               )
                             }
                           >
-                            <option value="student">student</option>
+                            <option value="student">學生</option>
                             {loginRole === "admin" || editingUser.username === loginUser ? (
-                              <option value="teacher">teacher</option>
+                              <option value="teacher">教師</option>
                             ) : null}
                           </select>
                         </td>

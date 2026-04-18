@@ -423,13 +423,11 @@ function parseUserCsv(csvText: string):
   let startIndex = 0;
   const header = splitCsvLine(lines[0]!);
   const normalizedHeader = header.map((h) => h.toLowerCase());
-  const headerMatches5 = normalizedHeader.join(",") === "username,name,school,role,password";
-  const headerMatches6 = normalizedHeader.join(",") === "username,name,school,role,password,classnumber";
-  const headerMatches7 = normalizedHeader.join(",") === "username,name,school,role,password,classnumber,ownerteacherusername";
-  const headerMatchesZh5 = header.join(",") === "帳號,姓名,學校,角色,密碼";
-  const headerMatchesZh6 = header.join(",") === "帳號,姓名,學校,角色,密碼,班級號碼";
-  const headerMatchesZh7 = header.join(",") === "帳號,姓名,學校,角色,密碼,班級號碼,綁定教師";
-  if (headerMatches5 || headerMatches6 || headerMatches7 || headerMatchesZh5 || headerMatchesZh6 || headerMatchesZh7) {
+  const headerMatches6 = normalizedHeader.join(",") === "classnumber,username,name,school,role,password";
+  const headerMatches7 = normalizedHeader.join(",") === "classnumber,username,name,school,role,password,ownerteacherusername";
+  const headerMatchesZh6 = header.join(",") === "班級號碼,帳號,姓名,學校,角色,密碼";
+  const headerMatchesZh7 = header.join(",") === "班級號碼,帳號,姓名,學校,角色,密碼,綁定教師";
+  if (headerMatches6 || headerMatches7 || headerMatchesZh6 || headerMatchesZh7) {
     startIndex = 1;
   }
 
@@ -448,22 +446,22 @@ function parseUserCsv(csvText: string):
 
   for (let idx = startIndex; idx < lines.length; idx += 1) {
     const cells = splitCsvLine(lines[idx]!);
-    if (cells.length !== 5 && cells.length !== 6 && cells.length !== 7) {
+    if (cells.length !== 6 && cells.length !== 7) {
       return { ok: false, error: `csv_invalid_column_count_line_${idx + 1}` };
     }
 
-    const hasClassNumber = cells.length >= 6;
+    const hasClassNumber = true;
     const hasOwner = cells.length >= 7;
 
     rows.push({
       line: idx + 1,
       values: {
-        username: cells[0],
-        name: cells[1],
-        school: cells[2],
-        role: cells[3],
-        password: cells[4],
-        classNumber: hasClassNumber ? cells[5] : "",
+        classNumber: cells[0],
+        username: cells[1],
+        name: cells[2],
+        school: cells[3],
+        role: cells[4],
+        password: cells[5],
         ownerTeacherUsername: hasOwner ? cells[6] : ""
       }
     });
