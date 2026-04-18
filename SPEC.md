@@ -1,434 +1,592 @@
-# AI 寫作學習平台 — 產品規格書
+# LLM4Writing 現行系統規格書（Implementation Spec）
 
-- **版本**：v1.1
-- **目標讀者**：AI 代理、前後端工程團隊
-- **文件目的**：定義系統行為、資料流、互動模式與各端點規格，供工程實作與 AI 理解使用
-
----
-
-## 0. 文件導讀（AI 閱讀指引）
-
-本文件以結構化方式描述系統。閱讀時請注意：
-
-- 第 1 章：系統總覽與核心概念（互動模式、步驟流程、切換控制權）
-- 第 2 章：學生端 10 個學習步驟的逐一規格
-- 第 3 章：教師端 3 大功能模組的規格
-- 第 4 章：Prompt 與問題庫的命名與配置規則
-- 附錄 A：快速查詢表（步驟↔模式↔Prompt↔問題庫對應關係）
-
-**關鍵不變量（Invariants）**：
-
-1. 步驟流程的切換**僅**由教師端觸發，學生端無法自行跳轉步驟。
-2. 互動模式嚴格決定 AI 何時回覆、學生能否輸入。
-3. 「小組互動」模式下，AI 必須等**所有組員**各回覆至少一次才回覆。
-4. 「無互動」與「個人反思」模式下，AI 的回覆行為不同於其他模式（見 §1.1）。
+- 文件版本：`2026-04-18`
+- 對齊程式：目前 `main` 分支（Next.js 16 App Router 版本）
+- 文件用途：讓其他 AI / 工程師可依本文件重建「相同行為」系統
+- 規格性質：**以現行實作為準**（非產品理想狀態）
 
 ---
 
-## 1. 系統概覽
+## 1. 系統定位與範圍
 
-本平台是一套 AI 輔助寫作學習系統。學生在 AI 引導下，依序完成 **10 個學習步驟**以提升寫作能力。教師端可即時觀察學生學習進度，並統一控制步驟流程。
+本系統是 AI 輔助寫作教學平台，包含三種角色：
 
-### 1.1 互動模式定義
+- `student`：加入寫作任務、進行 10 步驟學習互動、儲存草稿與大綱
+- `teacher`：管理自己管轄的學生/任務、切換步驟、檢視進度、分組
+- `admin`：跨教師全域管理帳號與任務
 
-每個步驟**屬於且僅屬於**以下四種模式之一。模式決定 AI 的回覆時機與學生的操作方式。
+核心組成：
 
-| 模式 | 適用步驟 | AI 回覆條件 | 學生是否輸入 |
-|---|---|---|---|
-| **小組互動** | 1、2、4 | 必須等**所有組員**各回覆至少一次後，AI 才回覆 | 是 |
-| **個人互動** | 3、6、8 | 個人發送訊息後，AI **即時**回覆 | 是 |
-| **無互動** | 5、7、10 | AI **一次性**生成報告，學生僅閱覽 | 否 |
-| **個人反思** | 9 | 系統發送固定問題，學生作答，**AI 不回覆** | 是 |
-
-### 1.2 學習步驟總覽
-
-| 步驟 | 名稱 | 互動模式 | 重點說明 |
-|---|---|---|---|
-| 1 | 審視題目 | 小組互動 | 依子步驟順序提問（問題庫隨機 + Prompt 生成），所有組員回覆後 AI 給予回饋，共 **5 個子步驟** |
-| 2 | 蒐集資料 | 小組互動 | 依子步驟順序提問（Prompt 生成 + 問題庫隨機），共 **4 個子步驟** |
-| 3 | 生成論點 | 個人互動 | 學生主動提問，AI 即時回覆；可開啟「文章結構樹」編輯並儲存 |
-| 4 | 對比修正 | 小組互動 | 可繼續編輯自己的結構樹，並瀏覽其他組員的結構樹；所有組員回覆後 AI 給予回饋 |
-| 5 | 摘要報告 | 無互動 | AI 根據步驟 1–4 對話內容一次性生成摘要，學生僅檢視 |
-| 6 | 撰寫初稿 | 個人互動 | 點擊「撰寫作文」進行寫作，可參考步驟 4 的最終結構樹 |
-| 7 | 分析回饋 | 無互動 | 系統顯示步驟 6 作文，AI 依 Prompt 生成分析回饋，學生僅檢視 |
-| 8 | 修改潤飾 | 個人互動 | 在步驟 6 作文基礎上修改，儲存後完成 |
-| 9 | 個人反思 | 個人反思 | 系統依序發送 **4 個固定問題**，學生逐一作答，AI 不介入 |
-| 10 | 總結報告 | 無互動 | 系統顯示步驟 8 作文，AI 生成最終分析報告，學生僅檢視 |
-
-### 1.3 步驟切換控制權
-
-- 步驟轉跳**由教師端控制**。
-- 路徑：教師端 → `課堂觀察` → `檢視學習進度` → 點選指定步驟按鈕。
-- 結果：所有學生端**統一跳轉**至該步驟。
+- 前端：Next.js App Router 頁面
+- 後端：Next.js Route Handlers (`app/api/**`)
+- 狀態/資料：
+  - `Session` 儲存在 Postgres（若無 DB 退回 memory）
+  - `User` 儲存在 Postgres（若無 DB 退回 memory）
+  - `Essay/OpenClass/Groups/PromptConfig` 為 process memory mock store（`src/lib/mock-data.ts`）
 
 ---
 
-## 2. 學生端規格
+## 2. 技術架構
 
-### 2.1 登入與首頁
+## 2.1 執行環境
 
-- 學生登入後進入首頁，以列表顯示**所有寫作任務**。
-- 每個任務下方提供 **2 個按鈕**：
-  1. **加入討論**：點擊後正式進入步驟流程。
-  2. **歷史紀錄**：查看過去的學習紀錄。
+- Node.js + Next.js 16
+- React 19
+- TypeScript 5
+- `postgres` npm 套件
 
-### 2.2 通用操作元素
+## 2.2 儲存策略
 
-除「無互動」模式步驟外，學生在各步驟中均可：
+### Session Store
 
-1. 點擊**文字框**，輸入個人回覆。
-2. 點擊**發送訊息**按鈕，送出文字框內容。
-3. 點擊**寫作主題**按鈕，查看本次寫作主題與寫作引導說明。
+- 檔案：`src/lib/store.ts`
+- 啟用條件：`POSTGRES_URL` 或 `DATABASE_URL` 有值
+- Postgres 表：`llm4writing_sessions`
+  - `id TEXT PRIMARY KEY`
+  - `payload JSONB`
+  - `created_at`
+  - `updated_at`
+- 無 DB 時：使用 `globalThis` memory map（重啟即遺失）
 
-### 2.3 各步驟細節規格
+### User Store
 
----
+- 檔案：`src/lib/user-store.ts`
+- 啟用條件同 Session
+- Postgres 表：`llm4writing_users`
+  - `username TEXT PRIMARY KEY`
+  - `payload JSONB`
+  - `password TEXT`
+  - `created_at`
+  - `updated_at`
+- 啟動時會 backfill 預設帳號（`ON CONFLICT DO NOTHING`）
+- 無 DB 時：使用 `globalThis` memory map
 
-#### 步驟 1 — 審視題目 〔小組互動〕
+### Domain Mock Store
 
-- **互動規則**：必須等所有組員各回覆至少一次，AI 才進行回覆。
-- **回饋格式**：每個子步驟 AI 皆依「步驟 1 Prompt」輸出格式給予回饋。
-
-**子步驟流程**：
-
-| 子步驟 | 觸發動作 | 提問來源 |
-|---|---|---|
-| 1-1 | 系統發送「步驟 1 開頭詞」，接續提問 | 「子步驟 1-1 問題庫」隨機抽取 |
-| 1-2 | AI 回饋後提問 | 「子步驟 1-2 問題庫」隨機抽取 |
-| 1-3 | AI 回饋後提問 | 依「子步驟 1-3 Prompt」生成 |
-| 1-4 | AI 回饋後提問 | 依「子步驟 1-4 Prompt」生成 |
-| 1-5 | AI 回饋後提問，回覆後**結束本步驟** | 「子步驟 1-5 問題庫」隨機抽取 |
-
----
-
-#### 步驟 2 — 蒐集資料 〔小組互動〕
-
-- **互動規則**：必須等所有組員各回覆至少一次，AI 才進行回覆。
-- **回饋格式**：每個子步驟 AI 皆依「步驟 2 Prompt」輸出格式給予回饋。
-
-**子步驟流程**：
-
-| 子步驟 | 觸發動作 | 提問來源 |
-|---|---|---|
-| 2-1 | 系統發送「步驟 2 開頭詞」，接續提問 | 依「子步驟 2-1 Prompt」生成 |
-| 2-2 | AI 回饋後提問 | 依「子步驟 2-2 Prompt」生成 |
-| 2-3 | AI 回饋後提問 | 依「子步驟 2-3 Prompt」生成 |
-| 2-4 | AI 回饋後提問，回覆後**結束本步驟** | 「子步驟 2-4 問題庫」隨機抽取 |
+- 檔案：`src/lib/mock-data.ts`
+- 內容：`essays`、`openClasses`、`activityGroupMap`、`essayPromptConfigs`、`openClassPromptConfigs`
+- 注意：此區資料目前不持久化到 DB
 
 ---
 
-#### 步驟 3 — 生成論點 〔個人互動〕
-
-- **互動規則**：個人發送訊息後，AI 即時給予回覆；**AI 不主動提問**。
-- **進入行為**：系統發送「步驟 3 開頭詞」。
-- **AI 行為**：依「步驟 3 Prompt」設定角色、步驟目標與輸出格式，僅針對學生提問進行回覆。
-
-**UI 元素**：
-
-- **文章結構樹** 按鈕：根據文體顯示對應的文章架構心智圖，供學生編輯。
-- **儲存** 按鈕：儲存學生編輯後的文章結構樹。
-
----
-
-#### 步驟 4 — 對比修正 〔小組互動〕
-
-- **互動規則**：必須等所有組員各回覆至少一次，AI 才進行回覆。
-- **進入行為**：系統發送「步驟 4 開頭詞」。
-
-**UI 元素 — 文章結構樹 按鈕（2 項功能）**：
-
-1. **繼續編輯自己在步驟 3 的文章結構樹**：編輯完成後點擊「儲存」。
-2. **瀏覽其他組員的文章結構樹**：透過下拉選單檢視（**唯讀**）。
-
----
-
-#### 步驟 5 — 摘要報告 〔無互動〕
-
-- **互動規則**：AI 一次性生成報告，學生無需輸入任何內容。
-- **資料來源**：步驟 1、2、3、4 的所有對話內容。
-- **生成規則**：結合「步驟 5 Prompt」生成摘要報告。
-- **UI 限制**：**不顯示文字輸入框**。
-
----
-
-#### 步驟 6 — 撰寫初稿 〔個人互動〕
-
-- **互動規則**：個人發送訊息後，AI 即時給予回覆。
-- **進入行為**：系統發送「步驟 6 開頭詞」。
-
-**UI 元素**：
-
-- **文章結構樹** 按鈕：顯示步驟 4 最終儲存的文章結構樹（**唯讀參考**）。
-- **撰寫作文** 按鈕：開啟作文文字框供學生撰寫初稿。
-
----
-
-#### 步驟 7 — 分析回饋 〔無互動〕
-
-- **互動規則**：AI 一次性生成分析，學生無需輸入任何內容。
-- **顯示內容**：系統先顯示該學生在步驟 6 撰寫的作文內容。
-- **生成規則**：AI 根據「步驟 7 Prompt」對作文生成分析回饋。
-- **UI 限制**：**不顯示文字輸入框**。
-
----
-
-#### 步驟 8 — 修改潤飾 〔個人互動〕
-
-- **互動規則**：個人發送訊息後，AI 即時給予回覆。
-
-**UI 元素**：
-
-- **撰寫作文** 按鈕：開啟編輯器，**預載步驟 6 儲存的作文內容**，供學生修改潤飾。
-- **儲存** 按鈕：儲存修改後的作文。
-
----
-
-#### 步驟 9 — 個人反思 〔個人反思〕
-
-- **互動規則**：系統發送固定問題，**AI 不參與回覆**，完全由系統控制問答流程。
-
-**子步驟流程**：
-
-| 順序 | 系統行為 |
-|---|---|
-| 1 | 系統發送「步驟 9 開頭詞」 |
-| 2 | 系統發送**第 1 個固定問題**，待學生回覆 |
-| 3 | 系統發送**第 2 個固定問題**，待學生回覆 |
-| 4 | 系統發送**第 3 個固定問題**，待學生回覆 |
-| 5 | 系統發送**第 4 個固定問題**，待學生回覆後，本步驟完成 |
-
----
-
-#### 步驟 10 — 總結報告 〔無互動〕
-
-- **互動規則**：AI 一次性生成最終報告，學生無需輸入任何內容。
-- **顯示內容**：系統先顯示該學生在步驟 8 儲存的最終作文內容。
-- **生成規則**：AI 根據「步驟 10 Prompt」生成完整分析回饋。
-- **UI 限制**：**不顯示文字輸入框**。
-
----
-
-## 3. 教師端規格
-
-教師登入後進入首頁，頂部導覽列包含 **3 個主功能選單**：系統管理、學習管理、課程管理。
-
-### 3.1 系統管理
-
-#### 3.1.1 帳號管理
-
-顯示所有使用者帳號，以表格呈現：
-
-| 欄位 | 內容 |
-|---|---|
-| # | 流水號 |
-| 帳號 | 使用者帳號 |
-| 姓名 | 使用者姓名 |
-| 學校 | 所屬學校 |
-| 角色 | 學生 / 教師 |
-| 修改密碼 | 提供修改密碼入口 |
-
-### 3.2 學習管理
-
-#### 3.2.1 課堂觀察
-
-- 教師可查看已派發的寫作任務。
-- 點選任務後進入「**檢視學習進度**」頁面。
-
-**關鍵功能**：教師在「檢視學習進度」頁面可點選指定步驟按鈕，讓所有學生端**統一跳轉**至該步驟（即 §1.3 的步驟切換控制）。
-
-##### 檢視學習進度頁面（表格）
-
-| 欄位 | 內容 |
-|---|---|
-| 序號 | 流水號 |
-| 小組名稱 | 組別名稱 |
-| 成員名單 | 所有成員姓名 |
-| 小組進度 | 目前所在步驟（**即時更新**） |
-| 動作 | 「查看小組對話」、「查看個人進度」 |
-
-##### 動作按鈕行為
-
-- **查看小組對話**：顯示小組互動模式步驟（**1、2、4**）的完整對話紀錄。
-- **查看個人進度**：以表格顯示個人進度。
-
-##### 個人進度表格
-
-| 欄位 | 內容 |
-|---|---|
-| 序號 | 流水號 |
-| 姓名 | 學生姓名 |
-| 個人進度 | 目前所在步驟 |
-| 動作 | 「查看對話紀錄」— 可透過下拉選單檢視個人互動模式（**3、6、8**）的對話紀錄 |
-
-### 3.3 課程管理
-
-#### 3.3.1 寫作主題管理
-
-教師可新增並管理寫作主題。
-
-##### 列表欄位
-
-| 欄位 | 內容 |
-|---|---|
-| 序號 | 流水號 |
-| 寫作主題 | 主題名稱 |
-| 文體類別 | 文體類型 |
-| 動作 | 「修改」、「SystemPrompt」、「問題庫」 |
-
-##### 動作按鈕行為
-
-| 按鈕 | 功能 |
-|---|---|
-| 修改 | 編輯寫作主題、文體、寫作引導說明，按「確認」儲存 |
-| SystemPrompt | 分別輸入**十個學習步驟**各自的「步驟 Prompt」內容（角色設定、步驟目標、輸出格式） |
-| 問題庫 | 手動輸入**子步驟 1-1、1-2、1-5、2-4** 的問題庫題目 |
-
-##### 新增主題
-
-路徑：點選「新增寫作主題」按鈕 → 輸入寫作主題、文體、寫作引導說明 → 按「確認」儲存。
-
-#### 3.3.2 寫作任務管理
-
-教師可針對**班級**建立並管理寫作任務。
-
-##### 列表欄位
-
-| 欄位 | 內容 |
-|---|---|
-| 序號 | 流水號 |
-| 班級 | 班級名稱 |
-| 寫作主題 | 對應主題 |
-| 文體類別 | 文體類型 |
-| 討論時長 | 時間設定 |
-| 動作 | 「修改」、「組別管理」、「SystemPrompt」、「刪除」 |
-
-##### 動作按鈕行為
-
-| 按鈕 | 功能 |
-|---|---|
-| 修改 | 編輯班級名稱、寫作主題、討論時長、補充資料，按「確認」儲存 |
-| 組別管理 | 建立新組別（輸入組別名稱 → 點「建立組別」），並從「未分配學生」列表以**拖曳**方式將學生分配至對應組別，完成後點選「儲存分組」 |
-| SystemPrompt | 針對此班級任務設定覆蓋的步驟 Prompt（**優先級高於寫作主題設定**） |
-| 刪除 | 刪除該寫作任務 |
-
-##### 新增任務
-
-路徑：點選「新增班級」按鈕 → 輸入班級名稱、寫作主題、討論時長、補充資料 → 按「確認」儲存。
-
-##### Prompt 優先級規則
-
-```
-班級任務層級 SystemPrompt  >  寫作主題層級 SystemPrompt
-```
-（班級任務設定的 Prompt 會覆蓋寫作主題設定的 Prompt）
-
----
-
-## 4. Prompt 與問題庫參考
-
-### 4.1 Prompt 命名規則
-
-每個寫作主題下，Prompt 以「步驟編號 + 用途」命名，供工程端識別與呼叫：
-
-| 識別名稱 | 用途 | 設定入口 |
-|---|---|---|
-| **步驟 N Prompt** | 設定 AI 角色、步驟目標、輸出格式（N = 1 ~ 10） | 寫作主題管理 > SystemPrompt |
-| **子步驟 X-Y Prompt** | 生成對應子步驟的提問（X = 步驟編號, Y = 子步驟序號） | 寫作主題管理 > SystemPrompt |
-| **子步驟 X-Y 問題庫** | 人工輸入的提問題庫，系統隨機抽取一題 | 寫作主題管理 > 問題庫 |
-
-### 4.2 問題庫適用子步驟
-
-以下子步驟採用**問題庫**（由教師手動輸入）而非 AI 動態生成：
-
-- **子步驟 1-1**：步驟 1 第一輪提問
-- **子步驟 1-2**：步驟 1 第二輪提問
-- **子步驟 1-5**：步驟 1 第五輪提問
-- **子步驟 2-4**：步驟 2 第四輪提問
-
-### 4.3 步驟開頭詞
-
-以下步驟進入時，系統會發送一則預設「開頭詞」：
-
-> **步驟 1、步驟 2、步驟 3、步驟 4、步驟 6、步驟 8、步驟 9**
-
-開頭詞內容由教師在 SystemPrompt 頁面設定。
-
-（註：步驟 5、7、10 為「無互動」模式，直接顯示 AI 一次性生成的報告，無開頭詞。）
-
----
-
-## 附錄 A — 快速查詢表
-
-### A.1 步驟 × 模式 × Prompt × 問題庫對應表
-
-| 步驟 | 名稱 | 模式 | 步驟 Prompt | 子步驟 Prompt | 子步驟 問題庫 | 開頭詞 |
-|---|---|---|---|---|---|---|
-| 1 | 審視題目 | 小組互動 | ✓ | 1-3, 1-4 | 1-1, 1-2, 1-5 | ✓ |
-| 2 | 蒐集資料 | 小組互動 | ✓ | 2-1, 2-2, 2-3 | 2-4 | ✓ |
-| 3 | 生成論點 | 個人互動 | ✓ | — | — | ✓ |
-| 4 | 對比修正 | 小組互動 | ✓ | — | — | ✓ |
-| 5 | 摘要報告 | 無互動 | ✓ | — | — | ✗ |
-| 6 | 撰寫初稿 | 個人互動 | ✓ | — | — | ✓ |
-| 7 | 分析回饋 | 無互動 | ✓ | — | — | ✗ |
-| 8 | 修改潤飾 | 個人互動 | ✓ | — | — | ✓ |
-| 9 | 個人反思 | 個人反思 | — | — | — | ✓ |
-| 10 | 總結報告 | 無互動 | ✓ | — | — | ✗ |
-
-### A.2 步驟 × UI 元素對應表
-
-| 步驟 | 文字框 | 發送訊息 | 文章結構樹 | 撰寫作文 | 儲存 | 特殊說明 |
-|---|---|---|---|---|---|---|
-| 1 | ✓ | ✓ | — | — | — | — |
-| 2 | ✓ | ✓ | — | — | — | — |
-| 3 | ✓ | ✓ | ✓（可編輯） | — | ✓（存結構樹） | — |
-| 4 | ✓ | ✓ | ✓（可編輯自己 + 唯讀他人） | — | ✓（存結構樹） | — |
-| 5 | ✗ | ✗ | — | — | — | 僅顯示報告 |
-| 6 | ✓ | ✓ | ✓（唯讀，步驟 4 最終版） | ✓ | — | — |
-| 7 | ✗ | ✗ | — | — | — | 顯示作文 + 分析 |
-| 8 | ✓ | ✓ | — | ✓（預載步驟 6 作文） | ✓（存作文） | — |
-| 9 | ✓ | ✓ | — | — | — | 4 個固定問題，AI 不介入 |
-| 10 | ✗ | ✗ | — | — | — | 顯示最終作文 + 分析 |
-
-### A.3 資料依賴關係（前一步驟 → 後一步驟）
-
-| 後續步驟 | 依賴來源 |
-|---|---|
-| 步驟 4 | 步驟 3 的結構樹（可繼續編輯）+ 其他組員的結構樹（唯讀） |
-| 步驟 5 | 步驟 1、2、3、4 所有對話內容 |
-| 步驟 6 | 步驟 4 最終儲存的結構樹（唯讀參考） |
-| 步驟 7 | 步驟 6 的作文 |
-| 步驟 8 | 步驟 6 儲存的作文（預載編輯器） |
-| 步驟 10 | 步驟 8 儲存的最終作文 |
-
-### A.4 教師端 → 學生端控制流
-
-```
-教師端：課堂觀察 → 檢視學習進度 → 點選步驟按鈕
-                                          │
-                                          ▼
-學生端：所有學生統一跳轉至該步驟（無法自行切換）
+## 3. 核心資料模型
+
+來源：`src/lib/types.ts`
+
+## 3.1 UserAccount
+
+```ts
+{
+  username: string;
+  name: string;
+  school: string;
+  role: "student" | "teacher" | "admin";
+  ownerTeacherUsername?: string; // student 才有
+  classNumber?: string; // student 才有
+}
 ```
 
-### A.5 教師端功能樹
+## 3.2 Essay（在 mock-data 中）
 
+```ts
+{
+  id: string;
+  title: string;
+  genre: string;
+  description: string;
+  enabled: boolean;
+}
 ```
-教師端
-├── 系統管理
-│   └── 帳號管理
-├── 學習管理
-│   └── 課堂觀察
-│       └── 檢視學習進度
-│           ├── 查看小組對話（步驟 1、2、4）
-│           └── 查看個人進度
-│               └── 查看對話紀錄（步驟 3、6、8）
-└── 課程管理
-    ├── 寫作主題管理
-    │   ├── 修改（主題、文體、引導說明）
-    │   ├── SystemPrompt（10 個步驟 Prompt + 子步驟 Prompt）
-    │   └── 問題庫（子步驟 1-1、1-2、1-5、2-4）
-    └── 寫作任務管理
-        ├── 修改（班級、主題、時長、補充資料）
-        ├── 組別管理（建立組別 + 拖曳分配學生）
-        ├── SystemPrompt（班級層級覆蓋，優先級較高）
-        └── 刪除
+
+## 3.3 OpenClassTask / OpenClassView（在 mock-data 中）
+
+儲存主體（Task）：
+
+```ts
+{
+  id: string;
+  school: string;
+  classNumber: string;
+  essayId: string;
+  durationMinutes: number;
+  supplemental: string;
+}
 ```
+
+對外顯示（View）會補：
+
+```ts
+{
+  essayTitle: string;
+  essayGenre: string;
+}
+```
+
+## 3.4 Activity
+
+API 輸出給學習/分組流程使用：
+
+```ts
+{
+  id: string; // 對應 openClass id
+  school: string;
+  classNumber: string;
+  essayId: string;
+  title: string; // essay title
+  genre: string; // essay genre
+  durationMinutes: number;
+  supplemental: string;
+  groups: ActivityGroup[];
+}
+```
+
+## 3.5 SessionState
+
+```ts
+{
+  id: string;
+  createdAt: string;
+  currentStep: number;
+  participants: string[];
+  messages: ChatMessage[];
+  groupGate: Record<string, string[]>;
+  reflectionIndex: Record<string, number>;
+  workflow: "spec10" | "legacy_phase";
+  phaseMax: number;
+  activityId?: string;
+  activityTitle?: string;
+  groupId?: string;
+  groupName?: string;
+  promptConfig: PromptConfig;
+  stepState: { step1Substep: number; step2Substep: number };
+  outlines: Record<string, string>;
+  draftStep6: Record<string, string>;
+  draftStep8: Record<string, string>;
+  reports: {
+    step5?: string;
+    step7: Record<string, string>;
+    step10: Record<string, string>;
+  };
+}
+```
+
+---
+
+## 4. 權限與資料邊界
+
+## 4.1 角色
+
+- `student`：只能操作自己參與的 session 與 artifact
+- `teacher`：僅可管理自己名下學生、自己可見班級的任務與分組
+- `admin`：可管理全域
+
+## 4.2 教師可見範圍定義
+
+教師可見學生：
+
+- 條件：`role = student` 且 `ownerTeacherUsername = 教師username`
+
+教師可見班級：
+
+- 由上述學生集合的 `(school, classNumber)` 推導
+
+教師可見寫作任務（open classes）：
+
+- 任務的 `(school, classNumber)` 必須落在教師可見班級集合
+
+教師可操作分組候選學生：
+
+- 可見學生中，`student.school == activity.school && student.classNumber == activity.classNumber`
+
+## 4.3 班級歸屬規則（重要）
+
+同一學校 + 同一班級號碼，不可同時掛在不同教師名下：
+
+- 建立/更新 student 都會檢查 `class_owner_teacher_conflict`
+
+---
+
+## 5. 學習步驟引擎規格
+
+來源：`src/lib/engine.ts` + `src/lib/spec.ts`
+
+## 5.1 步驟與模式
+
+- 1 審視題目：`group_interaction`
+- 2 蒐集資料：`group_interaction`
+- 3 生成論點：`personal_interaction`
+- 4 對比修正：`group_interaction`
+- 5 摘要報告：`non_interactive`
+- 6 撰寫初稿：`personal_interaction`
+- 7 分析回饋：`non_interactive`
+- 8 修改潤飾：`personal_interaction`
+- 9 個人反思：`personal_reflection`
+- 10 總結報告：`non_interactive`
+
+## 5.2 Step 1 / Step 2 子步驟門檻
+
+- Step1 有 5 個子步驟
+- Step2 有 4 個子步驟
+- 每個子步驟需「全部 participants 都回覆至少一次」，AI 才回覆並進入下一子步
+- Gate key 格式：`"{step}-{substep}"`
+
+## 5.3 問題來源優先序
+
+每個子步驟問題產生邏輯：
+
+1. 先看 `questionBanks[key]`（若有題目則隨機抽）
+2. 否則看 `subStepPrompts[key]`（包成 `請討論：...`）
+3. 否則用內建 fallback 文案
+
+## 5.4 非互動步驟行為
+
+教師切到非互動步驟時即生成：
+
+- Step5：彙整步驟 1~4 最近訊息，寫入 `reports.step5`
+- Step7：為每位 participant 生成 `reports.step7[user]`
+- Step10：為每位 participant 生成 `reports.step10[user]`
+
+## 5.5 個人反思（Step9）
+
+- 固定 4 題反思題
+- student 每送一次訊息，`reflectionIndex[user] + 1`
+- 未達 4 題：系統送下一題
+- 完成：系統送「個人反思完成」
+
+## 5.6 Artifact 儲存
+
+student 可儲存三種內容：
+
+- `outline` -> `session.outlines[username]`
+- `draft6` -> `session.draftStep6[username]`
+- `draft8` -> `session.draftStep8[username]`
+
+---
+
+## 6. 前端頁面規格
+
+## 6.1 `/login`
+
+- 帳密登入，寫入 HTTP-only cookie：
+  - `llm4w_user`
+  - `llm4w_role`
+- 依角色導向：
+  - student -> `/student`
+  - teacher/admin -> `/teacher`
+
+## 6.2 `/student`
+
+主要能力：
+
+1. 顯示可加入的活動列表（只會看到自己所屬 group 的任務）
+2. 點「加入討論」：
+   - 若已有同 activity 的 `spec10` session 且自己在 participants，直接回傳舊 session
+   - 否則建立新 session（participants = 自己所在 group members）
+3. 顯示聊天訊息、步驟資訊、寫作主題資訊
+4. 可儲存 outline/draft6/draft8
+5. 可查歷史 session
+
+畫面文案目前用「班級號碼」顯示任務班級。
+
+## 6.3 `/teacher`
+
+三大分頁：
+
+- 系統管理
+- 學習管理
+- 課程管理
+
+### 系統管理
+
+- 帳號 CRUD（teacher/admin 依權限限制）
+- reset password
+- CSV 批次建帳
+- student 帳號必填 `classNumber`
+
+### 學習管理
+
+- 監看 `spec10` sessions
+- 教師可切換步驟（`/api/teacher/step`）
+- 看小組訊息（1/2/4）
+- 看個人互動訊息（3/6/8）與個人進度
+
+### 課程管理
+
+- 寫作主題管理（essay CRUD）
+- 主題 Prompt/問題庫編輯（essay prompt config）
+- 寫作任務管理（open class）：
+  - 班級下拉：來自可見 student 的 classNumber 清單
+  - 主題下拉：顯示 `essayId / title`
+  - 支援新增與編輯
+  - 在同一編輯表單可寫 `步驟1` / `子步驟2-1` 的任務 prompt 覆蓋
+- 組別管理：
+  - 先選任務（顯示為「班級 + 任務 + id」）
+  - 設定組數
+  - `隨機平均分組`
+  - 或 `先建空組拖曳`
+  - 儲存分組
+
+---
+
+## 7. API 契約（現行）
+
+以下為重點 API，完整路由可參考 `README.md`。
+
+## 7.1 Auth
+
+### `POST /api/auth/login`
+
+Request:
+
+```json
+{ "username": "teacher", "password": "teacher123" }
+```
+
+Response:
+
+```json
+{ "ok": true, "user": { "username": "teacher", "role": "teacher" }, "redirectTo": "/teacher" }
+```
+
+Error:
+
+- `401 { error: "invalid_credentials" }`
+
+### `GET /api/auth/me`
+
+- 已登入：`{ authenticated: true, user }`
+- 未登入：`401 { authenticated: false }`
+
+### `POST /api/auth/logout`
+
+- 清除 cookie
+
+## 7.2 Student
+
+### `GET /api/student/activities`
+
+- 權限：student
+- 回傳自己可參與 activities
+
+### `POST /api/student/join`
+
+Request:
+
+```json
+{ "activityId": "oc-001" }
+```
+
+Behavior:
+
+- 找 activity + 自己所在 group
+- 有舊 session 則回舊 session
+- 否則建立新 session（workflow: `spec10`）
+
+Error:
+
+- `403 forbidden`
+- `404 activity_not_found`
+- `403 not_group_member`
+
+### `GET /api/student/history?activityId=...`
+
+- 回傳該 student 參與過的 sessions（可選 activity 過濾）
+
+## 7.3 Session & Chat
+
+### `POST /api/session/start`
+
+- 通用 session 建立（需 participants）
+
+### `GET /api/session/:sessionId`
+
+- 讀 session payload
+
+### `POST /api/chat/send`
+
+Request:
+
+```json
+{ "sessionId": "...", "userId": "student", "text": "..." }
+```
+
+Error（400）：
+
+- `unknown_participant`
+- `step_non_interactive`
+
+### `POST /api/session/artifact/save`
+
+Request:
+
+```json
+{ "sessionId": "...", "type": "outline|draft6|draft8", "content": "..." }
+```
+
+限制：
+
+- 需 student
+- 需為 session participant
+
+## 7.4 Teacher Learning APIs
+
+### `POST /api/teacher/step`
+
+Request:
+
+```json
+{ "sessionId": "...", "step": 6 }
+```
+
+- 權限：teacher/admin
+- 使用 `switchStep`
+
+### `GET /api/teacher/monitor`
+
+- 回傳 `workflow === spec10` 的 session 列表與訊息
+
+### `GET /api/teacher/personal-progress?sessionId=...&username=...`
+
+- 權限：teacher/admin
+- 回傳 participant 的個人進度統計
+- `username` 有值時回傳個人訊息串
+
+## 7.5 Admin/Course APIs
+
+### `GET/POST /api/admin/essays`
+
+- 權限：teacher/admin
+- 管理寫作主題
+
+### `GET/POST /api/admin/prompts/essay`
+
+- 權限：teacher/admin
+- 管理 essay 層級 prompt config
+
+### `GET/POST /api/admin/openclasses`
+
+- 權限：teacher/admin
+- GET：
+  - admin 看全部
+  - teacher 僅看可見班級任務
+- POST（新增/編輯任務）：
+  - 欄位：`id? classNumber essayId durationMinutes supplemental school? promptOverride?`
+  - teacher 僅可對可見班級操作
+  - `promptOverride` 寫入 open class prompt config
+
+### `GET/POST /api/admin/prompts/openclass`
+
+- 權限：teacher/admin
+- 管理任務層級 prompt config
+
+### `GET /api/admin/activities`
+
+- 權限：teacher/admin
+- 回傳可見範圍 activities + `studentCandidates`
+
+### `POST /api/admin/groups`
+
+Request:
+
+```json
+{ "activityId": "oc-001", "groups": [{ "groupId": "g1", "groupName": "1", "members": ["student"] }] }
+```
+
+Behavior:
+
+- 依活動班級推導 `allowedStudents`
+- 只保留允許學生，且自動去重
+- `groupName` 正規化為數字字串
+
+### `GET/POST/PUT/DELETE /api/admin/users`
+
+- 權限：teacher/admin
+- 規則：
+  - teacher 只能管理自己與自己學生
+  - student 必須有 `ownerTeacherUsername` + `classNumber`
+  - 禁止自刪、禁止不合法角色變更
+  - 支援 CSV 批次建立（5/6/7 欄格式）
+
+---
+
+## 8. Prompt 配置規格
+
+`PromptConfig` 結構：
+
+```ts
+{
+  stepPrompts: Record<string, string>;
+  subStepPrompts: Record<string, string>;
+  questionBanks: Record<string, string[]>;
+}
+```
+
+套用規則：
+
+1. 先取 essay config
+2. 再 merge openClass config（同 key 覆蓋）
+
+實作函式：`resolvePromptConfigForActivity(activityId)`
+
+---
+
+## 9. 目前預設資料（Bootstrap）
+
+預設帳號（user-store & mock-data 對齊）：
+
+- `admin / admin123`
+- `teacher / teacher123`
+- `student / student123`（班級 701，綁 teacher）
+- `s1 / student123`（班級 701，綁 teacher）
+- `s2 / student123`（班級 701，綁 teacher）
+- `s3 / student123`（班級 702，綁 teacher）
+
+預設 essays：
+
+- `essay-1 科技與生活`
+- `essay-2 我的校園角落`
+
+預設 openClasses：
+
+- `oc-001`：Demo High / 701 / essay-1
+- `oc-002`：Demo High / 702 / essay-2
+
+---
+
+## 10. 不變量（AI 生成時必須遵守）
+
+1. 同校同班只能對應單一教師（student 建立與更新都要檢查）
+2. teacher 的任務與分組操作必須受可見班級限制
+3. 建立寫作任務時，班級與主題必須來自可選清單（非自由文字）
+4. 任務編輯必須可同時維護任務 prompt 覆蓋
+5. Step1/2 必須維持「所有組員回覆才 AI 回覆」的 group gate
+6. Step5/7/10 必須是 non-interactive（學生送訊息會報錯）
+7. student artifact 只能存到自己參與的 session
+8. session/user store 必須維持「有 DB 用 DB，無 DB 用 memory」雙模式
+
+---
+
+## 11. 已知限制（現況）
+
+1. essays/openClasses/groups/prompt configs 仍為 in-memory，尚未持久化 DB
+2. `mock-data` 與 `user-store` 分層共存，重啟後 domain 資料會回預設
+3. 群組隨機分配採前端簡單亂數，不含種子與可重現性
+4. 提示詞編輯 UI 目前僅暴露部分 key（step1 / 2-1 / 1-3 / 1-1 等）
+
+---
+
+## 12. 重建指引（給未來 AI）
+
+若要生成相同行為系統，請至少完整實作：
+
+1. `types.ts` 的資料型別（特別是 `UserAccount.classNumber`、`Activity.classNumber/essayId`）
+2. `engine.ts` 的 10 步驟模式與 gate / reflection 行為
+3. `user-store.ts` 的衝突檢查與 role-based CRUD 規則
+4. `mock-data.ts` 的 open class + prompt merge + group sanitizer
+5. `admin/users`, `admin/openclasses`, `admin/activities`, `admin/groups` 路由的可見範圍過濾
+6. `/teacher` UI 的：
+   - 任務下拉（班級/主題）
+   - 任務編輯（含 prompt 覆蓋）
+   - 分組兩種方式（隨機、拖曳）
+
+只要上述 6 點一致，系統核心行為即可與目前版本對齊。
