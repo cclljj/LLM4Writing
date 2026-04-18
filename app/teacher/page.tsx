@@ -1047,12 +1047,28 @@ export default function TeacherPage() {
 
           <div className="card" style={{ marginBottom: 10 }}>
             <h3 style={{ marginBottom: 8 }}>CSV 貼上批次新增</h3>
-            <small>
-              格式：`classnumber,username,name,school,role,password[,ownerTeacherUsername]`。
-              {loginRole === "admin"
-                ? "admin 建 student 時，必填 ownerTeacherUsername。"
-                : "teacher 建立 student 時，系統會自動綁定目前登入教師。"}
-            </small>
+            <div style={{ marginBottom: 8 }}>
+              <small style={{ display: "block" }}>
+                請使用逗號分隔，欄位順序固定為：
+                <code style={{ marginLeft: 6 }}>
+                  classnumber,username,name,school,role,password[,ownerTeacherUsername]
+                </code>
+              </small>
+              <small style={{ display: "block", marginTop: 4 }}>
+                role 僅可填 <code>student</code> 或 <code>teacher</code>（不可填 <code>admin</code>）。
+              </small>
+              <small style={{ display: "block", marginTop: 4 }}>
+                username 規則：2~32 字元，可用英數字與 <code>.</code>、<code>_</code>、<code>-</code>。
+              </small>
+              <small style={{ display: "block", marginTop: 4 }}>
+                password 至少 6 碼；student 必填 classnumber。
+              </small>
+              <small style={{ display: "block", marginTop: 4 }}>
+                {loginRole === "admin"
+                  ? "admin 批次建立 student 時，必填 ownerTeacherUsername，且需為既有教師 username。"
+                  : "teacher 批次建立時僅可建立 student；ownerTeacherUsername 會自動綁定為目前登入教師。"}
+              </small>
+            </div>
             <textarea
               style={{ marginTop: 8 }}
               value={csvInput}
