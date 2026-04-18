@@ -53,5 +53,14 @@ export async function POST(request: NextRequest) {
     saveEssayPromptConfig(saved.id, body.promptConfig);
   }
 
-  return NextResponse.json({ saved });
+  const config = getEssayPromptConfig(saved.id);
+
+  const savedWithPrompt = {
+    ...saved,
+    step1Prompt: config.stepPrompts["1"] ?? "",
+    subStep13Prompt: config.subStepPrompts["1-3"] ?? "",
+    questionBank11: config.questionBanks["1-1"] ?? []
+  };
+
+  return NextResponse.json({ saved: savedWithPrompt });
 }
