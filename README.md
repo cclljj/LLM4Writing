@@ -47,6 +47,15 @@ npx --yes vercel --prod
 - `/student` 學生端操作頁
 - `/teacher` 教師端操作頁
 
+
+## 登入流程
+
+- 登入頁：`/login`
+- 預設測試帳號：
+  - 學生：`student / student123`
+  - 教師：`teacher / teacher123`
+- 可透過環境變數覆寫：`DEFAULT_STUDENT_USER`、`DEFAULT_STUDENT_PASS`、`DEFAULT_TEACHER_USER`、`DEFAULT_TEACHER_PASS`
+
 ## API 一覽
 
 - `GET /api/health`

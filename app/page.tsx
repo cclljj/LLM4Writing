@@ -5,18 +5,16 @@ export default function HomePage() {
     <main>
       <div className="card">
         <h1>LLM4Writing Vercel-native</h1>
+        <p>登入流程已恢復：學生與教師需先登入，並依角色導向對應系統頁面。</p>
         <p>
-          這個版本已改為 Vercel 原生架構：Next.js App Router + Serverless API。
-        </p>
-        <p>
-          目前先完成「可部署、可操作、可擴充」骨架，並將 SPEC 中最核心的步驟模式規則落實到 API。
+          請先從 <Link href="/login">登入頁</Link> 進入。
         </p>
       </div>
 
       <div className="row">
         <div className="col card">
           <h2>學生端</h2>
-          <p>建立/加入學習 session、送出訊息、查看 AI/系統回覆。</p>
+          <p>進行學習 session、送出訊息、查看 AI/系統回覆。</p>
           <Link href="/student">前往學生端</Link>
         </div>
 
@@ -30,6 +28,15 @@ export default function HomePage() {
       <div className="card">
         <h2>API</h2>
         <ul>
+          <li>
+            <code>POST /api/auth/login</code>
+          </li>
+          <li>
+            <code>POST /api/auth/logout</code>
+          </li>
+          <li>
+            <code>GET /api/auth/me</code>
+          </li>
           <li>
             <code>GET /api/health</code>
           </li>

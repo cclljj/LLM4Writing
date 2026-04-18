@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getCurrentUser } from "@/src/lib/auth-server";
 import { getSession, saveSession } from "@/src/lib/store";
 import { switchStep } from "@/src/lib/engine";
 import { SwitchStepPayload } from "@/src/lib/types";
 
 export async function POST(request: NextRequest) {
+  const user = await getCurrentUser();
+  if (!user || user.role !== "teacher") {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
+
   const payload = (await request.json()) as SwitchStepPayload;
   const session = await getSession(payload.sessionId);
 
