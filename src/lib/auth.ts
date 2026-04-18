@@ -1,4 +1,4 @@
-import { validateUserCredential } from "@/src/lib/mock-data";
+import { validateUserCredentialStore } from "@/src/lib/user-store";
 
 export type AuthRole = "student" | "teacher" | "admin";
 
@@ -7,8 +7,8 @@ export interface AuthUser {
   role: AuthRole;
 }
 
-export function validateCredential(username: string, password: string): AuthUser | undefined {
-  const user = validateUserCredential(username, password);
+export async function validateCredential(username: string, password: string): Promise<AuthUser | undefined> {
+  const user = await validateUserCredentialStore(username, password);
   if (!user) {
     return undefined;
   }

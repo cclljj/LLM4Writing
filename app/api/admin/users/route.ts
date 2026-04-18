@@ -1,17 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/src/lib/auth-server";
-import {
-  createUserAccount,
-  deleteUserAccount,
-  getTeacherUsers,
-  getUser,
-  getUsers,
-  getUsersVisibleToTeacher,
-  resetUserPassword,
-  updateUserAccount
-} from "@/src/lib/mock-data";
 import { AuthUser } from "@/src/lib/auth";
 import { UserAccount } from "@/src/lib/types";
+import {
+  createUserStore,
+  deleteUserStore,
+  getTeacherUsersStore,
+  getUserStore,
+  getUsersVisibleToTeacherStore,
+  listUsersStore,
+  resetUserPasswordStore,
+  updateUserStore
+} from "@/src/lib/user-store";
 
 type ManageRole = "student" | "teacher" | "admin";
 
@@ -31,10 +31,10 @@ export async function GET() {
   }
 
   if (user.role === "admin") {
-    return NextResponse.json({ users: getUsers() });
+    return NextResponse.json({ users: await listUsersStore() });
   }
 
-  return NextResponse.json({ users: getUsersVisibleToTeacher(user.username) });
+  return NextResponse.json({ users: await getUsersVisibleToTeacherStore(user.username) });
 }
 
 export async function POST(request: NextRequest) {
@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "password_too_short" }, { status: 400 });
     }
 
-    const target = getUser(body.username);
+    const target = await getUserStore(body.username);
     if (!target) {
       return NextResponse.json({ error: "user_not_found" }, { status: 404 });
     }
@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "forbidden_target" }, { status: 403 });
     }
 
-    const ok = resetUserPassword(body.username, body.newPassword);
+    const ok = await resetUserPasswordStore(body.username, body.newPassword);
     if (!ok) {
       return NextResponse.json({ error: "user_not_found" }, { status: 404 });
     }
@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "missing_required_fields" }, { status: 400 });
     }
 
-    const checked = validateUserFields(body.user);
+    const checked = await validateUserFields(body.user);
     if (!checked.ok) {
       return NextResponse.json({ error: checked.error }, { status: 400 });
     }
@@ -100,7 +100,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const result = createUserAccount(checked.user);
+    const result = await createUserStore(checked.user);
     if (!result.ok) {
       return NextResponse.json({ error: result.error }, { status: 409 });
     }
@@ -118,7 +118,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: parsed.error }, { status: 400 });
     }
 
-    const existing = new Set(getUsers().map((item) => item.username));
+    const existing = new Set((await listUsersStore()).map((item) => item.username));
     const seenInFile = new Set<string>();
     const errors: Array<{ line: number; message: string }> = [];
     const validRows: Array<{
@@ -130,17 +130,17 @@ export async function POST(request: NextRequest) {
       ownerTeacherUsername?: string;
     }> = [];
 
-    parsed.rows.forEach((row) => {
-      const checked = validateUserFields(row.values);
+    for (const row of parsed.rows) {
+      const checked = await validateUserFields(row.values);
       if (!checked.ok) {
         errors.push({ line: row.line, message: checked.error });
-        return;
+        continue;
       }
 
       if (requester.role === "teacher") {
         if (checked.user.role !== "student") {
           errors.push({ line: row.line, message: "teacher_can_only_create_students" });
-          return;
+          continue;
         }
         checked.user.ownerTeacherUsername = requester.username;
       }
@@ -148,33 +148,34 @@ export async function POST(request: NextRequest) {
       if (requester.role === "admin") {
         if (checked.user.role === "admin") {
           errors.push({ line: row.line, message: "cannot_create_admin_account" });
-          return;
+          continue;
         }
         if (checked.user.role === "student" && !checked.user.ownerTeacherUsername) {
           errors.push({ line: row.line, message: "missing_owner_teacher" });
-          return;
+          continue;
         }
       }
 
       if (existing.has(checked.user.username)) {
         errors.push({ line: row.line, message: `username_exists:${checked.user.username}` });
-        return;
+        continue;
       }
       if (seenInFile.has(checked.user.username)) {
         errors.push({ line: row.line, message: `duplicated_username_in_csv:${checked.user.username}` });
-        return;
+        continue;
       }
+
       seenInFile.add(checked.user.username);
       validRows.push(checked.user);
-    });
+    }
 
     if (errors.length > 0) {
       return NextResponse.json({ error: "csv_validation_failed", details: errors }, { status: 400 });
     }
 
-    validRows.forEach((newUser) => {
-      createUserAccount(newUser);
-    });
+    for (const newUser of validRows) {
+      await createUserStore(newUser);
+    }
 
     return NextResponse.json({ ok: true, createdCount: validRows.length });
   }
@@ -197,7 +198,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: "missing_required_fields" }, { status: 400 });
   }
 
-  const target = getUser(body.username);
+  const target = await getUserStore(body.username);
   if (!target) {
     return NextResponse.json({ error: "user_not_found" }, { status: 404 });
   }
@@ -256,17 +257,15 @@ export async function PUT(request: NextRequest) {
     if (target.username === requester.username && patch.role && patch.role !== "admin") {
       return NextResponse.json({ error: "cannot_downgrade_self_role" }, { status: 400 });
     }
-
     if (patch.role === "admin" && target.role !== "admin") {
       return NextResponse.json({ error: "cannot_promote_to_admin" }, { status: 403 });
     }
-
     if ((patch.role === "student" || target.role === "student") && !patch.ownerTeacherUsername && target.role !== "student") {
       return NextResponse.json({ error: "missing_owner_teacher" }, { status: 400 });
     }
   }
 
-  const result = updateUserAccount(body.username, patch);
+  const result = await updateUserStore(body.username, patch);
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: 400 });
   }
@@ -285,7 +284,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: "missing_required_fields" }, { status: 400 });
   }
 
-  const target = getUser(body.username);
+  const target = await getUserStore(body.username);
   if (!target) {
     return NextResponse.json({ error: "user_not_found" }, { status: 404 });
   }
@@ -302,7 +301,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: "cannot_delete_admin" }, { status: 403 });
   }
 
-  const result = deleteUserAccount(body.username);
+  const result = await deleteUserStore(body.username);
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: 400 });
   }
@@ -329,7 +328,7 @@ function isValidRole(role: string): role is ManageRole {
   return role === "student" || role === "teacher" || role === "admin";
 }
 
-function validateUserFields(input: UserInput):
+async function validateUserFields(input: UserInput): Promise<
   | {
       ok: true;
       user: {
@@ -341,7 +340,8 @@ function validateUserFields(input: UserInput):
         ownerTeacherUsername?: string;
       };
     }
-  | { ok: false; error: string } {
+  | { ok: false; error: string }
+> {
   const username = (input.username ?? "").trim();
   const name = (input.name ?? "").trim();
   const school = (input.school ?? "").trim();
@@ -362,7 +362,8 @@ function validateUserFields(input: UserInput):
     return { ok: false, error: "password_too_short" };
   }
   if (role === "student" && ownerTeacherUsername) {
-    const teacherExists = getTeacherUsers().some((teacher) => teacher.username === ownerTeacherUsername);
+    const teachers = await getTeacherUsersStore();
+    const teacherExists = teachers.some((teacher) => teacher.username === ownerTeacherUsername);
     if (!teacherExists) {
       return { ok: false, error: "owner_teacher_not_found" };
     }

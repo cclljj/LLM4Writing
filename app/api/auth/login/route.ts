@@ -6,7 +6,7 @@ export async function POST(request: NextRequest) {
   const username = (body.username ?? "").trim();
   const password = body.password ?? "";
 
-  const user = validateCredential(username, password);
+  const user = await validateCredential(username, password);
   if (!user) {
     return NextResponse.json({ error: "invalid_credentials" }, { status: 401 });
   }

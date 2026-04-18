@@ -49,3 +49,5 @@ node_modules/
 
 ### Keep Maven wrapper ###
 .mvn
+.vercel
+.env*.local
