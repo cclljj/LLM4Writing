@@ -686,12 +686,21 @@ export default function TeacherPage() {
 
   async function saveGroups() {
     if (!selectedActivityId) return;
-    await fetch("/api/admin/groups", {
+    const response = await fetch("/api/admin/groups", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ activityId: selectedActivityId, groups: editableGroups })
     });
-    await refreshAll();
+    const data = await response.json();
+    if (!response.ok) {
+      setError(data.error ?? "save_groups_failed");
+      return;
+    }
+
+    const updated = data.updated as ActivityRow;
+    setActivities((prev) => prev.map((activity) => (activity.id === updated.id ? updated : activity)));
+    setEditableGroups(updated.groups.map((group) => ({ ...group, members: [...group.members] })));
+    setError("");
   }
 
   function addGroup() {
@@ -704,6 +713,10 @@ export default function TeacherPage() {
         members: []
       }
     ]);
+  }
+
+  function removeGroup(groupId: string) {
+    setEditableGroups((prev) => prev.filter((group) => group.groupId !== groupId));
   }
 
   function patchPrompt(
@@ -1671,7 +1684,19 @@ export default function TeacherPage() {
                     onDragOver={(e) => e.preventDefault()}
                     onDrop={dropToGroup(group.groupId)}
                   >
-                    <strong>組別 {group.groupName}</strong>
+                    <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+                      <strong>組別 {group.groupName}</strong>
+                      {group.members.length === 0 ? (
+                        <button
+                          type="button"
+                          className="secondary"
+                          style={{ width: "auto", minWidth: 36, padding: "4px 8px" }}
+                          onClick={() => removeGroup(group.groupId)}
+                        >
+                          x
+                        </button>
+                      ) : null}
+                    </div>
                     {group.members.map((username) => (
                       <div
                         key={username}
