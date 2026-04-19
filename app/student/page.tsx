@@ -70,6 +70,63 @@ function getMode(step: number): InteractionMode {
   return "personal_reflection";
 }
 
+function escapeHtml(input: string): string {
+  return input
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function applyInlineMarkdown(input: string): string {
+  return input.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+}
+
+function renderMessageHtml(text: string): string {
+  const lines = text.split(/\r?\n/);
+  const htmlParts: string[] = [];
+  let listBuffer: string[] = [];
+
+  const flushList = () => {
+    if (listBuffer.length === 0) return;
+    htmlParts.push(`<ul>${listBuffer.join("")}</ul>`);
+    listBuffer = [];
+  };
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) {
+      flushList();
+      continue;
+    }
+
+    const escaped = applyInlineMarkdown(escapeHtml(line));
+    if (escaped.startsWith("- ")) {
+      listBuffer.push(`<li>${escaped.slice(2)}</li>`);
+      continue;
+    }
+
+    flushList();
+
+    const h3 = escaped.match(/^###\s+(.+)$/);
+    if (h3) {
+      htmlParts.push(`<h4 style="margin:8px 0 4px;">${h3[1]}</h4>`);
+      continue;
+    }
+    const h4 = escaped.match(/^####\s+(.+)$/);
+    if (h4) {
+      htmlParts.push(`<h5 style="margin:8px 0 4px;">${h4[1]}</h5>`);
+      continue;
+    }
+
+    htmlParts.push(`<p style="margin:6px 0;">${escaped}</p>`);
+  }
+
+  flushList();
+  return htmlParts.join("");
+}
+
 export default function StudentPage() {
   const router = useRouter();
   const [loginUser, setLoginUser] = useState("");
@@ -163,6 +220,14 @@ export default function StudentPage() {
 
   const currentStep = session?.currentStep ?? 1;
   const currentMode = getMode(currentStep);
+  const currentModeLabel =
+    currentMode === "group_interaction"
+      ? "小組互動"
+      : currentMode === "personal_interaction"
+        ? "個人互動"
+        : currentMode === "non_interactive"
+          ? "無互動"
+          : "個人反思";
   const isInputEnabled = currentMode !== "non_interactive";
 
   async function logout() {
@@ -280,6 +345,7 @@ export default function StudentPage() {
       : currentStep === 2
         ? `目前子步驟：2-${session?.stepState.step2Substep ?? 1}`
         : null;
+  const stepModeLine = `${stepSubstepText ?? "目前子步驟：—"} ｜ 模式：${currentModeLabel}`;
 
   const ownStep7Report = session && loginUser ? session.reports.step7[loginUser] : undefined;
   const ownStep10Report = session && loginUser ? session.reports.step10[loginUser] : undefined;
@@ -474,48 +540,29 @@ export default function StudentPage() {
             </div>
           </div>
 
-          <div className="card" style={{ borderColor: "#bfdbfe", background: "#eff6ff" }}>
-            <h2>課程資訊</h2>
-            <p>
-              <strong>課程標題：</strong>
-              {session.activityTitle ?? currentActivity?.title ?? "未命名課程"}
-            </p>
-            <p>
-              <strong>群組名稱：</strong>
-              {session.groupName ?? "—"}
-            </p>
-            <p>
-              <strong>組員名單：</strong>
-              {session.participants.length > 0 ? session.participants.join("、") : "—"}
-            </p>
-            <p>
-              <strong>課程說明：</strong>
-              {currentActivity?.supplemental || "—"}
-            </p>
-            <p>
-              <strong>文章說明：</strong>
-              {currentActivity?.essayDescription || "—"}
-            </p>
-          </div>
-
-          <div className="card" style={{ borderColor: "#93c5fd", background: "#eff6ff" }}>
-            <h2>寫作主題與引導說明</h2>
-            <p>
-              <strong>題目：</strong>
-              {session.activityTitle ?? "未命名任務"}
-            </p>
-            <p>
-              <strong>班級 / 文體 / 時長：</strong>
-              {currentActivity?.classNumber ?? "—"} / {currentActivity?.genre ?? "—"} / {currentActivity?.durationMinutes ?? "—"} 分鐘
-            </p>
-            <p>
-              <strong>寫作引導說明：</strong>
-              {currentActivity?.essayDescription || "—"}
-            </p>
-            <p>
-              <strong>補充資料：</strong>
-              {currentActivity?.supplemental || "—"}
-            </p>
+          <div className="card" style={{ borderColor: "#93c5fd", background: "#eff6ff", padding: "10px 14px" }}>
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 10,
+                alignItems: "center",
+                lineHeight: 1.4
+              }}
+            >
+              <strong>題目：{session.activityTitle ?? currentActivity?.title ?? "未命名課程"}</strong>
+              <small>班級：{currentActivity?.classNumber ?? "—"}</small>
+              <small>文體：{currentActivity?.genre ?? "—"}</small>
+              <small>時長：{currentActivity?.durationMinutes ?? "—"} 分鐘</small>
+              <small>小組：{session.groupName ?? "—"}</small>
+              <small>組員：{session.participants.length > 0 ? session.participants.join("、") : "—"}</small>
+            </div>
+            <div style={{ marginTop: 6 }}>
+              <small>引導說明：{currentActivity?.essayDescription || "—"}</small>
+            </div>
+            <div>
+              <small>補充資料：{currentActivity?.supplemental || "—"}</small>
+            </div>
           </div>
 
           <div className="card">
@@ -527,18 +574,8 @@ export default function StudentPage() {
                 任務：{session.activityTitle ?? "未命名"} / Session: {session.id}
               </small>
             </div>
-            {stepSubstepText ? <p><small>{stepSubstepText}</small></p> : null}
             <div style={{ marginTop: 8 }}>
-              <span className="badge">
-                模式：
-                {currentMode === "group_interaction"
-                  ? "小組互動"
-                  : currentMode === "personal_interaction"
-                    ? "個人互動"
-                    : currentMode === "non_interactive"
-                      ? "無互動"
-                      : "個人反思"}
-              </span>
+              <span className="badge">{stepModeLine}</span>
             </div>
             <p>
               <small>步驟切換由教師端控制，你的頁面會自動同步。</small>
@@ -712,7 +749,10 @@ export default function StudentPage() {
                   [S{message.step}] {message.role}
                   {message.userId ? `(${message.userId})` : ""}
                 </strong>
-                <div>{message.text}</div>
+                <div
+                  style={{ marginTop: 4 }}
+                  dangerouslySetInnerHTML={{ __html: renderMessageHtml(message.text) }}
+                />
                 <small>{message.at}</small>
               </div>
             ))}
