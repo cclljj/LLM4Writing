@@ -35,6 +35,7 @@ type SessionState = {
   groupName?: string;
   workflow: string;
   participants: string[];
+  groupGate?: Record<string, string[]>;
   stepState: { step1Substep: number; step2Substep: number };
   outlines: Record<string, string>;
   draftStep6: Record<string, string>;
@@ -51,6 +52,14 @@ type SessionState = {
     at: string;
     step: number;
   }>;
+};
+
+type InteractiveItem = {
+  id: string;
+  kind: "question" | "student" | "ai";
+  text: string;
+  at: string;
+  userId?: string;
 };
 
 const stepNameMap: Record<number, string> = {
@@ -153,7 +162,7 @@ export default function StudentPage() {
   const [showOutlineEditor, setShowOutlineEditor] = useState(false);
   const [showDraftEditor, setShowDraftEditor] = useState(false);
   const [showStep6OutlineRef, setShowStep6OutlineRef] = useState(false);
-  const [inputPromptText, setInputPromptText] = useState("訊息");
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -205,33 +214,49 @@ export default function StudentPage() {
     }
   }, [session?.id, session?.currentStep, loginUser]);
 
-  useEffect(() => {
-    if (!session) {
-      setInputPromptText("訊息");
-      return;
-    }
-
-    const step = session.currentStep;
-    const substep =
-      step === 1
-        ? session.stepState.step1Substep
-        : step === 2
-          ? session.stepState.step2Substep
-          : null;
-    const key = substep ? `${step}-${substep}` : null;
-    const bank = key ? session.promptConfig?.questionBanks?.[key] : undefined;
-    if (bank && bank.length > 0) {
-      const picked = bank[Math.floor(Math.random() * bank.length)]!;
-      setInputPromptText(picked);
-      return;
-    }
-    setInputPromptText("訊息");
-  }, [session?.id, session?.currentStep, session?.stepState.step1Substep, session?.stepState.step2Substep]);
-
   const sortedMessages = useMemo(
     () => [...(session?.messages ?? [])].sort((a, b) => a.at.localeCompare(b.at)),
     [session]
   );
+  const interactiveMessages = useMemo(() => {
+    if (!session) return [] as InteractiveItem[];
+
+    const toQuestionText = (text: string): string | null => {
+      if (text.includes("子步驟 ")) {
+        const idx = text.indexOf("子步驟 ");
+        const extracted = text.slice(idx).trim();
+        return extracted;
+      }
+      if (text.startsWith("下一題：")) {
+        return text.replace("下一題：", "").trim();
+      }
+      if (text.startsWith("步驟 9 開始：")) {
+        return text.replace("步驟 9 開始：", "").trim();
+      }
+      return null;
+    };
+
+    const result: InteractiveItem[] = [];
+    sortedMessages
+      .filter((m) => m.step === session.currentStep)
+      .forEach((m) => {
+        if (m.role === "student") {
+          result.push({ id: m.id, kind: "student", text: m.text, at: m.at, userId: m.userId });
+          return;
+        }
+        if (m.role === "ai") {
+          result.push({ id: m.id, kind: "ai", text: m.text, at: m.at });
+          return;
+        }
+        if (m.role === "system") {
+          const q = toQuestionText(m.text);
+          if (q) {
+            result.push({ id: m.id, kind: "question", text: q, at: m.at });
+          }
+        }
+      });
+    return result;
+  }, [session, sortedMessages]);
   const currentActivity = useMemo(
     () => {
       const all = [...classCourses];
@@ -332,21 +357,26 @@ export default function StudentPage() {
     e.preventDefault();
     if (!session || !text.trim() || !isInputEnabled) return;
     setError("");
+    setIsSendingMessage(true);
 
-    const response = await fetch("/api/chat/send", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionId: session.id, userId: loginUser || "student", text })
-    });
+    try {
+      const response = await fetch("/api/chat/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: session.id, userId: loginUser || "student", text })
+      });
 
-    const data = await response.json();
-    if (!response.ok) {
-      setError(data.error ?? "send_failed");
-      return;
+      const data = await response.json();
+      if (!response.ok) {
+        setError(data.error ?? "send_failed");
+        return;
+      }
+
+      setSession(data);
+      setText("");
+    } finally {
+      setIsSendingMessage(false);
     }
-
-    setSession(data);
-    setText("");
   }
 
   async function saveArtifact(type: "outline" | "draft6" | "draft8", content: string) {
@@ -373,6 +403,22 @@ export default function StudentPage() {
         ? `目前子步驟：2-${session?.stepState.step2Substep ?? 1}`
         : null;
   const stepModeLine = `${stepSubstepText ?? "目前子步驟：—"} ｜ 模式：${currentModeLabel}`;
+  const lastInteractive = interactiveMessages[interactiveMessages.length - 1];
+  const canReplyToQuestion = lastInteractive?.kind === "question";
+  const activeSubstepKey =
+    currentStep === 1
+      ? `1-${session?.stepState.step1Substep ?? 1}`
+      : currentStep === 2
+        ? `2-${session?.stepState.step2Substep ?? 1}`
+        : null;
+  const responders = activeSubstepKey ? session?.groupGate?.[activeSubstepKey] ?? [] : [];
+  const hasSubmittedThisTurn = Boolean(loginUser && responders.includes(loginUser));
+  const waitingGroupMembers =
+    currentMode === "group_interaction" &&
+    !!session &&
+    Array.isArray(responders) &&
+    hasSubmittedThisTurn &&
+    !session.participants.every((p) => responders.includes(p));
 
   const ownStep7Report = session && loginUser ? session.reports.step7[loginUser] : undefined;
   const ownStep10Report = session && loginUser ? session.reports.step10[loginUser] : undefined;
@@ -578,17 +624,17 @@ export default function StudentPage() {
               }}
             >
               <strong>題目：{session.activityTitle ?? currentActivity?.title ?? "未命名課程"}</strong>
-              <small>班級：{currentActivity?.classNumber ?? "—"}</small>
-              <small>文體：{currentActivity?.genre ?? "—"}</small>
-              <small>時長：{currentActivity?.durationMinutes ?? "—"} 分鐘</small>
-              <small>小組：{session.groupName ?? "—"}</small>
-              <small>組員：{session.participants.length > 0 ? session.participants.join("、") : "—"}</small>
+              <span>班級：{currentActivity?.classNumber ?? "—"}</span>
+              <span>文體：{currentActivity?.genre ?? "—"}</span>
+              <span>時長：{currentActivity?.durationMinutes ?? "—"} 分鐘</span>
+              <span>小組：{session.groupName ?? "—"}</span>
+              <span>組員：{session.participants.length > 0 ? session.participants.join("、") : "—"}</span>
             </div>
-            <div style={{ marginTop: 6 }}>
-              <small>引導說明：{currentActivity?.essayDescription || "—"}</small>
+            <div style={{ marginTop: 8 }}>
+              <p style={{ margin: 0 }}>引導說明：{currentActivity?.essayDescription || "—"}</p>
             </div>
             <div>
-              <small>補充資料：{currentActivity?.supplemental || "—"}</small>
+              <p style={{ margin: "6px 0 0" }}>補充資料：{currentActivity?.supplemental || "—"}</p>
             </div>
           </div>
 
@@ -740,7 +786,7 @@ export default function StudentPage() {
           ) : null}
 
           <div className="card">
-            <h2>互動區</h2>
+            <h2>互動內容</h2>
             {currentMode === "non_interactive" ? (
               <small>本步驟為無互動模式，請閱讀系統/AI 產出內容。</small>
             ) : null}
@@ -748,15 +794,40 @@ export default function StudentPage() {
               <small>個人反思模式：系統發問，AI 不回覆。</small>
             ) : null}
 
-            {isInputEnabled ? (
+            {interactiveMessages.map((message) => (
+              <div key={message.id} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
+                <strong>
+                  {message.kind === "question"
+                    ? "系統提問"
+                    : message.kind === "student"
+                      ? `學生${message.userId ? `(${message.userId})` : ""}`
+                      : "AI 回覆"}
+                </strong>
+                <div
+                  style={{ marginTop: 4 }}
+                  dangerouslySetInnerHTML={{ __html: renderMessageHtml(message.text) }}
+                />
+                <small>{message.at}</small>
+              </div>
+            ))}
+
+            {interactiveMessages.length === 0 ? <small>目前此步驟尚無互動內容。</small> : null}
+
+            {isSendingMessage ? (
+              <p style={{ marginTop: 10 }}>
+                <small>等待遠端 AI 回答中...</small>
+              </p>
+            ) : null}
+            {waitingGroupMembers ? (
+              <p style={{ marginTop: 10 }}>
+                <small>等待同組其他同學完成本題回覆...</small>
+              </p>
+            ) : null}
+
+            {isInputEnabled && canReplyToQuestion && !waitingGroupMembers && !isSendingMessage ? (
               <form onSubmit={sendMessage}>
-                <label>{inputPromptText}</label>
+                <label>你的回答</label>
                 <textarea value={text} onChange={(e) => setText(e.target.value)} />
-                {currentMode === "group_interaction" ? (
-                  <small style={{ display: "block", fontSize: 12, marginTop: 6, color: "#6b7280" }}>
-                    小組互動模式：需所有組員至少回覆一次後，AI 才會回覆。
-                  </small>
-                ) : null}
                 <button type="submit" style={{ marginTop: 10 }}>
                   發送訊息
                 </button>
@@ -770,8 +841,9 @@ export default function StudentPage() {
             ) : null}
           </div>
 
+          <hr />
           <div className="card">
-            <h2>對話紀錄</h2>
+            <h2>完整對話紀錄（除錯）</h2>
             {sortedMessages.map((message) => (
               <div key={message.id} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
                 <strong>
