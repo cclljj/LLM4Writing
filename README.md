@@ -23,14 +23,14 @@ LLM4Writing 已改造成可直接部署於 Vercel 的原生架構版本。
 - Frontend: Next.js (`app/`)
 - Backend: Next.js Route Handlers (`app/api/**`)
 - Runtime: Vercel Serverless Functions
-- Storage: Postgres（支援 Vercel/Neon 連線字串；無 DB 環境時自動 fallback memory）
+- Storage: Postgres（支援 Vercel/Neon 連線字串；無 DB 時 fallback `.data/domain-state.json` + memory）
 
 ## 已回補流程（依 SPEC_generated_by_AI）
 
 1. 學生端活動列表（ActivityPage）
 2. 任務加入討論 + 歷史紀錄（含 CourseDetailModal 詳情確認）
 3. Phase1~5 聊天流程（含 Phase5 仍可輸入）
-4. 教師端三大模組入口：系統管理 / 學習管理 / 課程管理
+4. 教師端三大模組入口：帳號管理 / 課程管理 / 學習管理
 5. 課堂觀察（小組進度與對話檢視）與步驟切換
 6. 寫作主題與開課管理（Vercel-native 版 CRUD）
 7. Prompt / 問題庫管理入口（主題層 + 班級覆蓋層）

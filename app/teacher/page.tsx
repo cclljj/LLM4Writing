@@ -206,6 +206,18 @@ export default function TeacherPage() {
     () => activities.find((activity) => activity.id === selectedLearningActivityId),
     [activities, selectedLearningActivityId]
   );
+  const selectedGroupActivity = useMemo(
+    () => activities.find((activity) => activity.id === selectedActivityId),
+    [activities, selectedActivityId]
+  );
+  const hasExistingGrouping = useMemo(
+    () => (selectedGroupActivity?.groups.length ?? 0) > 0,
+    [selectedGroupActivity]
+  );
+  const canSaveGroups = useMemo(
+    () => Boolean(selectedActivityId) && editableGroups.length > 0 && unassignedStudents.length === 0,
+    [selectedActivityId, editableGroups.length, unassignedStudents.length]
+  );
 
   const filteredMonitorSessions = useMemo(
     () =>
@@ -239,6 +251,11 @@ export default function TeacherPage() {
     if (!activity) return;
 
     setEditableGroups(activity.groups.map((group) => ({ ...group, members: [...group.members] })));
+    if (activity.groups.length > 0) {
+      setGroupCount(Math.max(1, activity.groups.length));
+    } else {
+      setGroupCount(2);
+    }
     const assigned = new Set(activity.groups.flatMap((group) => group.members));
     const candidates = activity.studentCandidates ?? [];
     setUnassignedStudents(candidates.filter((username) => !assigned.has(username)));
@@ -919,6 +936,10 @@ export default function TeacherPage() {
 
   async function saveGroups() {
     if (!selectedActivityId) return;
+    if (unassignedStudents.length > 0) {
+      setError("尚有未分配學生，無法儲存分組。");
+      return;
+    }
     const response = await fetch("/api/admin/groups", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -950,10 +971,12 @@ export default function TeacherPage() {
   }
 
   function initializeGroupsForDrag() {
+    if (hasExistingGrouping) return;
     setEditableGroups(buildEmptyGroups(groupCount));
   }
 
   function randomAssignGroups() {
+    if (hasExistingGrouping) return;
     const safeCount = Math.max(1, groupCount);
     const pool = [...unassignedStudents].sort(() => Math.random() - 0.5);
     const nextGroups = buildEmptyGroups(safeCount);
@@ -2015,23 +2038,63 @@ export default function TeacherPage() {
                 <div className="col" style={{ alignSelf: "end" }}>
                   <div className="row">
                     <div style={{ width: 140 }}>
-                      <button type="button" className="secondary" onClick={randomAssignGroups}>
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={randomAssignGroups}
+                        disabled={hasExistingGrouping}
+                        style={{
+                          background: hasExistingGrouping ? "#f3f4f6" : undefined,
+                          color: hasExistingGrouping ? "#9ca3af" : undefined,
+                          borderColor: hasExistingGrouping ? "#e5e7eb" : undefined,
+                          cursor: hasExistingGrouping ? "not-allowed" : undefined
+                        }}
+                      >
                         隨機平均分組
                       </button>
                     </div>
                     <div style={{ width: 140 }}>
-                      <button type="button" className="secondary" onClick={initializeGroupsForDrag}>
-                        先建空組拖曳
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={initializeGroupsForDrag}
+                        disabled={hasExistingGrouping}
+                        style={{
+                          background: hasExistingGrouping ? "#f3f4f6" : undefined,
+                          color: hasExistingGrouping ? "#9ca3af" : undefined,
+                          borderColor: hasExistingGrouping ? "#e5e7eb" : undefined,
+                          cursor: hasExistingGrouping ? "not-allowed" : undefined
+                        }}
+                      >
+                        先建空組
                       </button>
                     </div>
                     <div style={{ width: 140 }}>
-                      <button type="button" onClick={saveGroups}>
+                      <button
+                        type="button"
+                        onClick={saveGroups}
+                        disabled={!canSaveGroups}
+                        style={{
+                          background: !canSaveGroups ? "#f3f4f6" : undefined,
+                          color: !canSaveGroups ? "#9ca3af" : undefined,
+                          borderColor: !canSaveGroups ? "#e5e7eb" : undefined,
+                          cursor: !canSaveGroups ? "not-allowed" : undefined
+                        }}
+                      >
                         儲存分組
                       </button>
                     </div>
                   </div>
                 </div>
               </div>
+              <small>
+                {hasExistingGrouping
+                  ? "此任務已有既有分組，可直接拖曳調整；初始化按鈕已鎖定。"
+                  : "此任務尚未分組，請先設定組數並執行隨機分組或先建空組後拖曳。"}
+              </small>
+              <small>
+                目前未分配學生：{unassignedStudents.length} 人（為 0 時才可儲存分組）
+              </small>
 
               <div className="row" style={{ marginTop: 12 }}>
                 <div
