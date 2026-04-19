@@ -15,17 +15,19 @@ function makeMessage(input: Omit<ChatMessage, "id" | "at">): ChatMessage {
   };
 }
 
-function pickQuestion(session: SessionState, key: string, fallback: string): string {
+function pickQuestionFromBank(session: SessionState, key: string, fallback: string): string {
   const bank = session.promptConfig?.questionBanks?.[key];
   if (bank && bank.length > 0) {
     return bank[Math.floor(Math.random() * bank.length)]!;
   }
+  return fallback;
+}
 
+function pickQuestionFromSubStepPrompt(session: SessionState, key: string, fallback: string): string {
   const prompt = session.promptConfig?.subStepPrompts?.[key];
   if (prompt) {
     return `請討論：${prompt}`;
   }
-
   return fallback;
 }
 
@@ -39,7 +41,13 @@ function buildStep1Question(session: SessionState): string {
     4: "請回應可能的反對意見。",
     5: "請總結本步驟結論。"
   };
-  return pickQuestion(session, key, fallbackMap[s] ?? "請繼續討論。");
+  const fallback = fallbackMap[s] ?? "請繼續討論。";
+
+  // SPEC_yunchieh: 1-1/1-2/1-5 使用問題庫；1-3/1-4 使用子步驟 prompt。
+  if ([1, 2, 5].includes(s)) {
+    return pickQuestionFromBank(session, key, fallback);
+  }
+  return pickQuestionFromSubStepPrompt(session, key, fallback);
 }
 
 function buildStep2Question(session: SessionState): string {
@@ -51,7 +59,19 @@ function buildStep2Question(session: SessionState): string {
     3: "請整理支持與反對資料。",
     4: "請補上一個具體案例。"
   };
-  return pickQuestion(session, key, fallbackMap[s] ?? "請繼續蒐集資料。");
+  const fallback = fallbackMap[s] ?? "請繼續蒐集資料。";
+
+  // SPEC_yunchieh: 2-1/2-2/2-3 使用子步驟 prompt；2-4 使用問題庫。
+  if (s === 4) {
+    return pickQuestionFromBank(session, key, fallback);
+  }
+  return pickQuestionFromSubStepPrompt(session, key, fallback);
+}
+
+function getCurrentSubstepKey(session: SessionState, step: number): string | null {
+  if (step === 1) return `1-${session.stepState.step1Substep}`;
+  if (step === 2) return `2-${session.stepState.step2Substep}`;
+  return null;
 }
 
 function initializeStepQuestion(session: SessionState, step: number): void {
@@ -161,6 +181,18 @@ async function generateAiTextForStep(session: SessionState, step: number, contex
   if (session.promptConfig.systemPrompt) systemParts.push(session.promptConfig.systemPrompt);
   const stepPrompt = session.promptConfig.stepPrompts[String(step)];
   if (stepPrompt) systemParts.push(stepPrompt);
+  const substepKey = getCurrentSubstepKey(session, step);
+  if (substepKey) {
+    const substepPrompt = session.promptConfig.subStepPrompts[substepKey];
+    const questionBank = session.promptConfig.questionBanks[substepKey];
+    systemParts.push(`目前子步驟：${substepKey}`);
+    if (substepPrompt) {
+      systemParts.push(`子步驟 Prompt（${substepKey}）：\n${substepPrompt}`);
+    }
+    if (questionBank && questionBank.length > 0) {
+      systemParts.push(`子步驟問題庫（${substepKey}）：\n${questionBank.map((q, i) => `${i + 1}. ${q}`).join("\n")}`);
+    }
+  }
   systemParts.push(`目前步驟：${step}（${stepName}）。請嚴格遵守步驟與輸出格式要求。`);
 
   const recent = buildRecentContext(session, step);
@@ -307,29 +339,30 @@ function handleStep1Or2Group(
 
   session.groupGate[gateKey] = [];
 
+  return { session, allResponded: true, substep };
+}
+
+function advanceStep1Or2SubstepAfterAi(session: SessionState, step: 1 | 2, completedSubstep: number): void {
   if (step === 1) {
-    if (substep < 5) {
+    if (completedSubstep < 5) {
       session.stepState.step1Substep += 1;
       const nextSub = session.stepState.step1Substep;
       const q = buildStep1Question(session);
       session.messages.push(makeMessage({ role: "system", step, text: `子步驟 1-${nextSub}：${q}` }));
-    } else {
-      session.messages.push(makeMessage({ role: "system", step, text: "步驟 1 子步驟已完成，等待教師切換下一步。" }));
+      return;
     }
+    session.messages.push(makeMessage({ role: "system", step, text: "步驟 1 子步驟已完成，等待教師切換下一步。" }));
+    return;
   }
 
-  if (step === 2) {
-    if (substep < 4) {
-      session.stepState.step2Substep += 1;
-      const nextSub = session.stepState.step2Substep;
-      const q = buildStep2Question(session);
-      session.messages.push(makeMessage({ role: "system", step, text: `子步驟 2-${nextSub}：${q}` }));
-    } else {
-      session.messages.push(makeMessage({ role: "system", step, text: "步驟 2 子步驟已完成，等待教師切換下一步。" }));
-    }
+  if (completedSubstep < 4) {
+    session.stepState.step2Substep += 1;
+    const nextSub = session.stepState.step2Substep;
+    const q = buildStep2Question(session);
+    session.messages.push(makeMessage({ role: "system", step, text: `子步驟 2-${nextSub}：${q}` }));
+    return;
   }
-
-  return { session, allResponded: true, substep };
+  session.messages.push(makeMessage({ role: "system", step, text: "步驟 2 子步驟已完成，等待教師切換下一步。" }));
 }
 
 export async function sendStudentMessage(session: SessionState, userId: string, text: string): Promise<SessionState> {
@@ -360,6 +393,7 @@ export async function sendStudentMessage(session: SessionState, userId: string, 
           text: await generateAiTextForStep(result.session, step, `all members answered step ${step} substep ${result.substep}`)
         })
       );
+      advanceStep1Or2SubstepAfterAi(result.session, step as 1 | 2, result.substep);
     }
     return result.session;
   }

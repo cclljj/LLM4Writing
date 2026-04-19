@@ -98,6 +98,10 @@ npx --yes vercel --prod
 - 檔案：`src/config/system-prompt-config.json`
 - 說明：全系統統一使用，不再依主題或任務做覆蓋
 - 維護方式：由開發人員修改檔案後，透過 CI/CD 重新部署
+- 課程進行中 LLM 組裝規則：
+  - `systemPrompt + stepPrompts[步驟編號]`
+  - Step1/2 另會帶入目前子步驟對應的 `subStepPrompts[x-y]` 與 `questionBanks[x-y]`（若存在）
+  - 子步驟問題庫以 `writingTasks[essayId].questionBanks` 為主要來源
 
 ## Remote LLM（環境變數）
 

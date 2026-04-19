@@ -255,13 +255,30 @@ API 輸出給學習/分組流程使用：
 
 ## 5.3 問題來源優先序
 
-每個子步驟問題產生邏輯：
+依 `SPEC_yunchieh.md` 對應規則：
 
-1. 先看 `questionBanks[key]`（若有題目則隨機抽）
-2. 否則看 `subStepPrompts[key]`（包成 `請討論：...`）
-3. 否則用內建 fallback 文案
+1. Step 1
+- `1-1`、`1-2`、`1-5`：取 `questionBanks["1-1"|"1-2"|"1-5"]` 隨機抽題
+- `1-3`、`1-4`：取 `subStepPrompts["1-3"|"1-4"]`（無值時 fallback）
+2. Step 2
+- `2-1`、`2-2`、`2-3`：取 `subStepPrompts["2-1"|"2-2"|"2-3"]`（無值時 fallback）
+- `2-4`：取 `questionBanks["2-4"]` 隨機抽題
 
-## 5.4 非互動步驟行為
+`questionBanks` 的主要來源為 `writingTasks[essayId].questionBanks`（依任務 `essayId` 取用）。
+
+## 5.4 LLM Prompt 組裝
+
+課程進行中（有啟用遠端 LLM）時，`system` 訊息組裝規則：
+
+1. 全域 `systemPrompt`
+2. 當前步驟 `stepPrompts[String(step)]`
+3. 若為 Step 1/2，附加目前子步驟 key（例如 `1-3`）對應的：
+- `subStepPrompts[key]`（若存在）
+- `questionBanks[key]`（若存在）
+
+也就是 Step 1 會使用 `systemPrompt + stepPrompts["1"]`，Step 2 會使用 `systemPrompt + stepPrompts["2"]`，餘依此類推。
+
+## 5.5 非互動步驟行為
 
 教師切到非互動步驟時即生成：
 
@@ -269,14 +286,14 @@ API 輸出給學習/分組流程使用：
 - Step7：為每位 participant 生成 `reports.step7[user]`
 - Step10：為每位 participant 生成 `reports.step10[user]`
 
-## 5.5 個人反思（Step9）
+## 5.6 個人反思（Step9）
 
 - 固定 4 題反思題
 - student 每送一次訊息，`reflectionIndex[user] + 1`
 - 未達 4 題：系統送下一題
 - 完成：系統送「個人反思完成」
 
-## 5.6 Artifact 儲存
+## 5.7 Artifact 儲存
 
 student 可儲存三種內容：
 
