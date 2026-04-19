@@ -10,6 +10,7 @@ type Course = {
   classNumber: string;
   title: string;
   genre: string;
+  essayDescription?: string;
   durationMinutes: number;
   supplemental: string;
   courseStatus?: "not_started" | "in_progress" | "paused" | "ended";
@@ -30,6 +31,7 @@ type SessionState = {
   currentStep: number;
   activityId?: string;
   activityTitle?: string;
+  groupName?: string;
   workflow: string;
   participants: string[];
   stepState: { step1Substep: number; step2Substep: number };
@@ -79,8 +81,7 @@ export default function StudentPage() {
   const [activeCourses, setActiveCourses] = useState<Course[]>([]);
   const [pausedCourses, setPausedCourses] = useState<Course[]>([]);
   const [participatedCourses, setParticipatedCourses] = useState<ParticipatedCourse[]>([]);
-  const [entryCourse, setEntryCourse] = useState<Course | null>(null);
-  const [entryMode, setEntryMode] = useState<"upcoming" | "active">("upcoming");
+  const [preparingCourse, setPreparingCourse] = useState<Course | null>(null);
   const [session, setSession] = useState<SessionState | null>(null);
   const [text, setText] = useState("");
   const [error, setError] = useState("");
@@ -151,10 +152,10 @@ export default function StudentPage() {
   const currentActivity = useMemo(
     () => {
       const all = [...classCourses];
-      if (entryCourse) all.push(entryCourse);
-      return all.find((item) => item.id === session?.activityId) ?? entryCourse;
+      if (preparingCourse) all.push(preparingCourse);
+      return all.find((item) => item.id === session?.activityId) ?? preparingCourse;
     },
-    [classCourses, entryCourse, session?.activityId]
+    [classCourses, preparingCourse, session?.activityId]
   );
   const teammateUsers = useMemo(() => {
     if (!session) return [];
@@ -219,7 +220,7 @@ export default function StudentPage() {
     }
 
     setSession(data);
-    setEntryCourse(null);
+    setPreparingCourse(null);
     await refreshOverview();
   }
 
@@ -319,10 +320,7 @@ export default function StudentPage() {
               <div style={{ width: 180 }}>
                 <button
                   type="button"
-                  onClick={() => {
-                    setEntryCourse(course);
-                    setEntryMode("active");
-                  }}
+                  onClick={() => joinActivity(course.id)}
                 >
                   進入課程
                 </button>
@@ -349,8 +347,7 @@ export default function StudentPage() {
                 <button
                   type="button"
                   onClick={() => {
-                    setEntryCourse(course);
-                    setEntryMode("upcoming");
+                    setPreparingCourse(course);
                   }}
                 >
                   進入課程
@@ -401,25 +398,21 @@ export default function StudentPage() {
         </div>
       ) : null}
 
-      {entryCourse ? (
+      {preparingCourse ? (
         <div className="card" style={{ borderColor: "#93c5fd", background: "#eff6ff" }}>
-          <h2>{entryMode === "active" ? "課程確認" : "準備開始上課"}</h2>
+          <h2>準備開始上課</h2>
           <p>
-            <strong>{entryCourse.title}</strong>
+            <strong>{preparingCourse.title}</strong>
           </p>
           <p>
-            班級：{entryCourse.classNumber} / 文體：{entryCourse.genre} / 討論時長：{entryCourse.durationMinutes} 分鐘
+            班級：{preparingCourse.classNumber} / 文體：{preparingCourse.genre} / 討論時長：{preparingCourse.durationMinutes} 分鐘
           </p>
-          <p>補充資料：{entryCourse.supplemental}</p>
-          <small>
-            {entryMode === "active"
-              ? "課程進行中，確認後將進入討論。"
-              : "你已進入準備階段，請等待老師點選「開始上課」。"}
-          </small>
+          <p>補充資料：{preparingCourse.supplemental}</p>
+          <small>你已進入準備階段，請等待老師點選「開始上課」。</small>
           <div className="row" style={{ marginTop: 10 }}>
             <div style={{ width: 220 }}>
-              <button type="button" onClick={() => joinActivity(entryCourse.id)}>
-                {entryMode === "active" ? "確認並進入討論" : "檢查並進入討論"}
+              <button type="button" onClick={() => joinActivity(preparingCourse.id)}>
+                檢查並進入討論
               </button>
             </div>
             <div style={{ width: 180 }}>
@@ -428,8 +421,8 @@ export default function StudentPage() {
               </button>
             </div>
             <div style={{ width: 180 }}>
-              <button type="button" className="secondary" onClick={() => setEntryCourse(null)}>
-                取消
+              <button type="button" className="secondary" onClick={() => setPreparingCourse(null)}>
+                離開準備
               </button>
             </div>
           </div>
@@ -438,6 +431,30 @@ export default function StudentPage() {
 
       {session ? (
         <>
+          <div className="card" style={{ borderColor: "#bfdbfe", background: "#eff6ff" }}>
+            <h2>課程資訊</h2>
+            <p>
+              <strong>課程標題：</strong>
+              {session.activityTitle ?? currentActivity?.title ?? "未命名課程"}
+            </p>
+            <p>
+              <strong>群組名稱：</strong>
+              {session.groupName ?? "—"}
+            </p>
+            <p>
+              <strong>組員名單：</strong>
+              {session.participants.length > 0 ? session.participants.join("、") : "—"}
+            </p>
+            <p>
+              <strong>課程說明：</strong>
+              {currentActivity?.supplemental || "—"}
+            </p>
+            <p>
+              <strong>文章說明：</strong>
+              {currentActivity?.essayDescription || "—"}
+            </p>
+          </div>
+
           <div className="card">
             <h2>
               Step {session.currentStep} - {stepNameMap[session.currentStep] ?? "未知步驟"}

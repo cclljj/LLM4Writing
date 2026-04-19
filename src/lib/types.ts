@@ -93,6 +93,7 @@ export interface Activity {
   essayId: string;
   title: string;
   genre: string;
+  essayDescription?: string;
   durationMinutes: number;
   supplemental: string;
   groups: ActivityGroup[];

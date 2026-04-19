@@ -355,6 +355,7 @@ function toOpenClassView(openClass: OpenClassTask): OpenClassView {
 
 function toActivity(openClass: OpenClassTask): Activity {
   const detail = toOpenClassView(openClass);
+  const essay = findEssay(openClass.essayId);
   const groups = activityGroupMap[openClass.id] ?? [];
 
   return {
@@ -364,6 +365,7 @@ function toActivity(openClass: OpenClassTask): Activity {
     essayId: openClass.essayId,
     title: detail.essayTitle,
     genre: detail.essayGenre,
+    essayDescription: essay?.description ?? "",
     durationMinutes: openClass.durationMinutes,
     supplemental: openClass.supplemental,
     groups: groups.map((group) => ({ ...group, members: [...group.members] })),
