@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { ChatMessage, SessionState, StartSessionPayload } from "@/src/lib/types";
 import { REFLECTION_QUESTIONS, STEP_DEFINITIONS, getModeByStep, getStepName } from "@/src/lib/spec";
+import { isLlmConfigured, llmChatCompletionText, LlmChatMessage } from "@/src/lib/llm-client";
 
 function now(): string {
   return new Date().toISOString();
@@ -136,13 +137,61 @@ function isLegacy(session: SessionState): boolean {
   return session.workflow === "legacy_phase";
 }
 
-function generateAiTextForStep(step: number, contextText: string): string {
-  const stepName = getStepName(step);
-  return `AI(${stepName}) 回覆：已收到內容「${contextText.slice(0, 80)}${contextText.length > 80 ? "..." : ""}」，請依本步驟目標繼續。`;
+function buildRecentContext(session: SessionState, step: number): string {
+  const relevant = session.messages
+    .filter((m) => m.step === step && (m.role === "student" || m.role === "ai" || m.role === "system"))
+    .slice(-12);
+
+  return relevant
+    .map((m) => {
+      if (m.role === "student") return `學生${m.userId ? `(${m.userId})` : ""}：${m.text}`;
+      if (m.role === "ai") return `AI：${m.text}`;
+      return `系統：${m.text}`;
+    })
+    .join("\n");
 }
 
-function generateLegacyAiText(step: number, contextText: string): string {
-  return `AI(Phase${step})：收到你的訊息「${contextText.slice(0, 80)}${contextText.length > 80 ? "..." : ""}」，請繼續。`;
+async function generateAiTextForStep(session: SessionState, step: number, contextText: string): Promise<string> {
+  const stepName = getStepName(step);
+  if (!isLlmConfigured()) {
+    return `AI(${stepName}) 回覆：已收到內容「${contextText.slice(0, 80)}${contextText.length > 80 ? "..." : ""}」，請依本步驟目標繼續。`;
+  }
+
+  const systemParts: string[] = [];
+  if (session.promptConfig.systemPrompt) systemParts.push(session.promptConfig.systemPrompt);
+  const stepPrompt = session.promptConfig.stepPrompts[String(step)];
+  if (stepPrompt) systemParts.push(stepPrompt);
+  systemParts.push(`目前步驟：${step}（${stepName}）。請嚴格遵守步驟與輸出格式要求。`);
+
+  const recent = buildRecentContext(session, step);
+  const messages: LlmChatMessage[] = [
+    { role: "system", content: systemParts.join("\n\n") },
+    {
+      role: "user",
+      content:
+        `以下是最近對話內容（可能含系統指示）：\n${recent || "(無)"}\n\n` +
+        `目前事件：${contextText}\n\n` +
+        `請根據最新一輪組員回覆，產出本步驟應給學生的下一則引導回覆。`
+    }
+  ];
+
+  return llmChatCompletionText({ messages, temperature: 0.6, maxTokens: 700 });
+}
+
+async function generateLegacyAiText(session: SessionState, step: number, contextText: string): Promise<string> {
+  if (!isLlmConfigured()) {
+    return `AI(Phase${step})：收到你的訊息「${contextText.slice(0, 80)}${contextText.length > 80 ? "..." : ""}」，請繼續。`;
+  }
+  const messages: LlmChatMessage[] = [
+    {
+      role: "system",
+      content:
+        session.promptConfig.systemPrompt ??
+        "你是一位引導式寫作的作文老師，請使用繁體中文，以鼓勵與提問方式引導學生。"
+    },
+    { role: "user", content: `目前 Phase${step}。學生訊息：${contextText}` }
+  ];
+  return llmChatCompletionText({ messages, temperature: 0.6, maxTokens: 400 });
 }
 
 function buildStep5Summary(session: SessionState): string {
@@ -160,6 +209,8 @@ function buildStep10Report(session: SessionState, userId: string): string {
   const essay = session.draftStep8[userId] ?? session.draftStep6[userId] ?? "(尚未提交作文)";
   return `步驟 10 總結報告（${userId}）\n最終稿：${essay}\n總評：結構已改善，建議再精煉結語。`;
 }
+
+// --- existing non-LLM report builders below ---
 
 export function switchStep(session: SessionState, step: number): SessionState {
   if (!STEP_DEFINITIONS.find((s) => s.step === step)) {
@@ -234,7 +285,11 @@ export function advanceLegacyPhase(session: SessionState): SessionState {
   return session;
 }
 
-function handleStep1Or2Group(session: SessionState, userId: string, text: string): SessionState {
+function handleStep1Or2Group(
+  session: SessionState,
+  userId: string,
+  text: string
+): { session: SessionState; allResponded: boolean; substep: number } {
   const step = session.currentStep;
   const substep = step === 1 ? session.stepState.step1Substep : session.stepState.step2Substep;
   const gateKey = `${step}-${substep}`;
@@ -247,12 +302,9 @@ function handleStep1Or2Group(session: SessionState, userId: string, text: string
 
   const allResponded = session.participants.every((participant) => responders.has(participant));
   if (!allResponded) {
-    return session;
+    return { session, allResponded: false, substep };
   }
 
-  session.messages.push(
-    makeMessage({ role: "ai", step, text: generateAiTextForStep(step, `all members answered substep ${substep}`) })
-  );
   session.groupGate[gateKey] = [];
 
   if (step === 1) {
@@ -277,10 +329,10 @@ function handleStep1Or2Group(session: SessionState, userId: string, text: string
     }
   }
 
-  return session;
+  return { session, allResponded: true, substep };
 }
 
-export function sendStudentMessage(session: SessionState, userId: string, text: string): SessionState {
+export async function sendStudentMessage(session: SessionState, userId: string, text: string): Promise<SessionState> {
   const step = session.currentStep;
 
   if (!session.participants.includes(userId)) {
@@ -289,7 +341,7 @@ export function sendStudentMessage(session: SessionState, userId: string, text: 
 
   if (isLegacy(session)) {
     session.messages.push(makeMessage({ role: "student", userId, step, text }));
-    session.messages.push(makeMessage({ role: "ai", step, text: generateLegacyAiText(step, text) }));
+    session.messages.push(makeMessage({ role: "ai", step, text: await generateLegacyAiText(session, step, text) }));
     return session;
   }
 
@@ -299,13 +351,23 @@ export function sendStudentMessage(session: SessionState, userId: string, text: 
   }
 
   if (step === 1 || step === 2) {
-    return handleStep1Or2Group(session, userId, text);
+    const result = handleStep1Or2Group(session, userId, text);
+    if (result.allResponded) {
+      result.session.messages.push(
+        makeMessage({
+          role: "ai",
+          step,
+          text: await generateAiTextForStep(result.session, step, `all members answered step ${step} substep ${result.substep}`)
+        })
+      );
+    }
+    return result.session;
   }
 
   session.messages.push(makeMessage({ role: "student", userId, step, text }));
 
   if (mode === "personal_interaction") {
-    session.messages.push(makeMessage({ role: "ai", step, text: generateAiTextForStep(step, text) }));
+    session.messages.push(makeMessage({ role: "ai", step, text: await generateAiTextForStep(session, step, text) }));
     return session;
   }
 
@@ -317,7 +379,9 @@ export function sendStudentMessage(session: SessionState, userId: string, text: 
 
     const allResponded = session.participants.every((participant) => responders.has(participant));
     if (allResponded) {
-      session.messages.push(makeMessage({ role: "ai", step, text: generateAiTextForStep(step, "all group members replied") }));
+      session.messages.push(
+        makeMessage({ role: "ai", step, text: await generateAiTextForStep(session, step, "all group members replied") })
+      );
       session.groupGate[gateKey] = [];
     }
     return session;

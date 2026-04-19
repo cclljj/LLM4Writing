@@ -45,6 +45,14 @@ Convert the project from Java/Wicket monolith deployment model to Vercel-native 
   - `llm4writing_sessions(id text primary key, payload jsonb, created_at, updated_at)`
 - Local fallback: memory store when `POSTGRES_URL`/`DATABASE_URL` is not set
 
+## Remote LLM Config (Optional)
+
+- Provider-agnostic env vars:
+  - `LLM_URL`
+  - `LLM_KEY`
+  - `LLM_MODEL`
+- When all are set, server will call the remote LLM via OpenAI-compatible Chat Completions.
+
 ## Remaining Work to Reach Full Production
 
 1. Add authentication and role-based authorization

@@ -27,6 +27,7 @@ type OpenClassView = OpenClassTask & {
 };
 
 type RawSystemPromptConfig = {
+  systemPrompt?: string;
   stepPrompts?: Record<string, string>;
   subStepPrompts?: Record<string, string>;
   questionBanks?: Record<string, string[]>;
@@ -455,10 +456,11 @@ export function getStudentUsernamesForActivityClass(activityId: string): string[
 export function resolvePromptConfigForActivity(activityId: string): PromptConfig {
   const activity = findActivity(activityId);
   if (!activity) {
-    return { stepPrompts: {}, subStepPrompts: {}, questionBanks: {} };
+    return { systemPrompt: undefined, stepPrompts: {}, subStepPrompts: {}, questionBanks: {} };
   }
 
   const raw = systemPromptConfig as RawSystemPromptConfig;
+  const systemPrompt = typeof raw.systemPrompt === "string" ? raw.systemPrompt : undefined;
   const stepPrompts = { ...(raw.stepPrompts ?? {}) };
   const subStepPrompts = { ...(raw.subStepPrompts ?? {}) };
   const baseQuestionBanks = Object.fromEntries(
@@ -481,6 +483,7 @@ export function resolvePromptConfigForActivity(activityId: string): PromptConfig
   ) as Record<string, string[]>;
 
   return {
+    systemPrompt,
     stepPrompts,
     subStepPrompts,
     questionBanks: { ...baseQuestionBanks, ...scopedQuestionBanks }

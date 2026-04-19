@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const updated = sendStudentMessage(session, payload.userId, payload.text);
+    const updated = await sendStudentMessage(session, payload.userId, payload.text);
     await saveSession(updated);
     return NextResponse.json(updated);
   } catch (error) {

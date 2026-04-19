@@ -15,6 +15,11 @@ export interface StepDefinition {
 }
 
 export interface PromptConfig {
+  /**
+   * Optional global system prompt for the remote LLM (provider-agnostic).
+   * Stored in filesystem JSON (src/config/system-prompt-config.json).
+   */
+  systemPrompt?: string;
   stepPrompts: Record<string, string>;
   subStepPrompts: Record<string, string>;
   questionBanks: Record<string, string[]>;

@@ -98,6 +98,16 @@ npx --yes vercel --prod
 - 說明：全系統統一使用，不再依主題或任務做覆蓋
 - 維護方式：由開發人員修改檔案後，透過 CI/CD 重新部署
 
+## Remote LLM（環境變數）
+
+系統可透過環境變數改用遠端 LLM（供應商無綁定，採 OpenAI-compatible Chat Completions 介面）。
+
+- `LLM_URL`：Chat Completions API URL（例如 OpenRouter：`https://openrouter.ai/api/v1/chat/completions`）
+- `LLM_KEY`：API Key（請勿 commit）
+- `LLM_MODEL`：模型名稱（例如 OpenRouter free model）
+
+若三個變數都未設定，系統會使用內建 stub 回覆（可讓 UI 跑起來，但不是真正 LLM）。
+
 ## Postgres 注意事項
 
 - 首次使用時，系統會自動建立 `llm4writing_sessions` table

@@ -24,6 +24,7 @@
   - `User` 儲存在 Postgres（若無 DB 退回 memory）
   - `Essay/OpenClass/Groups` 儲存在 Domain Store（Postgres 啟用時持久化；否則退回 memory）
   - `PromptConfig` 由檔案系統 `src/config/system-prompt-config.json` 載入
+  - （可選）`Remote LLM` 由環境變數啟用，供 engine 產生 AI 回覆（未設定時使用 stub）
 
 ---
 
@@ -48,6 +49,19 @@
   - `created_at`
   - `updated_at`
 - 無 DB 時：使用 `globalThis` memory map（重啟即遺失）
+
+## 2.3 Remote LLM（可選）
+
+目的：讓部署到 Vercel 的環境可透過環境變數切換不同 LLM 供應商（OpenRouter/OpenAI/Gemini 轉接服務等），不需要改程式碼。
+
+- 設定位置：Vercel Project Settings -> Environment Variables
+- 環境變數（全部都要有值才會啟用）：
+  - `LLM_URL`：OpenAI-compatible Chat Completions API URL
+  - `LLM_KEY`：API key（不可出現在前端程式碼）
+  - `LLM_MODEL`：模型名稱
+- 程式行為：
+  - 若三者皆有：`src/lib/engine.ts` 在需要 AI 回覆時，會呼叫 `src/lib/llm-client.ts` 對遠端 LLM 送出請求並將回覆寫入 session messages
+  - 若缺任一：使用內建 stub 回覆文字（讓 UI 流程可跑，但不代表真實 LLM）
 
 ### User Store
 
