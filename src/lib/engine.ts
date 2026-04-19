@@ -157,6 +157,30 @@ function isLegacy(session: SessionState): boolean {
   return session.workflow === "legacy_phase";
 }
 
+function ensureParticipants(session: SessionState, fallbackUserId: string): string[] {
+  const known = new Set<string>();
+
+  if (Array.isArray(session.participants)) {
+    session.participants.forEach((p) => {
+      if (typeof p === "string" && p.trim()) known.add(p);
+    });
+  }
+
+  // Recover legacy/corrupted session payloads by learning participants from existing student messages.
+  session.messages.forEach((m) => {
+    if (m.role === "student" && typeof m.userId === "string" && m.userId.trim()) {
+      known.add(m.userId);
+    }
+  });
+
+  if (fallbackUserId.trim()) {
+    known.add(fallbackUserId.trim());
+  }
+
+  session.participants = Array.from(known);
+  return session.participants;
+}
+
 function buildRecentContext(session: SessionState, step: number): string {
   const relevant = session.messages
     .filter((m) => m.step === step && (m.role === "student" || m.role === "ai" || m.role === "system"))
@@ -367,8 +391,9 @@ function advanceStep1Or2SubstepAfterAi(session: SessionState, step: 1 | 2, compl
 
 export async function sendStudentMessage(session: SessionState, userId: string, text: string): Promise<SessionState> {
   const step = session.currentStep;
+  const participants = ensureParticipants(session, userId);
 
-  if (!session.participants.includes(userId)) {
+  if (!participants.includes(userId)) {
     throw new Error("unknown_participant");
   }
 
