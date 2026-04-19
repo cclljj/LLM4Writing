@@ -40,6 +40,9 @@ type SessionState = {
   draftStep6: Record<string, string>;
   draftStep8: Record<string, string>;
   reports: { step5?: string; step7: Record<string, string>; step10: Record<string, string> };
+  promptConfig?: {
+    questionBanks?: Record<string, string[]>;
+  };
   messages: Array<{
     id: string;
     role: string;
@@ -150,6 +153,7 @@ export default function StudentPage() {
   const [showOutlineEditor, setShowOutlineEditor] = useState(false);
   const [showDraftEditor, setShowDraftEditor] = useState(false);
   const [showStep6OutlineRef, setShowStep6OutlineRef] = useState(false);
+  const [inputPromptText, setInputPromptText] = useState("訊息");
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -200,6 +204,29 @@ export default function StudentPage() {
       setRefUser((session.participants.find((user) => user !== loginUser) ?? session.participants[0])!);
     }
   }, [session?.id, session?.currentStep, loginUser]);
+
+  useEffect(() => {
+    if (!session) {
+      setInputPromptText("訊息");
+      return;
+    }
+
+    const step = session.currentStep;
+    const substep =
+      step === 1
+        ? session.stepState.step1Substep
+        : step === 2
+          ? session.stepState.step2Substep
+          : null;
+    const key = substep ? `${step}-${substep}` : null;
+    const bank = key ? session.promptConfig?.questionBanks?.[key] : undefined;
+    if (bank && bank.length > 0) {
+      const picked = bank[Math.floor(Math.random() * bank.length)]!;
+      setInputPromptText(picked);
+      return;
+    }
+    setInputPromptText("訊息");
+  }, [session?.id, session?.currentStep, session?.stepState.step1Substep, session?.stepState.step2Substep]);
 
   const sortedMessages = useMemo(
     () => [...(session?.messages ?? [])].sort((a, b) => a.at.localeCompare(b.at)),
@@ -717,17 +744,19 @@ export default function StudentPage() {
             {currentMode === "non_interactive" ? (
               <small>本步驟為無互動模式，請閱讀系統/AI 產出內容。</small>
             ) : null}
-            {currentMode === "group_interaction" ? (
-              <small>小組互動模式：需所有組員至少回覆一次後，AI 才會回覆。</small>
-            ) : null}
             {currentMode === "personal_reflection" ? (
               <small>個人反思模式：系統發問，AI 不回覆。</small>
             ) : null}
 
             {isInputEnabled ? (
               <form onSubmit={sendMessage}>
-                <label>訊息</label>
+                <label>{inputPromptText}</label>
                 <textarea value={text} onChange={(e) => setText(e.target.value)} />
+                {currentMode === "group_interaction" ? (
+                  <small style={{ display: "block", fontSize: 12, marginTop: 6, color: "#6b7280" }}>
+                    小組互動模式：需所有組員至少回覆一次後，AI 才會回覆。
+                  </small>
+                ) : null}
                 <button type="submit" style={{ marginTop: 10 }}>
                   發送訊息
                 </button>
