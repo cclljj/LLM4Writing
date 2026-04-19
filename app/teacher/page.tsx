@@ -60,6 +60,8 @@ type CourseTab = "essay" | "openclass" | "group";
 
 export default function TeacherPage() {
   const [loginUser, setLoginUser] = useState("");
+  const [loginName, setLoginName] = useState("");
+  const [loginSchool, setLoginSchool] = useState("");
   const [loginRole, setLoginRole] = useState<"teacher" | "admin">("teacher");
   const [tab, setTab] = useState<"system" | "learning" | "course">("system");
   const [courseTab, setCourseTab] = useState<CourseTab>("essay");
@@ -219,6 +221,8 @@ export default function TeacherPage() {
       .then((data) => {
         if (data?.authenticated) {
           setLoginUser(data.user.username);
+          setLoginName(data.user.name ?? "");
+          setLoginSchool(data.user.school ?? "");
           if (data.user.role === "admin") {
             setLoginRole("admin");
           } else {
@@ -979,6 +983,11 @@ export default function TeacherPage() {
     });
   }
 
+  const displaySchool = loginTeacherProfile?.school || loginSchool;
+  const displayName = loginTeacherProfile?.name || loginName;
+  const identityLabel =
+    loginUser && displaySchool && displayName ? `${displaySchool} – ${displayName} (${loginUser})` : loginUser || "管理端";
+
   return (
     <main>
       <div className="card">
@@ -986,7 +995,7 @@ export default function TeacherPage() {
           <h1 style={{ marginBottom: 0 }}>教師端管理台</h1>
           <div>
             <span className="badge" style={{ marginRight: 8 }}>
-              {loginUser ? `登入者: ${loginUser} (${loginRole === "admin" ? "管理員" : "教師"})` : "管理端"}
+              {identityLabel}
             </span>
             <button type="button" className="secondary" style={{ width: "auto" }} onClick={logout}>
               登出

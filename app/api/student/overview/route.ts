@@ -80,6 +80,7 @@ export async function GET() {
   return NextResponse.json({
     profile: {
       username: profile.username,
+      name: profile.name,
       school: profile.school,
       classNumber: profile.classNumber,
       ownerTeacherUsername: profile.ownerTeacherUsername

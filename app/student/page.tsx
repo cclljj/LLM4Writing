@@ -70,14 +70,17 @@ function getMode(step: number): InteractionMode {
 export default function StudentPage() {
   const router = useRouter();
   const [loginUser, setLoginUser] = useState("");
-  const [profile, setProfile] = useState<{ school?: string; classNumber?: string; ownerTeacherUsername?: string } | null>(null);
+  const [loginName, setLoginName] = useState("");
+  const [loginSchool, setLoginSchool] = useState("");
+  const [profile, setProfile] = useState<{ name?: string; school?: string; classNumber?: string; ownerTeacherUsername?: string } | null>(null);
   const [missingFields, setMissingFields] = useState<string[]>([]);
   const [classCourses, setClassCourses] = useState<Course[]>([]);
   const [upcomingCourses, setUpcomingCourses] = useState<Course[]>([]);
   const [activeCourses, setActiveCourses] = useState<Course[]>([]);
   const [pausedCourses, setPausedCourses] = useState<Course[]>([]);
   const [participatedCourses, setParticipatedCourses] = useState<ParticipatedCourse[]>([]);
-  const [preparingCourse, setPreparingCourse] = useState<Course | null>(null);
+  const [entryCourse, setEntryCourse] = useState<Course | null>(null);
+  const [entryMode, setEntryMode] = useState<"upcoming" | "active">("upcoming");
   const [session, setSession] = useState<SessionState | null>(null);
   const [text, setText] = useState("");
   const [error, setError] = useState("");
@@ -96,6 +99,8 @@ export default function StudentPage() {
       .then((data) => {
         if (data?.authenticated) {
           setLoginUser(data.user.username);
+          setLoginName(data.user.name ?? "");
+          setLoginSchool(data.user.school ?? "");
         }
       })
       .catch(() => undefined);
@@ -146,10 +151,10 @@ export default function StudentPage() {
   const currentActivity = useMemo(
     () => {
       const all = [...classCourses];
-      if (preparingCourse) all.push(preparingCourse);
-      return all.find((item) => item.id === session?.activityId) ?? preparingCourse;
+      if (entryCourse) all.push(entryCourse);
+      return all.find((item) => item.id === session?.activityId) ?? entryCourse;
     },
-    [classCourses, preparingCourse, session?.activityId]
+    [classCourses, entryCourse, session?.activityId]
   );
   const teammateUsers = useMemo(() => {
     if (!session) return [];
@@ -205,12 +210,16 @@ export default function StudentPage() {
         setError("課程目前暫停中，請等待老師繼續上課後再進入討論。");
         return;
       }
+      if (data.error === "not_group_member") {
+        setError("你尚未被分配到該課程小組，請向老師確認分組設定。");
+        return;
+      }
       setError(data.error ?? "join_failed");
       return;
     }
 
     setSession(data);
-    setPreparingCourse(null);
+    setEntryCourse(null);
     await refreshOverview();
   }
 
@@ -261,6 +270,10 @@ export default function StudentPage() {
 
   const ownStep7Report = session && loginUser ? session.reports.step7[loginUser] : undefined;
   const ownStep10Report = session && loginUser ? session.reports.step10[loginUser] : undefined;
+  const displaySchool = profile?.school || loginSchool;
+  const displayName = profile?.name || loginName;
+  const identityLabel =
+    displaySchool && displayName && loginUser ? `${displaySchool} – ${displayName} (${loginUser})` : loginUser || "學生";
 
   return (
     <main>
@@ -269,7 +282,7 @@ export default function StudentPage() {
           <h1 style={{ marginBottom: 0 }}>學生端課程首頁</h1>
           <div>
             <span className="badge" style={{ marginRight: 8 }}>
-              {loginUser ? `登入者: ${loginUser}` : "學生"}
+              {identityLabel}
             </span>
             <button type="button" className="secondary" style={{ width: "auto" }} onClick={logout}>
               登出
@@ -277,6 +290,12 @@ export default function StudentPage() {
           </div>
         </div>
       </div>
+
+      {error ? (
+        <div className="card" style={{ borderColor: "#fecaca", background: "#fff1f2" }}>
+          <small>{error}</small>
+        </div>
+      ) : null}
 
       {missingFields.length > 0 ? (
         <div className="card" style={{ borderColor: "#fecaca", background: "#fff1f2" }}>
@@ -298,7 +317,13 @@ export default function StudentPage() {
             </div>
             <div className="row" style={{ marginTop: 8 }}>
               <div style={{ width: 180 }}>
-                <button type="button" onClick={() => joinActivity(course.id)}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEntryCourse(course);
+                    setEntryMode("active");
+                  }}
+                >
                   進入課程
                 </button>
               </div>
@@ -321,7 +346,13 @@ export default function StudentPage() {
             </div>
             <div className="row" style={{ marginTop: 8 }}>
               <div style={{ width: 180 }}>
-                <button type="button" onClick={() => setPreparingCourse(course)}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEntryCourse(course);
+                    setEntryMode("upcoming");
+                  }}
+                >
                   進入課程
                 </button>
               </div>
@@ -370,21 +401,25 @@ export default function StudentPage() {
         </div>
       ) : null}
 
-      {preparingCourse ? (
+      {entryCourse ? (
         <div className="card" style={{ borderColor: "#93c5fd", background: "#eff6ff" }}>
-          <h2>準備開始上課</h2>
+          <h2>{entryMode === "active" ? "課程確認" : "準備開始上課"}</h2>
           <p>
-            <strong>{preparingCourse.title}</strong>
+            <strong>{entryCourse.title}</strong>
           </p>
           <p>
-            班級：{preparingCourse.classNumber} / 文體：{preparingCourse.genre} / 討論時長：{preparingCourse.durationMinutes} 分鐘
+            班級：{entryCourse.classNumber} / 文體：{entryCourse.genre} / 討論時長：{entryCourse.durationMinutes} 分鐘
           </p>
-          <p>補充資料：{preparingCourse.supplemental}</p>
-          <small>你已進入準備階段，請等待老師點選「開始上課」。</small>
+          <p>補充資料：{entryCourse.supplemental}</p>
+          <small>
+            {entryMode === "active"
+              ? "課程進行中，確認後將進入討論。"
+              : "你已進入準備階段，請等待老師點選「開始上課」。"}
+          </small>
           <div className="row" style={{ marginTop: 10 }}>
             <div style={{ width: 220 }}>
-              <button type="button" onClick={() => joinActivity(preparingCourse.id)}>
-                檢查並進入討論
+              <button type="button" onClick={() => joinActivity(entryCourse.id)}>
+                {entryMode === "active" ? "確認並進入討論" : "檢查並進入討論"}
               </button>
             </div>
             <div style={{ width: 180 }}>
@@ -393,8 +428,8 @@ export default function StudentPage() {
               </button>
             </div>
             <div style={{ width: 180 }}>
-              <button type="button" className="secondary" onClick={() => setPreparingCourse(null)}>
-                離開準備
+              <button type="button" className="secondary" onClick={() => setEntryCourse(null)}>
+                取消
               </button>
             </div>
           </div>

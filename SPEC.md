@@ -280,6 +280,8 @@ student 可儲存三種內容：
 - 依角色導向：
   - student -> `/student`
   - teacher/admin -> `/teacher`
+- 登入後首頁右上角顯示身分格式：
+  - `學校 – 姓名 (帳號)`
 
 ## 6.2 `/student`
 
@@ -291,7 +293,7 @@ student 可儲存三種內容：
    - 「暫停中課程（本班）」
    - 「自己參與過的課程清單」（依最近參與時間排序）
 2. 若學生資料缺漏（`school` / `classNumber` / `ownerTeacherUsername`），顯示警告訊息提醒向老師反映。
-3. 點進行中課程的「進入課程」可直接呼叫 `/api/student/join` 進入討論。
+3. 點進行中課程的「進入課程」會先進入課程確認卡，再按「確認並進入討論」呼叫 `/api/student/join`。
 4. 點尚未開始課程的「進入課程」可進入準備階段；在準備階段按「檢查並進入討論」才呼叫 `/api/student/join`。
 5. 若課程尚未開始、暫停中或已結束，`/api/student/join` 會回傳錯誤，前端顯示對應提示。
 6. 點已參與課程的「查詢紀錄」導向 `/student/history/[activityId]`，顯示該課參與摘要、歷次 session 與個人最後作品/回饋。
@@ -422,7 +424,7 @@ Error:
 
 - 權限：student
 - 回傳：
-  - `profile`（含 school/classNumber/ownerTeacherUsername）
+  - `profile`（含 name/school/classNumber/ownerTeacherUsername）
   - `missingFields`（學生資料缺漏欄位）
   - `classCourses`（同校同班全部課程）
   - `upcomingCourses`（同校同班且 `courseStatus=not_started`）
