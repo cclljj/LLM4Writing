@@ -285,14 +285,17 @@ student 可儲存三種內容：
 
 主要能力：
 
-1. 首頁只顯示兩類清單：
+1. 首頁顯示四類清單：
+   - 「進行中課程（本班）」
    - 「尚未開始課程（本班）」（來自 `/api/student/overview`，條件為同校同班且 `courseStatus=not_started`）
+   - 「暫停中課程（本班）」
    - 「自己參與過的課程清單」（依最近參與時間排序）
 2. 若學生資料缺漏（`school` / `classNumber` / `ownerTeacherUsername`），顯示警告訊息提醒向老師反映。
-3. 點尚未開始課程的「進入課程」可進入準備階段；在準備階段按「檢查並進入討論」才呼叫 `/api/student/join`。
-4. 若課程尚未開始或已結束，`/api/student/join` 會回傳錯誤，前端顯示對應提示。
-5. 點已參與課程的「查詢紀錄」導向 `/student/history/[activityId]`，顯示該課參與摘要、歷次 session 與個人最後作品/回饋。
-6. 進入 session 後維持原有 spec10 互動流程（步驟顯示、訊息區、artifact 儲存）。
+3. 點進行中課程的「進入課程」可直接呼叫 `/api/student/join` 進入討論。
+4. 點尚未開始課程的「進入課程」可進入準備階段；在準備階段按「檢查並進入討論」才呼叫 `/api/student/join`。
+5. 若課程尚未開始、暫停中或已結束，`/api/student/join` 會回傳錯誤，前端顯示對應提示。
+6. 點已參與課程的「查詢紀錄」導向 `/student/history/[activityId]`，顯示該課參與摘要、歷次 session 與個人最後作品/回饋。
+7. 進入 session 後維持原有 spec10 互動流程（步驟顯示、訊息區、artifact 儲存）。
 
 ## 6.3 `/teacher`
 
@@ -421,7 +424,10 @@ Error:
 - 回傳：
   - `profile`（含 school/classNumber/ownerTeacherUsername）
   - `missingFields`（學生資料缺漏欄位）
+  - `classCourses`（同校同班全部課程）
   - `upcomingCourses`（同校同班且 `courseStatus=not_started`）
+  - `activeCourses`（同校同班且 `courseStatus=in_progress`）
+  - `pausedCourses`（同校同班且 `courseStatus=paused`）
   - `participatedCourses`（自己曾參與過課程，依最近參與時間排序）
 
 ### `POST /api/student/join`

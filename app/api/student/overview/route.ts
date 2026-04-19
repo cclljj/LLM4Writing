@@ -22,12 +22,17 @@ export async function GET() {
   if (!profile.ownerTeacherUsername) missingFields.push("ownerTeacherUsername");
 
   const activities = getAllActivities();
+  const classCourses = activities
+    .filter((activity) => activity.school === profile.school && activity.classNumber === profile.classNumber)
+    .sort((a, b) => a.id.localeCompare(b.id));
   const upcomingCourses = activities.filter(
     (activity) =>
       activity.school === profile.school &&
       activity.classNumber === profile.classNumber &&
       activity.courseStatus === "not_started"
   );
+  const activeCourses = classCourses.filter((activity) => activity.courseStatus === "in_progress");
+  const pausedCourses = classCourses.filter((activity) => activity.courseStatus === "paused");
 
   const sessions = await listSessions();
   const ownSessions = sessions
@@ -80,7 +85,10 @@ export async function GET() {
       ownerTeacherUsername: profile.ownerTeacherUsername
     },
     missingFields,
+    classCourses,
     upcomingCourses,
+    activeCourses,
+    pausedCourses,
     participatedCourses
   });
 }

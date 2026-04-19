@@ -72,7 +72,10 @@ export default function StudentPage() {
   const [loginUser, setLoginUser] = useState("");
   const [profile, setProfile] = useState<{ school?: string; classNumber?: string; ownerTeacherUsername?: string } | null>(null);
   const [missingFields, setMissingFields] = useState<string[]>([]);
+  const [classCourses, setClassCourses] = useState<Course[]>([]);
   const [upcomingCourses, setUpcomingCourses] = useState<Course[]>([]);
+  const [activeCourses, setActiveCourses] = useState<Course[]>([]);
+  const [pausedCourses, setPausedCourses] = useState<Course[]>([]);
   const [participatedCourses, setParticipatedCourses] = useState<ParticipatedCourse[]>([]);
   const [preparingCourse, setPreparingCourse] = useState<Course | null>(null);
   const [session, setSession] = useState<SessionState | null>(null);
@@ -142,11 +145,11 @@ export default function StudentPage() {
   );
   const currentActivity = useMemo(
     () => {
-      const all = [...upcomingCourses];
+      const all = [...classCourses];
       if (preparingCourse) all.push(preparingCourse);
       return all.find((item) => item.id === session?.activityId) ?? preparingCourse;
     },
-    [upcomingCourses, preparingCourse, session?.activityId]
+    [classCourses, preparingCourse, session?.activityId]
   );
   const teammateUsers = useMemo(() => {
     if (!session) return [];
@@ -172,7 +175,10 @@ export default function StudentPage() {
 
     setProfile(data.profile ?? null);
     setMissingFields(data.missingFields ?? []);
+    setClassCourses(data.classCourses ?? []);
     setUpcomingCourses(data.upcomingCourses ?? []);
+    setActiveCourses(data.activeCourses ?? []);
+    setPausedCourses(data.pausedCourses ?? []);
     setParticipatedCourses(data.participatedCourses ?? []);
     setError("");
   }
@@ -282,6 +288,26 @@ export default function StudentPage() {
       ) : null}
 
       <div className="card">
+        <h2>進行中課程（本班）</h2>
+        {activeCourses.length === 0 ? <small>目前沒有進行中的課程。</small> : null}
+        {activeCourses.map((course) => (
+          <div key={course.id} style={{ borderTop: "1px solid #e5e7eb", padding: "10px 0" }}>
+            <strong>{course.title}</strong>（班級 {course.classNumber} / {course.genre} / {course.durationMinutes} 分鐘）
+            <div>
+              <small>{course.supplemental}</small>
+            </div>
+            <div className="row" style={{ marginTop: 8 }}>
+              <div style={{ width: 180 }}>
+                <button type="button" onClick={() => joinActivity(course.id)}>
+                  進入課程
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="card">
         <h2>尚未開始課程（本班）</h2>
         <small>
           班級：{profile?.classNumber ?? "—"} / 學校：{profile?.school ?? "—"}
@@ -299,6 +325,19 @@ export default function StudentPage() {
                   進入課程
                 </button>
               </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="card">
+        <h2>暫停中課程（本班）</h2>
+        {pausedCourses.length === 0 ? <small>目前沒有暫停中的課程。</small> : null}
+        {pausedCourses.map((course) => (
+          <div key={course.id} style={{ borderTop: "1px solid #e5e7eb", padding: "10px 0" }}>
+            <strong>{course.title}</strong>（班級 {course.classNumber} / {course.genre}）
+            <div>
+              <small>課程目前暫停中，請等待老師繼續上課。</small>
             </div>
           </div>
         ))}
@@ -323,6 +362,13 @@ export default function StudentPage() {
           </div>
         ))}
       </div>
+
+      {classCourses.length === 0 ? (
+        <div className="card" style={{ borderColor: "#bfdbfe", background: "#eff6ff" }}>
+          <h2>目前沒有可顯示課程</h2>
+          <small>請確認老師已建立寫作任務，且你的學校與班級資料設定正確。</small>
+        </div>
+      ) : null}
 
       {preparingCourse ? (
         <div className="card" style={{ borderColor: "#93c5fd", background: "#eff6ff" }}>
