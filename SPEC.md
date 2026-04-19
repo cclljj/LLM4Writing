@@ -632,13 +632,11 @@ Behavior:
 
 預設 essays：
 
-- `essay-1 科技與生活`
-- `essay-2 我的校園角落`
+- （開發期重設後預設為空）
 
 預設 openClasses：
 
-- `oc-001`：Demo High / 701 / essay-1
-- `oc-002`：Demo High / 702 / essay-2
+- （開發期重設後預設為空）
 
 ---
 

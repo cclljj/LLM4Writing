@@ -36,6 +36,7 @@ type DomainState = {
 };
 
 const KEY = "__llm4writing_domain_state__";
+const REMOVED_ESSAY_IDS = new Set(["essay-1", "essay-2", "essay-3"]);
 
 const defaultUsers: UserAccount[] = [
   { username: "admin", name: "System Admin", school: "Demo High", role: "admin" },
@@ -83,28 +84,13 @@ const defaultUserPasswords: Record<string, string> = {
   teacher: "teacher123"
 };
 
-const defaultEssays: Essay[] = [
-  { id: "essay-1", title: "科技與生活", genre: "議論文", description: "科技改變生活的利弊分析", enabled: true },
-  { id: "essay-2", title: "我的校園角落", genre: "說明文", description: "校園問題觀察與改善", enabled: true }
-];
+const defaultEssays: Essay[] = [];
 
-const defaultOpenClasses: OpenClassTask[] = [
-  { id: "oc-001", school: "Demo High", classNumber: "701", essayId: "essay-1", durationMinutes: 45, supplemental: "AI 與日常" },
-  { id: "oc-002", school: "Demo High", classNumber: "702", essayId: "essay-2", durationMinutes: 40, supplemental: "觀察與提案" }
-];
+const defaultOpenClasses: OpenClassTask[] = [];
 
-const defaultActivityGroupMap: Record<string, ActivityGroup[]> = {
-  "oc-001": [
-    { groupId: "g1", groupName: "1", members: ["student", "s1", "s2"] },
-    { groupId: "g2", groupName: "2", members: ["s3"] }
-  ],
-  "oc-002": [{ groupId: "g1", groupName: "1", members: ["student", "s3"] }]
-};
+const defaultActivityGroupMap: Record<string, ActivityGroup[]> = {};
 
-const defaultCourseStatusMap: Record<string, "not_started" | "in_progress" | "paused" | "ended"> = {
-  "oc-001": "not_started",
-  "oc-002": "not_started"
-};
+const defaultCourseStatusMap: Record<string, "not_started" | "in_progress" | "paused" | "ended"> = {};
 
 function cloneState(): DomainState {
   return {
@@ -166,9 +152,14 @@ function normalizeDomainState(input: unknown): DomainState {
     else mergedOpenClasses.push({ ...openClass });
   });
 
+  const filteredEssays = mergedEssays.filter((essay) => !REMOVED_ESSAY_IDS.has(essay.id));
+  const filteredOpenClasses = mergedOpenClasses.filter((openClass) => !REMOVED_ESSAY_IDS.has(openClass.essayId));
+  const allowedOpenClassIds = new Set(filteredOpenClasses.map((openClass) => openClass.id));
+
   const rawGroups = raw.activityGroupMap && typeof raw.activityGroupMap === "object" ? raw.activityGroupMap : {};
   const mergedActivityGroupMap: Record<string, ActivityGroup[]> = { ...base.activityGroupMap };
   Object.entries(rawGroups as Record<string, ActivityGroup[]>).forEach(([key, groups]) => {
+    if (!allowedOpenClassIds.has(key)) return;
     mergedActivityGroupMap[key] = Array.isArray(groups)
       ? groups.map((group) => ({
           groupId: group.groupId,
@@ -177,18 +168,28 @@ function normalizeDomainState(input: unknown): DomainState {
         }))
       : [];
   });
+  Object.keys(mergedActivityGroupMap).forEach((key) => {
+    if (!allowedOpenClassIds.has(key)) {
+      delete mergedActivityGroupMap[key];
+    }
+  });
 
   const rawCourseStatus = raw.courseStatusMap && typeof raw.courseStatusMap === "object" ? raw.courseStatusMap : {};
   const mergedCourseStatusMap = {
     ...base.courseStatusMap,
     ...(rawCourseStatus as Record<string, "not_started" | "in_progress" | "paused" | "ended">)
   };
+  Object.keys(mergedCourseStatusMap).forEach((key) => {
+    if (!allowedOpenClassIds.has(key)) {
+      delete mergedCourseStatusMap[key];
+    }
+  });
 
   return {
     users: mergedUsers,
     userPasswords: mergedUserPasswords,
-    essays: mergedEssays,
-    openClasses: mergedOpenClasses,
+    essays: filteredEssays,
+    openClasses: filteredOpenClasses,
     activityGroupMap: mergedActivityGroupMap,
     courseStatusMap: mergedCourseStatusMap
   };
