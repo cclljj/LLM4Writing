@@ -90,7 +90,6 @@ export default function StudentPage() {
   const [outlineText, setOutlineText] = useState("");
   const [draftText, setDraftText] = useState("");
   const [refUser, setRefUser] = useState("");
-  const [showTopic, setShowTopic] = useState(false);
   const [showOutlineEditor, setShowOutlineEditor] = useState(false);
   const [showDraftEditor, setShowDraftEditor] = useState(false);
   const [showStep6OutlineRef, setShowStep6OutlineRef] = useState(false);
@@ -140,7 +139,6 @@ export default function StudentPage() {
     if (session.currentStep === 3 || session.currentStep === 4) {
       setShowOutlineEditor(false);
     }
-    setShowTopic(false);
     if (!refUser && session.participants.length > 0) {
       setRefUser((session.participants.find((user) => user !== loginUser) ?? session.participants[0])!);
     }
@@ -468,7 +466,6 @@ export default function StudentPage() {
                 onClick={() => {
                   setSession(null);
                   setPreparingCourse(null);
-                  setShowTopic(false);
                   refreshOverview().catch(() => undefined);
                 }}
               >
@@ -501,6 +498,26 @@ export default function StudentPage() {
             </p>
           </div>
 
+          <div className="card" style={{ borderColor: "#93c5fd", background: "#eff6ff" }}>
+            <h2>寫作主題與引導說明</h2>
+            <p>
+              <strong>題目：</strong>
+              {session.activityTitle ?? "未命名任務"}
+            </p>
+            <p>
+              <strong>班級 / 文體 / 時長：</strong>
+              {currentActivity?.classNumber ?? "—"} / {currentActivity?.genre ?? "—"} / {currentActivity?.durationMinutes ?? "—"} 分鐘
+            </p>
+            <p>
+              <strong>寫作引導說明：</strong>
+              {currentActivity?.essayDescription || "—"}
+            </p>
+            <p>
+              <strong>補充資料：</strong>
+              {currentActivity?.supplemental || "—"}
+            </p>
+          </div>
+
           <div className="card">
             <h2>
               Step {session.currentStep} - {stepNameMap[session.currentStep] ?? "未知步驟"}
@@ -526,26 +543,7 @@ export default function StudentPage() {
             <p>
               <small>步驟切換由教師端控制，你的頁面會自動同步。</small>
             </p>
-            <div style={{ width: 180 }}>
-              <button type="button" className="secondary" onClick={() => setShowTopic((prev) => !prev)}>
-                寫作主題
-              </button>
-            </div>
           </div>
-
-          {showTopic ? (
-            <div className="card" style={{ borderColor: "#93c5fd", background: "#eff6ff" }}>
-              <h2>寫作主題</h2>
-              <p>
-                <strong>{session.activityTitle ?? "未命名任務"}</strong>
-              </p>
-              <p>
-                班級：{currentActivity?.classNumber ?? "—"} / 文體：{currentActivity?.genre ?? "—"} / 討論時長：
-                {currentActivity?.durationMinutes ?? "—"} 分鐘
-              </p>
-              <p>寫作引導說明：{currentActivity?.supplemental ?? "—"}</p>
-            </div>
-          ) : null}
 
           {(currentStep === 3 || currentStep === 4) && loginUser ? (
             <div className="card">

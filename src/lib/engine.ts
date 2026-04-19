@@ -15,12 +15,12 @@ function makeMessage(input: Omit<ChatMessage, "id" | "at">): ChatMessage {
 }
 
 function pickQuestion(session: SessionState, key: string, fallback: string): string {
-  const bank = session.promptConfig.questionBanks[key];
+  const bank = session.promptConfig?.questionBanks?.[key];
   if (bank && bank.length > 0) {
     return bank[Math.floor(Math.random() * bank.length)]!;
   }
 
-  const prompt = session.promptConfig.subStepPrompts[key];
+  const prompt = session.promptConfig?.subStepPrompts?.[key];
   if (prompt) {
     return `請討論：${prompt}`;
   }

@@ -26,6 +26,13 @@ type OpenClassView = OpenClassTask & {
   essayGenre: string;
 };
 
+type RawSystemPromptConfig = {
+  stepPrompts?: Record<string, string>;
+  subStepPrompts?: Record<string, string>;
+  questionBanks?: Record<string, string[]>;
+  writingTasks?: Record<string, { questionBanks?: Record<string, string[]> }>;
+};
+
 type DomainState = {
   users: UserAccount[];
   userPasswords: Record<string, string>;
@@ -446,10 +453,38 @@ export function getStudentUsernamesForActivityClass(activityId: string): string[
 }
 
 export function resolvePromptConfigForActivity(activityId: string): PromptConfig {
-  if (!findActivity(activityId)) {
+  const activity = findActivity(activityId);
+  if (!activity) {
     return { stepPrompts: {}, subStepPrompts: {}, questionBanks: {} };
   }
-  return JSON.parse(JSON.stringify(systemPromptConfig)) as PromptConfig;
+
+  const raw = systemPromptConfig as RawSystemPromptConfig;
+  const stepPrompts = { ...(raw.stepPrompts ?? {}) };
+  const subStepPrompts = { ...(raw.subStepPrompts ?? {}) };
+  const baseQuestionBanks = Object.fromEntries(
+    Object.entries(raw.questionBanks ?? {}).map(([key, value]) => [
+      key,
+      Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []
+    ])
+  ) as Record<string, string[]>;
+
+  const taskBanks = raw.writingTasks ?? {};
+  const matchedTask =
+    taskBanks[activity.essayId] ??
+    taskBanks[activity.title] ??
+    Object.entries(taskBanks).find(([key]) => key.trim() === activity.title.trim())?.[1];
+  const scopedQuestionBanks = Object.fromEntries(
+    Object.entries(matchedTask?.questionBanks ?? {}).map(([key, value]) => [
+      key,
+      Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []
+    ])
+  ) as Record<string, string[]>;
+
+  return {
+    stepPrompts,
+    subStepPrompts,
+    questionBanks: { ...baseQuestionBanks, ...scopedQuestionBanks }
+  };
 }
 
 export function getUsers(): UserAccount[] {

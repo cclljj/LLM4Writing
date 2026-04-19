@@ -22,7 +22,8 @@
 - 狀態/資料：
   - `Session` 儲存在 Postgres（若無 DB 退回 memory）
   - `User` 儲存在 Postgres（若無 DB 退回 memory）
-  - `Essay/OpenClass/Groups/PromptConfig` 儲存在 Domain Store（Postgres 啟用時持久化；否則退回 memory）
+  - `Essay/OpenClass/Groups` 儲存在 Domain Store（Postgres 啟用時持久化；否則退回 memory）
+  - `PromptConfig` 由檔案系統 `src/config/system-prompt-config.json` 載入
 
 ---
 
@@ -299,7 +300,7 @@ student 可儲存三種內容：
 4. 點尚未開始課程的「進入課程」可進入準備階段；在準備階段按「檢查並進入討論」才呼叫 `/api/student/join`。
 5. 若課程尚未開始、暫停中或已結束，`/api/student/join` 會回傳錯誤，前端顯示對應提示。
 6. 點已參與課程的「查詢紀錄」導向 `/student/history/[activityId]`，顯示該課參與摘要、歷次 session 與個人最後作品/回饋。
-7. 進入 session 後先顯示課程資訊區塊（課程標題、群組名稱、組員名單、課程說明、文章說明），再進入 spec10 互動流程（步驟顯示、訊息區、artifact 儲存）。
+7. 進入 session 後先顯示課程資訊與「寫作主題與引導說明」區塊（題目、班級、文體、時長、寫作引導說明、補充資料），再進入 spec10 互動流程（步驟顯示、訊息區、artifact 儲存）。
 8. 一旦進入 session，學生頁會切換到課程內容視圖（提供「返回課程清單」按鈕）。
 
 ## 6.3 `/teacher`
@@ -627,7 +628,8 @@ Behavior:
 
 1. 全系統統一使用檔案系統 JSON：`src/config/system-prompt-config.json`
 2. 不再依主題或任務做 prompt 覆蓋
-3. 開發團隊透過修改該 JSON 並經 CI/CD 部署到 production
+3. 若 JSON 具有 `writingTasks`，則依目前活動的 `essayId` 或 `title` 匹配題目專屬 `questionBanks`
+4. 開發團隊透過修改該 JSON 並經 CI/CD 部署到 production
 
 實作函式：`resolvePromptConfigForActivity(activityId)`
 
