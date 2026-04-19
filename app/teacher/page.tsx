@@ -249,16 +249,7 @@ export default function TeacherPage() {
     if (!selectedActivityId || activities.length === 0) return;
     const activity = activities.find((item) => item.id === selectedActivityId);
     if (!activity) return;
-
-    setEditableGroups(activity.groups.map((group) => ({ ...group, members: [...group.members] })));
-    if (activity.groups.length > 0) {
-      setGroupCount(Math.max(1, activity.groups.length));
-    } else {
-      setGroupCount(2);
-    }
-    const assigned = new Set(activity.groups.flatMap((group) => group.members));
-    const candidates = activity.studentCandidates ?? [];
-    setUnassignedStudents(candidates.filter((username) => !assigned.has(username)));
+    resetGroupDraft(activity);
   }, [selectedActivityId, activities]);
 
   useEffect(() => {
@@ -970,21 +961,51 @@ export default function TeacherPage() {
     }));
   }
 
+  function resetGroupDraft(activity: ActivityRow) {
+    const nextGroups = activity.groups.map((group) => ({ ...group, members: [...group.members] }));
+    setEditableGroups(nextGroups);
+    setGroupCount(activity.groups.length > 0 ? Math.max(1, activity.groups.length) : 2);
+    const assigned = new Set(nextGroups.flatMap((group) => group.members));
+    const candidates = activity.studentCandidates ?? [];
+    setUnassignedStudents(candidates.filter((username) => !assigned.has(username)));
+  }
+
+  function resetAllStudentsToUnassigned() {
+    if (!selectedGroupActivity) return [];
+    const candidates = selectedGroupActivity.studentCandidates ?? [];
+    setUnassignedStudents(candidates);
+    return candidates;
+  }
+
   function initializeGroupsForDrag() {
-    if (hasExistingGrouping) return;
+    const candidates = resetAllStudentsToUnassigned();
+    if (!selectedGroupActivity) return;
     setEditableGroups(buildEmptyGroups(groupCount));
+    if (candidates.length === 0) {
+      setError("此任務沒有可分配的學生。");
+      return;
+    }
+    setError("");
   }
 
   function randomAssignGroups() {
-    if (hasExistingGrouping) return;
+    const candidates = resetAllStudentsToUnassigned();
+    if (!selectedGroupActivity) return;
     const safeCount = Math.max(1, groupCount);
-    const pool = [...unassignedStudents].sort(() => Math.random() - 0.5);
+    const pool = [...candidates].sort(() => Math.random() - 0.5);
     const nextGroups = buildEmptyGroups(safeCount);
     pool.forEach((username, idx) => {
       nextGroups[idx % safeCount]?.members.push(username);
     });
     setEditableGroups(nextGroups);
     setUnassignedStudents([]);
+    setError("");
+  }
+
+  function cancelGroupEdits() {
+    if (!selectedGroupActivity) return;
+    resetGroupDraft(selectedGroupActivity);
+    setError("");
   }
 
   function removeGroup(groupId: string) {
@@ -2042,13 +2063,7 @@ export default function TeacherPage() {
                         type="button"
                         className="secondary"
                         onClick={randomAssignGroups}
-                        disabled={hasExistingGrouping}
-                        style={{
-                          background: hasExistingGrouping ? "#f3f4f6" : undefined,
-                          color: hasExistingGrouping ? "#9ca3af" : undefined,
-                          borderColor: hasExistingGrouping ? "#e5e7eb" : undefined,
-                          cursor: hasExistingGrouping ? "not-allowed" : undefined
-                        }}
+                        disabled={!selectedActivityId}
                       >
                         隨機平均分組
                       </button>
@@ -2058,13 +2073,7 @@ export default function TeacherPage() {
                         type="button"
                         className="secondary"
                         onClick={initializeGroupsForDrag}
-                        disabled={hasExistingGrouping}
-                        style={{
-                          background: hasExistingGrouping ? "#f3f4f6" : undefined,
-                          color: hasExistingGrouping ? "#9ca3af" : undefined,
-                          borderColor: hasExistingGrouping ? "#e5e7eb" : undefined,
-                          cursor: hasExistingGrouping ? "not-allowed" : undefined
-                        }}
+                        disabled={!selectedActivityId}
                       >
                         先建空組
                       </button>
@@ -2084,12 +2093,17 @@ export default function TeacherPage() {
                         儲存分組
                       </button>
                     </div>
+                    <div style={{ width: 140 }}>
+                      <button type="button" className="secondary" onClick={cancelGroupEdits} disabled={!selectedActivityId}>
+                        取消
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
               <small>
                 {hasExistingGrouping
-                  ? "此任務已有既有分組，可直接拖曳調整；初始化按鈕已鎖定。"
+                  ? "此任務已有既有分組，可直接拖曳調整；若按初始化按鈕會先將所有學生重設為未分配。"
                   : "此任務尚未分組，請先設定組數並執行隨機分組或先建空組後拖曳。"}
               </small>
               <small>
