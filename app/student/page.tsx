@@ -12,7 +12,7 @@ type Course = {
   genre: string;
   durationMinutes: number;
   supplemental: string;
-  courseStatus?: "not_started" | "in_progress" | "ended";
+  courseStatus?: "not_started" | "in_progress" | "paused" | "ended";
 };
 
 type ParticipatedCourse = {
@@ -193,6 +193,10 @@ export default function StudentPage() {
       }
       if (data.error === "course_ended") {
         setError("課程已結束，無法再進入討論。");
+        return;
+      }
+      if (data.error === "course_paused") {
+        setError("課程目前暫停中，請等待老師繼續上課後再進入討論。");
         return;
       }
       setError(data.error ?? "join_failed");

@@ -21,6 +21,9 @@ export async function POST(request: NextRequest) {
   if (activity.courseStatus === "not_started") {
     return NextResponse.json({ error: "course_not_started" }, { status: 400 });
   }
+  if (activity.courseStatus === "paused") {
+    return NextResponse.json({ error: "course_paused" }, { status: 400 });
+  }
   if (activity.courseStatus === "ended") {
     return NextResponse.json({ error: "course_ended" }, { status: 400 });
   }

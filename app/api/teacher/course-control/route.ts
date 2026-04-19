@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/src/lib/auth-server";
-import { endCourse, flushDomainState, getActivitiesVisibleToTeacher, getAllActivities, hydrateDomainState, startCourse } from "@/src/lib/mock-data";
+import {
+  endCourse,
+  flushDomainState,
+  getActivitiesVisibleToTeacher,
+  getAllActivities,
+  hydrateDomainState,
+  startCourse,
+  togglePauseOrResumeCourse
+} from "@/src/lib/mock-data";
 
 export async function POST(request: NextRequest) {
   const user = await getCurrentUser();
@@ -9,7 +17,7 @@ export async function POST(request: NextRequest) {
   }
 
   await hydrateDomainState();
-  const body = (await request.json()) as { activityId?: string; action?: "start" | "end" };
+  const body = (await request.json()) as { activityId?: string; action?: "start" | "pause_resume" | "end" };
   if (!body.activityId || !body.action) {
     return NextResponse.json({ error: "missing_required_fields" }, { status: 400 });
   }
@@ -26,6 +34,19 @@ export async function POST(request: NextRequest) {
     }
     await flushDomainState();
     return NextResponse.json({ ok: true, status: result.status });
+  }
+
+  if (body.action === "pause_resume") {
+    const result = togglePauseOrResumeCourse(body.activityId);
+    if (!result.ok) {
+      return NextResponse.json({ error: result.error }, { status: 400 });
+    }
+    await flushDomainState();
+    return NextResponse.json({ ok: true, status: result.status });
+  }
+
+  if (body.action !== "end") {
+    return NextResponse.json({ error: "invalid_action" }, { status: 400 });
   }
 
   const result = endCourse(body.activityId);

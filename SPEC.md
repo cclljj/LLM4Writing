@@ -143,7 +143,7 @@ API 輸出給學習/分組流程使用：
   durationMinutes: number;
   supplemental: string;
   groups: ActivityGroup[];
-  courseStatus?: "not_started" | "in_progress" | "ended";
+  courseStatus?: "not_started" | "in_progress" | "paused" | "ended";
 }
 ```
 
@@ -317,10 +317,23 @@ student 可儲存三種內容：
 ### 學習管理
 
 - 先選課程（班級 + 主題）後，依 `courseStatus` 控制按鈕可用狀態：
-  - `not_started`：僅可按「開始上課」
-  - `in_progress`：可按「結束上課」「查看狀態」，不可再按「開始上課」
-  - `ended`：僅可按「查看狀態」
-- 「開始上課 / 結束上課」呼叫 `/api/teacher/course-control`
+  - `not_started`：
+    - `開始上課` 可按
+    - `暫停/繼續上課`、`結束上課`、`查看狀態` disabled（灰色）
+  - `in_progress`：
+    - `開始上課` disabled（灰色）
+    - `暫停/繼續上課` 可按（顯示為「暫停上課」，點擊後狀態轉 `paused`）
+    - `結束上課`、`查看狀態` 可按
+  - `paused`：
+    - `開始上課` disabled（灰色）
+    - `暫停/繼續上課` 可按（顯示為「繼續上課」，點擊後狀態轉 `in_progress`）
+    - `結束上課`、`查看狀態` 可按
+  - `ended`：
+    - `開始上課` disabled（灰色）
+    - `暫停/繼續上課` 可按（顯示為「繼續上課」，點擊後狀態轉 `in_progress`）
+    - `結束上課` disabled（灰色）
+    - `查看狀態` 可按
+- 「開始上課 / 暫停或繼續 / 結束上課」呼叫 `/api/teacher/course-control`
 - 「查看狀態」可查看該課程即時或歷史 session 內容，並可繼續使用：
   - 步驟切換（`/api/teacher/step`）
   - 小組訊息檢視（1/2/4）
@@ -433,6 +446,7 @@ Error:
 - `404 activity_not_found`
 - `403 not_group_member`
 - `400 course_not_started`
+- `400 course_paused`
 - `400 course_ended`
 
 ### `GET /api/student/history?activityId=...`
@@ -511,13 +525,17 @@ Request:
 Request:
 
 ```json
-{ "activityId": "oc-001", "action": "start|end" }
+{ "activityId": "oc-001", "action": "start|pause_resume|end" }
 ```
 
 - 權限：teacher/admin
 - 需在可見課程範圍內
 - `start`：`not_started -> in_progress`
-- `end`：`in_progress -> ended`
+- `pause_resume`：
+  - `in_progress -> paused`
+  - `paused -> in_progress`
+  - `ended -> in_progress`
+- `end`：`in_progress|paused -> ended`
 
 ## 7.5 Admin/Course APIs
 

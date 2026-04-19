@@ -34,7 +34,7 @@ type ActivityRow = {
   supplemental: string;
   groups: ActivityGroup[];
   studentCandidates?: string[];
-  courseStatus?: "not_started" | "in_progress" | "ended";
+  courseStatus?: "not_started" | "in_progress" | "paused" | "ended";
 };
 
 type PromptConfig = {
@@ -293,13 +293,14 @@ export default function TeacherPage() {
     }
   }
 
-  function getCourseStatusLabel(status?: "not_started" | "in_progress" | "ended") {
+  function getCourseStatusLabel(status?: "not_started" | "in_progress" | "paused" | "ended") {
     if (status === "in_progress") return "進行中";
+    if (status === "paused") return "暫停中";
     if (status === "ended") return "已結束";
     return "尚未開始";
   }
 
-  async function handleCourseLifecycle(action: "start" | "end") {
+  async function handleCourseLifecycle(action: "start" | "pause_resume" | "end") {
     if (!selectedLearningActivityId) return;
 
     const response = await fetch("/api/teacher/course-control", {
@@ -1517,18 +1518,45 @@ export default function TeacherPage() {
               </div>
             </div>
             <div className="row" style={{ marginTop: 10, gap: 8 }}>
+              {(() => {
+                const status = selectedLearningActivity?.courseStatus;
+                const startDisabled = !selectedLearningActivity || status !== "not_started";
+                const pauseResumeDisabled = !selectedLearningActivity || status === "not_started";
+                const endDisabled = !selectedLearningActivity || status === "not_started" || status === "ended";
+                const viewDisabled = !selectedLearningActivity || status === "not_started";
+                const disabledButtonStyle = {
+                  width: "auto",
+                  background: "#f3f4f6",
+                  color: "#9ca3af",
+                  borderColor: "#e5e7eb",
+                  cursor: "not-allowed"
+                } as const;
+                const enabledButtonStyle = { width: "auto" } as const;
+                return (
+                  <>
               <button
                 type="button"
-                style={{ width: "auto" }}
-                disabled={!selectedLearningActivity || selectedLearningActivity.courseStatus !== "not_started"}
+                style={startDisabled ? disabledButtonStyle : enabledButtonStyle}
+                disabled={startDisabled}
+                className={startDisabled ? "secondary" : ""}
                 onClick={() => handleCourseLifecycle("start")}
               >
                 開始上課
               </button>
               <button
                 type="button"
-                style={{ width: "auto" }}
-                disabled={!selectedLearningActivity || selectedLearningActivity.courseStatus !== "in_progress"}
+                className={pauseResumeDisabled ? "secondary" : ""}
+                style={pauseResumeDisabled ? disabledButtonStyle : enabledButtonStyle}
+                disabled={pauseResumeDisabled}
+                onClick={() => handleCourseLifecycle("pause_resume")}
+              >
+                {status === "in_progress" ? "暫停上課" : "繼續上課"}
+              </button>
+              <button
+                type="button"
+                style={endDisabled ? disabledButtonStyle : enabledButtonStyle}
+                disabled={endDisabled}
+                className={endDisabled ? "secondary" : ""}
                 onClick={() => handleCourseLifecycle("end")}
               >
                 結束上課
@@ -1536,12 +1564,15 @@ export default function TeacherPage() {
               <button
                 type="button"
                 className="secondary"
-                style={{ width: "auto" }}
-                disabled={!selectedLearningActivity || selectedLearningActivity.courseStatus === "not_started"}
+                style={viewDisabled ? disabledButtonStyle : enabledButtonStyle}
+                disabled={viewDisabled}
                 onClick={() => setShowCourseStatusView(true)}
               >
                 查看狀態
               </button>
+                  </>
+                );
+              })()}
               <button
                 type="button"
                 className="secondary"

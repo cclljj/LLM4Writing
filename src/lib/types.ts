@@ -96,7 +96,7 @@ export interface Activity {
   durationMinutes: number;
   supplemental: string;
   groups: ActivityGroup[];
-  courseStatus?: "not_started" | "in_progress" | "ended";
+  courseStatus?: "not_started" | "in_progress" | "paused" | "ended";
 }
 
 export interface UserAccount {
