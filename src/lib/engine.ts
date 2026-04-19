@@ -243,8 +243,9 @@ function buildRecentContext(session: SessionState, step: number): string {
 
 async function generateAiTextForStep(session: SessionState, step: number, contextText: string): Promise<string> {
   const stepName = getStepName(step);
+  const fallback = `AI(${stepName}) 回覆：已收到內容「${contextText.slice(0, 80)}${contextText.length > 80 ? "..." : ""}」，請依本步驟目標繼續。`;
   if (!isLlmConfigured()) {
-    return `AI(${stepName}) 回覆：已收到內容「${contextText.slice(0, 80)}${contextText.length > 80 ? "..." : ""}」，請依本步驟目標繼續。`;
+    return fallback;
   }
 
   const systemParts: string[] = [];
@@ -277,12 +278,17 @@ async function generateAiTextForStep(session: SessionState, step: number, contex
     }
   ];
 
-  return llmChatCompletionText({ messages, temperature: 0.6, maxTokens: 700 });
+  try {
+    return await llmChatCompletionText({ messages, temperature: 0.6, maxTokens: 700 });
+  } catch {
+    return fallback;
+  }
 }
 
 async function generateLegacyAiText(session: SessionState, step: number, contextText: string): Promise<string> {
+  const fallback = `AI(Phase${step})：收到你的訊息「${contextText.slice(0, 80)}${contextText.length > 80 ? "..." : ""}」，請繼續。`;
   if (!isLlmConfigured()) {
-    return `AI(Phase${step})：收到你的訊息「${contextText.slice(0, 80)}${contextText.length > 80 ? "..." : ""}」，請繼續。`;
+    return fallback;
   }
   const messages: LlmChatMessage[] = [
     {
@@ -293,7 +299,11 @@ async function generateLegacyAiText(session: SessionState, step: number, context
     },
     { role: "user", content: `目前 Phase${step}。學生訊息：${contextText}` }
   ];
-  return llmChatCompletionText({ messages, temperature: 0.6, maxTokens: 400 });
+  try {
+    return await llmChatCompletionText({ messages, temperature: 0.6, maxTokens: 400 });
+  } catch {
+    return fallback;
+  }
 }
 
 function buildStep5Summary(session: SessionState): string {

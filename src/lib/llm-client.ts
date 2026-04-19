@@ -29,6 +29,54 @@ export function isLlmConfigured(): boolean {
   return getLlmConfig() !== null;
 }
 
+function extractTextFromUnknown(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) {
+    const parts = value
+      .map((item) => {
+        if (typeof item === "string") return item;
+        if (item && typeof item === "object") {
+          const record = item as Record<string, unknown>;
+          if (typeof record.text === "string") return record.text;
+          if (typeof record.content === "string") return record.content;
+        }
+        return "";
+      })
+      .filter(Boolean);
+    return parts.join("\n");
+  }
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    if (typeof record.text === "string") return record.text;
+    if (typeof record.content === "string") return record.content;
+  }
+  return "";
+}
+
+function pickAssistantText(data: unknown): string | null {
+  if (!data || typeof data !== "object") return null;
+  const record = data as Record<string, unknown>;
+
+  const outputText = extractTextFromUnknown(record.output_text);
+  if (outputText.trim()) return outputText.trim();
+
+  const choices = Array.isArray(record.choices) ? record.choices : [];
+  const first = choices[0] as Record<string, unknown> | undefined;
+  if (first) {
+    const message = (first.message as Record<string, unknown> | undefined) ?? undefined;
+    const messageContent = extractTextFromUnknown(message?.content);
+    if (messageContent.trim()) return messageContent.trim();
+
+    const text = extractTextFromUnknown(first.text);
+    if (text.trim()) return text.trim();
+
+    const refusal = extractTextFromUnknown(message?.refusal);
+    if (refusal.trim()) return refusal.trim();
+  }
+
+  return null;
+}
+
 export async function llmChatCompletionText(input: {
   messages: LlmChatMessage[];
   temperature?: number;
@@ -72,17 +120,13 @@ export async function llmChatCompletionText(input: {
       throw new Error("llm_empty_response_body");
     }
 
-    const data = JSON.parse(raw) as {
-      choices?: Array<{ message?: { content?: string } }>;
-    };
-
-    const text = data.choices?.[0]?.message?.content;
-    if (typeof text !== "string" || !text.trim()) {
-      throw new Error("llm_missing_choices_message_content");
+    const data = JSON.parse(raw) as unknown;
+    const text = pickAssistantText(data);
+    if (!text) {
+      throw new Error(`llm_missing_assistant_text:${raw.slice(0, 300)}`);
     }
-    return text.trim();
+    return text;
   } finally {
     clearTimeout(timeout);
   }
 }
-

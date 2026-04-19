@@ -62,6 +62,7 @@
 - 程式行為：
   - 若三者皆有：`src/lib/engine.ts` 在需要 AI 回覆時，會呼叫 `src/lib/llm-client.ts` 對遠端 LLM 送出請求並將回覆寫入 session messages
   - 若缺任一：使用內建 stub 回覆文字（讓 UI 流程可跑，但不代表真實 LLM）
+  - 若遠端 LLM 回傳格式不符或請求失敗：自動 fallback 為內建回覆，不中斷課程流程
 
 ### User Store
 

@@ -113,6 +113,7 @@ npx --yes vercel --prod
 - `LLM_MODEL`：模型名稱（例如 OpenRouter free model）
 
 若三個變數都未設定，系統會使用內建 stub 回覆（可讓 UI 跑起來，但不是真正 LLM）。
+若遠端 LLM 回應格式異常或暫時失敗，系統也會自動 fallback 回覆，避免中斷課堂流程。
 
 ## Postgres 注意事項
 
