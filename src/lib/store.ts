@@ -39,6 +39,20 @@ function getSqlClient(): Sql {
 
 let initPromise: Promise<void> | undefined;
 
+function normalizeSessionPayload(payload: unknown): SessionState | undefined {
+  if (typeof payload === "string") {
+    try {
+      return normalizeSessionPayload(JSON.parse(payload));
+    } catch {
+      return undefined;
+    }
+  }
+  if (payload && typeof payload === "object") {
+    return payload as SessionState;
+  }
+  return undefined;
+}
+
 async function ensureSessionTable(): Promise<void> {
   if (!isPostgresEnabled()) {
     return;
@@ -90,14 +104,14 @@ export async function getSession(sessionId: string): Promise<SessionState | unde
   await ensureSessionTable();
   const sql = getSqlClient();
 
-  const rows = await sql<{ payload: SessionState }[]>`
+  const rows = await sql<{ payload: unknown }[]>`
     SELECT payload
     FROM llm4writing_sessions
     WHERE id = ${sessionId}
     LIMIT 1
   `;
 
-  return rows[0]?.payload;
+  return rows[0] ? normalizeSessionPayload(rows[0].payload) : undefined;
 }
 
 export async function listSessions(): Promise<SessionState[]> {
@@ -107,13 +121,15 @@ export async function listSessions(): Promise<SessionState[]> {
 
   await ensureSessionTable();
   const sql = getSqlClient();
-  const rows = await sql<{ payload: SessionState }[]>`
+  const rows = await sql<{ payload: unknown }[]>`
     SELECT payload
     FROM llm4writing_sessions
     ORDER BY updated_at DESC
   `;
 
-  return rows.map((row) => row.payload);
+  return rows
+    .map((row) => normalizeSessionPayload(row.payload))
+    .filter((item): item is SessionState => Boolean(item));
 }
 
 export function getStorageMode(): "postgres" | "memory" {
