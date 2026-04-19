@@ -157,7 +157,53 @@ function isLegacy(session: SessionState): boolean {
   return session.workflow === "legacy_phase";
 }
 
+function normalizeSessionRuntimeShape(session: SessionState): void {
+  if (!Array.isArray(session.messages)) {
+    session.messages = [];
+  }
+  if (!Array.isArray(session.participants)) {
+    session.participants = [];
+  }
+  if (!session.groupGate || typeof session.groupGate !== "object") {
+    session.groupGate = {};
+  }
+  if (!session.reflectionIndex || typeof session.reflectionIndex !== "object") {
+    session.reflectionIndex = {};
+  }
+  if (!session.stepState || typeof session.stepState !== "object") {
+    session.stepState = { step1Substep: 1, step2Substep: 1 };
+  }
+  if (typeof session.stepState.step1Substep !== "number") {
+    session.stepState.step1Substep = 1;
+  }
+  if (typeof session.stepState.step2Substep !== "number") {
+    session.stepState.step2Substep = 1;
+  }
+  if (!session.promptConfig || typeof session.promptConfig !== "object") {
+    session.promptConfig = { stepPrompts: {}, subStepPrompts: {}, questionBanks: {} };
+  }
+  if (!session.promptConfig.stepPrompts || typeof session.promptConfig.stepPrompts !== "object") {
+    session.promptConfig.stepPrompts = {};
+  }
+  if (!session.promptConfig.subStepPrompts || typeof session.promptConfig.subStepPrompts !== "object") {
+    session.promptConfig.subStepPrompts = {};
+  }
+  if (!session.promptConfig.questionBanks || typeof session.promptConfig.questionBanks !== "object") {
+    session.promptConfig.questionBanks = {};
+  }
+  if (!session.reports || typeof session.reports !== "object") {
+    session.reports = { step7: {}, step10: {} };
+  }
+  if (!session.reports.step7 || typeof session.reports.step7 !== "object") {
+    session.reports.step7 = {};
+  }
+  if (!session.reports.step10 || typeof session.reports.step10 !== "object") {
+    session.reports.step10 = {};
+  }
+}
+
 function ensureParticipants(session: SessionState, fallbackUserId: string): string[] {
+  normalizeSessionRuntimeShape(session);
   const known = new Set<string>();
 
   if (Array.isArray(session.participants)) {
@@ -269,6 +315,7 @@ function buildStep10Report(session: SessionState, userId: string): string {
 // --- existing non-LLM report builders below ---
 
 export function switchStep(session: SessionState, step: number): SessionState {
+  normalizeSessionRuntimeShape(session);
   if (!STEP_DEFINITIONS.find((s) => s.step === step)) {
     throw new Error(`invalid_step:${step}`);
   }
@@ -390,6 +437,7 @@ function advanceStep1Or2SubstepAfterAi(session: SessionState, step: 1 | 2, compl
 }
 
 export async function sendStudentMessage(session: SessionState, userId: string, text: string): Promise<SessionState> {
+  normalizeSessionRuntimeShape(session);
   const step = session.currentStep;
   const participants = ensureParticipants(session, userId);
 
