@@ -238,6 +238,21 @@ export default function StudentPage() {
       responders.length > 0 &&
       !hasSubmittedThisTurn;
 
+    const stepMessages = sortedMessages.filter((m) => m.step === session.currentStep);
+    let currentTurnStartIndex = -1;
+    for (let i = stepMessages.length - 1; i >= 0; i -= 1) {
+      const m = stepMessages[i]!;
+      if (activeGateKey && activeGateKey !== "4-1") {
+        if (m.role === "system" && m.text.includes(`子步驟 ${activeGateKey}：`)) {
+          currentTurnStartIndex = i;
+          break;
+        }
+      } else if (m.role === "system" && m.text.startsWith("步驟 4 開頭詞：")) {
+        currentTurnStartIndex = i;
+        break;
+      }
+    }
+
     const toQuestionText = (text: string): string | null => {
       if (text.includes("子步驟 ")) {
         const idx = text.indexOf("子步驟 ");
@@ -254,11 +269,10 @@ export default function StudentPage() {
     };
 
     const result: InteractiveItem[] = [];
-    sortedMessages
-      .filter((m) => m.step === session.currentStep)
-      .forEach((m) => {
+    stepMessages.forEach((m, idx) => {
         if (m.role === "student") {
-          if (hidePeerAnswersBeforeOwn && m.userId && m.userId !== loginUser) {
+          const isCurrentTurnMessage = currentTurnStartIndex >= 0 ? idx > currentTurnStartIndex : false;
+          if (hidePeerAnswersBeforeOwn && isCurrentTurnMessage && m.userId && m.userId !== loginUser) {
             return;
           }
           result.push({ id: m.id, kind: "student", text: m.text, at: m.at, userId: m.userId });
