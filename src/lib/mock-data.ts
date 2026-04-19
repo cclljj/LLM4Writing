@@ -410,10 +410,10 @@ export async function flushDomainState(): Promise<void> {
   }
   await ensureDomainTable();
   const sql = getSqlClient();
-  const snapshot = snapshotState();
+  const snapshotJson = JSON.stringify(snapshotState());
   await sql`
     INSERT INTO llm4writing_domain (id, payload)
-    VALUES ('singleton', ${snapshot}::jsonb)
+    VALUES ('singleton', ${snapshotJson}::jsonb)
     ON CONFLICT (id)
     DO UPDATE SET
       payload = EXCLUDED.payload,
