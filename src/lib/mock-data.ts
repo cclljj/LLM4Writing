@@ -439,6 +439,12 @@ function getStudentsBySchoolAndClass(school: string, classNumber: string): UserA
   return users.filter((user) => user.role === "student" && user.school === school && user.classNumber === classNumber);
 }
 
+export function getStudentUsernamesForActivityClass(activityId: string): string[] {
+  const activity = findActivity(activityId);
+  if (!activity) return [];
+  return getStudentsBySchoolAndClass(activity.school, activity.classNumber).map((student) => student.username);
+}
+
 export function resolvePromptConfigForActivity(activityId: string): PromptConfig {
   if (!findActivity(activityId)) {
     return { stepPrompts: {}, subStepPrompts: {}, questionBanks: {} };

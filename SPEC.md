@@ -444,6 +444,7 @@ Request:
 Behavior:
 
 - 找 activity + 自己所在 group
+- 若尚未分組或找不到學生分組，使用同班學生名單作為 fallback 參與者（groupName=`未分組`）
 - 有舊 session 則回舊 session
 - 否則建立新 session（workflow: `spec10`）
 

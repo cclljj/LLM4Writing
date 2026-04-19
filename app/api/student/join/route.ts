@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/src/lib/auth-server";
 import { createSession } from "@/src/lib/engine";
-import { findActivity, hydrateDomainState, resolvePromptConfigForActivity } from "@/src/lib/mock-data";
+import { findActivity, getStudentUsernamesForActivityClass, hydrateDomainState, resolvePromptConfigForActivity } from "@/src/lib/mock-data";
 import { listSessions, saveSession } from "@/src/lib/store";
 
 export async function POST(request: NextRequest) {
@@ -29,7 +29,9 @@ export async function POST(request: NextRequest) {
   }
 
   const group = activity.groups.find((g) => g.members.includes(user.username));
-  if (!group) {
+  const fallbackParticipants = getStudentUsernamesForActivityClass(activity.id);
+  const participants = group?.members.length ? group.members : fallbackParticipants;
+  if (participants.length === 0 || !participants.includes(user.username)) {
     return NextResponse.json({ error: "not_group_member" }, { status: 403 });
   }
 
@@ -42,13 +44,13 @@ export async function POST(request: NextRequest) {
   }
 
   const session = createSession({
-    participants: group.members,
+    participants,
     workflow: "spec10",
     phaseMax: 10,
     activityId: activity.id,
     activityTitle: activity.title,
-    groupId: group.groupId,
-    groupName: group.groupName,
+    groupId: group?.groupId ?? "g-auto",
+    groupName: group?.groupName ?? "未分組",
     promptConfig: resolvePromptConfigForActivity(activity.id)
   });
 
