@@ -257,7 +257,15 @@ export default function StudentPage() {
       if (text.includes("子步驟 ")) {
         const idx = text.indexOf("子步驟 ");
         const extracted = text.slice(idx).trim();
-        return extracted;
+        const m = extracted.match(/^子步驟\s+(\d-\d)：([\s\S]*)$/);
+        if (!m) return extracted;
+        const substep = m[1];
+        const content = m[2]?.trim() ?? "";
+        // Do not leak prompt instructions in student-facing interaction stream.
+        if (content.startsWith("請討論：")) {
+          return `子步驟 ${substep}：請依上一則 AI 提問進行回答。`;
+        }
+        return `子步驟 ${substep}：${content}`;
       }
       if (text.startsWith("下一題：")) {
         return text.replace("下一題：", "").trim();
