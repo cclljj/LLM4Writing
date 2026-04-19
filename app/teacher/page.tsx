@@ -9,9 +9,6 @@ type EssayRow = {
   genre: string;
   description: string;
   enabled: boolean;
-  step1Prompt?: string;
-  subStep13Prompt?: string;
-  questionBank11?: string[];
 };
 type OpenClassRow = {
   id: string;
@@ -35,12 +32,6 @@ type ActivityRow = {
   groups: ActivityGroup[];
   studentCandidates?: string[];
   courseStatus?: "not_started" | "in_progress" | "paused" | "ended";
-};
-
-type PromptConfig = {
-  stepPrompts: Record<string, string>;
-  subStepPrompts: Record<string, string>;
-  questionBanks: Record<string, string[]>;
 };
 
 type MonitorSession = {
@@ -116,19 +107,14 @@ export default function TeacherPage() {
     title: "",
     genre: "議論文",
     description: "",
-    enabled: true,
-    step1Prompt: "",
-    subStep13Prompt: "",
-    questionBank11Text: ""
+    enabled: true
   });
   const [openClassForm, setOpenClassForm] = useState({
     id: "",
     classNumber: "",
     essayId: "",
     durationMinutes: 40,
-    supplemental: "",
-    step1PromptOverride: "",
-    subStep21PromptOverride: ""
+    supplemental: ""
   });
 
   const [selectedActivityId, setSelectedActivityId] = useState("");
@@ -726,19 +712,8 @@ export default function TeacherPage() {
     e.preventDefault();
     setError("");
 
-    const step1Prompt = essayForm.step1Prompt.trim();
-    const subStep13Prompt = essayForm.subStep13Prompt.trim();
-    const questionBank11 = essayForm.questionBank11Text
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean);
-
     if (!essayForm.title.trim() || !essayForm.genre.trim() || !essayForm.description.trim()) {
       setError("寫作主題基本欄位未填完整");
-      return;
-    }
-    if (!step1Prompt || !subStep13Prompt || questionBank11.length === 0) {
-      setError("請完整填寫步驟 1 Prompt、步驟 1-3 Prompt、問題庫 1-1");
       return;
     }
 
@@ -751,12 +726,7 @@ export default function TeacherPage() {
           title: essayForm.title,
           genre: essayForm.genre,
           description: essayForm.description,
-          enabled: essayForm.enabled,
-          promptConfig: {
-            stepPrompts: { "1": step1Prompt },
-            subStepPrompts: { "1-3": subStep13Prompt },
-            questionBanks: { "1-1": questionBank11 }
-          }
+          enabled: essayForm.enabled
         })
       });
       const essayData = await essayResponse.json();
@@ -787,10 +757,7 @@ export default function TeacherPage() {
         title: "",
         genre: "議論文",
         description: "",
-        enabled: true,
-        step1Prompt: "",
-        subStep13Prompt: "",
-        questionBank11Text: ""
+        enabled: true
       });
 
       // 再背景同步全部資料，若失敗不影響剛剛新增的顯示
@@ -807,21 +774,13 @@ export default function TeacherPage() {
       title: essay.title,
       genre: essay.genre,
       description: essay.description,
-      enabled: essay.enabled,
-      step1Prompt: essay.step1Prompt ?? "",
-      subStep13Prompt: essay.subStep13Prompt ?? "",
-      questionBank11Text: (essay.questionBank11 ?? []).join("\n")
+      enabled: essay.enabled
     });
   }
 
   async function saveOpenClass(e: FormEvent) {
     e.preventDefault();
     setError("");
-    const promptOverride: PromptConfig = {
-      stepPrompts: openClassForm.step1PromptOverride ? { "1": openClassForm.step1PromptOverride } : {},
-      subStepPrompts: openClassForm.subStep21PromptOverride ? { "2-1": openClassForm.subStep21PromptOverride } : {},
-      questionBanks: {}
-    };
 
     const response = await fetch("/api/admin/openclasses", {
       method: "POST",
@@ -831,8 +790,7 @@ export default function TeacherPage() {
         classNumber: openClassForm.classNumber,
         essayId: openClassForm.essayId,
         durationMinutes: openClassForm.durationMinutes,
-        supplemental: openClassForm.supplemental,
-        promptOverride
+        supplemental: openClassForm.supplemental
       })
     });
     const data = await response.json();
@@ -850,9 +808,7 @@ export default function TeacherPage() {
       classNumber: "",
       essayId: "",
       durationMinutes: 40,
-      supplemental: "",
-      step1PromptOverride: "",
-      subStep21PromptOverride: ""
+      supplemental: ""
     });
     await refreshAll();
   }
@@ -1014,17 +970,12 @@ export default function TeacherPage() {
   }
 
   async function startEditOpenClass(openClass: OpenClassRow) {
-    const response = await fetch(`/api/admin/prompts/openclass?openClassId=${encodeURIComponent(openClass.id)}`);
-    const data = await response.json();
-    const config = (data?.config ?? { stepPrompts: {}, subStepPrompts: {}, questionBanks: {} }) as PromptConfig;
     setOpenClassForm({
       id: openClass.id,
       classNumber: openClass.classNumber,
       essayId: openClass.essayId,
       durationMinutes: openClass.durationMinutes,
-      supplemental: openClass.supplemental,
-      step1PromptOverride: config.stepPrompts["1"] ?? "",
-      subStep21PromptOverride: config.subStepPrompts["2-1"] ?? ""
+      supplemental: openClass.supplemental
     });
   }
 
@@ -1818,7 +1769,7 @@ export default function TeacherPage() {
           {courseTab === "essay" ? (
             <div className="card">
               <h2>寫作主題管理</h2>
-              <small>新增或編輯主題時，需同時維護核心 Prompt/問題庫欄位。</small>
+              <small>Prompt 與問題庫改由系統參數 JSON 管理；此處僅維護主題資料。</small>
               <form onSubmit={saveEssay} className="row">
                 <div className="col">
                   <label>標題</label>
@@ -1836,30 +1787,10 @@ export default function TeacherPage() {
                 </div>
                 <div className="col">
                   <label>引導說明</label>
-                  <input
+                  <textarea
+                    rows={6}
                     value={essayForm.description}
                     onChange={(e) => setEssayForm({ ...essayForm, description: e.target.value })}
-                  />
-                </div>
-                <div className="col">
-                  <label>步驟 1 Prompt</label>
-                  <textarea
-                    value={essayForm.step1Prompt}
-                    onChange={(e) => setEssayForm({ ...essayForm, step1Prompt: e.target.value })}
-                  />
-                </div>
-                <div className="col">
-                  <label>步驟 1-3 Prompt</label>
-                  <textarea
-                    value={essayForm.subStep13Prompt}
-                    onChange={(e) => setEssayForm({ ...essayForm, subStep13Prompt: e.target.value })}
-                  />
-                </div>
-                <div className="col">
-                  <label>問題庫 1-1（每行一題）</label>
-                  <textarea
-                    value={essayForm.questionBank11Text}
-                    onChange={(e) => setEssayForm({ ...essayForm, questionBank11Text: e.target.value })}
                   />
                 </div>
                 <div className="col" style={{ alignSelf: "end" }}>
@@ -1876,10 +1807,7 @@ export default function TeacherPage() {
                           title: "",
                           genre: "議論文",
                           description: "",
-                          enabled: true,
-                          step1Prompt: "",
-                          subStep13Prompt: "",
-                          questionBank11Text: ""
+                          enabled: true
                         })
                       }
                     >
@@ -2005,23 +1933,10 @@ export default function TeacherPage() {
                 </div>
                 <div className="col">
                   <label>補充資料</label>
-                  <input
+                  <textarea
+                    rows={6}
                     value={openClassForm.supplemental}
                     onChange={(e) => setOpenClassForm({ ...openClassForm, supplemental: e.target.value })}
-                  />
-                </div>
-                <div className="col">
-                  <label>步驟 1 Prompt 覆蓋（編輯任務時可調整）</label>
-                  <textarea
-                    value={openClassForm.step1PromptOverride}
-                    onChange={(e) => setOpenClassForm({ ...openClassForm, step1PromptOverride: e.target.value })}
-                  />
-                </div>
-                <div className="col">
-                  <label>子步驟 2-1 Prompt 覆蓋</label>
-                  <textarea
-                    value={openClassForm.subStep21PromptOverride}
-                    onChange={(e) => setOpenClassForm({ ...openClassForm, subStep21PromptOverride: e.target.value })}
                   />
                 </div>
                 <div className="col" style={{ alignSelf: "end" }}>

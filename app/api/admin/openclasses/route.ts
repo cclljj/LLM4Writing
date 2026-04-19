@@ -4,10 +4,8 @@ import {
   flushDomainState,
   getOpenClasses,
   hydrateDomainState,
-  saveOpenClassPromptConfig,
   upsertOpenClass
 } from "@/src/lib/mock-data";
-import { PromptConfig } from "@/src/lib/types";
 import { getUserStore, getUsersVisibleToTeacherStore } from "@/src/lib/user-store";
 
 export async function GET() {
@@ -43,7 +41,6 @@ export async function POST(request: NextRequest) {
     school?: string;
     durationMinutes?: number;
     supplemental?: string;
-    promptOverride?: PromptConfig;
   };
 
   if (!body.classNumber || !body.essayId || !body.durationMinutes || body.supplemental === undefined) {
@@ -85,9 +82,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: saved.error }, { status: 400 });
   }
 
-  if (body.promptOverride) {
-    saveOpenClassPromptConfig(saved.saved.id, body.promptOverride);
-  }
   await flushDomainState();
 
   return NextResponse.json({ saved: saved.saved });

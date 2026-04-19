@@ -33,7 +33,7 @@ LLM4Writing 已改造成可直接部署於 Vercel 的原生架構版本。
 4. 教師端三大模組入口：帳號管理 / 課程管理 / 學習管理
 5. 課堂觀察（小組進度與對話檢視）與步驟切換
 6. 寫作主題與開課管理（Vercel-native 版 CRUD）
-7. Prompt / 問題庫管理入口（主題層 + 班級覆蓋層）
+7. Prompt / 問題庫改為系統參數 JSON（檔案版）
 
 ## 本機開發
 
@@ -89,8 +89,14 @@ npx --yes vercel --prod
   - `GET /api/admin/activities`
   - `POST /api/admin/groups`
   - `GET /api/teacher/personal-progress`
-  - `GET/POST /api/admin/prompts/essay`
-  - `GET/POST /api/admin/prompts/openclass`
+  - `GET/POST /api/admin/prompts/essay`（唯讀，POST 不可寫）
+  - `GET/POST /api/admin/prompts/openclass`（唯讀，POST 不可寫）
+
+## 系統參數（Prompt）
+
+- 檔案：`src/config/system-prompt-config.json`
+- 說明：全系統統一使用，不再依主題或任務做覆蓋
+- 維護方式：由開發人員修改檔案後，透過 CI/CD 重新部署
 
 ## Postgres 注意事項
 

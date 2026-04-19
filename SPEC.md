@@ -64,7 +64,7 @@
 ### Domain Mock Store
 
 - 檔案：`src/lib/mock-data.ts`
-- 內容：`users`、`userPasswords`、`essays`、`openClasses`、`activityGroupMap`、`courseStatusMap`、`essayPromptConfigs`、`openClassPromptConfigs`
+- 內容：`users`、`userPasswords`、`essays`、`openClasses`、`activityGroupMap`、`courseStatusMap`
 - Postgres 啟用時：
   - 表：`llm4writing_domain`
   - 主鍵固定 `id='singleton'`，`payload` 存整體 domain JSON
@@ -341,22 +341,20 @@ student 可儲存三種內容：
 
 ### 課程管理
 
-- 寫作主題管理（含 essay + 核心 prompt 欄位整合編輯）：
+- 寫作主題管理：
   - 「說明」欄位文案為「引導說明」
-  - 新增/編輯主題時，需同時維護：
-    - `步驟 1 Prompt`
-    - `步驟 1-3 Prompt`
-    - `問題庫 1-1（每行一題）`
+  - 新增/編輯僅維護主題資料（title / genre / 引導說明 / enabled）
+  - 「引導說明」使用較大文字輸入區（textarea）
   - 主題清單含「編輯」按鈕，可載入並編輯主題完整內容
   - 主題清單含「啟用 / 停用」按鈕，且按鈕互斥可用：
     - 啟用中：`停用` 可按、`啟用` disabled
     - 停用中：`啟用` 可按、`停用` disabled
-  - 原「主題 Prompt/問題庫」獨立分頁已移除
 - 寫作任務管理（open class）：
   - 班級下拉：來自可見 student 的 classNumber 清單
   - 主題下拉：顯示 `essayId / title`（僅可選啟用主題；編輯既有任務時可保留既有停用主題）
   - 支援新增與編輯
-  - 在同一編輯表單可寫 `步驟1` / `子步驟2-1` 的任務 prompt 覆蓋
+  - 「補充資料」使用較大文字輸入區（textarea）
+  - 不提供任務層 prompt 覆蓋欄位
 - 組別管理：
   - 先選任務（顯示為「班級 + 任務 + id」）
   - 若該任務「尚未分組」：
@@ -548,7 +546,8 @@ Request:
 ### `GET/POST /api/admin/prompts/essay`
 
 - 權限：teacher/admin
-- 管理 essay 層級 prompt config（目前由「寫作主題管理」同頁整合呼叫）
+- 改為唯讀檢視系統參數 JSON
+- `POST` 不允許寫入（回傳 `prompt_config_readonly_use_filesystem_json`）
 
 ### `GET/POST /api/admin/openclasses`
 
@@ -557,16 +556,16 @@ Request:
   - admin 看全部
   - teacher 僅看可見班級任務
 - POST（新增/編輯任務）：
-  - 欄位：`id? classNumber essayId durationMinutes supplemental school? promptOverride?`
+  - 欄位：`id? classNumber essayId durationMinutes supplemental school?`
   - teacher 僅可對可見班級操作
   - 停用中的主題不可建立新任務（`essay_disabled`）
   - 既有任務若已綁定停用主題，仍可維持與編輯
-  - `promptOverride` 寫入 open class prompt config
 
 ### `GET/POST /api/admin/prompts/openclass`
 
 - 權限：teacher/admin
-- 管理任務層級 prompt config
+- 改為唯讀檢視系統參數 JSON
+- `POST` 不允許寫入（回傳 `prompt_config_readonly_use_filesystem_json`）
 
 ### `GET /api/admin/activities`
 
@@ -612,8 +611,9 @@ Behavior:
 
 套用規則：
 
-1. 先取 essay config
-2. 再 merge openClass config（同 key 覆蓋）
+1. 全系統統一使用檔案系統 JSON：`src/config/system-prompt-config.json`
+2. 不再依主題或任務做 prompt 覆蓋
+3. 開發團隊透過修改該 JSON 並經 CI/CD 部署到 production
 
 實作函式：`resolvePromptConfigForActivity(activityId)`
 
@@ -647,12 +647,12 @@ Behavior:
 1. 同校同班只能對應單一教師（student 建立與更新都要檢查）
 2. teacher 的任務與分組操作必須受可見班級限制
 3. 建立寫作任務時，班級與主題必須來自可選清單（非自由文字）
-4. 任務編輯必須可同時維護任務 prompt 覆蓋
+4. Prompt 僅能來自 `src/config/system-prompt-config.json`（不可由 UI/API 寫入 DB）
 5. Step1/2 必須維持「所有組員回覆才 AI 回覆」的 group gate
 6. Step5/7/10 必須是 non-interactive（學生送訊息會報錯）
 7. student artifact 只能存到自己參與的 session
 8. session/user/domain store 必須維持「有 DB 用 DB，無 DB 用 memory」雙模式
-9. student 透過 `/api/student/join` 加入時必須遵守課程狀態限制（未開始/已結束不可加入）
+9. student 透過 `/api/student/join` 加入時必須遵守課程狀態限制（未開始/暫停/已結束不可加入）
 10. 停用主題不可建立新寫作任務，但既有任務不受影響
 
 ---
@@ -661,7 +661,7 @@ Behavior:
 
 1. 無 DB 環境下，domain 依賴本機檔案 `.data/domain-state.json`；若檔案不可寫或被清空，會回預設
 2. 群組隨機分配採前端簡單亂數，不含種子與可重現性
-3. 提示詞編輯 UI 目前僅暴露部分 key（step1 / 2-1 / 1-3 / 1-1 等）
+3. Prompt 變更需改檔案並重新部署，不支援線上即時編輯
 
 ---
 
@@ -672,11 +672,11 @@ Behavior:
 1. `types.ts` 的資料型別（特別是 `UserAccount.classNumber`、`Activity.classNumber/essayId`）
 2. `engine.ts` 的 10 步驟模式與 gate / reflection 行為
 3. `user-store.ts` 的衝突檢查與 role-based CRUD 規則
-4. `mock-data.ts` 的 open class + prompt merge + group sanitizer
+4. `mock-data.ts` 的 open class + system prompt config 載入 + group sanitizer
 5. `admin/users`, `admin/openclasses`, `admin/activities`, `admin/groups` 路由的可見範圍過濾
 6. `/teacher` UI 的：
    - 任務下拉（班級/主題）
-   - 任務編輯（含 prompt 覆蓋）
+   - 任務編輯（無 prompt 覆蓋）
    - 分組兩種方式（隨機、拖曳）
 
 只要上述 6 點一致，系統核心行為即可與目前版本對齊。

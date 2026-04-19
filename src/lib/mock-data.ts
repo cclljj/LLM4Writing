@@ -2,6 +2,7 @@ import { Activity, ActivityGroup, PromptConfig, UserAccount } from "@/src/lib/ty
 import postgres, { Sql } from "postgres";
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import systemPromptConfig from "@/src/config/system-prompt-config.json";
 
 type Essay = {
   id: string;
@@ -32,8 +33,6 @@ type DomainState = {
   openClasses: OpenClassTask[];
   activityGroupMap: Record<string, ActivityGroup[]>;
   courseStatusMap: Record<string, "not_started" | "in_progress" | "paused" | "ended">;
-  essayPromptConfigs: Record<string, PromptConfig>;
-  openClassPromptConfigs: Record<string, PromptConfig>;
 };
 
 const KEY = "__llm4writing_domain_state__";
@@ -107,46 +106,6 @@ const defaultCourseStatusMap: Record<string, "not_started" | "in_progress" | "pa
   "oc-002": "not_started"
 };
 
-const defaultEssayPromptConfigs: Record<string, PromptConfig> = {
-  "essay-1": {
-    stepPrompts: {
-      "1": "你是引導討論助教，請聚焦題意澄清。",
-      "2": "引導蒐集論據，提醒資料來源。",
-      "3": "協助產生可辯護的論點。",
-      "4": "引導比較組員觀點並修正。",
-      "5": "總結前四步重點並形成摘要。",
-      "6": "引導學生完成作文初稿。",
-      "7": "分析初稿的論點、結構、語言。",
-      "8": "指導潤飾與修訂。",
-      "9": "反思提問由系統執行。",
-      "10": "輸出完整總結報告。"
-    },
-    subStepPrompts: {
-      "1-3": "請從立場差異切入，提出追問。",
-      "1-4": "請要求學生補足可驗證證據。",
-      "2-1": "引導學生先列出可查證資料類型。",
-      "2-2": "引導學生評估資料可信度。",
-      "2-3": "引導學生整理支持/反對資料。"
-    },
-    questionBanks: {
-      "1-1": ["題目中的關鍵詞有哪些？", "這個題目要解決什麼問題？"],
-      "1-2": ["你目前最直覺的立場是什麼？", "有沒有可能的反方觀點？"],
-      "1-5": ["請總結你們小組目前的共同結論。"],
-      "2-4": ["請分享一則可支持你論點的具體案例。"]
-    }
-  }
-};
-
-const defaultOpenClassPromptConfigs: Record<string, PromptConfig> = {
-  "oc-001": {
-    stepPrompts: {
-      "1": "701 班專用：先釐清科技影響面向（學習/社交/生活）。"
-    },
-    subStepPrompts: {},
-    questionBanks: {}
-  }
-};
-
 function cloneState(): DomainState {
   return {
     users: defaultUsers.map((user) => ({ ...user })),
@@ -154,24 +113,7 @@ function cloneState(): DomainState {
     essays: defaultEssays.map((essay) => ({ ...essay })),
     openClasses: defaultOpenClasses.map((openClass) => ({ ...openClass })),
     activityGroupMap: JSON.parse(JSON.stringify(defaultActivityGroupMap)) as Record<string, ActivityGroup[]>,
-    courseStatusMap: { ...defaultCourseStatusMap },
-    essayPromptConfigs: JSON.parse(JSON.stringify(defaultEssayPromptConfigs)) as Record<string, PromptConfig>,
-    openClassPromptConfigs: JSON.parse(JSON.stringify(defaultOpenClassPromptConfigs)) as Record<string, PromptConfig>
-  };
-}
-
-function normalizePromptConfig(input: unknown): PromptConfig {
-  const value = (input ?? {}) as {
-    stepPrompts?: Record<string, string>;
-    subStepPrompts?: Record<string, string>;
-    questionBanks?: Record<string, string[]>;
-  };
-  return {
-    stepPrompts: { ...(value.stepPrompts ?? {}) },
-    subStepPrompts: { ...(value.subStepPrompts ?? {}) },
-    questionBanks: Object.fromEntries(
-      Object.entries(value.questionBanks ?? {}).map(([key, list]) => [key, Array.isArray(list) ? list.filter((q) => typeof q === "string") : []])
-    )
+    courseStatusMap: { ...defaultCourseStatusMap }
   };
 }
 
@@ -242,27 +184,13 @@ function normalizeDomainState(input: unknown): DomainState {
     ...(rawCourseStatus as Record<string, "not_started" | "in_progress" | "paused" | "ended">)
   };
 
-  const rawEssayPrompts = raw.essayPromptConfigs && typeof raw.essayPromptConfigs === "object" ? raw.essayPromptConfigs : {};
-  const mergedEssayPrompts: Record<string, PromptConfig> = { ...base.essayPromptConfigs };
-  Object.entries(rawEssayPrompts as Record<string, unknown>).forEach(([key, value]) => {
-    mergedEssayPrompts[key] = normalizePromptConfig(value);
-  });
-
-  const rawOpenClassPrompts = raw.openClassPromptConfigs && typeof raw.openClassPromptConfigs === "object" ? raw.openClassPromptConfigs : {};
-  const mergedOpenClassPrompts: Record<string, PromptConfig> = { ...base.openClassPromptConfigs };
-  Object.entries(rawOpenClassPrompts as Record<string, unknown>).forEach(([key, value]) => {
-    mergedOpenClassPrompts[key] = normalizePromptConfig(value);
-  });
-
   return {
     users: mergedUsers,
     userPasswords: mergedUserPasswords,
     essays: mergedEssays,
     openClasses: mergedOpenClasses,
     activityGroupMap: mergedActivityGroupMap,
-    courseStatusMap: mergedCourseStatusMap,
-    essayPromptConfigs: mergedEssayPrompts,
-    openClassPromptConfigs: mergedOpenClassPrompts
+    courseStatusMap: mergedCourseStatusMap
   };
 }
 
@@ -281,8 +209,6 @@ const essays = state.essays;
 const openClasses = state.openClasses;
 const activityGroupMap = state.activityGroupMap;
 const courseStatusMap = state.courseStatusMap;
-const essayPromptConfigs = state.essayPromptConfigs;
-const openClassPromptConfigs = state.openClassPromptConfigs;
 const DOMAIN_FILE = path.join(process.cwd(), ".data", "domain-state.json");
 
 function getPostgresUrl(): string | undefined {
@@ -347,15 +273,6 @@ function applyState(next: DomainState) {
     courseStatusMap[key] = value;
   });
 
-  Object.keys(essayPromptConfigs).forEach((key) => delete essayPromptConfigs[key]);
-  Object.entries(next.essayPromptConfigs).forEach(([key, value]) => {
-    essayPromptConfigs[key] = JSON.parse(JSON.stringify(value)) as PromptConfig;
-  });
-
-  Object.keys(openClassPromptConfigs).forEach((key) => delete openClassPromptConfigs[key]);
-  Object.entries(next.openClassPromptConfigs).forEach(([key, value]) => {
-    openClassPromptConfigs[key] = JSON.parse(JSON.stringify(value)) as PromptConfig;
-  });
 }
 
 function snapshotState(): DomainState {
@@ -365,9 +282,7 @@ function snapshotState(): DomainState {
     essays: essays.map((item) => ({ ...item })),
     openClasses: openClasses.map((item) => ({ ...item })),
     activityGroupMap: JSON.parse(JSON.stringify(activityGroupMap)) as Record<string, ActivityGroup[]>,
-    courseStatusMap: { ...courseStatusMap },
-    essayPromptConfigs: JSON.parse(JSON.stringify(essayPromptConfigs)) as Record<string, PromptConfig>,
-    openClassPromptConfigs: JSON.parse(JSON.stringify(openClassPromptConfigs)) as Record<string, PromptConfig>
+    courseStatusMap: { ...courseStatusMap }
   };
 }
 
@@ -422,14 +337,6 @@ export async function flushDomainState(): Promise<void> {
       payload = EXCLUDED.payload,
       updated_at = NOW()
   `;
-}
-
-function mergePromptConfig(base: PromptConfig, override: PromptConfig): PromptConfig {
-  return {
-    stepPrompts: { ...base.stepPrompts, ...override.stepPrompts },
-    subStepPrompts: { ...base.subStepPrompts, ...override.subStepPrompts },
-    questionBanks: { ...base.questionBanks, ...override.questionBanks }
-  };
 }
 
 function findEssay(essayId: string): Essay | undefined {
@@ -530,13 +437,10 @@ function getStudentsBySchoolAndClass(school: string, classNumber: string): UserA
 }
 
 export function resolvePromptConfigForActivity(activityId: string): PromptConfig {
-  const openClass = openClasses.find((item) => item.id === activityId);
-  const essay = openClass ? findEssay(openClass.essayId) : undefined;
-
-  const base: PromptConfig = essay ? getEssayPromptConfig(essay.id) : { stepPrompts: {}, subStepPrompts: {}, questionBanks: {} };
-  const override: PromptConfig = openClass ? getOpenClassPromptConfig(openClass.id) : { stepPrompts: {}, subStepPrompts: {}, questionBanks: {} };
-
-  return mergePromptConfig(base, override);
+  if (!findActivity(activityId)) {
+    return { stepPrompts: {}, subStepPrompts: {}, questionBanks: {} };
+  }
+  return JSON.parse(JSON.stringify(systemPromptConfig)) as PromptConfig;
 }
 
 export function getUsers(): UserAccount[] {
@@ -670,36 +574,6 @@ export function updateActivityGroups(activityId: string, groups: ActivityGroup[]
 
   activityGroupMap[activityId] = sanitizedGroups;
   return findActivity(activityId);
-}
-
-export function getEssayPromptConfig(essayId: string): PromptConfig {
-  return (
-    essayPromptConfigs[essayId] ?? {
-      stepPrompts: {},
-      subStepPrompts: {},
-      questionBanks: {}
-    }
-  );
-}
-
-export function saveEssayPromptConfig(essayId: string, config: PromptConfig): PromptConfig {
-  essayPromptConfigs[essayId] = config;
-  return essayPromptConfigs[essayId];
-}
-
-export function getOpenClassPromptConfig(openClassId: string): PromptConfig {
-  return (
-    openClassPromptConfigs[openClassId] ?? {
-      stepPrompts: {},
-      subStepPrompts: {},
-      questionBanks: {}
-    }
-  );
-}
-
-export function saveOpenClassPromptConfig(openClassId: string, config: PromptConfig): PromptConfig {
-  openClassPromptConfigs[openClassId] = config;
-  return openClassPromptConfigs[openClassId];
 }
 
 export function upsertEssay(input: {

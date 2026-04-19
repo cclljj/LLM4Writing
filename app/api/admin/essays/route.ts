@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/src/lib/auth-server";
-import { flushDomainState, getEssayPromptConfig, getEssays, hydrateDomainState, saveEssayPromptConfig, upsertEssay } from "@/src/lib/mock-data";
-import { PromptConfig } from "@/src/lib/types";
+import { flushDomainState, getEssays, hydrateDomainState, upsertEssay } from "@/src/lib/mock-data";
 
 export async function GET() {
   const user = await getCurrentUser();
@@ -10,17 +9,7 @@ export async function GET() {
   }
 
   await hydrateDomainState();
-  const essays = getEssays().map((essay) => {
-    const config = getEssayPromptConfig(essay.id);
-    return {
-      ...essay,
-      step1Prompt: config.stepPrompts["1"] ?? "",
-      subStep13Prompt: config.subStepPrompts["1-3"] ?? "",
-      questionBank11: config.questionBanks["1-1"] ?? []
-    };
-  });
-
-  return NextResponse.json({ essays });
+  return NextResponse.json({ essays: getEssays() });
 }
 
 export async function POST(request: NextRequest) {
@@ -36,7 +25,6 @@ export async function POST(request: NextRequest) {
     genre?: string;
     description?: string;
     enabled?: boolean;
-    promptConfig?: PromptConfig;
   };
 
   if (!body.title || !body.genre || !body.description) {
@@ -51,19 +39,6 @@ export async function POST(request: NextRequest) {
     enabled: body.enabled ?? true
   });
 
-  if (body.promptConfig) {
-    saveEssayPromptConfig(saved.id, body.promptConfig);
-  }
   await flushDomainState();
-
-  const config = getEssayPromptConfig(saved.id);
-
-  const savedWithPrompt = {
-    ...saved,
-    step1Prompt: config.stepPrompts["1"] ?? "",
-    subStep13Prompt: config.subStepPrompts["1-3"] ?? "",
-    questionBank11: config.questionBanks["1-1"] ?? []
-  };
-
-  return NextResponse.json({ saved: savedWithPrompt });
+  return NextResponse.json({ saved });
 }
