@@ -232,6 +232,11 @@ export default function StudentPage() {
             : null;
     const responders = activeGateKey ? session.groupGate?.[activeGateKey] ?? [] : [];
     const hasSubmittedThisTurn = Boolean(loginUser && responders.includes(loginUser));
+    const hidePeerAnswersBeforeOwn =
+      currentMode === "group_interaction" &&
+      Array.isArray(responders) &&
+      responders.length > 0 &&
+      !hasSubmittedThisTurn;
 
     const toQuestionText = (text: string): string | null => {
       if (text.includes("子步驟 ")) {
@@ -253,7 +258,7 @@ export default function StudentPage() {
       .filter((m) => m.step === session.currentStep)
       .forEach((m) => {
         if (m.role === "student") {
-          if (currentMode === "group_interaction" && !hasSubmittedThisTurn && m.userId && m.userId !== loginUser) {
+          if (hidePeerAnswersBeforeOwn && m.userId && m.userId !== loginUser) {
             return;
           }
           result.push({ id: m.id, kind: "student", text: m.text, at: m.at, userId: m.userId });
