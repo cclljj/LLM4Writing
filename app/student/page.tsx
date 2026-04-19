@@ -220,6 +220,18 @@ export default function StudentPage() {
   );
   const interactiveMessages = useMemo(() => {
     if (!session) return [] as InteractiveItem[];
+    const currentStep = session.currentStep;
+    const currentMode = getMode(currentStep);
+    const activeGateKey =
+      currentStep === 1
+        ? `1-${session.stepState.step1Substep ?? 1}`
+        : currentStep === 2
+          ? `2-${session.stepState.step2Substep ?? 1}`
+          : currentStep === 4
+            ? "4-1"
+            : null;
+    const responders = activeGateKey ? session.groupGate?.[activeGateKey] ?? [] : [];
+    const hasSubmittedThisTurn = Boolean(loginUser && responders.includes(loginUser));
 
     const toQuestionText = (text: string): string | null => {
       if (text.includes("子步驟 ")) {
@@ -241,6 +253,9 @@ export default function StudentPage() {
       .filter((m) => m.step === session.currentStep)
       .forEach((m) => {
         if (m.role === "student") {
+          if (currentMode === "group_interaction" && !hasSubmittedThisTurn && m.userId && m.userId !== loginUser) {
+            return;
+          }
           result.push({ id: m.id, kind: "student", text: m.text, at: m.at, userId: m.userId });
           return;
         }
@@ -256,7 +271,7 @@ export default function StudentPage() {
         }
       });
     return result;
-  }, [session, sortedMessages]);
+  }, [session, sortedMessages, loginUser]);
   const currentActivity = useMemo(
     () => {
       const all = [...classCourses];
@@ -404,15 +419,23 @@ export default function StudentPage() {
         : null;
   const stepModeLine = `${stepSubstepText ?? "目前子步驟：—"} ｜ 模式：${currentModeLabel}`;
   const lastInteractive = interactiveMessages[interactiveMessages.length - 1];
-  const canReplyToQuestion = lastInteractive?.kind === "question";
-  const activeSubstepKey =
+  const lastIsQuestion = lastInteractive?.kind === "question";
+  const activeGateKey =
     currentStep === 1
       ? `1-${session?.stepState.step1Substep ?? 1}`
       : currentStep === 2
         ? `2-${session?.stepState.step2Substep ?? 1}`
+        : currentStep === 4
+          ? "4-1"
         : null;
-  const responders = activeSubstepKey ? session?.groupGate?.[activeSubstepKey] ?? [] : [];
+  const responders = activeGateKey ? session?.groupGate?.[activeGateKey] ?? [] : [];
   const hasSubmittedThisTurn = Boolean(loginUser && responders.includes(loginUser));
+  const allRespondedThisTurn =
+    currentMode === "group_interaction" && !!session && session.participants.every((p) => responders.includes(p));
+  const canReplyToQuestion =
+    currentMode === "group_interaction"
+      ? !hasSubmittedThisTurn && !allRespondedThisTurn
+      : Boolean(lastIsQuestion);
   const waitingGroupMembers =
     currentMode === "group_interaction" &&
     !!session &&
