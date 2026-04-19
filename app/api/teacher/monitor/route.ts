@@ -19,7 +19,10 @@ export async function GET() {
       groupName: s.groupName,
       participants: s.participants,
       currentStep: s.currentStep,
-      messages: s.messages
+      messages: s.messages,
+      groupGate: s.groupGate,
+      stepState: s.stepState,
+      reflectionIndex: s.reflectionIndex
     }));
 
   return NextResponse.json({ sessions: activeSessions });

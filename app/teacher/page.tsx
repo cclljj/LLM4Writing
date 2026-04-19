@@ -42,6 +42,9 @@ type MonitorSession = {
   groupName?: string;
   participants: string[];
   currentStep: number;
+  groupGate?: Record<string, string[]>;
+  stepState?: { step1Substep: number; step2Substep: number };
+  reflectionIndex?: Record<string, number>;
   messages: Array<{ id: string; role: string; userId?: string; text: string; at: string; step: number }>;
 };
 
@@ -214,6 +217,71 @@ export default function TeacherPage() {
         : [],
     [monitorSessions, selectedLearningActivityId]
   );
+
+  function getStepAdvanceHint(session: MonitorSession): { ready: boolean; text: string; nextStep?: number } {
+    const step = session.currentStep;
+    const nextStep = step < 10 ? step + 1 : undefined;
+    const stepMessages = session.messages.filter((m) => m.step === step);
+    const studentUsers = new Set(stepMessages.filter((m) => m.role === "student" && m.userId).map((m) => m.userId as string));
+    const allParticipantsReplied =
+      session.participants.length > 0 && session.participants.every((participant) => studentUsers.has(participant));
+
+    if (step === 1) {
+      const ready = stepMessages.some(
+        (m) => m.role === "system" && m.text.includes("步驟 1 子步驟已完成，等待教師切換下一步")
+      );
+      return ready
+        ? { ready: true, text: "全部組員已完成步驟 1，建議切換到 Step 2。", nextStep }
+        : {
+            ready: false,
+            text: `步驟 1 進行中（目前子步驟 1-${session.stepState?.step1Substep ?? 1}），等待全部組員完成。`
+          };
+    }
+
+    if (step === 2) {
+      const ready = stepMessages.some(
+        (m) => m.role === "system" && m.text.includes("步驟 2 子步驟已完成，等待教師切換下一步")
+      );
+      return ready
+        ? { ready: true, text: "全部組員已完成步驟 2，建議切換到 Step 3。", nextStep }
+        : {
+            ready: false,
+            text: `步驟 2 進行中（目前子步驟 2-${session.stepState?.step2Substep ?? 1}），等待全部組員完成。`
+          };
+    }
+
+    if (step === 4) {
+      const ready = allParticipantsReplied;
+      return ready
+        ? { ready: true, text: "步驟 4 已收齊全組回覆，建議切換到 Step 5。", nextStep }
+        : { ready: false, text: "步驟 4 尚未收齊全組回覆。" };
+    }
+
+    if ([3, 6, 8].includes(step)) {
+      const ready = allParticipantsReplied;
+      return ready
+        ? { ready: true, text: `步驟 ${step} 已收齊回覆，建議切換到 Step ${nextStep}。`, nextStep }
+        : { ready: false, text: `步驟 ${step} 尚未收齊所有學生回覆。` };
+    }
+
+    if ([5, 7].includes(step)) {
+      const ready = stepMessages.some((m) => m.role === "ai");
+      return ready
+        ? { ready: true, text: `步驟 ${step} 報告已產生，建議切換到 Step ${nextStep}。`, nextStep }
+        : { ready: false, text: `步驟 ${step} 報告尚未產生。` };
+    }
+
+    if (step === 9) {
+      const ready =
+        session.participants.length > 0 &&
+        session.participants.every((participant) => (session.reflectionIndex?.[participant] ?? 0) >= 4);
+      return ready
+        ? { ready: true, text: "步驟 9 反思已完成，建議切換到 Step 10。", nextStep }
+        : { ready: false, text: "步驟 9 反思尚未全部完成。" };
+    }
+
+    return { ready: false, text: "目前已是最後步驟或無下一步建議。" };
+  }
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -1558,6 +1626,7 @@ export default function TeacherPage() {
                         <th>小組名稱</th>
                         <th>成員名單</th>
                         <th>小組進度</th>
+                        <th>步驟切換提示</th>
                         <th>動作</th>
                       </tr>
                     </thead>
@@ -1569,6 +1638,31 @@ export default function TeacherPage() {
                           <td>{session.groupName ?? session.groupId ?? "未命名組"}</td>
                           <td>{session.participants.join(", ")}</td>
                           <td>Step {session.currentStep}</td>
+                          <td>
+                            {(() => {
+                              const hint = getStepAdvanceHint(session);
+                              return (
+                                <>
+                                  <small style={{ color: hint.ready ? "#166534" : "#6b7280" }}>{hint.text}</small>
+                                  {hint.ready && hint.nextStep ? (
+                                    <div style={{ marginTop: 6 }}>
+                                      <button
+                                        type="button"
+                                        className="secondary"
+                                        style={{ width: "auto" }}
+                                        onClick={() => {
+                                          setSessionId(session.sessionId);
+                                          setStep(hint.nextStep!);
+                                        }}
+                                      >
+                                        套用 Step {hint.nextStep}
+                                      </button>
+                                    </div>
+                                  ) : null}
+                                </>
+                              );
+                            })()}
+                          </td>
                           <td>
                             <div className="row" style={{ gap: 8 }}>
                               <button
