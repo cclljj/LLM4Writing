@@ -5,55 +5,60 @@ import { findActivity, getStudentUsernamesForActivityClass, hydrateDomainState, 
 import { listSessions, saveSession } from "@/src/lib/store";
 
 export async function POST(request: NextRequest) {
-  const user = await getCurrentUser();
-  if (!user || user.role !== "student") {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
+  try {
+    const user = await getCurrentUser();
+    if (!user || user.role !== "student") {
+      return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    }
 
-  await hydrateDomainState();
-  const body = (await request.json()) as { activityId?: string };
-  const activityId = body.activityId ?? "";
-  const activity = findActivity(activityId);
-  if (!activity) {
-    return NextResponse.json({ error: "activity_not_found" }, { status: 404 });
-  }
+    await hydrateDomainState();
+    const body = (await request.json()) as { activityId?: string };
+    const activityId = body.activityId ?? "";
+    const activity = findActivity(activityId);
+    if (!activity) {
+      return NextResponse.json({ error: "activity_not_found" }, { status: 404 });
+    }
 
-  if (activity.courseStatus === "not_started") {
-    return NextResponse.json({ error: "course_not_started" }, { status: 400 });
-  }
-  if (activity.courseStatus === "paused") {
-    return NextResponse.json({ error: "course_paused" }, { status: 400 });
-  }
-  if (activity.courseStatus === "ended") {
-    return NextResponse.json({ error: "course_ended" }, { status: 400 });
-  }
+    if (activity.courseStatus === "not_started") {
+      return NextResponse.json({ error: "course_not_started" }, { status: 400 });
+    }
+    if (activity.courseStatus === "paused") {
+      return NextResponse.json({ error: "course_paused" }, { status: 400 });
+    }
+    if (activity.courseStatus === "ended") {
+      return NextResponse.json({ error: "course_ended" }, { status: 400 });
+    }
 
-  const group = activity.groups.find((g) => g.members.includes(user.username));
-  const fallbackParticipants = getStudentUsernamesForActivityClass(activity.id);
-  const participants = group?.members.length ? group.members : fallbackParticipants;
-  if (participants.length === 0 || !participants.includes(user.username)) {
-    return NextResponse.json({ error: "not_group_member" }, { status: 403 });
+    const group = activity.groups.find((g) => g.members.includes(user.username));
+    const fallbackParticipants = getStudentUsernamesForActivityClass(activity.id);
+    const participants = group?.members.length ? group.members : fallbackParticipants;
+    if (participants.length === 0 || !participants.includes(user.username)) {
+      return NextResponse.json({ error: "not_group_member" }, { status: 403 });
+    }
+
+    const sessions = await listSessions();
+    const existing = sessions.find(
+      (s) => s.workflow === "spec10" && s.activityId === activity.id && s.participants.includes(user.username)
+    );
+    if (existing) {
+      return NextResponse.json(existing);
+    }
+
+    const session = createSession({
+      participants,
+      workflow: "spec10",
+      phaseMax: 10,
+      activityId: activity.id,
+      activityTitle: activity.title,
+      groupId: group?.groupId ?? "g-auto",
+      groupName: group?.groupName ?? "未分組",
+      promptConfig: resolvePromptConfigForActivity(activity.id)
+    });
+
+    await saveSession(session);
+    return NextResponse.json(session, { status: 201 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "student_join_failed";
+    return NextResponse.json({ error: "student_join_failed", detail: message }, { status: 500 });
   }
-
-  const sessions = await listSessions();
-  const existing = sessions.find(
-    (s) => s.workflow === "spec10" && s.activityId === activity.id && s.participants.includes(user.username)
-  );
-  if (existing) {
-    return NextResponse.json(existing);
-  }
-
-  const session = createSession({
-    participants,
-    workflow: "spec10",
-    phaseMax: 10,
-    activityId: activity.id,
-    activityTitle: activity.title,
-    groupId: group?.groupId ?? "g-auto",
-    groupName: group?.groupName ?? "未分組",
-    promptConfig: resolvePromptConfigForActivity(activity.id)
-  });
-
-  await saveSession(session);
-  return NextResponse.json(session, { status: 201 });
 }

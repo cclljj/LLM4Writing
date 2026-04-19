@@ -198,7 +198,15 @@ export default function StudentPage() {
       body: JSON.stringify({ activityId })
     });
 
-    const data = await response.json();
+    const raw = await response.text();
+    let data: Record<string, unknown> = {};
+    if (raw) {
+      try {
+        data = JSON.parse(raw) as Record<string, unknown>;
+      } catch {
+        data = {};
+      }
+    }
     if (!response.ok) {
       if (data.error === "course_not_started") {
         setError("課程尚未開始，請等待老師開始上課後再進入討論。");
@@ -216,11 +224,16 @@ export default function StudentPage() {
         setError("你尚未被分配到該課程小組，請向老師確認分組設定。");
         return;
       }
-      setError(data.error ?? "join_failed");
+      if (data.error === "student_join_failed") {
+        const detail = typeof data.detail === "string" ? data.detail : "unknown";
+        setError(`進入課程失敗：${detail}`);
+        return;
+      }
+      setError(typeof data.error === "string" ? data.error : "join_failed");
       return;
     }
 
-    setSession(data);
+    setSession(data as SessionState);
     setPreparingCourse(null);
     await refreshOverview();
   }

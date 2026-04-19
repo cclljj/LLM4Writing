@@ -459,6 +459,7 @@ Error:
 - `400 course_not_started`
 - `400 course_paused`
 - `400 course_ended`
+- `500 student_join_failed`（含 `detail` 便於偵錯）
 
 ### `GET /api/student/history?activityId=...`
 
