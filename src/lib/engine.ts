@@ -312,6 +312,30 @@ function buildStep5Summary(session: SessionState): string {
   return `步驟 5 摘要報告\n${brief || "目前尚無足夠資料。"}`;
 }
 
+function splitAiFeedbackAndQuestion(aiText: string): { feedbackText: string; nextQuestion?: string } {
+  const marker = /(###\s*\*\*請回答以下問題\*\*|請回答以下問題)\s*[:：]?/m;
+  const match = marker.exec(aiText);
+  if (!match || typeof match.index !== "number") {
+    return { feedbackText: aiText.trim() };
+  }
+
+  const before = aiText.slice(0, match.index).trim();
+  const after = aiText.slice(match.index + match[0].length).trim();
+  if (!after) {
+    return { feedbackText: before || aiText.trim() };
+  }
+
+  const normalizedQuestion = after
+    .replace(/^[-*]\s*/, "")
+    .replace(/^###\s*/, "")
+    .trim();
+
+  return {
+    feedbackText: before || "已收到大家的回覆。",
+    nextQuestion: normalizedQuestion
+  };
+}
+
 function buildStep7Report(session: SessionState, userId: string): string {
   const essay = session.draftStep6[userId] ?? "(尚未撰寫初稿)";
   return `步驟 7 分析回饋（${userId}）\n初稿：${essay}\n建議：請加強論點與例證的連結。`;
@@ -423,12 +447,17 @@ function handleStep1Or2Group(
   return { session, allResponded: true, substep };
 }
 
-function advanceStep1Or2SubstepAfterAi(session: SessionState, step: 1 | 2, completedSubstep: number): void {
+function advanceStep1Or2SubstepAfterAi(
+  session: SessionState,
+  step: 1 | 2,
+  completedSubstep: number,
+  nextQuestionFromAi?: string
+): void {
   if (step === 1) {
     if (completedSubstep < 5) {
       session.stepState.step1Substep += 1;
       const nextSub = session.stepState.step1Substep;
-      const q = buildStep1Question(session);
+      const q = nextQuestionFromAi?.trim() || buildStep1Question(session);
       session.messages.push(makeMessage({ role: "system", step, text: `子步驟 1-${nextSub}：${q}` }));
       return;
     }
@@ -439,7 +468,7 @@ function advanceStep1Or2SubstepAfterAi(session: SessionState, step: 1 | 2, compl
   if (completedSubstep < 4) {
     session.stepState.step2Substep += 1;
     const nextSub = session.stepState.step2Substep;
-    const q = buildStep2Question(session);
+    const q = nextQuestionFromAi?.trim() || buildStep2Question(session);
     session.messages.push(makeMessage({ role: "system", step, text: `子步驟 2-${nextSub}：${q}` }));
     return;
   }
@@ -469,14 +498,16 @@ export async function sendStudentMessage(session: SessionState, userId: string, 
   if (step === 1 || step === 2) {
     const result = handleStep1Or2Group(session, userId, text);
     if (result.allResponded) {
+      const aiRaw = await generateAiTextForStep(result.session, step, `all members answered step ${step} substep ${result.substep}`);
+      const parsed = splitAiFeedbackAndQuestion(aiRaw);
       result.session.messages.push(
         makeMessage({
           role: "ai",
           step,
-          text: await generateAiTextForStep(result.session, step, `all members answered step ${step} substep ${result.substep}`)
+          text: parsed.feedbackText
         })
       );
-      advanceStep1Or2SubstepAfterAi(result.session, step as 1 | 2, result.substep);
+      advanceStep1Or2SubstepAfterAi(result.session, step as 1 | 2, result.substep, parsed.nextQuestion);
     }
     return result.session;
   }

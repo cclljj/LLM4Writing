@@ -267,6 +267,10 @@ API 輸出給學習/分組流程使用：
 
 `questionBanks` 的主要來源為 `writingTasks[essayId].questionBanks`（依任務 `essayId` 取用）。
 
+子步驟轉接規則：
+- 在 Step1/2 的 AI 回覆中，若包含「請回答以下問題」段落，系統會將該段落內容抽出，作為「下一子步驟」的系統提問。
+- 同時，該段落不再保留於當前 AI 回覆，避免重複顯示。
+
 ## 5.4 LLM Prompt 組裝
 
 課程進行中（有啟用遠端 LLM）時，`system` 訊息組裝規則：
