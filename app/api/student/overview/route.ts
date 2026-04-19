@@ -24,13 +24,20 @@ export async function GET() {
   const activities = getAllActivities();
   const classCourses = activities
     .filter((activity) => activity.school === profile.school && activity.classNumber === profile.classNumber)
+    .map((activity) => {
+      const ownGroup = activity.groups.find((group) => group.members.includes(user.username));
+      const groupStatus = ownGroup
+        ? `第 ${ownGroup.groupName} 組`
+        : activity.groups.length === 0
+          ? "尚未分組"
+          : "未分配";
+      return {
+        ...activity,
+        groupStatus
+      };
+    })
     .sort((a, b) => a.id.localeCompare(b.id));
-  const upcomingCourses = activities.filter(
-    (activity) =>
-      activity.school === profile.school &&
-      activity.classNumber === profile.classNumber &&
-      activity.courseStatus === "not_started"
-  );
+  const upcomingCourses = classCourses.filter((activity) => activity.courseStatus === "not_started");
   const activeCourses = classCourses.filter((activity) => activity.courseStatus === "in_progress");
   const pausedCourses = classCourses.filter((activity) => activity.courseStatus === "paused");
 

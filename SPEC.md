@@ -293,12 +293,14 @@ student 可儲存三種內容：
    - 「尚未開始課程（本班）」（來自 `/api/student/overview`，條件為同校同班且 `courseStatus=not_started`）
    - 「暫停中課程（本班）」
    - 「自己參與過的課程清單」（依最近參與時間排序）
+   - 各課程列顯示分組狀態（`尚未分組` / `未分配` / `第 X 組`）
 2. 若學生資料缺漏（`school` / `classNumber` / `ownerTeacherUsername`），顯示警告訊息提醒向老師反映。
 3. 點進行中課程的「進入課程」會直接呼叫 `/api/student/join` 進入討論，不需二次確認。
 4. 點尚未開始課程的「進入課程」可進入準備階段；在準備階段按「檢查並進入討論」才呼叫 `/api/student/join`。
 5. 若課程尚未開始、暫停中或已結束，`/api/student/join` 會回傳錯誤，前端顯示對應提示。
 6. 點已參與課程的「查詢紀錄」導向 `/student/history/[activityId]`，顯示該課參與摘要、歷次 session 與個人最後作品/回饋。
 7. 進入 session 後先顯示課程資訊區塊（課程標題、群組名稱、組員名單、課程說明、文章說明），再進入 spec10 互動流程（步驟顯示、訊息區、artifact 儲存）。
+8. 一旦進入 session，學生頁會切換到課程內容視圖（提供「返回課程清單」按鈕）。
 
 ## 6.3 `/teacher`
 
@@ -428,6 +430,7 @@ Error:
   - `profile`（含 name/school/classNumber/ownerTeacherUsername）
   - `missingFields`（學生資料缺漏欄位）
   - `classCourses`（同校同班全部課程）
+    - 內含每堂課的 `groupStatus`（分組狀態字串）
   - `upcomingCourses`（同校同班且 `courseStatus=not_started`）
   - `activeCourses`（同校同班且 `courseStatus=in_progress`）
   - `pausedCourses`（同校同班且 `courseStatus=paused`）

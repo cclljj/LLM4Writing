@@ -13,6 +13,7 @@ type Course = {
   essayDescription?: string;
   durationMinutes: number;
   supplemental: string;
+  groupStatus?: string;
   courseStatus?: "not_started" | "in_progress" | "paused" | "ended";
 };
 
@@ -307,6 +308,8 @@ export default function StudentPage() {
         </div>
       ) : null}
 
+      {!session ? (
+      <>
       <div className="card">
         <h2>進行中課程（本班）</h2>
         {activeCourses.length === 0 ? <small>目前沒有進行中的課程。</small> : null}
@@ -315,6 +318,9 @@ export default function StudentPage() {
             <strong>{course.title}</strong>（班級 {course.classNumber} / {course.genre} / {course.durationMinutes} 分鐘）
             <div>
               <small>{course.supplemental}</small>
+            </div>
+            <div>
+              <small>分組狀態：{course.groupStatus ?? "尚未分組"}</small>
             </div>
             <div className="row" style={{ marginTop: 8 }}>
               <div style={{ width: 180 }}>
@@ -342,6 +348,9 @@ export default function StudentPage() {
             <div>
               <small>{course.supplemental}</small>
             </div>
+            <div>
+              <small>分組狀態：{course.groupStatus ?? "尚未分組"}</small>
+            </div>
             <div className="row" style={{ marginTop: 8 }}>
               <div style={{ width: 180 }}>
                 <button
@@ -366,6 +375,9 @@ export default function StudentPage() {
             <strong>{course.title}</strong>（班級 {course.classNumber} / {course.genre}）
             <div>
               <small>課程目前暫停中，請等待老師繼續上課。</small>
+            </div>
+            <div>
+              <small>分組狀態：{course.groupStatus ?? "尚未分組"}</small>
             </div>
           </div>
         ))}
@@ -396,6 +408,8 @@ export default function StudentPage() {
           <h2>目前沒有可顯示課程</h2>
           <small>請確認老師已建立寫作任務，且你的學校與班級資料設定正確。</small>
         </div>
+      ) : null}
+      </>
       ) : null}
 
       {preparingCourse ? (
@@ -431,6 +445,25 @@ export default function StudentPage() {
 
       {session ? (
         <>
+          <div className="card">
+            <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+              <h2 style={{ marginBottom: 0 }}>課程內容</h2>
+              <button
+                type="button"
+                className="secondary"
+                style={{ width: "auto" }}
+                onClick={() => {
+                  setSession(null);
+                  setPreparingCourse(null);
+                  setShowTopic(false);
+                  refreshOverview().catch(() => undefined);
+                }}
+              >
+                返回課程清單
+              </button>
+            </div>
+          </div>
+
           <div className="card" style={{ borderColor: "#bfdbfe", background: "#eff6ff" }}>
             <h2>課程資訊</h2>
             <p>
