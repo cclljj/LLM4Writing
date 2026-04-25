@@ -72,18 +72,18 @@ collect_counts() {
   local out_file="$2"
 
   : > "$out_file"
-  mapfile -t tables < <(psql "$db_url" -At -c "
-    SELECT quote_ident(schemaname) || '.' || quote_ident(tablename)
-    FROM pg_tables
-    WHERE schemaname='public'
-    ORDER BY tablename;
-  ")
-
-  for tbl in "${tables[@]}"; do
+  while IFS= read -r tbl; do
     [[ -z "$tbl" ]] && continue
     cnt="$(psql "$db_url" -At -c "SELECT COUNT(*) FROM ${tbl};")"
     echo "${tbl},${cnt}" >> "$out_file"
-  done
+  done < <(
+    psql "$db_url" -At -c "
+      SELECT quote_ident(schemaname) || '.' || quote_ident(tablename)
+      FROM pg_tables
+      WHERE schemaname='public'
+      ORDER BY tablename;
+    "
+  )
 }
 
 echo "[1/4] Validate target DB connection"
