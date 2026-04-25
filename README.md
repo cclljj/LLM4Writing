@@ -14,6 +14,7 @@ LLM4Writing 已改造成可直接部署於 Vercel 的原生架構版本。
 - 所有需求必須先開 GitHub Issue 再實作
 - 每次任務都要先檢查是否需要更新 `SPEC.md`
 - 完整流程請見 [`TASK.md`](TASK.md)
+- Supabase 資料庫遷移流程請見 [`SUPABASE_MIGRATION.md`](SUPABASE_MIGRATION.md)
 - GitHub 模板：
   - Issue: `.github/ISSUE_TEMPLATE/task_change.yml`
   - PR: `.github/pull_request_template.md`
@@ -55,6 +56,13 @@ npm run dev
 ```bash
 npx --yes vercel --prod
 ```
+
+## Supabase 遷移
+
+- 完整流程（遷移腳本 + 環境變數切換 + 驗證/回復）請參考 [`SUPABASE_MIGRATION.md`](SUPABASE_MIGRATION.md)
+- 腳本：
+  - `scripts/supabase/migrate_to_supabase.sh`
+  - `scripts/supabase/verify_migration.sh`
 
 已設定/可用頁面：
 

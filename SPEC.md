@@ -727,7 +727,18 @@ Behavior:
 
 ---
 
-## 12. 重建指引（給未來 AI）
+## 12. 資料庫遷移與維運
+
+1. Postgres 遷移到 Supabase 的標準流程文件：`SUPABASE_MIGRATION.md`
+2. 標準腳本：
+   - `scripts/supabase/migrate_to_supabase.sh`（備份、還原、row count 比對）
+   - `scripts/supabase/verify_migration.sh`（關鍵表/JSON 檢查、可選 API smoke test）
+3. 環境變數切換時，`POSTGRES_URL` 與 `DATABASE_URL` 應同步指向同一個目標 DB，避免環境差異
+4. 任何遷移作業完成後，必須執行驗證步驟與手動 smoke test，再切 production 流量
+
+---
+
+## 13. 重建指引（給未來 AI）
 
 若要生成相同行為系統，請至少完整實作：
 
