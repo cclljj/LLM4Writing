@@ -3,7 +3,7 @@ import postgres, { Sql } from "postgres";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import systemPromptConfig from "@/src/config/system-prompt-config.json";
-import { getDatabaseUrl, isDatabaseEnabled } from "@/src/lib/db-config";
+import { getDatabaseUrl, getPostgresClientOptions, isDatabaseEnabled } from "@/src/lib/db-config";
 
 type Essay = {
   id: string;
@@ -229,7 +229,7 @@ function getSqlClient(): Sql {
     if (!url) {
       throw new Error("postgres_url_missing");
     }
-    sqlClient = postgres(url, { prepare: true, max: 1 });
+    sqlClient = postgres(url, getPostgresClientOptions(url));
   }
   return sqlClient;
 }

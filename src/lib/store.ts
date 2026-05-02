@@ -1,6 +1,6 @@
 import postgres, { Sql } from "postgres";
 import { SessionState } from "@/src/lib/types";
-import { getDatabaseUrl, isDatabaseEnabled } from "@/src/lib/db-config";
+import { getDatabaseUrl, getPostgresClientOptions, isDatabaseEnabled } from "@/src/lib/db-config";
 
 type MemoryStore = Map<string, SessionState>;
 
@@ -22,10 +22,7 @@ function getSqlClient(): Sql {
     if (!url) {
       throw new Error("postgres_url_missing");
     }
-    sqlClient = postgres(url, {
-      prepare: true,
-      max: 1
-    });
+    sqlClient = postgres(url, getPostgresClientOptions(url));
   }
   return sqlClient;
 }

@@ -131,6 +131,8 @@ npx --yes vercel --prod
 - 首次使用時，系統會自動建立 `llm4writing_sessions` table
 - `payload` 以 `JSONB` 儲存完整 session 狀態
 - 資料庫連線優先讀取 `SUPABASE_DB_URL`（建議只設定這個）
+- 若使用 Supabase pooler，建議改用 transaction pooler 連線（常見為 `:6543`），可降低 `MaxClientsInSessionMode` 風險
+- 可選環境變數 `SUPABASE_POOL_MODE=transaction|session` 強制指定模式（未指定時會依 URL 自動判斷）
 - `POSTGRES_URL` / `DATABASE_URL` 僅作舊環境相容 fallback
 - 若三者都未設定，會自動使用 in-memory store（重啟即遺失）
 

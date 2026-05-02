@@ -43,6 +43,7 @@
 
 - 檔案：`src/lib/store.ts`
 - 啟用條件：`SUPABASE_DB_URL`（優先）或 `POSTGRES_URL` / `DATABASE_URL`（相容 fallback）有值
+- Supabase 連線建議：serverless 情境優先 transaction pooler（常見 port `6543`）；可用 `SUPABASE_POOL_MODE=transaction` 強制模式
 - Postgres 表：`llm4writing_sessions`
   - `id TEXT PRIMARY KEY`
   - `payload JSONB`
@@ -472,6 +473,7 @@ Error:
 - 實作要求：資料表初始化若首次失敗，不可將失敗狀態永久快取；後續請求必須可重試初始化
 - 實作要求：若使用者資料表已存在，登入流程不得強依賴 `CREATE TABLE` 權限
 - 實作要求：初始化過程中若遇 DDL/DML 權限不足（例如 `permission denied`），不得直接造成登入不可用；應容錯並繼續使用既有資料表/資料
+- 實作要求：為避免 `MaxClientsInSessionMode`，DB client 在 transaction pooler 模式需停用 prepared statements，並採短 idle timeout
 
 ### `GET /api/auth/me`
 

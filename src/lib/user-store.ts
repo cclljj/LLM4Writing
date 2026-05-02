@@ -1,6 +1,6 @@
 import postgres, { Sql } from "postgres";
 import { UserAccount } from "@/src/lib/types";
-import { getDatabaseUrl, isDatabaseEnabled } from "@/src/lib/db-config";
+import { getDatabaseUrl, getPostgresClientOptions, isDatabaseEnabled } from "@/src/lib/db-config";
 
 type StoredUser = UserAccount & { password: string };
 type MemoryUserStore = Map<string, StoredUser>;
@@ -64,7 +64,7 @@ function getSqlClient(): Sql {
   if (!sqlClient) {
     const url = getDatabaseUrl();
     if (!url) throw new Error("postgres_url_missing");
-    sqlClient = postgres(url, { prepare: true, max: 1 });
+    sqlClient = postgres(url, getPostgresClientOptions(url));
   }
   return sqlClient;
 }
