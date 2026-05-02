@@ -302,6 +302,48 @@ export default function TeacherPage() {
     [monitorSessions, selectedLearningActivityId]
   );
 
+  const classJoinRows = useMemo(() => {
+    if (!selectedLearningActivity) return [];
+    const students = selectedLearningActivity.studentCandidates ?? [];
+    return students.map((username) => {
+      const joinedSessions = filteredMonitorSessions.filter((session) => session.participants.includes(username));
+      const latestSession = joinedSessions[0];
+      return {
+        username,
+        joined: joinedSessions.length > 0,
+        step: latestSession?.currentStep ?? null,
+        groupName: latestSession?.groupName ?? null
+      };
+    });
+  }, [selectedLearningActivity, filteredMonitorSessions]);
+
+  const groupStatusRows = useMemo(() => {
+    if (!selectedLearningActivity) return [];
+
+    const groups = selectedLearningActivity.groups.length
+      ? selectedLearningActivity.groups
+      : [{ groupId: "g-auto", groupName: "未分組", members: selectedLearningActivity.studentCandidates ?? [] }];
+
+    return groups.map((group) => {
+      const joinedMembers = group.members.filter((member) =>
+        filteredMonitorSessions.some((session) => session.participants.includes(member))
+      );
+      const groupSession = filteredMonitorSessions.find(
+        (session) =>
+          (session.groupId && session.groupId === group.groupId) ||
+          (session.groupName && session.groupName === group.groupName)
+      );
+      return {
+        groupId: group.groupId,
+        groupName: group.groupName,
+        totalMembers: group.members.length,
+        joinedCount: joinedMembers.length,
+        pendingCount: group.members.length - joinedMembers.length,
+        currentStep: groupSession?.currentStep ?? null
+      };
+    });
+  }, [selectedLearningActivity, filteredMonitorSessions]);
+
   function getStepAdvanceHint(session: MonitorSession): { ready: boolean; text: string; nextStep?: number } {
     const step = session.currentStep;
     const nextStep = step < 10 ? step + 1 : undefined;
@@ -1779,6 +1821,64 @@ export default function TeacherPage() {
 
           {showCourseStatusView ? (
             <>
+              <div className="card">
+                <h2>全班加入狀態</h2>
+                <div style={{ overflowX: "auto" }}>
+                  <table className="pro-table">
+                    <thead>
+                      <tr>
+                        <th>序號</th>
+                        <th>學生帳號</th>
+                        <th>加入狀態</th>
+                        <th>所在組別</th>
+                        <th>目前進度</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {classJoinRows.map((row, idx) => (
+                        <tr key={row.username}>
+                          <td>{idx + 1}</td>
+                          <td>{row.username}</td>
+                          <td>{row.joined ? "已加入" : "未加入"}</td>
+                          <td>{row.groupName ?? "—"}</td>
+                          <td>{row.step ? `Step ${row.step}` : "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {classJoinRows.length === 0 ? <small>此課程目前沒有可見學生名單。</small> : null}
+              </div>
+
+              <div className="card">
+                <h2>分組狀態總覽</h2>
+                <div style={{ overflowX: "auto" }}>
+                  <table className="pro-table">
+                    <thead>
+                      <tr>
+                        <th>組別</th>
+                        <th>組員總數</th>
+                        <th>已加入人數</th>
+                        <th>未加入人數</th>
+                        <th>小組目前進度</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {groupStatusRows.map((row) => (
+                        <tr key={row.groupId}>
+                          <td>{row.groupName}</td>
+                          <td>{row.totalMembers}</td>
+                          <td>{row.joinedCount}</td>
+                          <td>{row.pendingCount}</td>
+                          <td>{row.currentStep ? `Step ${row.currentStep}` : "尚未建立 session"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {groupStatusRows.length === 0 ? <small>此課程目前沒有分組資料。</small> : null}
+              </div>
+
               <div className="card">
                 <h2>課程狀態內容（即時 / 歷史）</h2>
                 <div style={{ overflowX: "auto" }}>

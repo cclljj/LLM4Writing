@@ -3,12 +3,12 @@ import { getCurrentUser } from "@/src/lib/auth-server";
 import {
   endCourse,
   flushDomainState,
-  getActivitiesVisibleToTeacher,
   getAllActivities,
   hydrateDomainState,
   startCourse,
   togglePauseOrResumeCourse
 } from "@/src/lib/mock-data";
+import { getUsersVisibleToTeacherStore, listUsersStore } from "@/src/lib/user-store";
 
 export async function POST(request: NextRequest) {
   const user = await getCurrentUser();
@@ -22,7 +22,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "missing_required_fields" }, { status: 400 });
   }
 
-  const visibleActivities = user.role === "admin" ? getAllActivities() : getActivitiesVisibleToTeacher(user.username);
+  const baseActivities = getAllActivities();
+  const visibleUsers = user.role === "admin" ? await listUsersStore() : await getUsersVisibleToTeacherStore(user.username);
+  const visibleStudents = visibleUsers.filter((u) => u.role === "student");
+  const visibleClasses = new Set(visibleStudents.map((u) => `${u.school}::${u.classNumber ?? ""}`));
+  const visibleActivities =
+    user.role === "admin"
+      ? baseActivities
+      : baseActivities.filter((activity) => visibleClasses.has(`${activity.school}::${activity.classNumber}`));
   if (!visibleActivities.some((activity) => activity.id === body.activityId)) {
     return NextResponse.json({ error: "forbidden_activity" }, { status: 403 });
   }
