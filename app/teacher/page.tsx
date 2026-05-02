@@ -440,6 +440,13 @@ export default function TeacherPage() {
   }, [selectedLearningActivityId]);
 
   useEffect(() => {
+    if (!showCourseStatusView || !selectedLearningActivityId) return;
+    refreshMonitor().catch(() => {
+      setError("monitor_load_failed");
+    });
+  }, [showCourseStatusView, selectedLearningActivityId]);
+
+  useEffect(() => {
     setClassFilter("");
     setUserPage(1);
   }, [roleFilter, schoolFilter]);
@@ -454,15 +461,24 @@ export default function TeacherPage() {
     }
   }, [userPage, totalUserPages]);
 
-  async function refreshAll() {
+  async function refreshMonitor() {
+    const response = await fetch("/api/teacher/monitor", { cache: "no-store" });
+    if (!response.ok) {
+      setError("monitor_load_failed");
+      return;
+    }
+    const data = await response.json();
+    setMonitorSessions(data.sessions ?? []);
+  }
+
+  async function refreshAll(includeMonitor = false) {
     const token = Date.now();
     refreshTokenRef.current = token;
     const fetchOpts: RequestInit = { cache: "no-store" };
-    const [u, e, o, m, a] = await Promise.all([
+    const [u, e, o, a] = await Promise.all([
       fetch("/api/admin/users", fetchOpts),
       fetch("/api/admin/essays", fetchOpts),
       fetch("/api/admin/openclasses", fetchOpts),
-      fetch("/api/teacher/monitor", fetchOpts),
       fetch("/api/admin/activities", fetchOpts)
     ]);
     if (refreshTokenRef.current !== token) return;
@@ -476,7 +492,6 @@ export default function TeacherPage() {
       const list = (await o.json()).openClasses ?? [];
       setOpenClasses(list);
     }
-    if (m.ok) setMonitorSessions((await m.json()).sessions ?? []);
     if (a.ok) {
       const list = (await a.json()).activities ?? [];
       setActivities(list);
@@ -486,6 +501,10 @@ export default function TeacherPage() {
       if (!list.some((item: ActivityRow) => item.id === selectedLearningActivityId)) {
         setSelectedLearningActivityId(list[0]?.id ?? "");
       }
+    }
+
+    if (includeMonitor) {
+      await refreshMonitor();
     }
   }
 
@@ -523,7 +542,7 @@ export default function TeacherPage() {
       }
 
       setError("");
-      await refreshAll();
+      await refreshAll(showCourseStatusView);
     });
   }
 
@@ -562,7 +581,7 @@ export default function TeacherPage() {
       });
       setGroupViewStep("all");
 
-      await refreshAll();
+      await refreshAll(true);
     });
   }
 
@@ -1817,6 +1836,9 @@ export default function TeacherPage() {
                               onClick={() => {
                                 setSelectedLearningActivityId(activity.id);
                                 setShowCourseStatusView(true);
+                                runLearningAction("系統正在載入課程狀態，請稍候...", async () => {
+                                  await refreshMonitor();
+                                });
                               }}
                             >
                               查看狀態
@@ -1829,7 +1851,7 @@ export default function TeacherPage() {
                               onClick={() => {
                                 setSelectedLearningActivityId(activity.id);
                                 runLearningAction("系統正在重新整理課程資料，請稍候...", async () => {
-                                  await refreshAll();
+                                  await refreshAll(showCourseStatusView);
                                 });
                               }}
                             >
