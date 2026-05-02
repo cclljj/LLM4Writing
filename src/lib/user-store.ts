@@ -93,6 +93,12 @@ async function ensureUserTable(): Promise<void> {
   if (!initPromise) {
     initPromise = (async () => {
       const sql = getSqlClient();
+      const existing = await sql<{ regclass: string | null }[]>`
+        SELECT to_regclass('public.llm4writing_users') AS regclass
+      `;
+      if (existing[0]?.regclass) {
+        return;
+      }
       await sql`
         CREATE TABLE IF NOT EXISTS llm4writing_users (
           username TEXT PRIMARY KEY,

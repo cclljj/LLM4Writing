@@ -466,6 +466,7 @@ Error:
 - `401 { error: "invalid_credentials" }`
 - `503 { error: "auth_service_unavailable" }`
 - 實作要求：資料表初始化若首次失敗，不可將失敗狀態永久快取；後續請求必須可重試初始化
+- 實作要求：若使用者資料表已存在，登入流程不得強依賴 `CREATE TABLE` 權限
 
 ### `GET /api/auth/me`
 
