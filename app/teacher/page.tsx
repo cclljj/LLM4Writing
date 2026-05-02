@@ -38,6 +38,8 @@ type MonitorSession = {
   sessionId: string;
   activityId?: string;
   activityTitle?: string;
+  school?: string;
+  classNumber?: string;
   groupId?: string;
   groupName?: string;
   participants: string[];
@@ -179,11 +181,6 @@ export default function TeacherPage() {
     });
   }, [users, schoolFilter]);
 
-  const sessionHints = useMemo(
-    () => Array.from(new Set(monitorSessions.map((session) => session.sessionId))),
-    [monitorSessions]
-  );
-
   const filteredUsers = useMemo(() => {
     const keyword = userQuery.trim().toLowerCase();
 
@@ -300,6 +297,26 @@ export default function TeacherPage() {
         ? monitorSessions.filter((session) => session.activityId === selectedLearningActivityId)
         : [],
     [monitorSessions, selectedLearningActivityId]
+  );
+
+  const sessionHints = useMemo(() => filteredMonitorSessions.map((session) => session.sessionId), [filteredMonitorSessions]);
+
+  function formatSessionLabel(session: MonitorSession): string {
+    const school = session.school?.trim() || selectedLearningActivity?.school || "unknown-school";
+    const classNumber = session.classNumber?.trim() || selectedLearningActivity?.classNumber || "unknown-class";
+    const groupNumber = (session.groupName || session.groupId || "unknown-group").toString();
+    return `${school} + ${classNumber} + ${groupNumber}`;
+  }
+
+  const sessionLabelMap = useMemo(
+    () =>
+      new Map(
+        filteredMonitorSessions.map((session) => [
+          session.sessionId,
+          `${formatSessionLabel(session)} (${session.activityTitle ?? session.activityId ?? "activity"})`
+        ])
+      ),
+    [filteredMonitorSessions, selectedLearningActivity?.school, selectedLearningActivity?.classNumber]
   );
 
   const classJoinRows = useMemo(() => {
@@ -1213,12 +1230,6 @@ export default function TeacherPage() {
         </div>
       </div>
 
-      <datalist id="session-id-options">
-        {sessionHints.map((id) => (
-          <option key={id} value={id} />
-        ))}
-      </datalist>
-
       <div className="card row">
         <div style={{ width: 180 }}>
           <button type="button" className={tab === "system" ? "" : "secondary"} onClick={() => setTab("system")}>帳號管理</button>
@@ -1969,9 +1980,16 @@ export default function TeacherPage() {
                 <h2>檢視學習進度 / 切換步驟</h2>
                 <form onSubmit={handleSwitch} className="row">
                   <div className="col">
-                    <label>Session ID</label>
-                    <input list="session-id-options" value={sessionId} onChange={(e) => setSessionId(e.target.value)} />
-                    <small>可直接輸入，或從建議清單挑選既有 Session ID。</small>
+                    <label>學習進度對象</label>
+                    <select value={sessionId} onChange={(e) => setSessionId(e.target.value)}>
+                      <option value="">請選擇課程/班級/組別</option>
+                      {filteredMonitorSessions.map((session) => (
+                        <option key={session.sessionId} value={session.sessionId}>
+                          {formatSessionLabel(session)}
+                        </option>
+                      ))}
+                    </select>
+                    <small>使用「學校 + 班級 + 組別」辨識 session。</small>
                   </div>
                   <div className="col">
                     <label>Step</label>
@@ -1996,7 +2014,7 @@ export default function TeacherPage() {
                       style={{ width: "auto" }}
                       onClick={() => setSessionId(id)}
                     >
-                      {id}
+                      {sessionLabelMap.get(id) ?? id}
                     </button>
                   ))}
                 </div>
@@ -2007,12 +2025,15 @@ export default function TeacherPage() {
                 <h2>個人進度表</h2>
                 <div className="row">
                   <div className="col">
-                    <label>Session ID</label>
-                    <input
-                      list="session-id-options"
-                      value={progressSessionId}
-                      onChange={(e) => setProgressSessionId(e.target.value)}
-                    />
+                    <label>個人進度對象</label>
+                    <select value={progressSessionId} onChange={(e) => setProgressSessionId(e.target.value)}>
+                      <option value="">請選擇課程/班級/組別</option>
+                      {filteredMonitorSessions.map((session) => (
+                        <option key={session.sessionId} value={session.sessionId}>
+                          {formatSessionLabel(session)}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                   <div className="col" style={{ alignSelf: "end" }}>
                     <button type="button" className="secondary" onClick={() => loadProgress()}>
