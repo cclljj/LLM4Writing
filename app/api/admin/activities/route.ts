@@ -9,7 +9,11 @@ export async function GET() {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
-  await hydrateDomainState();
+  try {
+    await hydrateDomainState();
+  } catch {
+    // Degrade gracefully so learning management can still render available in-memory activity state.
+  }
   const baseActivities = getAllActivities();
   const visibleUsers = user.role === "admin" ? await listUsersStore() : await getUsersVisibleToTeacherStore(user.username);
   const visibleStudents = visibleUsers.filter((u) => u.role === "student");

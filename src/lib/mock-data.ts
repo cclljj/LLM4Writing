@@ -243,19 +243,35 @@ function getSqlClient(): Sql {
 
 let domainInitPromise: Promise<void> | undefined;
 
+function isPermissionLikeError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const record = error as { code?: unknown; message?: unknown };
+  const code = typeof record.code === "string" ? record.code : "";
+  const message = typeof record.message === "string" ? record.message.toLowerCase() : "";
+  return code === "42501" || message.includes("permission denied");
+}
+
 async function ensureDomainTable(): Promise<void> {
   if (!isPostgresEnabled()) return;
   if (!domainInitPromise) {
     domainInitPromise = (async () => {
       const sql = getSqlClient();
-      await sql`
-        CREATE TABLE IF NOT EXISTS llm4writing_domain (
-          id TEXT PRIMARY KEY,
-          payload JSONB NOT NULL,
-          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        )
+      const existing = await sql<{ regclass: string | null }[]>`
+        SELECT COALESCE(to_regclass('llm4writing_domain')::text, to_regclass('public.llm4writing_domain')::text) AS regclass
       `;
+      if (existing[0]?.regclass) return;
+      try {
+        await sql`
+          CREATE TABLE IF NOT EXISTS llm4writing_domain (
+            id TEXT PRIMARY KEY,
+            payload JSONB NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          )
+        `;
+      } catch (error) {
+        if (!isPermissionLikeError(error)) throw error;
+      }
     })().catch((error) => {
       domainInitPromise = undefined;
       throw error;
@@ -321,14 +337,18 @@ export async function hydrateDomainState(): Promise<void> {
   `;
   const row = rows[0];
   if (!row?.payload) {
-    await flushDomainState();
+    // Keep bootstrapped in-memory defaults; do not force-write DB during read path.
     return;
   }
   const normalized = normalizeDomainState(row.payload);
   applyState(normalized);
   if (typeof row.payload === "string") {
     // Migrate legacy double-encoded JSON payload to proper JSON object format.
-    await flushDomainState();
+    try {
+      await flushDomainState();
+    } catch {
+      // Best-effort migration only; never block read path.
+    }
   }
 }
 

@@ -85,6 +85,8 @@
   - 表：`llm4writing_domain`
   - 主鍵固定 `id='singleton'`，`payload` 存整體 domain JSON
   - 相關 API 會先 hydrate 再操作，變更後 flush 回 DB
+  - hydrate 讀取路徑不得強制觸發 flush；當 DB 寫入受限時，讀取仍需可降級為記憶體快照（避免課程清單整體 500）
+  - 若遇 DDL 權限不足（如 `permission denied`），建表流程需容錯，不能阻斷讀取 API
 - 無 DB 時：
   - 優先使用檔案持久化：`.data/domain-state.json`
   - 並同步維持 `globalThis` memory state
