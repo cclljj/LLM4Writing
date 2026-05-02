@@ -133,6 +133,8 @@ export default function TeacherPage() {
   const [progressSessionId, setProgressSessionId] = useState("");
   const [selectedLearningActivityId, setSelectedLearningActivityId] = useState("");
   const [showCourseStatusView, setShowCourseStatusView] = useState(false);
+  const [isLearningProcessing, setIsLearningProcessing] = useState(false);
+  const [learningProcessingText, setLearningProcessingText] = useState("");
   const [progressRows, setProgressRows] = useState<PersonalProgressRow[]>([]);
   const [selectedProgressUser, setSelectedProgressUser] = useState("");
   const [personalMessages, setPersonalMessages] = useState<
@@ -487,6 +489,17 @@ export default function TeacherPage() {
     }
   }
 
+  async function runLearningAction<T>(processingText: string, action: () => Promise<T>): Promise<T | undefined> {
+    setIsLearningProcessing(true);
+    setLearningProcessingText(processingText);
+    try {
+      return await action();
+    } finally {
+      setIsLearningProcessing(false);
+      setLearningProcessingText("");
+    }
+  }
+
   function getCourseStatusLabel(status?: "not_started" | "in_progress" | "paused" | "ended") {
     if (status === "in_progress") return "進行中";
     if (status === "paused") return "暫停中";
@@ -495,19 +508,23 @@ export default function TeacherPage() {
   }
 
   async function handleCourseLifecycle(activityId: string, action: "start" | "pause_resume" | "end") {
-    const response = await fetch("/api/teacher/course-control", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ activityId, action })
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      setError(data.error ?? "course_lifecycle_failed");
-      return;
-    }
+    const processingText =
+      action === "start" ? "系統正在開始上課，請稍候..." : action === "end" ? "系統正在結束上課，請稍候..." : "系統正在更新課程狀態，請稍候...";
+    await runLearningAction(processingText, async () => {
+      const response = await fetch("/api/teacher/course-control", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ activityId, action })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setError(data.error ?? "course_lifecycle_failed");
+        return;
+      }
 
-    setError("");
-    await refreshAll();
+      setError("");
+      await refreshAll();
+    });
   }
 
   async function logout() {
@@ -516,58 +533,61 @@ export default function TeacherPage() {
   }
 
   async function applyStepSwitch(sessionId: string, step: number) {
-    setError("");
+    await runLearningAction(`系統正在切換到 Step ${step}，請稍候...`, async () => {
+      setError("");
 
-    const response = await fetch("/api/teacher/step", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionId, step })
+      const response = await fetch("/api/teacher/step", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId, step })
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        setError(data.error ?? "switch_failed");
+        return;
+      }
+
+      setMonitorSelected({
+        sessionId: data.id,
+        activityId: data.activityId,
+        activityTitle: data.activityTitle,
+        school: data.school,
+        classNumber: data.classNumber,
+        groupId: data.groupId,
+        groupName: data.groupName,
+        participants: data.participants,
+        currentStep: data.currentStep,
+        messages: data.messages
+      });
+      setGroupViewStep("all");
+
+      await refreshAll();
     });
-
-    const data = await response.json();
-    if (!response.ok) {
-      setError(data.error ?? "switch_failed");
-      return;
-    }
-
-    setMonitorSelected({
-      sessionId: data.id,
-      activityId: data.activityId,
-      activityTitle: data.activityTitle,
-      school: data.school,
-      classNumber: data.classNumber,
-      groupId: data.groupId,
-      groupName: data.groupName,
-      participants: data.participants,
-      currentStep: data.currentStep,
-      messages: data.messages
-    });
-    setGroupViewStep("all");
-
-    await refreshAll();
   }
 
   async function loadProgress(sessionTarget?: string, username?: string) {
     const sid = sessionTarget ?? progressSessionId;
     if (!sid) return;
+    await runLearningAction("系統正在載入個人進度，請稍候...", async () => {
+      const q = new URLSearchParams({ sessionId: sid });
+      if (username) {
+        q.set("username", username);
+      }
 
-    const q = new URLSearchParams({ sessionId: sid });
-    if (username) {
-      q.set("username", username);
-    }
+      const response = await fetch(`/api/teacher/personal-progress?${q.toString()}`);
+      const data = await response.json();
+      if (!response.ok) {
+        setError(data.error ?? "progress_failed");
+        return;
+      }
 
-    const response = await fetch(`/api/teacher/personal-progress?${q.toString()}`);
-    const data = await response.json();
-    if (!response.ok) {
-      setError(data.error ?? "progress_failed");
-      return;
-    }
-
-    setProgressRows(data.progress ?? []);
-    setPersonalMessages(data.personalMessages ?? []);
-    if (username) {
-      setSelectedProgressUser(username);
-    }
+      setProgressRows(data.progress ?? []);
+      setPersonalMessages(data.personalMessages ?? []);
+      if (username) {
+        setSelectedProgressUser(username);
+      }
+    });
   }
 
   function openResetPassword(username: string) {
@@ -1714,6 +1734,20 @@ export default function TeacherPage() {
         <>
           <div className="card">
             <h2>學習管理</h2>
+            {isLearningProcessing ? (
+              <div
+                style={{
+                  marginBottom: 10,
+                  padding: "10px 12px",
+                  border: "1px solid #bfdbfe",
+                  background: "#eff6ff",
+                  color: "#1d4ed8",
+                  borderRadius: 8
+                }}
+              >
+                <strong>Processing...</strong> {learningProcessingText}
+              </div>
+            ) : null}
             <div style={{ overflowX: "auto" }}>
               <table className="pro-table">
                 <thead>
@@ -1752,7 +1786,7 @@ export default function TeacherPage() {
                               type="button"
                               style={startDisabled ? disabledButtonStyle : enabledButtonStyle}
                               className={startDisabled ? "secondary" : ""}
-                              disabled={startDisabled}
+                              disabled={startDisabled || isLearningProcessing}
                               onClick={() => handleCourseLifecycle(activity.id, "start")}
                             >
                               開始上課
@@ -1761,7 +1795,7 @@ export default function TeacherPage() {
                               type="button"
                               className={pauseResumeDisabled ? "secondary" : ""}
                               style={pauseResumeDisabled ? disabledButtonStyle : enabledButtonStyle}
-                              disabled={pauseResumeDisabled}
+                              disabled={pauseResumeDisabled || isLearningProcessing}
                               onClick={() => handleCourseLifecycle(activity.id, "pause_resume")}
                             >
                               {status === "in_progress" ? "暫停上課" : "繼續上課"}
@@ -1770,7 +1804,7 @@ export default function TeacherPage() {
                               type="button"
                               className={endDisabled ? "secondary" : ""}
                               style={endDisabled ? disabledButtonStyle : enabledButtonStyle}
-                              disabled={endDisabled}
+                              disabled={endDisabled || isLearningProcessing}
                               onClick={() => handleCourseLifecycle(activity.id, "end")}
                             >
                               結束上課
@@ -1779,7 +1813,7 @@ export default function TeacherPage() {
                               type="button"
                               className="secondary"
                               style={viewDisabled ? disabledButtonStyle : enabledButtonStyle}
-                              disabled={viewDisabled}
+                              disabled={viewDisabled || isLearningProcessing}
                               onClick={() => {
                                 setSelectedLearningActivityId(activity.id);
                                 setShowCourseStatusView(true);
@@ -1791,9 +1825,12 @@ export default function TeacherPage() {
                               type="button"
                               className="secondary"
                               style={{ width: "auto" }}
+                              disabled={isLearningProcessing}
                               onClick={() => {
                                 setSelectedLearningActivityId(activity.id);
-                                refreshAll();
+                                runLearningAction("系統正在重新整理課程資料，請稍候...", async () => {
+                                  await refreshAll();
+                                });
                               }}
                             >
                               重新整理
@@ -1904,6 +1941,7 @@ export default function TeacherPage() {
                                         type="button"
                                         className="secondary"
                                         style={{ width: "auto" }}
+                                        disabled={isLearningProcessing}
                                         onClick={() => applyStepSwitch(session.sessionId, hint.nextStep!)}
                                       >
                                         套用 Step {hint.nextStep}
@@ -1920,6 +1958,7 @@ export default function TeacherPage() {
                                 type="button"
                                 className="secondary"
                                 style={{ width: "auto" }}
+                                disabled={isLearningProcessing}
                                 onClick={() => {
                                   setMonitorSelected(session);
                                   setGroupViewStep("all");
@@ -1932,6 +1971,7 @@ export default function TeacherPage() {
                                 type="button"
                                 className="secondary"
                                 style={{ width: "auto" }}
+                                disabled={isLearningProcessing}
                                 onClick={() => {
                                   setProgressSessionId(session.sessionId);
                                   loadProgress(session.sessionId);
@@ -1966,7 +2006,7 @@ export default function TeacherPage() {
                     </select>
                   </div>
                   <div className="col" style={{ alignSelf: "end" }}>
-                    <button type="button" className="secondary" onClick={() => loadProgress()}>
+                    <button type="button" className="secondary" disabled={isLearningProcessing} onClick={() => loadProgress()}>
                       載入個人進度
                     </button>
                   </div>
@@ -1996,6 +2036,7 @@ export default function TeacherPage() {
                               type="button"
                               className="secondary"
                               style={{ width: "auto" }}
+                              disabled={isLearningProcessing}
                               onClick={() => loadProgress(progressSessionId, row.username)}
                             >
                               查看
