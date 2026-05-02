@@ -256,7 +256,10 @@ async function ensureDomainTable(): Promise<void> {
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )
       `;
-    })();
+    })().catch((error) => {
+      domainInitPromise = undefined;
+      throw error;
+    });
   }
   await domainInitPromise;
 }

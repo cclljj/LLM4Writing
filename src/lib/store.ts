@@ -69,7 +69,10 @@ async function ensureSessionTable(): Promise<void> {
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )
       `;
-    })();
+    })().catch((error) => {
+      initPromise = undefined;
+      throw error;
+    });
   }
 
   await initPromise;

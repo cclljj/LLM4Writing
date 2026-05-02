@@ -113,7 +113,10 @@ async function ensureUserTable(): Promise<void> {
           ON CONFLICT (username) DO NOTHING
         `;
       }
-    })();
+    })().catch((error) => {
+      initPromise = undefined;
+      throw error;
+    });
   }
 
   await initPromise;
