@@ -1,5 +1,6 @@
 import postgres, { Sql } from "postgres";
 import { SessionState } from "@/src/lib/types";
+import { getDatabaseUrl, isDatabaseEnabled } from "@/src/lib/db-config";
 
 type MemoryStore = Map<string, SessionState>;
 
@@ -13,19 +14,11 @@ function getMemoryStore(): MemoryStore {
   return globalScope[KEY] as MemoryStore;
 }
 
-function getPostgresUrl(): string | undefined {
-  return process.env.POSTGRES_URL ?? process.env.DATABASE_URL;
-}
-
-function isPostgresEnabled(): boolean {
-  return Boolean(getPostgresUrl());
-}
-
 let sqlClient: Sql | undefined;
 
 function getSqlClient(): Sql {
   if (!sqlClient) {
-    const url = getPostgresUrl();
+    const url = getDatabaseUrl();
     if (!url) {
       throw new Error("postgres_url_missing");
     }
@@ -54,7 +47,7 @@ function normalizeSessionPayload(payload: unknown): SessionState | undefined {
 }
 
 async function ensureSessionTable(): Promise<void> {
-  if (!isPostgresEnabled()) {
+  if (!isDatabaseEnabled()) {
     return;
   }
 
@@ -79,7 +72,7 @@ async function ensureSessionTable(): Promise<void> {
 }
 
 export async function saveSession(session: SessionState): Promise<SessionState> {
-  if (!isPostgresEnabled()) {
+  if (!isDatabaseEnabled()) {
     getMemoryStore().set(session.id, session);
     return session;
   }
@@ -100,7 +93,7 @@ export async function saveSession(session: SessionState): Promise<SessionState> 
 }
 
 export async function getSession(sessionId: string): Promise<SessionState | undefined> {
-  if (!isPostgresEnabled()) {
+  if (!isDatabaseEnabled()) {
     return getMemoryStore().get(sessionId);
   }
 
@@ -118,7 +111,7 @@ export async function getSession(sessionId: string): Promise<SessionState | unde
 }
 
 export async function listSessions(): Promise<SessionState[]> {
-  if (!isPostgresEnabled()) {
+  if (!isDatabaseEnabled()) {
     return Array.from(getMemoryStore().values());
   }
 
@@ -136,5 +129,5 @@ export async function listSessions(): Promise<SessionState[]> {
 }
 
 export function getStorageMode(): "postgres" | "memory" {
-  return isPostgresEnabled() ? "postgres" : "memory";
+  return isDatabaseEnabled() ? "postgres" : "memory";
 }

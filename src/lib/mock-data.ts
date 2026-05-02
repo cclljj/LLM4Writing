@@ -3,6 +3,7 @@ import postgres, { Sql } from "postgres";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import systemPromptConfig from "@/src/config/system-prompt-config.json";
+import { getDatabaseUrl, isDatabaseEnabled } from "@/src/lib/db-config";
 
 type Essay = {
   id: string;
@@ -220,19 +221,11 @@ const activityGroupMap = state.activityGroupMap;
 const courseStatusMap = state.courseStatusMap;
 const DOMAIN_FILE = path.join(process.cwd(), ".data", "domain-state.json");
 
-function getPostgresUrl(): string | undefined {
-  return process.env.POSTGRES_URL ?? process.env.DATABASE_URL;
-}
-
-function isPostgresEnabled(): boolean {
-  return Boolean(getPostgresUrl());
-}
-
 let sqlClient: Sql | undefined;
 
 function getSqlClient(): Sql {
   if (!sqlClient) {
-    const url = getPostgresUrl();
+    const url = getDatabaseUrl();
     if (!url) {
       throw new Error("postgres_url_missing");
     }
@@ -252,7 +245,7 @@ function isPermissionLikeError(error: unknown): boolean {
 }
 
 async function ensureDomainTable(): Promise<void> {
-  if (!isPostgresEnabled()) return;
+  if (!isDatabaseEnabled()) return;
   if (!domainInitPromise) {
     domainInitPromise = (async () => {
       const sql = getSqlClient();
@@ -315,7 +308,7 @@ function snapshotState(): DomainState {
 }
 
 export async function hydrateDomainState(): Promise<void> {
-  if (!isPostgresEnabled()) {
+  if (!isDatabaseEnabled()) {
     try {
       const raw = await fs.readFile(DOMAIN_FILE, "utf8");
       const payload = JSON.parse(raw) as unknown;
@@ -353,7 +346,7 @@ export async function hydrateDomainState(): Promise<void> {
 }
 
 export async function flushDomainState(): Promise<void> {
-  if (!isPostgresEnabled()) {
+  if (!isDatabaseEnabled()) {
     await fs.mkdir(path.dirname(DOMAIN_FILE), { recursive: true });
     await fs.writeFile(DOMAIN_FILE, JSON.stringify(snapshotState(), null, 2), "utf8");
     return;

@@ -1,5 +1,6 @@
 import postgres, { Sql } from "postgres";
 import { UserAccount } from "@/src/lib/types";
+import { getDatabaseUrl, isDatabaseEnabled } from "@/src/lib/db-config";
 
 type StoredUser = UserAccount & { password: string };
 type MemoryUserStore = Map<string, StoredUser>;
@@ -57,19 +58,11 @@ function getMemoryStore(): MemoryUserStore {
   return globalScope[KEY] as MemoryUserStore;
 }
 
-function getPostgresUrl(): string | undefined {
-  return process.env.POSTGRES_URL ?? process.env.DATABASE_URL;
-}
-
-function isPostgresEnabled(): boolean {
-  return Boolean(getPostgresUrl());
-}
-
 let sqlClient: Sql | undefined;
 
 function getSqlClient(): Sql {
   if (!sqlClient) {
-    const url = getPostgresUrl();
+    const url = getDatabaseUrl();
     if (!url) throw new Error("postgres_url_missing");
     sqlClient = postgres(url, { prepare: true, max: 1 });
   }
@@ -96,7 +89,7 @@ async function retryOnce<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 async function ensureUserTable(): Promise<void> {
-  if (!isPostgresEnabled()) return;
+  if (!isDatabaseEnabled()) return;
 
   if (!initPromise) {
     initPromise = (async () => {
@@ -171,7 +164,7 @@ function normalizePayload(payload: unknown): UserAccount {
 }
 
 export async function listUsersStore(): Promise<UserAccount[]> {
-  if (!isPostgresEnabled()) {
+  if (!isDatabaseEnabled()) {
     return Array.from(getMemoryStore().values()).map(stripPassword);
   }
 
@@ -187,7 +180,7 @@ export async function listUsersStore(): Promise<UserAccount[]> {
 }
 
 export async function getUserStore(username: string): Promise<UserAccount | undefined> {
-  if (!isPostgresEnabled()) {
+  if (!isDatabaseEnabled()) {
     const row = getMemoryStore().get(username);
     return row ? stripPassword(row) : undefined;
   }
@@ -205,7 +198,7 @@ export async function getUserStore(username: string): Promise<UserAccount | unde
 }
 
 export async function validateUserCredentialStore(username: string, password: string): Promise<UserAccount | undefined> {
-  if (!isPostgresEnabled()) {
+  if (!isDatabaseEnabled()) {
     const row = getMemoryStore().get(username);
     if (!row || row.password !== password) return undefined;
     return stripPassword(row);
@@ -228,7 +221,7 @@ export async function validateUserCredentialStore(username: string, password: st
 }
 
 export async function resetUserPasswordStore(username: string, newPassword: string): Promise<boolean> {
-  if (!isPostgresEnabled()) {
+  if (!isDatabaseEnabled()) {
     const existing = getMemoryStore().get(username);
     if (!existing) return false;
     existing.password = newPassword;
@@ -286,7 +279,7 @@ export async function createUserStore(input: {
     classNumber: input.role === "student" ? input.classNumber : undefined
   };
 
-  if (!isPostgresEnabled()) {
+  if (!isDatabaseEnabled()) {
     getMemoryStore().set(input.username, { ...safePayload, password: input.password });
     return { ok: true };
   }
@@ -348,7 +341,7 @@ export async function updateUserStore(
     classNumber: nextRole === "student" ? nextClassNumber : undefined
   };
 
-  if (!isPostgresEnabled()) {
+  if (!isDatabaseEnabled()) {
     const existingRaw = getMemoryStore().get(username);
     if (!existingRaw) return { ok: false, error: "user_not_found" };
     getMemoryStore().set(username, {
@@ -390,7 +383,7 @@ export async function deleteUserStore(username: string): Promise<{ ok: true } | 
     if (hasStudents) return { ok: false, error: "teacher_has_students" };
   }
 
-  if (!isPostgresEnabled()) {
+  if (!isDatabaseEnabled()) {
     getMemoryStore().delete(username);
     return { ok: true };
   }

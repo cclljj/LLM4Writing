@@ -130,7 +130,9 @@ npx --yes vercel --prod
 
 - 首次使用時，系統會自動建立 `llm4writing_sessions` table
 - `payload` 以 `JSONB` 儲存完整 session 狀態
-- 若未設定 `POSTGRES_URL` 或 `DATABASE_URL`，會自動使用 in-memory store（重啟即遺失）
+- 資料庫連線優先讀取 `SUPABASE_DB_URL`（建議只設定這個）
+- `POSTGRES_URL` / `DATABASE_URL` 僅作舊環境相容 fallback
+- 若三者都未設定，會自動使用 in-memory store（重啟即遺失）
 
 ## 版本
 

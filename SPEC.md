@@ -42,7 +42,7 @@
 ### Session Store
 
 - 檔案：`src/lib/store.ts`
-- 啟用條件：`POSTGRES_URL` 或 `DATABASE_URL` 有值
+- 啟用條件：`SUPABASE_DB_URL`（優先）或 `POSTGRES_URL` / `DATABASE_URL`（相容 fallback）有值
 - Postgres 表：`llm4writing_sessions`
   - `id TEXT PRIMARY KEY`
   - `payload JSONB`
@@ -750,7 +750,7 @@ Behavior:
 2. 標準腳本：
    - `scripts/supabase/migrate_to_supabase.sh`（備份、還原、row count 比對）
    - `scripts/supabase/verify_migration.sh`（關鍵表/JSON 檢查、可選 API smoke test）
-3. 環境變數切換時，`POSTGRES_URL` 與 `DATABASE_URL` 應同步指向同一個目標 DB，避免環境差異
+3. 環境變數切換時，應以 `SUPABASE_DB_URL` 為唯一主來源；若保留 `POSTGRES_URL` / `DATABASE_URL`，三者必須同步指向同一個 Supabase DB
 4. 任何遷移作業完成後，必須執行驗證步驟與手動 smoke test，再切 production 流量
 
 ---
