@@ -539,35 +539,44 @@ export default function TeacherPage() {
     const token = Date.now();
     refreshTokenRef.current = token;
     const fetchOpts: RequestInit = { cache: "no-store" };
-    let u: Response;
-    let e: Response;
-    let o: Response;
-    let a: Response;
-    try {
-      [u, e, o, a] = await Promise.all([
-        fetch("/api/admin/users", fetchOpts),
-        fetch("/api/admin/essays", fetchOpts),
-        fetch("/api/admin/openclasses", fetchOpts),
-        fetch("/api/admin/activities", fetchOpts)
-      ]);
-    } catch {
-      setError("learning_data_load_failed");
-      return;
-    }
+
+    const fetchActivitiesWithRetry = async (): Promise<Response | null> => {
+      try {
+        const first = await fetch("/api/admin/activities", fetchOpts);
+        if (first.ok) return first;
+      } catch {
+        // Ignore and retry once below.
+      }
+      try {
+        return await fetch("/api/admin/activities", fetchOpts);
+      } catch {
+        return null;
+      }
+    };
+
+    const [uRes, eRes, oRes, activitiesRes] = await Promise.all([
+      fetch("/api/admin/users", fetchOpts).catch(() => null),
+      fetch("/api/admin/essays", fetchOpts).catch(() => null),
+      fetch("/api/admin/openclasses", fetchOpts).catch(() => null),
+      fetchActivitiesWithRetry()
+    ]);
+
     if (refreshTokenRef.current !== token) return;
 
-    if (u.ok) setUsers((await u.json()).users ?? []);
-    if (e.ok) {
-      const list = (await e.json()).essays ?? [];
+    if (uRes?.ok) setUsers((await uRes.json()).users ?? []);
+    if (eRes?.ok) {
+      const list = (await eRes.json()).essays ?? [];
       setEssays(list);
     }
-    if (o.ok) {
-      const list = (await o.json()).openClasses ?? [];
+    if (oRes?.ok) {
+      const list = (await oRes.json()).openClasses ?? [];
       setOpenClasses(list);
     }
-    if (a.ok) {
-      const list = (await a.json()).activities ?? [];
+
+    if (activitiesRes?.ok) {
+      const list = (await activitiesRes.json()).activities ?? [];
       setActivities(list);
+      setError("");
       if (!list.some((item: ActivityRow) => item.id === selectedActivityId)) {
         setSelectedActivityId(list[0]?.id ?? "");
       }
@@ -576,6 +585,7 @@ export default function TeacherPage() {
       }
     } else {
       setError("activities_load_failed");
+      return;
     }
 
     if (includeMonitor) {
