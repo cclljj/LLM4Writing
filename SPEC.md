@@ -515,7 +515,7 @@ Request:
 Behavior:
 
 - 找 activity + 自己所在 group
-- 若尚未分組或找不到學生分組，使用同班學生名單作為 fallback 參與者（groupName=`未分組`）
+- 有分組時，若找不到學生分組，直接回 `403 not_group_member`
 - 有舊 session 則回舊 session
 - 否則建立新 session（workflow: `spec10`）
 
@@ -558,6 +558,11 @@ Request:
 ```json
 { "sessionId": "...", "userId": "student", "text": "..." }
 ```
+
+Behavior:
+
+- 以 server 端登入 cookie 驗證學生身份，忽略前端傳入 `userId` 欄位
+- 僅允許 `student` 身份送出
 
 Error（400）：
 

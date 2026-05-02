@@ -405,7 +405,7 @@ export default function StudentPage() {
       const response = await fetch("/api/chat/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId: session.id, userId: loginUser || "student", text })
+        body: JSON.stringify({ sessionId: session.id, userId: loginUser, text })
       });
 
       const data = await response.json();

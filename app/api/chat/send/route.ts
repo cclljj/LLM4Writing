@@ -2,9 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { sendStudentMessage } from "@/src/lib/engine";
 import { getSession, saveSession } from "@/src/lib/store";
 import { SendMessagePayload } from "@/src/lib/types";
+import { getCurrentUser } from "@/src/lib/auth-server";
 
 export async function POST(request: NextRequest) {
   const payload = (await request.json()) as SendMessagePayload;
+  const user = await getCurrentUser();
+  if (!user || user.role !== "student") {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
   const session = await getSession(payload.sessionId);
 
   if (!session) {
@@ -12,7 +17,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const updated = await sendStudentMessage(session, payload.userId, payload.text);
+    const updated = await sendStudentMessage(session, user.username, payload.text);
     await saveSession(updated);
     return NextResponse.json(updated);
   } catch (error) {

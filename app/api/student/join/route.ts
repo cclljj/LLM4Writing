@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/src/lib/auth-server";
 import { createSession } from "@/src/lib/engine";
-import { findActivity, getStudentUsernamesForActivityClass, hydrateDomainState, resolvePromptConfigForActivity } from "@/src/lib/mock-data";
+import { findActivity, hydrateDomainState, resolvePromptConfigForActivity } from "@/src/lib/mock-data";
 import { listSessions, saveSession } from "@/src/lib/store";
 
 export async function POST(request: NextRequest) {
@@ -29,9 +29,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "course_ended" }, { status: 400 });
     }
 
+    const hasGrouping = activity.groups.length > 0;
     const group = activity.groups.find((g) => g.members.includes(user.username));
-    const fallbackParticipants = getStudentUsernamesForActivityClass(activity.id);
-    const participants = group?.members.length ? group.members : fallbackParticipants;
+    if (hasGrouping && !group) {
+      return NextResponse.json({ error: "not_group_member" }, { status: 403 });
+    }
+
+    const participants = group?.members ?? [];
     if (participants.length === 0 || !participants.includes(user.username)) {
       return NextResponse.json({ error: "not_group_member" }, { status: 403 });
     }
