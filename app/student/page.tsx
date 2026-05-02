@@ -172,6 +172,76 @@ function toMermaid(nodes: OutlineNode[]): string {
   return lines.join("\n");
 }
 
+function fromMermaid(text: string): OutlineNode[] {
+  const raw = text.trim();
+  if (!raw) return makeDefaultOutlineNodes();
+  const lines = raw
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !line.startsWith("graph "));
+
+  const nodeTextMap = new Map<string, string>();
+  const parentMap = new Map<string, string | null>();
+
+  for (const line of lines) {
+    const nodeMatch = line.match(/^([A-Za-z0-9_-]+)\s*\["([\s\S]*)"\]$/);
+    if (nodeMatch) {
+      const [, id, label] = nodeMatch;
+      nodeTextMap.set(id, label.replaceAll('\\"', '"'));
+      if (!parentMap.has(id)) parentMap.set(id, null);
+      continue;
+    }
+    const edgeMatch = line.match(/^([A-Za-z0-9_-]+)\s*-->\s*([A-Za-z0-9_-]+)$/);
+    if (edgeMatch) {
+      const [, parentId, childId] = edgeMatch;
+      parentMap.set(childId, parentId);
+      if (!parentMap.has(parentId)) parentMap.set(parentId, null);
+      if (!nodeTextMap.has(parentId)) nodeTextMap.set(parentId, parentId);
+      if (!nodeTextMap.has(childId)) nodeTextMap.set(childId, childId);
+    }
+  }
+
+  if (nodeTextMap.size === 0) return makeDefaultOutlineNodes();
+
+  const depthMap = new Map<string, number>();
+  const getDepth = (id: string): number => {
+    const cached = depthMap.get(id);
+    if (cached) return cached;
+    const parent = parentMap.get(id);
+    const depth = parent ? getDepth(parent) + 1 : 1;
+    depthMap.set(id, depth);
+    return depth;
+  };
+
+  const ids = Array.from(nodeTextMap.keys());
+  ids.forEach((id) => getDepth(id));
+  const groups = new Map<number, string[]>();
+  ids.forEach((id) => {
+    const depth = depthMap.get(id) ?? 1;
+    const arr = groups.get(depth) ?? [];
+    arr.push(id);
+    groups.set(depth, arr);
+  });
+
+  const sortedDepths = Array.from(groups.keys()).sort((a, b) => a - b);
+  const nodes: OutlineNode[] = [];
+  sortedDepths.forEach((depth) => {
+    const idsAtDepth = groups.get(depth) ?? [];
+    idsAtDepth.forEach((id, idx) => {
+      nodes.push({
+        id,
+        parentId: parentMap.get(id) ?? null,
+        text: nodeTextMap.get(id) ?? id,
+        x: 120 + idx * 180,
+        y: 40 + (depth - 1) * 120
+      });
+    });
+  });
+
+  return nodes.length > 0 ? nodes : makeDefaultOutlineNodes();
+}
+
 export default function StudentPage() {
   const router = useRouter();
   const [loginUser, setLoginUser] = useState("");
@@ -255,10 +325,11 @@ export default function StudentPage() {
   }, [session?.id, session?.currentStep, loginUser]);
 
   useEffect(() => {
-    if (session?.currentStep !== 3 || !showOutlineEditor) return;
-    setOutlineNodes(makeDefaultOutlineNodes());
+    if (session?.currentStep !== 3 || !showOutlineEditor || !loginUser) return;
+    const saved = session.outlines[loginUser]?.trim() ?? "";
+    setOutlineNodes(saved ? fromMermaid(saved) : makeDefaultOutlineNodes());
     setEditingNodeId(null);
-  }, [showOutlineEditor, session?.id, session?.currentStep]);
+  }, [showOutlineEditor, session?.id, session?.currentStep, loginUser, session?.outlines]);
 
   useEffect(() => {
     if (!draggingNodeId) return;
