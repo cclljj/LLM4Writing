@@ -483,6 +483,10 @@ export default function StudentPage() {
     currentStep === 1 &&
     latestStepMessage?.role === "system" &&
     latestStepMessage.text.includes("步驟 1 子步驟已完成，等待教師切換下一步");
+  const step2CompletedWaitingTeacher =
+    currentStep === 2 &&
+    latestStepMessage?.role === "system" &&
+    latestStepMessage.text.includes("步驟 2 子步驟已完成，等待教師切換下一步");
 
   const ownStep7Report = session && loginUser ? session.reports.step7[loginUser] : undefined;
   const ownStep10Report = session && loginUser ? session.reports.step10[loginUser] : undefined;
@@ -892,8 +896,18 @@ export default function StudentPage() {
                 <small>步驟 1 已完成，請等待老師切換到步驟 2。</small>
               </p>
             ) : null}
+            {step2CompletedWaitingTeacher ? (
+              <p style={{ marginTop: 10 }}>
+                <small>步驟 2 子步驟已完成，請等待老師切換下一步。</small>
+              </p>
+            ) : null}
 
-            {isInputEnabled && canReplyToQuestion && !waitingGroupMembers && !isSendingMessage && !step1CompletedWaitingTeacher ? (
+            {isInputEnabled &&
+            canReplyToQuestion &&
+            !waitingGroupMembers &&
+            !isSendingMessage &&
+            !step1CompletedWaitingTeacher &&
+            !step2CompletedWaitingTeacher ? (
               <form onSubmit={sendMessage}>
                 <label>你的回答</label>
                 <textarea value={text} onChange={(e) => setText(e.target.value)} />
