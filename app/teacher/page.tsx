@@ -683,6 +683,21 @@ export default function TeacherPage() {
         return;
       }
 
+      setMonitorSessions((prev) =>
+        prev.map((session) =>
+          session.sessionId === data.id
+            ? {
+                ...session,
+                currentStep: data.currentStep,
+                messages: data.messages,
+                groupGate: data.groupGate,
+                stepState: data.stepState,
+                reflectionIndex: data.reflectionIndex
+              }
+            : session
+        )
+      );
+
       setMonitorSelected({
         sessionId: data.id,
         activityId: data.activityId,
