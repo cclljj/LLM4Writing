@@ -192,6 +192,7 @@ export default function TeacherPage() {
   const [showCourseStatusView, setShowCourseStatusView] = useState(false);
   const [isLearningProcessing, setIsLearningProcessing] = useState(false);
   const [learningProcessingText, setLearningProcessingText] = useState("");
+  const [learningWarning, setLearningWarning] = useState("");
   const [progressRows, setProgressRows] = useState<PersonalProgressRow[]>([]);
   const [selectedProgressUser, setSelectedProgressUser] = useState("");
   const [personalMessages, setPersonalMessages] = useState<
@@ -498,9 +499,7 @@ export default function TeacherPage() {
 
   useEffect(() => {
     if (!showCourseStatusView || !selectedLearningActivityId) return;
-    refreshMonitor().catch(() => {
-      setError("monitor_load_failed");
-    });
+    refreshMonitor().catch(() => undefined);
   }, [showCourseStatusView, selectedLearningActivityId]);
 
   useEffect(() => {
@@ -526,13 +525,23 @@ export default function TeacherPage() {
   }, [tab]);
 
   async function refreshMonitor() {
-    const response = await fetch("/api/teacher/monitor", { cache: "no-store" });
-    if (!response.ok) {
-      setError("monitor_load_failed");
+    const fetchOpts: RequestInit = { cache: "no-store" };
+    let response: Response | null = null;
+    try {
+      response = await fetch("/api/teacher/monitor", fetchOpts);
+      if (!response.ok) {
+        response = await fetch("/api/teacher/monitor", fetchOpts);
+      }
+    } catch {
+      response = null;
+    }
+    if (!response?.ok) {
+      setLearningWarning("monitor_load_failed");
       return;
     }
     const data = await response.json();
     setMonitorSessions(data.sessions ?? []);
+    setLearningWarning("");
   }
 
   async function refreshAll(includeMonitor = false) {
@@ -577,6 +586,7 @@ export default function TeacherPage() {
       const list = (await activitiesRes.json()).activities ?? [];
       setActivities(list);
       setError("");
+      setLearningWarning("");
       if (!list.some((item: ActivityRow) => item.id === selectedActivityId)) {
         setSelectedActivityId(list[0]?.id ?? "");
       }
@@ -1953,6 +1963,7 @@ export default function TeacherPage() {
             {activities.length === 0 ? (
               <small>目前沒有可顯示的課程資料。請按「重新整理」或確認此帳號是否有可見課程。</small>
             ) : null}
+            {learningWarning ? <small>{learningWarning}</small> : null}
             {error ? <small>{error}</small> : null}
           </div>
 
