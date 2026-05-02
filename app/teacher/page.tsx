@@ -192,8 +192,7 @@ export default function TeacherPage() {
       if (schoolFilter !== "all" && user.school !== schoolFilter) return false;
 
       if (roleFilter === "student" && schoolFilter !== "all") {
-        if (!classFilter) return false;
-        if ((user.classNumber ?? "") !== classFilter) return false;
+        if (classFilter && (user.classNumber ?? "") !== classFilter) return false;
       }
 
       if (!keyword) return true;
@@ -239,6 +238,21 @@ export default function TeacherPage() {
   }, [sortedUsers, userPage]);
 
   const userPageStartIndex = useMemo(() => (userPage - 1) * 20, [userPage]);
+
+  function toggleUserSort(field: "username" | "name" | "classNumber") {
+    if (userSortBy === field) {
+      setUserSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setUserSortBy(field);
+    setUserSortDirection("asc");
+  }
+
+  function getSortIndicator(field: "username" | "name" | "classNumber") {
+    if (userSortBy !== field) return "↕";
+    return userSortDirection === "asc" ? "↑" : "↓";
+  }
+
   const teacherUsers = useMemo(
     () => users.filter((item) => item.role === "teacher"),
     [users]
@@ -1446,7 +1460,7 @@ export default function TeacherPage() {
               <div className="col">
                 <label>班級篩選（由大到小）</label>
                 <select value={classFilter} onChange={(e) => setClassFilter(e.target.value)}>
-                  <option value="">請先選擇班級</option>
+                  <option value="">全部班級</option>
                   {classFilterOptions.map((classNumber) => (
                     <option key={classNumber} value={classNumber}>
                       {classNumber}
@@ -1455,21 +1469,6 @@ export default function TeacherPage() {
                 </select>
               </div>
             ) : null}
-            <div className="col">
-              <label>排序欄位</label>
-              <select value={userSortBy} onChange={(e) => setUserSortBy(e.target.value as "username" | "name" | "classNumber")}>
-                <option value="username">帳號</option>
-                <option value="name">姓名</option>
-                <option value="classNumber">班級號碼</option>
-              </select>
-            </div>
-            <div className="col">
-              <label>排序方向</label>
-              <select value={userSortDirection} onChange={(e) => setUserSortDirection(e.target.value as "asc" | "desc")}>
-                <option value="asc">由小到大</option>
-                <option value="desc">由大到小</option>
-              </select>
-            </div>
           </div>
 
           <div style={{ overflowX: "auto" }}>
@@ -1477,10 +1476,25 @@ export default function TeacherPage() {
               <thead>
                 <tr>
                   <th>#</th>
-                  <th>帳號</th>
-                  <th>姓名</th>
+                  <th>
+                    帳號
+                    <button type="button" className="secondary" style={{ width: "auto", marginLeft: 6, padding: "2px 6px" }} onClick={() => toggleUserSort("username")}>
+                      {getSortIndicator("username")}
+                    </button>
+                  </th>
+                  <th>
+                    姓名
+                    <button type="button" className="secondary" style={{ width: "auto", marginLeft: 6, padding: "2px 6px" }} onClick={() => toggleUserSort("name")}>
+                      {getSortIndicator("name")}
+                    </button>
+                  </th>
                   <th>學校</th>
-                  <th>班級號碼</th>
+                  <th>
+                    班級號碼
+                    <button type="button" className="secondary" style={{ width: "auto", marginLeft: 6, padding: "2px 6px" }} onClick={() => toggleUserSort("classNumber")}>
+                      {getSortIndicator("classNumber")}
+                    </button>
+                  </th>
                   <th>角色</th>
                   <th>綁定教師</th>
                   <th style={{ width: 360 }}>操作</th>
