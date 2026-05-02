@@ -271,7 +271,10 @@ async function generateAiTextWithRetry(messages: LlmChatMessage[], temperature: 
 
 async function generateAiTextForStep(session: SessionState, step: number, contextText: string): Promise<string> {
   const stepName = getStepName(step);
-  const fallback = `AI（${stepName}）回覆：已收到本輪回覆。請依目前步驟目標繼續討論。`;
+  const fallback =
+    step === 3
+      ? "AI（生成論點）回覆：已收到你的提問。請先整理一個清楚主張，並列出 2-3 個支持重點，把它們放進結構樹節點。"
+      : `AI（${stepName}）回覆：已收到本輪回覆。請依目前步驟目標繼續討論。`;
   if (!isLlmConfigured()) {
     return fallback;
   }
@@ -305,7 +308,7 @@ async function generateAiTextForStep(session: SessionState, step: number, contex
         (step === 3 ? `以下是步驟 1/2 對談脈絡（用於引導結構樹）：\n${step3History || "(無)"}\n\n` : "") +
         `目前事件：${contextText}\n\n` +
         (step === 3
-          ? "請依據 stepPrompts[3] 先提出一個具體提問，再給出清楚回覆/引導，協助學生逐步完成結構樹。"
+          ? "請依據 stepPrompts[3] 的角色、目標與輸出格式，僅針對學生提問給出回覆與建議。禁止主動提問、禁止要求學生再回答新問題。"
           : "請根據最新一輪組員回覆，產出本步驟應給學生的下一則引導回覆。")
     }
   ];
