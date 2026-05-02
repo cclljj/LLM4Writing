@@ -241,6 +241,19 @@ function buildRecentContext(session: SessionState, step: number): string {
     .join("\n");
 }
 
+function buildHistoryContextForStep3(session: SessionState): string {
+  const relevant = session.messages
+    .filter((m) => (m.step === 1 || m.step === 2) && (m.role === "student" || m.role === "ai" || m.role === "system"))
+    .slice(-20);
+  return relevant
+    .map((m) => {
+      if (m.role === "student") return `S${m.step}-學生${m.userId ? `(${m.userId})` : ""}：${m.text}`;
+      if (m.role === "ai") return `S${m.step}-AI：${m.text}`;
+      return `S${m.step}-系統：${m.text}`;
+    })
+    .join("\n");
+}
+
 async function generateAiTextWithRetry(messages: LlmChatMessage[], temperature: number, maxTokens: number): Promise<string> {
   let lastError: unknown;
   for (let attempt = 1; attempt <= 3; attempt += 1) {
@@ -282,14 +295,18 @@ async function generateAiTextForStep(session: SessionState, step: number, contex
   systemParts.push(`目前步驟：${step}（${stepName}）。請嚴格遵守步驟與輸出格式要求。`);
 
   const recent = buildRecentContext(session, step);
+  const step3History = step === 3 ? buildHistoryContextForStep3(session) : "";
   const messages: LlmChatMessage[] = [
     { role: "system", content: systemParts.join("\n\n") },
     {
       role: "user",
       content:
         `以下是最近對話內容（可能含系統指示）：\n${recent || "(無)"}\n\n` +
+        (step === 3 ? `以下是步驟 1/2 對談脈絡（用於引導結構樹）：\n${step3History || "(無)"}\n\n` : "") +
         `目前事件：${contextText}\n\n` +
-        `請根據最新一輪組員回覆，產出本步驟應給學生的下一則引導回覆。`
+        (step === 3
+          ? "請依據 stepPrompts[3] 先提出一個具體提問，再給出清楚回覆/引導，協助學生逐步完成結構樹。"
+          : "請根據最新一輪組員回覆，產出本步驟應給學生的下一則引導回覆。")
     }
   ];
 

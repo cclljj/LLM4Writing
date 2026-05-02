@@ -457,10 +457,20 @@ export default function TeacherPage() {
     }
 
     if ([3, 6, 8].includes(step)) {
-      const ready = allParticipantsReplied;
+      const ready =
+        step === 3
+          ? session.participants.length > 0 &&
+            session.participants.every((participant) => (session.groupGate?.["3-complete"] ?? []).includes(participant))
+          : allParticipantsReplied;
       return ready
-        ? { ready: true, text: `步驟 ${step} 已收齊回覆，建議切換到 Step ${nextStep}。`, nextStep }
-        : { ready: false, text: `步驟 ${step} 尚未收齊所有學生回覆。` };
+        ? { ready: true, text: `步驟 ${step} 已收齊完成條件，建議切換到 Step ${nextStep}。`, nextStep }
+        : {
+            ready: false,
+            text:
+              step === 3
+                ? "步驟 3 尚未全員完成結構樹。"
+                : `步驟 ${step} 尚未收齊所有學生回覆。`
+          };
     }
 
     if ([5, 7].includes(step)) {

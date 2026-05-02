@@ -362,6 +362,9 @@ student 可儲存三種內容：
   - 所有節點可拖曳調整位置；放到其他節點上可改變隸屬層次（連線同步更新）
   - 需提供「儲存變更」按鈕，將目前結構轉為 Mermaid 格式儲存到 `outline`
   - 若 `outline` 已有 Mermaid 存檔，重新載入或重開編輯器時需優先還原該內容，不可重置為預設單一節點
+  - 需提供「完成結構樹」按鈕；學生按下後即標記該學生已完成 Step3。若同組尚未全員完成，顯示等待其他同學完成提示
+20. Step3 版面規則：互動內容區需顯示在結構樹編輯器上方。
+21. Step3 AI 引導規則：依 `stepPrompts["3"]` 進行可來回的問答引導，直到學生按下「完成結構樹」；引導過程需帶入步驟1/2 對話脈絡。
 
 ## 6.3 `/teacher`
 
@@ -590,6 +593,20 @@ Request:
 
 - 需 student
 - 需為 session participant
+
+### `POST /api/session/step3/complete`
+
+Request:
+
+```json
+{ "sessionId": "..." }
+```
+
+Behavior:
+
+- 權限：student 且需為 session participant
+- 僅允許在 Step3 呼叫
+- 於 `groupGate["3-complete"]` 記錄完成者名單（去重）
 
 ## 7.4 Teacher Learning APIs
 

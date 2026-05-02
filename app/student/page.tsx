@@ -523,6 +523,22 @@ export default function StudentPage() {
     await saveArtifact("outline", mermaidText);
   }
 
+  async function completeOutlineTree() {
+    if (!session) return;
+    await saveOutlineTree();
+    const response = await fetch("/api/session/step3/complete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId: session.id })
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      setError(data.error ?? "complete_step3_failed");
+      return;
+    }
+    setSession(data);
+  }
+
   const currentStep = session?.currentStep ?? 1;
   const currentMode = getMode(currentStep);
   const currentModeLabel =
@@ -698,6 +714,13 @@ export default function StudentPage() {
     currentStep === 2 &&
     latestStepMessage?.role === "system" &&
     latestStepMessage.text.includes("步驟 2 子步驟已完成，等待教師切換下一步");
+  const step3CompletedUsers = session?.groupGate?.["3-complete"] ?? [];
+  const step3CompletedByMe = Boolean(loginUser && step3CompletedUsers.includes(loginUser));
+  const waitingStep3Members =
+    currentStep === 3 &&
+    !!session &&
+    step3CompletedByMe &&
+    !session.participants.every((participant) => step3CompletedUsers.includes(participant));
 
   const ownStep7Report = session && loginUser ? session.reports.step7[loginUser] : undefined;
   const ownStep10Report = session && loginUser ? session.reports.step10[loginUser] : undefined;
@@ -934,6 +957,46 @@ export default function StudentPage() {
             </p>
           </div>
 
+          {currentStep === 3 ? (
+            <div className="card">
+              <h2>互動內容</h2>
+              {interactiveMessages.map((message) => (
+                <div key={message.id} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
+                  <strong>
+                    {message.kind === "question"
+                      ? "系統提問"
+                      : message.kind === "student"
+                        ? `學生${message.userId ? `(${message.userId})` : ""}`
+                        : "AI 回覆"}
+                  </strong>
+                  <div
+                    style={{ marginTop: 4 }}
+                    dangerouslySetInnerHTML={{ __html: renderMessageHtml(message.text) }}
+                  />
+                  <small>{message.at}</small>
+                </div>
+              ))}
+
+              {interactiveMessages.length === 0 ? <small>目前此步驟尚無互動內容。</small> : null}
+              {step3CompletedByMe ? (
+                <p style={{ marginTop: 10 }}>
+                  <small>
+                    {waitingStep3Members ? "你已完成結構樹，等待其他同學完成..." : "你已完成結構樹，可等待老師切換下一步。"}
+                  </small>
+                </p>
+              ) : null}
+              {!step3CompletedByMe && isInputEnabled && canReplyToQuestion && !isSendingMessage ? (
+                <form onSubmit={sendMessage}>
+                  <label>你的回答</label>
+                  <textarea value={text} onChange={(e) => setText(e.target.value)} />
+                  <button type="submit" style={{ marginTop: 10 }}>
+                    發送訊息
+                  </button>
+                </form>
+              ) : null}
+            </div>
+          ) : null}
+
           {(currentStep === 3 || currentStep === 4) && loginUser ? (
             <div className="card">
               <h2>文章結構樹</h2>
@@ -1063,11 +1126,23 @@ export default function StudentPage() {
                           );
                         })}
                       </div>
-                      <div style={{ width: 180, marginTop: 10 }}>
-                        <button type="button" onClick={saveOutlineTree}>
-                          儲存變更
-                        </button>
+                      <div className="row" style={{ marginTop: 10, gap: 10 }}>
+                        <div style={{ width: 180 }}>
+                          <button type="button" onClick={saveOutlineTree}>
+                            儲存變更
+                          </button>
+                        </div>
+                        <div style={{ width: 180 }}>
+                          <button type="button" className="secondary" onClick={completeOutlineTree} disabled={step3CompletedByMe}>
+                            完成結構樹
+                          </button>
+                        </div>
                       </div>
+                      {step3CompletedByMe ? (
+                        <small style={{ display: "block", marginTop: 8 }}>
+                          {waitingStep3Members ? "你已完成結構樹，等待其他同學完成..." : "你已完成結構樹，可等待老師切換下一步。"}
+                        </small>
+                      ) : null}
                     </>
                   ) : (
                     <>
@@ -1174,6 +1249,7 @@ export default function StudentPage() {
             </div>
           ) : null}
 
+          {currentStep !== 3 ? (
           <div className="card">
             <h2>互動內容</h2>
             {currentMode === "non_interactive" ? (
@@ -1244,6 +1320,7 @@ export default function StudentPage() {
               </p>
             ) : null}
           </div>
+          ) : null}
 
           <hr />
           <div className="card">
