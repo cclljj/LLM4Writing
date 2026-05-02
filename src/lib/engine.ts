@@ -241,9 +241,24 @@ function buildRecentContext(session: SessionState, step: number): string {
     .join("\n");
 }
 
+async function generateAiTextWithRetry(messages: LlmChatMessage[], temperature: number, maxTokens: number): Promise<string> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      return await llmChatCompletionText({ messages, temperature, maxTokens });
+    } catch (error) {
+      lastError = error;
+      if (attempt < 3) {
+        await new Promise((resolve) => setTimeout(resolve, attempt * 250));
+      }
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("llm_retry_exhausted");
+}
+
 async function generateAiTextForStep(session: SessionState, step: number, contextText: string): Promise<string> {
   const stepName = getStepName(step);
-  const fallback = `AI(${stepName}) 回覆：已收到內容「${contextText.slice(0, 80)}${contextText.length > 80 ? "..." : ""}」，請依本步驟目標繼續。`;
+  const fallback = `AI（${stepName}）回覆：已收到本輪回覆。請依目前步驟目標繼續討論。`;
   if (!isLlmConfigured()) {
     return fallback;
   }
@@ -279,7 +294,7 @@ async function generateAiTextForStep(session: SessionState, step: number, contex
   ];
 
   try {
-    return await llmChatCompletionText({ messages, temperature: 0.6, maxTokens: 700 });
+    return await generateAiTextWithRetry(messages, 0.6, 700);
   } catch {
     return fallback;
   }

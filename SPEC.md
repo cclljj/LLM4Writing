@@ -60,9 +60,9 @@
   - `LLM_KEY`：API key（不可出現在前端程式碼）
   - `LLM_MODEL`：模型名稱
 - 程式行為：
-  - 若三者皆有：`src/lib/engine.ts` 在需要 AI 回覆時，會呼叫 `src/lib/llm-client.ts` 對遠端 LLM 送出請求並將回覆寫入 session messages
-  - 若缺任一：使用內建 stub 回覆文字（讓 UI 流程可跑，但不代表真實 LLM）
-  - 若遠端 LLM 回傳格式不符或請求失敗：自動 fallback 為內建回覆，不中斷課程流程
+- 若三者皆有：`src/lib/engine.ts` 在需要 AI 回覆時，會呼叫 `src/lib/llm-client.ts` 對遠端 LLM 送出請求並將回覆寫入 session messages
+- 若缺任一：使用內建 stub 回覆文字（讓 UI 流程可跑，但不代表真實 LLM）
+- 若遠端 LLM 回傳格式不符或請求失敗：先進行最多 3 次短暫退避重試；仍失敗時自動 fallback 為內建回覆，不中斷課程流程
 
 ### User Store
 
