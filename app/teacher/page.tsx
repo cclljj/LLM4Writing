@@ -1972,7 +1972,7 @@ export default function TeacherPage() {
                               style={{ width: "auto" }}
                               onClick={() => loadProgress(progressSessionId, row.username)}
                             >
-                              查看 3/6/8 對話
+                              查看
                             </button>
                           </td>
                         </tr>
