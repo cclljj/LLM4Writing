@@ -469,6 +469,16 @@ export default function StudentPage() {
     Array.isArray(responders) &&
     hasSubmittedThisTurn &&
     !session.participants.every((p) => responders.includes(p));
+  const latestStepMessage =
+    session?.messages
+      .filter((message) => message.step === currentStep)
+      .at(-1) ?? null;
+  const waitingAiForGroup =
+    currentMode === "group_interaction" &&
+    !!session &&
+    session.participants.length > 0 &&
+    session.participants.every((p) => responders.includes(p)) &&
+    latestStepMessage?.role !== "ai";
 
   const ownStep7Report = session && loginUser ? session.reports.step7[loginUser] : undefined;
   const ownStep10Report = session && loginUser ? session.reports.step10[loginUser] : undefined;
@@ -863,7 +873,7 @@ export default function StudentPage() {
 
             {interactiveMessages.length === 0 ? <small>目前此步驟尚無互動內容。</small> : null}
 
-            {isSendingMessage ? (
+            {isSendingMessage || waitingAiForGroup ? (
               <p style={{ marginTop: 10 }}>
                 <small>等待遠端 AI 回答中...</small>
               </p>
