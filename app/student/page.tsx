@@ -437,6 +437,9 @@ export default function StudentPage() {
       if (text.startsWith("步驟 9 開始：")) {
         return text.replace("步驟 9 開始：", "").trim();
       }
+      if (text.startsWith("步驟 3 開頭詞：")) {
+        return text.replace("步驟 3 開頭詞：", "").trim();
+      }
       return null;
     };
 
@@ -683,13 +686,17 @@ export default function StudentPage() {
           ? "4-1"
         : null;
   const responders = activeGateKey ? session?.groupGate?.[activeGateKey] ?? [] : [];
+  const step3CompletedUsers = session?.groupGate?.["3-complete"] ?? [];
+  const step3CompletedByMe = Boolean(loginUser && step3CompletedUsers.includes(loginUser));
   const hasSubmittedThisTurn = Boolean(loginUser && responders.includes(loginUser));
   const allRespondedThisTurn =
     currentMode === "group_interaction" && !!session && session.participants.every((p) => responders.includes(p));
   const canReplyToQuestion =
     currentMode === "group_interaction"
       ? !hasSubmittedThisTurn && !allRespondedThisTurn
-      : Boolean(lastIsQuestion);
+      : currentStep === 3
+        ? !step3CompletedByMe
+        : Boolean(lastIsQuestion);
   const waitingGroupMembers =
     currentMode === "group_interaction" &&
     !!session &&
@@ -714,8 +721,6 @@ export default function StudentPage() {
     currentStep === 2 &&
     latestStepMessage?.role === "system" &&
     latestStepMessage.text.includes("步驟 2 子步驟已完成，等待教師切換下一步");
-  const step3CompletedUsers = session?.groupGate?.["3-complete"] ?? [];
-  const step3CompletedByMe = Boolean(loginUser && step3CompletedUsers.includes(loginUser));
   const waitingStep3Members =
     currentStep === 3 &&
     !!session &&
@@ -977,7 +982,9 @@ export default function StudentPage() {
                 </div>
               ))}
 
-              {interactiveMessages.length === 0 ? <small>目前此步驟尚無互動內容。</small> : null}
+              {interactiveMessages.length === 0 ? (
+                <small>請先描述你目前想建構的文章主軸，或直接提出你在結構樹規劃上遇到的問題。</small>
+              ) : null}
               {step3CompletedByMe ? (
                 <p style={{ marginTop: 10 }}>
                   <small>
