@@ -80,6 +80,11 @@ export default function TeacherPage() {
   const [error, setError] = useState("");
   const [userQuery, setUserQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<"all" | "teacher" | "student" | "admin">("all");
+  const [schoolFilter, setSchoolFilter] = useState<string>("all");
+  const [classFilter, setClassFilter] = useState<string>("");
+  const [userSortBy, setUserSortBy] = useState<"username" | "name" | "classNumber">("username");
+  const [userSortDirection, setUserSortDirection] = useState<"asc" | "desc">("asc");
+  const [userPage, setUserPage] = useState(1);
   const [accountError, setAccountError] = useState("");
   const [accountSuccess, setAccountSuccess] = useState("");
   const [editingUser, setEditingUser] = useState<{
@@ -150,25 +155,90 @@ export default function TeacherPage() {
     [users]
   );
 
+  const schoolOptions = useMemo(
+    () => Array.from(new Set(users.map((user) => user.school).filter(Boolean))).sort((a, b) => a.localeCompare(b, "zh-Hant")),
+    [users]
+  );
+
+  const classFilterOptions = useMemo(() => {
+    if (schoolFilter === "all") return [];
+    const uniqClassNumbers = Array.from(
+      new Set(
+        users
+          .filter((user) => user.role === "student" && user.school === schoolFilter)
+          .map((user) => user.classNumber)
+          .filter((value): value is string => Boolean(value))
+      )
+    );
+
+    return uniqClassNumbers.sort((a, b) => {
+      const nA = Number(a);
+      const nB = Number(b);
+      if (Number.isFinite(nA) && Number.isFinite(nB)) return nB - nA;
+      return b.localeCompare(a, "zh-Hant");
+    });
+  }, [users, schoolFilter]);
+
   const sessionHints = useMemo(
     () => Array.from(new Set(monitorSessions.map((session) => session.sessionId))),
     [monitorSessions]
   );
 
-  const filteredUsers = useMemo(
-    () =>
-      users.filter((user) => {
-        if (roleFilter !== "all" && user.role !== roleFilter) return false;
-        const keyword = userQuery.trim().toLowerCase();
-        if (!keyword) return true;
-        return (
-          user.username.toLowerCase().includes(keyword) ||
-          user.name.toLowerCase().includes(keyword) ||
-          user.school.toLowerCase().includes(keyword)
-        );
-      }),
-    [users, roleFilter, userQuery]
-  );
+  const filteredUsers = useMemo(() => {
+    const keyword = userQuery.trim().toLowerCase();
+
+    return users.filter((user) => {
+      if (roleFilter !== "all" && user.role !== roleFilter) return false;
+      if (schoolFilter !== "all" && user.school !== schoolFilter) return false;
+
+      if (roleFilter === "student" && schoolFilter !== "all") {
+        if (!classFilter) return false;
+        if ((user.classNumber ?? "") !== classFilter) return false;
+      }
+
+      if (!keyword) return true;
+      return (
+        user.username.toLowerCase().includes(keyword) ||
+        user.name.toLowerCase().includes(keyword) ||
+        user.school.toLowerCase().includes(keyword)
+      );
+    });
+  }, [users, roleFilter, schoolFilter, classFilter, userQuery]);
+
+  const sortedUsers = useMemo(() => {
+    const getSortValue = (user: UserRow): string => {
+      if (userSortBy === "username") return user.username;
+      if (userSortBy === "name") return user.name;
+      return user.classNumber ?? "";
+    };
+
+    const sorted = [...filteredUsers].sort((a, b) => {
+      const aValue = getSortValue(a);
+      const bValue = getSortValue(b);
+
+      if (userSortBy === "classNumber") {
+        const aNum = Number(aValue);
+        const bNum = Number(bValue);
+        if (Number.isFinite(aNum) && Number.isFinite(bNum)) {
+          return userSortDirection === "asc" ? aNum - bNum : bNum - aNum;
+        }
+      }
+
+      const base = aValue.localeCompare(bValue, "zh-Hant");
+      return userSortDirection === "asc" ? base : -base;
+    });
+
+    return sorted;
+  }, [filteredUsers, userSortBy, userSortDirection]);
+
+  const totalUserPages = useMemo(() => Math.max(1, Math.ceil(sortedUsers.length / 20)), [sortedUsers.length]);
+
+  const pagedUsers = useMemo(() => {
+    const start = (userPage - 1) * 20;
+    return sortedUsers.slice(start, start + 20);
+  }, [sortedUsers, userPage]);
+
+  const userPageStartIndex = useMemo(() => (userPage - 1) * 20, [userPage]);
   const teacherUsers = useMemo(
     () => users.filter((item) => item.role === "teacher"),
     [users]
@@ -319,6 +389,21 @@ export default function TeacherPage() {
     setProgressSessionId("");
     setSessionId("");
   }, [selectedLearningActivityId]);
+
+  useEffect(() => {
+    setClassFilter("");
+    setUserPage(1);
+  }, [roleFilter, schoolFilter]);
+
+  useEffect(() => {
+    setUserPage(1);
+  }, [classFilter, userSortBy, userSortDirection, userQuery]);
+
+  useEffect(() => {
+    if (userPage > totalUserPages) {
+      setUserPage(totalUserPages);
+    }
+  }, [userPage, totalUserPages]);
 
   async function refreshAll() {
     const [u, e, o, m, a] = await Promise.all([
@@ -1218,6 +1303,9 @@ export default function TeacherPage() {
                 password 至少 6 碼；student 必填 classnumber。
               </small>
               <small style={{ display: "block", marginTop: 4 }}>
+                teacher 的 classnumber 與 ownerTeacherUsername 可填任意字串（可留空）。
+              </small>
+              <small style={{ display: "block", marginTop: 4 }}>
                 {loginRole === "admin"
                   ? "admin 批次建立 student 時，必填 ownerTeacherUsername，且需為既有教師 username。"
                   : "teacher 批次建立時僅可建立 student；ownerTeacherUsername 會自動綁定為目前登入教師。"}
@@ -1333,12 +1421,53 @@ export default function TeacherPage() {
               <label>角色篩選</label>
               <select
                 value={roleFilter}
-                onChange={(e) => setRoleFilter(e.target.value as "all" | "teacher" | "student" | "admin")}
+                onChange={(e) => {
+                  setRoleFilter(e.target.value as "all" | "teacher" | "student" | "admin");
+                }}
               >
                 <option value="all">全部</option>
                 {loginRole === "admin" ? <option value="admin">管理員</option> : null}
                 <option value="teacher">教師</option>
                 <option value="student">學生</option>
+              </select>
+            </div>
+            <div className="col">
+              <label>學校篩選</label>
+              <select value={schoolFilter} onChange={(e) => setSchoolFilter(e.target.value)}>
+                <option value="all">全部學校</option>
+                {schoolOptions.map((school) => (
+                  <option key={school} value={school}>
+                    {school}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {roleFilter === "student" && schoolFilter !== "all" ? (
+              <div className="col">
+                <label>班級篩選（由大到小）</label>
+                <select value={classFilter} onChange={(e) => setClassFilter(e.target.value)}>
+                  <option value="">請先選擇班級</option>
+                  {classFilterOptions.map((classNumber) => (
+                    <option key={classNumber} value={classNumber}>
+                      {classNumber}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
+            <div className="col">
+              <label>排序欄位</label>
+              <select value={userSortBy} onChange={(e) => setUserSortBy(e.target.value as "username" | "name" | "classNumber")}>
+                <option value="username">帳號</option>
+                <option value="name">姓名</option>
+                <option value="classNumber">班級號碼</option>
+              </select>
+            </div>
+            <div className="col">
+              <label>排序方向</label>
+              <select value={userSortDirection} onChange={(e) => setUserSortDirection(e.target.value as "asc" | "desc")}>
+                <option value="asc">由小到大</option>
+                <option value="desc">由大到小</option>
               </select>
             </div>
           </div>
@@ -1358,9 +1487,9 @@ export default function TeacherPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredUsers.map((user, idx) => (
+                {pagedUsers.map((user, idx) => (
                   <tr key={user.username}>
-                    <td>{idx + 1}</td>
+                    <td>{userPageStartIndex + idx + 1}</td>
                     <td>{user.username}</td>
                     {editingUser?.username === user.username ? (
                       <>
@@ -1516,6 +1645,27 @@ export default function TeacherPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+
+          <div className="row" style={{ marginTop: 10, alignItems: "center" }}>
+            <small>
+              第 {userPage} / {totalUserPages} 頁，共 {sortedUsers.length} 筆（每頁 20 筆）
+            </small>
+            <div style={{ width: 120 }}>
+              <button type="button" className="secondary" disabled={userPage <= 1} onClick={() => setUserPage((prev) => prev - 1)}>
+                上一頁
+              </button>
+            </div>
+            <div style={{ width: 120 }}>
+              <button
+                type="button"
+                className="secondary"
+                disabled={userPage >= totalUserPages}
+                onClick={() => setUserPage((prev) => prev + 1)}
+              >
+                下一頁
+              </button>
+            </div>
           </div>
         </div>
       ) : null}
