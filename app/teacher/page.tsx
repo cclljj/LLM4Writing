@@ -461,6 +461,13 @@ export default function TeacherPage() {
     }
   }, [userPage, totalUserPages]);
 
+  useEffect(() => {
+    if (tab !== "learning") return;
+    runLearningAction("系統正在載入學習管理資料，請稍候...", async () => {
+      await refreshAll(showCourseStatusView);
+    });
+  }, [tab]);
+
   async function refreshMonitor() {
     const response = await fetch("/api/teacher/monitor", { cache: "no-store" });
     if (!response.ok) {
@@ -475,12 +482,21 @@ export default function TeacherPage() {
     const token = Date.now();
     refreshTokenRef.current = token;
     const fetchOpts: RequestInit = { cache: "no-store" };
-    const [u, e, o, a] = await Promise.all([
-      fetch("/api/admin/users", fetchOpts),
-      fetch("/api/admin/essays", fetchOpts),
-      fetch("/api/admin/openclasses", fetchOpts),
-      fetch("/api/admin/activities", fetchOpts)
-    ]);
+    let u: Response;
+    let e: Response;
+    let o: Response;
+    let a: Response;
+    try {
+      [u, e, o, a] = await Promise.all([
+        fetch("/api/admin/users", fetchOpts),
+        fetch("/api/admin/essays", fetchOpts),
+        fetch("/api/admin/openclasses", fetchOpts),
+        fetch("/api/admin/activities", fetchOpts)
+      ]);
+    } catch {
+      setError("learning_data_load_failed");
+      return;
+    }
     if (refreshTokenRef.current !== token) return;
 
     if (u.ok) setUsers((await u.json()).users ?? []);
@@ -501,6 +517,8 @@ export default function TeacherPage() {
       if (!list.some((item: ActivityRow) => item.id === selectedLearningActivityId)) {
         setSelectedLearningActivityId(list[0]?.id ?? "");
       }
+    } else {
+      setError("activities_load_failed");
     }
 
     if (includeMonitor) {
@@ -1865,6 +1883,9 @@ export default function TeacherPage() {
                 </tbody>
               </table>
             </div>
+            {activities.length === 0 ? (
+              <small>目前沒有可顯示的課程資料。請按「重新整理」或確認此帳號是否有可見課程。</small>
+            ) : null}
             {error ? <small>{error}</small> : null}
           </div>
 
