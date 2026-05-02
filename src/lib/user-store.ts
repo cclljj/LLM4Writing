@@ -78,6 +78,15 @@ function getSqlClient(): Sql {
 
 let initPromise: Promise<void> | undefined;
 
+async function retryOnce<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch {
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    return fn();
+  }
+}
+
 async function ensureUserTable(): Promise<void> {
   if (!isPostgresEnabled()) return;
 
@@ -170,14 +179,16 @@ export async function validateUserCredentialStore(username: string, password: st
     return stripPassword(row);
   }
 
-  await ensureUserTable();
-  const sql = getSqlClient();
-  const rows = await sql<{ payload: unknown; password: string }[]>`
-    SELECT payload, password
-    FROM llm4writing_users
-    WHERE username = ${username}
-    LIMIT 1
-  `;
+  const rows = await retryOnce(async () => {
+    await ensureUserTable();
+    const sql = getSqlClient();
+    return sql<{ payload: unknown; password: string }[]>`
+      SELECT payload, password
+      FROM llm4writing_users
+      WHERE username = ${username}
+      LIMIT 1
+    `;
+  });
 
   const row = rows[0];
   if (!row || row.password !== password) return undefined;

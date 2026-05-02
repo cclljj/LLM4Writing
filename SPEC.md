@@ -463,6 +463,7 @@ Response:
 Error:
 
 - `401 { error: "invalid_credentials" }`
+- `503 { error: "auth_service_unavailable" }`
 
 ### `GET /api/auth/me`
 
