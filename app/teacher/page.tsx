@@ -1732,6 +1732,14 @@ export default function TeacherPage() {
                     const pauseResumeDisabled = status === "not_started" || status === "ended";
                     const endDisabled = status === "not_started" || status === "ended";
                     const viewDisabled = status === "not_started";
+                    const disabledButtonStyle = {
+                      width: "auto",
+                      background: "#f3f4f6",
+                      color: "#9ca3af",
+                      borderColor: "#e5e7eb",
+                      cursor: "not-allowed"
+                    } as const;
+                    const enabledButtonStyle = { width: "auto" } as const;
                     return (
                       <tr key={activity.id}>
                         <td>{activity.school}</td>
@@ -1740,19 +1748,37 @@ export default function TeacherPage() {
                         <td>{getCourseStatusLabel(status)}</td>
                         <td>
                           <div className="row" style={{ gap: 8 }}>
-                            <button type="button" style={{ width: "auto" }} disabled={startDisabled} onClick={() => handleCourseLifecycle(activity.id, "start")}>
+                            <button
+                              type="button"
+                              style={startDisabled ? disabledButtonStyle : enabledButtonStyle}
+                              className={startDisabled ? "secondary" : ""}
+                              disabled={startDisabled}
+                              onClick={() => handleCourseLifecycle(activity.id, "start")}
+                            >
                               開始上課
                             </button>
-                            <button type="button" className="secondary" style={{ width: "auto" }} disabled={pauseResumeDisabled} onClick={() => handleCourseLifecycle(activity.id, "pause_resume")}>
+                            <button
+                              type="button"
+                              className={pauseResumeDisabled ? "secondary" : ""}
+                              style={pauseResumeDisabled ? disabledButtonStyle : enabledButtonStyle}
+                              disabled={pauseResumeDisabled}
+                              onClick={() => handleCourseLifecycle(activity.id, "pause_resume")}
+                            >
                               {status === "in_progress" ? "暫停上課" : "繼續上課"}
                             </button>
-                            <button type="button" className="secondary" style={{ width: "auto" }} disabled={endDisabled} onClick={() => handleCourseLifecycle(activity.id, "end")}>
+                            <button
+                              type="button"
+                              className={endDisabled ? "secondary" : ""}
+                              style={endDisabled ? disabledButtonStyle : enabledButtonStyle}
+                              disabled={endDisabled}
+                              onClick={() => handleCourseLifecycle(activity.id, "end")}
+                            >
                               結束上課
                             </button>
                             <button
                               type="button"
                               className="secondary"
-                              style={{ width: "auto" }}
+                              style={viewDisabled ? disabledButtonStyle : enabledButtonStyle}
                               disabled={viewDisabled}
                               onClick={() => {
                                 setSelectedLearningActivityId(activity.id);
