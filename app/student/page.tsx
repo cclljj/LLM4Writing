@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 type InteractionMode = "group_interaction" | "personal_interaction" | "non_interactive" | "personal_reflection";
@@ -60,6 +60,14 @@ type InteractiveItem = {
   text: string;
   at: string;
   userId?: string;
+};
+
+type OutlineNode = {
+  id: string;
+  parentId: string | null;
+  text: string;
+  x: number;
+  y: number;
 };
 
 const stepNameMap: Record<number, string> = {
@@ -139,6 +147,31 @@ function renderMessageHtml(text: string): string {
   return htmlParts.join("");
 }
 
+function newNodeId(): string {
+  return `n-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function makeDefaultOutlineNodes(): OutlineNode[] {
+  return [{ id: "root", parentId: null, text: "主題", x: 380, y: 40 }];
+}
+
+function escapeMermaidLabel(text: string): string {
+  return text.replaceAll('"', '\\"').replaceAll("\n", " ");
+}
+
+function toMermaid(nodes: OutlineNode[]): string {
+  const lines: string[] = ["graph TD"];
+  nodes.forEach((node) => {
+    lines.push(`  ${node.id}["${escapeMermaidLabel(node.text || "未命名節點")}"]`);
+  });
+  nodes
+    .filter((node) => node.parentId)
+    .forEach((node) => {
+      lines.push(`  ${node.parentId} --> ${node.id}`);
+    });
+  return lines.join("\n");
+}
+
 export default function StudentPage() {
   const router = useRouter();
   const [loginUser, setLoginUser] = useState("");
@@ -157,12 +190,19 @@ export default function StudentPage() {
   const [error, setError] = useState("");
 
   const [outlineText, setOutlineText] = useState("");
+  const [outlineNodes, setOutlineNodes] = useState<OutlineNode[]>(makeDefaultOutlineNodes);
+  const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
+  const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null);
+  const [dropTargetNodeId, setDropTargetNodeId] = useState<string | null>(null);
+  const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [draftText, setDraftText] = useState("");
   const [refUser, setRefUser] = useState("");
   const [showOutlineEditor, setShowOutlineEditor] = useState(false);
   const [showDraftEditor, setShowDraftEditor] = useState(false);
   const [showStep6OutlineRef, setShowStep6OutlineRef] = useState(false);
   const [isSendingMessage, setIsSendingMessage] = useState(false);
+  const outlineCanvasRef = useRef<HTMLDivElement | null>(null);
+  const longPressTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -213,6 +253,59 @@ export default function StudentPage() {
       setRefUser((session.participants.find((user) => user !== loginUser) ?? session.participants[0])!);
     }
   }, [session?.id, session?.currentStep, loginUser]);
+
+  useEffect(() => {
+    if (session?.currentStep !== 3 || !showOutlineEditor) return;
+    setOutlineNodes(makeDefaultOutlineNodes());
+    setEditingNodeId(null);
+  }, [showOutlineEditor, session?.id, session?.currentStep]);
+
+  useEffect(() => {
+    if (!draggingNodeId) return;
+
+    function onMouseMove(event: MouseEvent) {
+      const canvas = outlineCanvasRef.current;
+      if (!canvas) return;
+      const rect = canvas.getBoundingClientRect();
+      const x = event.clientX - rect.left - dragOffset.x;
+      const y = event.clientY - rect.top - dragOffset.y;
+      setOutlineNodes((prev) =>
+        prev.map((node) =>
+          node.id === draggingNodeId
+            ? { ...node, x: Math.max(10, Math.min(980, x)), y: Math.max(10, Math.min(520, y)) }
+            : node
+        )
+      );
+    }
+
+    function onMouseUp() {
+      setOutlineNodes((prev) => {
+        if (!draggingNodeId || !dropTargetNodeId || draggingNodeId === dropTargetNodeId) return prev;
+        const dragging = prev.find((node) => node.id === draggingNodeId);
+        const target = prev.find((node) => node.id === dropTargetNodeId);
+        if (!dragging || !target) return prev;
+        const ancestorSet = new Set<string>();
+        let cursor: OutlineNode | undefined = target;
+        while (cursor?.parentId) {
+          ancestorSet.add(cursor.parentId);
+          cursor = prev.find((node) => node.id === cursor?.parentId);
+        }
+        if (ancestorSet.has(dragging.id)) return prev;
+        return prev.map((node) =>
+          node.id === draggingNodeId ? { ...node, parentId: target.id, y: target.y + 120 } : node
+        );
+      });
+      setDraggingNodeId(null);
+      setDropTargetNodeId(null);
+    }
+
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+  }, [dragOffset.x, dragOffset.y, draggingNodeId, dropTargetNodeId]);
 
   const sortedMessages = useMemo(
     () => [...(session?.messages ?? [])].sort((a, b) => a.at.localeCompare(b.at)),
@@ -311,6 +404,53 @@ export default function StudentPage() {
     if (!session) return [];
     return session.participants.filter((user) => user !== loginUser);
   }, [session, loginUser]);
+  const childrenMap = useMemo(() => {
+    const map = new Map<string, OutlineNode[]>();
+    outlineNodes.forEach((node) => {
+      if (!node.parentId) return;
+      const list = map.get(node.parentId) ?? [];
+      list.push(node);
+      map.set(node.parentId, list);
+    });
+    return map;
+  }, [outlineNodes]);
+
+  function getDepth(nodeId: string): number {
+    let depth = 1;
+    let cursor = outlineNodes.find((node) => node.id === nodeId);
+    while (cursor?.parentId) {
+      depth += 1;
+      cursor = outlineNodes.find((node) => node.id === cursor?.parentId);
+    }
+    return depth;
+  }
+
+  function addChildNode(parentId: string) {
+    const parent = outlineNodes.find((node) => node.id === parentId);
+    if (!parent) return;
+    const siblings = outlineNodes.filter((node) => node.parentId === parentId);
+    const next: OutlineNode = {
+      id: newNodeId(),
+      parentId,
+      text: `新節點 ${siblings.length + 1}`,
+      x: parent.x + siblings.length * 140,
+      y: parent.y + 120
+    };
+    setOutlineNodes((prev) => [...prev, next]);
+  }
+
+  function removeLeafNode(nodeId: string) {
+    const hasChildren = outlineNodes.some((node) => node.parentId === nodeId);
+    if (hasChildren) return;
+    setOutlineNodes((prev) => prev.filter((node) => node.id !== nodeId));
+    if (editingNodeId === nodeId) setEditingNodeId(null);
+  }
+
+  async function saveOutlineTree() {
+    const mermaidText = toMermaid(outlineNodes);
+    setOutlineText(mermaidText);
+    await saveArtifact("outline", mermaidText);
+  }
 
   const currentStep = session?.currentStep ?? 1;
   const currentMode = getMode(currentStep);
@@ -735,25 +875,135 @@ export default function StudentPage() {
               </div>
               {showOutlineEditor ? (
                 <>
-                  <label style={{ marginTop: 10 }}>我的結構樹內容</label>
-                  <textarea
-                    value={outlineText}
-                    onChange={(e) => setOutlineText(e.target.value)}
-                    placeholder={
-                      currentActivity?.genre === "議論文"
-                        ? "建議格式：立場主張、論點一、論點二、反方回應、結論。"
-                        : currentActivity?.genre === "說明文"
-                          ? "建議格式：主題說明、背景、重點一、重點二、總結。"
-                          : currentActivity?.genre === "抒情文"
-                            ? "建議格式：情境鋪陳、情感轉折、意象描述、收束。"
-                            : "請規劃主題、段落重點與結論。"
-                    }
-                  />
-                  <div style={{ width: 160, marginTop: 10 }}>
-                    <button type="button" onClick={() => saveArtifact("outline", outlineText)}>
-                      儲存結構樹
-                    </button>
-                  </div>
+                  {currentStep === 3 ? (
+                    <>
+                      <small>按節點右上角 ➕ 新增下一層；第二層以下且無子節點可用 ➖ 刪除。長按節點可編輯文字，拖曳可調整位置與層次。</small>
+                      <div
+                        ref={outlineCanvasRef}
+                        style={{
+                          position: "relative",
+                          width: "100%",
+                          minHeight: 560,
+                          border: "1px solid #e5e7eb",
+                          borderRadius: 10,
+                          marginTop: 10,
+                          overflow: "hidden",
+                          background: "linear-gradient(180deg, #f8fafc 0%, #ffffff 100%)"
+                        }}
+                      >
+                        <svg style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}>
+                          {outlineNodes
+                            .filter((node) => node.parentId)
+                            .map((node) => {
+                              const parent = outlineNodes.find((item) => item.id === node.parentId);
+                              if (!parent) return null;
+                              return (
+                                <line
+                                  key={`edge-${parent.id}-${node.id}`}
+                                  x1={parent.x + 60}
+                                  y1={parent.y + 34}
+                                  x2={node.x + 60}
+                                  y2={node.y}
+                                  stroke="#64748b"
+                                  strokeWidth={2}
+                                />
+                              );
+                            })}
+                        </svg>
+
+                        {outlineNodes.map((node) => {
+                          const children = childrenMap.get(node.id) ?? [];
+                          const depth = getDepth(node.id);
+                          const canDelete = depth >= 2 && children.length === 0;
+                          return (
+                            <div
+                              key={node.id}
+                              onMouseEnter={() => draggingNodeId && setDropTargetNodeId(node.id)}
+                              onMouseDown={(event) => {
+                                const target = event.target as HTMLElement;
+                                if (target.closest("button") || target.closest("input")) return;
+                                const box = event.currentTarget.getBoundingClientRect();
+                                setDragOffset({ x: event.clientX - box.left, y: event.clientY - box.top });
+                                setDraggingNodeId(node.id);
+                                if (longPressTimerRef.current) window.clearTimeout(longPressTimerRef.current);
+                                longPressTimerRef.current = window.setTimeout(() => {
+                                  setEditingNodeId(node.id);
+                                }, 500);
+                              }}
+                              onMouseUp={() => {
+                                if (longPressTimerRef.current) window.clearTimeout(longPressTimerRef.current);
+                                longPressTimerRef.current = null;
+                              }}
+                              style={{
+                                position: "absolute",
+                                left: node.x,
+                                top: node.y,
+                                width: 120,
+                                minHeight: 68,
+                                borderRadius: 10,
+                                border: node.id === dropTargetNodeId ? "2px solid #0ea5e9" : "1px solid #94a3b8",
+                                background: "#ffffff",
+                                boxShadow: "0 4px 14px rgba(15, 23, 42, 0.08)",
+                                padding: "8px 10px 6px",
+                                cursor: "move",
+                                userSelect: "none"
+                              }}
+                            >
+                              <div style={{ display: "flex", justifyContent: "flex-end", gap: 4, marginBottom: 4 }}>
+                                <button
+                                  type="button"
+                                  className="secondary"
+                                  style={{ width: 24, height: 24, padding: 0, lineHeight: 1 }}
+                                  onMouseDown={(e) => e.stopPropagation()}
+                                  onClick={() => addChildNode(node.id)}
+                                >
+                                  ➕
+                                </button>
+                                {canDelete ? (
+                                  <button
+                                    type="button"
+                                    className="secondary"
+                                    style={{ width: 24, height: 24, padding: 0, lineHeight: 1 }}
+                                    onMouseDown={(e) => e.stopPropagation()}
+                                    onClick={() => removeLeafNode(node.id)}
+                                  >
+                                    ➖
+                                  </button>
+                                ) : null}
+                              </div>
+                              {editingNodeId === node.id ? (
+                                <input
+                                  autoFocus
+                                  value={node.text}
+                                  onChange={(e) =>
+                                    setOutlineNodes((prev) =>
+                                      prev.map((item) => (item.id === node.id ? { ...item, text: e.target.value } : item))
+                                    )
+                                  }
+                                  onBlur={() => setEditingNodeId(null)}
+                                  onMouseDown={(e) => e.stopPropagation()}
+                                />
+                              ) : (
+                                <div style={{ fontSize: 13, fontWeight: 600, color: "#0f172a", whiteSpace: "pre-wrap" }}>
+                                  {node.text}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div style={{ width: 180, marginTop: 10 }}>
+                        <button type="button" onClick={saveOutlineTree}>
+                          儲存變更
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <label style={{ marginTop: 10 }}>我的結構樹內容（唯讀）</label>
+                      <pre style={{ marginTop: 8 }}>{session.outlines[loginUser] ?? "尚未提供"}</pre>
+                    </>
+                  )}
                 </>
               ) : null}
 
