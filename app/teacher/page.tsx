@@ -61,6 +61,63 @@ const genreOptions = ["議論文", "說明文", "抒情文", "其他"];
 const groupInteractionSteps = [1, 2, 4];
 type CourseTab = "essay" | "openclass" | "group";
 
+function escapeHtml(input: string): string {
+  return input
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function applyInlineMarkdown(input: string): string {
+  return input.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+}
+
+function renderMessageHtml(text: string): string {
+  const lines = text.split(/\r?\n/);
+  const htmlParts: string[] = [];
+  let listBuffer: string[] = [];
+
+  const flushList = () => {
+    if (listBuffer.length === 0) return;
+    htmlParts.push(`<ul>${listBuffer.join("")}</ul>`);
+    listBuffer = [];
+  };
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) {
+      flushList();
+      continue;
+    }
+
+    const escaped = applyInlineMarkdown(escapeHtml(line));
+    if (escaped.startsWith("- ")) {
+      listBuffer.push(`<li>${escaped.slice(2)}</li>`);
+      continue;
+    }
+
+    flushList();
+
+    const h3 = escaped.match(/^###\s+(.+)$/);
+    if (h3) {
+      htmlParts.push(`<h4 style="margin:8px 0 4px;">${h3[1]}</h4>`);
+      continue;
+    }
+    const h4 = escaped.match(/^####\s+(.+)$/);
+    if (h4) {
+      htmlParts.push(`<h5 style="margin:8px 0 4px;">${h4[1]}</h5>`);
+      continue;
+    }
+
+    htmlParts.push(`<p style="margin:6px 0;">${escaped}</p>`);
+  }
+
+  flushList();
+  return htmlParts.join("");
+}
+
 export default function TeacherPage() {
   const [loginUser, setLoginUser] = useState("");
   const [loginName, setLoginName] = useState("");
@@ -2113,7 +2170,7 @@ export default function TeacherPage() {
                         [S{message.step}] {message.role}
                         {message.userId ? `(${message.userId})` : ""}
                       </strong>
-                      <div>{message.text}</div>
+                      <div dangerouslySetInnerHTML={{ __html: renderMessageHtml(message.text) }} />
                     </div>
                   ))}
                   {groupMessages.length === 0 ? <small>目前此篩選條件下沒有 1/2/4 步驟對話。</small> : null}
@@ -2129,7 +2186,7 @@ export default function TeacherPage() {
                         [S{message.step}] {message.role}
                         {message.userId ? `(${message.userId})` : ""}
                       </strong>
-                      <div>{message.text}</div>
+                      <div dangerouslySetInnerHTML={{ __html: renderMessageHtml(message.text) }} />
                     </div>
                   ))}
                   {personalMessages.length === 0 ? <small>目前此學生沒有可顯示對話。</small> : null}
