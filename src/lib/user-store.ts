@@ -78,6 +78,14 @@ function getSqlClient(): Sql {
 
 let initPromise: Promise<void> | undefined;
 
+function isPermissionLikeError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const record = error as { code?: unknown; message?: unknown };
+  const code = typeof record.code === "string" ? record.code : "";
+  const message = typeof record.message === "string" ? record.message.toLowerCase() : "";
+  return code === "42501" || message.includes("permission denied");
+}
+
 async function retryOnce<T>(fn: () => Promise<T>): Promise<T> {
   try {
     return await fn();
@@ -94,30 +102,45 @@ async function ensureUserTable(): Promise<void> {
     initPromise = (async () => {
       const sql = getSqlClient();
       const existing = await sql<{ regclass: string | null }[]>`
-        SELECT to_regclass('public.llm4writing_users') AS regclass
+        SELECT COALESCE(to_regclass('llm4writing_users')::text, to_regclass('public.llm4writing_users')::text) AS regclass
       `;
       if (existing[0]?.regclass) {
         return;
       }
-      await sql`
-        CREATE TABLE IF NOT EXISTS llm4writing_users (
-          username TEXT PRIMARY KEY,
-          payload JSONB NOT NULL,
-          password TEXT NOT NULL,
-          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        )
-      `;
+      try {
+        await sql`
+          CREATE TABLE IF NOT EXISTS llm4writing_users (
+            username TEXT PRIMARY KEY,
+            payload JSONB NOT NULL,
+            password TEXT NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          )
+        `;
+      } catch (error) {
+        // Production DB roles may be read-only for DDL; do not fail login flow for that.
+        if (!isPermissionLikeError(error)) {
+          throw error;
+        }
+        return;
+      }
 
       // Backfill default bootstrap accounts if they are missing.
       // Use ON CONFLICT DO NOTHING so existing data is never overwritten.
       for (const user of defaultUsers) {
         const { password, ...payload } = user;
-        await sql`
-          INSERT INTO llm4writing_users (username, payload, password)
-          VALUES (${user.username}, ${JSON.stringify(payload)}::jsonb, ${password})
-          ON CONFLICT (username) DO NOTHING
-        `;
+        try {
+          await sql`
+            INSERT INTO llm4writing_users (username, payload, password)
+            VALUES (${user.username}, ${JSON.stringify(payload)}::jsonb, ${password})
+            ON CONFLICT (username) DO NOTHING
+          `;
+        } catch (error) {
+          // Production DB roles may be read-only for DML; do not fail login flow for that.
+          if (!isPermissionLikeError(error)) {
+            throw error;
+          }
+        }
       }
     })().catch((error) => {
       initPromise = undefined;
