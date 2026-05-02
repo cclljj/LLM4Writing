@@ -227,13 +227,6 @@ function ensureParticipants(session: SessionState, fallbackUserId: string): stri
   return session.participants;
 }
 
-function getRequiredResponders(session: SessionState): string[] {
-  const joined = Array.isArray(session.joinedUsers) ? session.joinedUsers : [];
-  const joinedSet = new Set(joined.filter((user) => typeof user === "string" && user.trim().length > 0));
-  const required = session.participants.filter((participant) => joinedSet.has(participant));
-  return required.length > 0 ? required : session.participants;
-}
-
 function buildRecentContext(session: SessionState, step: number): string {
   const relevant = session.messages
     .filter((m) => m.step === step && (m.role === "student" || m.role === "ai" || m.role === "system"))
@@ -444,8 +437,7 @@ function handleStep1Or2Group(
   responders.add(userId);
   session.groupGate[gateKey] = Array.from(responders);
 
-  const requiredResponders = getRequiredResponders(session);
-  const allResponded = requiredResponders.length > 0 && requiredResponders.every((participant) => responders.has(participant));
+  const allResponded = session.participants.every((participant) => responders.has(participant));
   if (!allResponded) {
     return { session, allResponded: false, substep };
   }
@@ -533,8 +525,7 @@ export async function sendStudentMessage(session: SessionState, userId: string, 
     responders.add(userId);
     session.groupGate[gateKey] = Array.from(responders);
 
-    const requiredResponders = getRequiredResponders(session);
-    const allResponded = requiredResponders.length > 0 && requiredResponders.every((participant) => responders.has(participant));
+    const allResponded = session.participants.every((participant) => responders.has(participant));
     if (allResponded) {
       session.messages.push(
         makeMessage({ role: "ai", step, text: await generateAiTextForStep(session, step, "all group members replied") })

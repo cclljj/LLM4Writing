@@ -251,7 +251,7 @@ API 輸出給學習/分組流程使用：
 
 - Step1 有 5 個子步驟
 - Step2 有 4 個子步驟
-- 每個子步驟需「目前已加入課程的 participants（joinedUsers）都回覆至少一次」，AI 才回覆並進入下一子步；未加入者不得阻塞流程
+- 每個子步驟需「全部 participants 都回覆至少一次」，AI 才回覆並進入下一子步
 - Gate key 格式：`"{step}-{substep}"`
 
 ## 5.3 問題來源優先序
