@@ -41,8 +41,23 @@ export async function POST(request: NextRequest) {
       (s) => s.workflow === "spec10" && s.activityId === activity.id && s.participants.includes(user.username)
     );
     if (existing) {
-      const nextJoinedUsers = Array.from(new Set([...(existing.joinedUsers ?? []), user.username]));
-      if (nextJoinedUsers.length !== (existing.joinedUsers ?? []).length) {
+      const messageJoinedUsers = Array.from(
+        new Set(
+          existing.messages
+            .filter((m) => m.role === "student" && typeof m.userId === "string" && m.userId.trim().length > 0)
+            .map((m) => m.userId as string)
+        )
+      );
+      // Guard against legacy/corrupted records where joinedUsers was accidentally prefilled with full participants.
+      const trustedJoinedUsers = (existing.joinedUsers ?? []).filter(
+        (name) => messageJoinedUsers.includes(name) || name === user.username
+      );
+      const nextJoinedUsers = Array.from(new Set([...trustedJoinedUsers, ...messageJoinedUsers, user.username]));
+      const prevJoinedUsers = existing.joinedUsers ?? [];
+      const joinedChanged =
+        nextJoinedUsers.length !== prevJoinedUsers.length ||
+        nextJoinedUsers.some((name) => !prevJoinedUsers.includes(name));
+      if (joinedChanged) {
         existing.joinedUsers = nextJoinedUsers;
         await saveSession(existing);
       }
