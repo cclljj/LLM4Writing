@@ -1,6 +1,6 @@
 "use client";
 
-import { DragEvent, FormEvent, useEffect, useMemo, useState } from "react";
+import { DragEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 type UserRow = { username: string; name: string; school: string; role: string; ownerTeacherUsername?: string; classNumber?: string };
 type EssayRow = {
@@ -59,8 +59,6 @@ type PersonalProgressRow = {
 
 const genreOptions = ["議論文", "說明文", "抒情文", "其他"];
 const groupInteractionSteps = [1, 2, 4];
-const personalInteractionSteps = [3, 6, 8];
-
 type CourseTab = "essay" | "openclass" | "group";
 
 export default function TeacherPage() {
@@ -77,8 +75,6 @@ export default function TeacherPage() {
   const [monitorSessions, setMonitorSessions] = useState<MonitorSession[]>([]);
   const [monitorSelected, setMonitorSelected] = useState<MonitorSession | null>(null);
   const [groupViewStep, setGroupViewStep] = useState<string>("all");
-  const [sessionId, setSessionId] = useState("");
-  const [step, setStep] = useState(1);
   const [error, setError] = useState("");
   const [userQuery, setUserQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<"all" | "teacher" | "student" | "admin">("all");
@@ -139,10 +135,10 @@ export default function TeacherPage() {
   const [showCourseStatusView, setShowCourseStatusView] = useState(false);
   const [progressRows, setProgressRows] = useState<PersonalProgressRow[]>([]);
   const [selectedProgressUser, setSelectedProgressUser] = useState("");
-  const [personalViewStep, setPersonalViewStep] = useState<number>(3);
   const [personalMessages, setPersonalMessages] = useState<
     Array<{ id: string; role: string; userId?: string; text: string; at: string; step: number }>
   >([]);
+  const refreshTokenRef = useRef(0);
 
   const classOptions = useMemo(
     () =>
@@ -266,14 +262,6 @@ export default function TeacherPage() {
     return base.filter((message) => message.step === Number(groupViewStep));
   }, [monitorSelected, groupViewStep]);
 
-  const personalFilteredMessages = useMemo(
-    () =>
-      personalMessages.filter(
-        (message) => personalInteractionSteps.includes(message.step) && message.step === personalViewStep
-      ),
-    [personalMessages, personalViewStep]
-  );
-
   const selectedLearningActivity = useMemo(
     () => activities.find((activity) => activity.id === selectedLearningActivityId),
     [activities, selectedLearningActivityId]
@@ -299,25 +287,12 @@ export default function TeacherPage() {
     [monitorSessions, selectedLearningActivityId]
   );
 
-  const sessionHints = useMemo(() => filteredMonitorSessions.map((session) => session.sessionId), [filteredMonitorSessions]);
-
   function formatSessionLabel(session: MonitorSession): string {
     const school = session.school?.trim() || selectedLearningActivity?.school || "unknown-school";
     const classNumber = session.classNumber?.trim() || selectedLearningActivity?.classNumber || "unknown-class";
     const groupNumber = (session.groupName || session.groupId || "unknown-group").toString();
     return `${school} + ${classNumber} + ${groupNumber}`;
   }
-
-  const sessionLabelMap = useMemo(
-    () =>
-      new Map(
-        filteredMonitorSessions.map((session) => [
-          session.sessionId,
-          `${formatSessionLabel(session)} (${session.activityTitle ?? session.activityId ?? "activity"})`
-        ])
-      ),
-    [filteredMonitorSessions, selectedLearningActivity?.school, selectedLearningActivity?.classNumber]
-  );
 
   const classJoinRows = useMemo(() => {
     if (!selectedLearningActivity) return [];
@@ -460,7 +435,6 @@ export default function TeacherPage() {
     setPersonalMessages([]);
     setSelectedProgressUser("");
     setProgressSessionId("");
-    setSessionId("");
   }, [selectedLearningActivityId]);
 
   useEffect(() => {
@@ -479,13 +453,17 @@ export default function TeacherPage() {
   }, [userPage, totalUserPages]);
 
   async function refreshAll() {
+    const token = Date.now();
+    refreshTokenRef.current = token;
+    const fetchOpts: RequestInit = { cache: "no-store" };
     const [u, e, o, m, a] = await Promise.all([
-      fetch("/api/admin/users"),
-      fetch("/api/admin/essays"),
-      fetch("/api/admin/openclasses"),
-      fetch("/api/teacher/monitor"),
-      fetch("/api/admin/activities")
+      fetch("/api/admin/users", fetchOpts),
+      fetch("/api/admin/essays", fetchOpts),
+      fetch("/api/admin/openclasses", fetchOpts),
+      fetch("/api/teacher/monitor", fetchOpts),
+      fetch("/api/admin/activities", fetchOpts)
     ]);
+    if (refreshTokenRef.current !== token) return;
 
     if (u.ok) setUsers((await u.json()).users ?? []);
     if (e.ok) {
@@ -500,11 +478,11 @@ export default function TeacherPage() {
     if (a.ok) {
       const list = (await a.json()).activities ?? [];
       setActivities(list);
-      if (!selectedActivityId && list[0]?.id) {
-        setSelectedActivityId(list[0].id);
+      if (!list.some((item: ActivityRow) => item.id === selectedActivityId)) {
+        setSelectedActivityId(list[0]?.id ?? "");
       }
-      if (!selectedLearningActivityId && list[0]?.id) {
-        setSelectedLearningActivityId(list[0].id);
+      if (!list.some((item: ActivityRow) => item.id === selectedLearningActivityId)) {
+        setSelectedLearningActivityId(list[0]?.id ?? "");
       }
     }
   }
@@ -516,13 +494,11 @@ export default function TeacherPage() {
     return "尚未開始";
   }
 
-  async function handleCourseLifecycle(action: "start" | "pause_resume" | "end") {
-    if (!selectedLearningActivityId) return;
-
+  async function handleCourseLifecycle(activityId: string, action: "start" | "pause_resume" | "end") {
     const response = await fetch("/api/teacher/course-control", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ activityId: selectedLearningActivityId, action })
+      body: JSON.stringify({ activityId, action })
     });
     const data = await response.json();
     if (!response.ok) {
@@ -539,8 +515,7 @@ export default function TeacherPage() {
     window.location.href = "/login";
   }
 
-  async function handleSwitch(e: FormEvent) {
-    e.preventDefault();
+  async function applyStepSwitch(sessionId: string, step: number) {
     setError("");
 
     const response = await fetch("/api/teacher/step", {
@@ -559,6 +534,8 @@ export default function TeacherPage() {
       sessionId: data.id,
       activityId: data.activityId,
       activityTitle: data.activityTitle,
+      school: data.school,
+      classNumber: data.classNumber,
       groupId: data.groupId,
       groupName: data.groupName,
       participants: data.participants,
@@ -590,10 +567,6 @@ export default function TeacherPage() {
     setPersonalMessages(data.personalMessages ?? []);
     if (username) {
       setSelectedProgressUser(username);
-      const matchedStep = personalInteractionSteps.find((targetStep) =>
-        (data.personalMessages ?? []).some((message: { step: number }) => message.step === targetStep)
-      );
-      setPersonalViewStep(matchedStep ?? 3);
     }
   }
 
@@ -1741,91 +1714,71 @@ export default function TeacherPage() {
         <>
           <div className="card">
             <h2>學習管理</h2>
-            <div className="row">
-              <div className="col">
-                <label>課程清單（班級 + 主題）</label>
-                <select
-                  value={selectedLearningActivityId}
-                  onChange={(e) => setSelectedLearningActivityId(e.target.value)}
-                >
-                  <option value="">請選擇課程</option>
-                  {activities.map((activity) => (
-                    <option key={activity.id} value={activity.id}>
-                      {activity.classNumber} 班 / {activity.title}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="col" style={{ alignSelf: "end" }}>
-                <small>
-                  目前狀態：{selectedLearningActivity ? getCourseStatusLabel(selectedLearningActivity.courseStatus) : "未選擇課程"}
-                </small>
-              </div>
-            </div>
-            <div className="row" style={{ marginTop: 10, gap: 8 }}>
-              {(() => {
-                const status = selectedLearningActivity?.courseStatus;
-                const startDisabled = !selectedLearningActivity || status !== "not_started";
-                const pauseResumeDisabled = !selectedLearningActivity || status === "not_started";
-                const endDisabled = !selectedLearningActivity || status === "not_started" || status === "ended";
-                const viewDisabled = !selectedLearningActivity || status === "not_started";
-                const disabledButtonStyle = {
-                  width: "auto",
-                  background: "#f3f4f6",
-                  color: "#9ca3af",
-                  borderColor: "#e5e7eb",
-                  cursor: "not-allowed"
-                } as const;
-                const enabledButtonStyle = { width: "auto" } as const;
-                return (
-                  <>
-              <button
-                type="button"
-                style={startDisabled ? disabledButtonStyle : enabledButtonStyle}
-                disabled={startDisabled}
-                className={startDisabled ? "secondary" : ""}
-                onClick={() => handleCourseLifecycle("start")}
-              >
-                開始上課
-              </button>
-              <button
-                type="button"
-                className={pauseResumeDisabled ? "secondary" : ""}
-                style={pauseResumeDisabled ? disabledButtonStyle : enabledButtonStyle}
-                disabled={pauseResumeDisabled}
-                onClick={() => handleCourseLifecycle("pause_resume")}
-              >
-                {status === "in_progress" ? "暫停上課" : "繼續上課"}
-              </button>
-              <button
-                type="button"
-                style={endDisabled ? disabledButtonStyle : enabledButtonStyle}
-                disabled={endDisabled}
-                className={endDisabled ? "secondary" : ""}
-                onClick={() => handleCourseLifecycle("end")}
-              >
-                結束上課
-              </button>
-              <button
-                type="button"
-                className="secondary"
-                style={viewDisabled ? disabledButtonStyle : enabledButtonStyle}
-                disabled={viewDisabled}
-                onClick={() => setShowCourseStatusView(true)}
-              >
-                查看狀態
-              </button>
-                  </>
-                );
-              })()}
-              <button
-                type="button"
-                className="secondary"
-                style={{ width: "auto" }}
-                onClick={() => refreshAll()}
-              >
-                重新整理
-              </button>
+            <div style={{ overflowX: "auto" }}>
+              <table className="pro-table">
+                <thead>
+                  <tr>
+                    <th>學校</th>
+                    <th>班級</th>
+                    <th>課程</th>
+                    <th>目前狀態</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {activities.map((activity) => {
+                    const status = activity.courseStatus;
+                    const startDisabled = status !== "not_started";
+                    const pauseResumeDisabled = status === "not_started" || status === "ended";
+                    const endDisabled = status === "not_started" || status === "ended";
+                    const viewDisabled = status === "not_started";
+                    return (
+                      <tr key={activity.id}>
+                        <td>{activity.school}</td>
+                        <td>{activity.classNumber}</td>
+                        <td>{activity.title}</td>
+                        <td>{getCourseStatusLabel(status)}</td>
+                        <td>
+                          <div className="row" style={{ gap: 8 }}>
+                            <button type="button" style={{ width: "auto" }} disabled={startDisabled} onClick={() => handleCourseLifecycle(activity.id, "start")}>
+                              開始上課
+                            </button>
+                            <button type="button" className="secondary" style={{ width: "auto" }} disabled={pauseResumeDisabled} onClick={() => handleCourseLifecycle(activity.id, "pause_resume")}>
+                              {status === "in_progress" ? "暫停上課" : "繼續上課"}
+                            </button>
+                            <button type="button" className="secondary" style={{ width: "auto" }} disabled={endDisabled} onClick={() => handleCourseLifecycle(activity.id, "end")}>
+                              結束上課
+                            </button>
+                            <button
+                              type="button"
+                              className="secondary"
+                              style={{ width: "auto" }}
+                              disabled={viewDisabled}
+                              onClick={() => {
+                                setSelectedLearningActivityId(activity.id);
+                                setShowCourseStatusView(true);
+                              }}
+                            >
+                              查看狀態
+                            </button>
+                            <button
+                              type="button"
+                              className="secondary"
+                              style={{ width: "auto" }}
+                              onClick={() => {
+                                setSelectedLearningActivityId(activity.id);
+                                refreshAll();
+                              }}
+                            >
+                              重新整理
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
             {error ? <small>{error}</small> : null}
           </div>
@@ -1925,10 +1878,7 @@ export default function TeacherPage() {
                                         type="button"
                                         className="secondary"
                                         style={{ width: "auto" }}
-                                        onClick={() => {
-                                          setSessionId(session.sessionId);
-                                          setStep(hint.nextStep!);
-                                        }}
+                                        onClick={() => applyStepSwitch(session.sessionId, hint.nextStep!)}
                                       >
                                         套用 Step {hint.nextStep}
                                       </button>
@@ -1948,7 +1898,6 @@ export default function TeacherPage() {
                                   setMonitorSelected(session);
                                   setGroupViewStep("all");
                                   setProgressSessionId(session.sessionId);
-                                  setSessionId(session.sessionId);
                                 }}
                               >
                                 查看小組對話
@@ -1974,51 +1923,6 @@ export default function TeacherPage() {
                 {filteredMonitorSessions.length === 0 ? (
                   <small>此課程目前沒有 session。開始上課後，學生加入討論即會出現即時或歷史內容。</small>
                 ) : null}
-              </div>
-
-              <div className="card">
-                <h2>檢視學習進度 / 切換步驟</h2>
-                <form onSubmit={handleSwitch} className="row">
-                  <div className="col">
-                    <label>學習進度對象</label>
-                    <select value={sessionId} onChange={(e) => setSessionId(e.target.value)}>
-                      <option value="">請選擇課程/班級/組別</option>
-                      {filteredMonitorSessions.map((session) => (
-                        <option key={session.sessionId} value={session.sessionId}>
-                          {formatSessionLabel(session)}
-                        </option>
-                      ))}
-                    </select>
-                    <small>使用「學校 + 班級 + 組別」辨識 session。</small>
-                  </div>
-                  <div className="col">
-                    <label>Step</label>
-                    <select value={step} onChange={(e) => setStep(Number(e.target.value))}>
-                      {Array.from({ length: 10 }, (_, i) => i + 1).map((v) => (
-                        <option key={v} value={v}>
-                          Step {v}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="col" style={{ alignSelf: "end" }}>
-                    <button type="submit">切換步驟</button>
-                  </div>
-                </form>
-                <div className="row" style={{ marginTop: 8 }}>
-                  {sessionHints.slice(0, 6).map((id) => (
-                    <button
-                      key={id}
-                      type="button"
-                      className="secondary"
-                      style={{ width: "auto" }}
-                      onClick={() => setSessionId(id)}
-                    >
-                      {sessionLabelMap.get(id) ?? id}
-                    </button>
-                  ))}
-                </div>
-                {error ? <small>{error}</small> : null}
               </div>
 
               <div className="card">
@@ -2109,17 +2013,7 @@ export default function TeacherPage() {
               {personalMessages.length > 0 ? (
                 <div className="card">
                   <h2>個人對話紀錄</h2>
-                  <div className="row" style={{ marginBottom: 8 }}>
-                    <div className="col">
-                      <label>步驟篩選（僅個人互動步驟）</label>
-                      <select value={personalViewStep} onChange={(e) => setPersonalViewStep(Number(e.target.value))}>
-                        <option value={3}>Step 3</option>
-                        <option value={6}>Step 6</option>
-                        <option value={8}>Step 8</option>
-                      </select>
-                    </div>
-                  </div>
-                  {personalFilteredMessages.map((message) => (
+                  {personalMessages.map((message) => (
                     <div key={message.id} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
                       <strong>
                         [S{message.step}] {message.role}
@@ -2128,7 +2022,7 @@ export default function TeacherPage() {
                       <div>{message.text}</div>
                     </div>
                   ))}
-                  {personalFilteredMessages.length === 0 ? <small>目前此學生在所選步驟沒有可顯示對話。</small> : null}
+                  {personalMessages.length === 0 ? <small>目前此學生沒有可顯示對話。</small> : null}
                 </div>
               ) : null}
             </>
