@@ -39,6 +39,7 @@ export interface SessionState {
   createdAt: string;
   currentStep: number;
   participants: string[];
+  joinedUsers?: string[];
   messages: ChatMessage[];
   groupGate: Record<string, string[]>;
   reflectionIndex: Record<string, number>;

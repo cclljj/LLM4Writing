@@ -41,6 +41,11 @@ export async function POST(request: NextRequest) {
       (s) => s.workflow === "spec10" && s.activityId === activity.id && s.participants.includes(user.username)
     );
     if (existing) {
+      const nextJoinedUsers = Array.from(new Set([...(existing.joinedUsers ?? []), user.username]));
+      if (nextJoinedUsers.length !== (existing.joinedUsers ?? []).length) {
+        existing.joinedUsers = nextJoinedUsers;
+        await saveSession(existing);
+      }
       return NextResponse.json(existing);
     }
 
@@ -54,6 +59,7 @@ export async function POST(request: NextRequest) {
       groupName: group?.groupName ?? "未分組",
       promptConfig: resolvePromptConfigForActivity(activity.id)
     });
+    session.joinedUsers = [user.username];
 
     await saveSession(session);
     return NextResponse.json(session, { status: 201 });

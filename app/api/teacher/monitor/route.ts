@@ -36,6 +36,7 @@ export async function GET() {
         groupId: s.groupId,
         groupName: s.groupName,
         participants: s.participants,
+        joinedUsers: s.joinedUsers ?? [],
         currentStep: s.currentStep,
         messages: s.messages,
         groupGate: s.groupGate,

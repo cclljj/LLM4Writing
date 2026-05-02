@@ -43,6 +43,7 @@ type MonitorSession = {
   groupId?: string;
   groupName?: string;
   participants: string[];
+  joinedUsers?: string[];
   currentStep: number;
   groupGate?: Record<string, string[]>;
   stepState?: { step1Substep: number; step2Substep: number };
@@ -357,12 +358,24 @@ export default function TeacherPage() {
   const classJoinRows = useMemo(() => {
     if (!selectedLearningActivity) return [];
     const students = selectedLearningActivity.studentCandidates ?? [];
+    const joinedUserSet = new Set(
+      filteredMonitorSessions.flatMap((session) => {
+        if (session.joinedUsers && session.joinedUsers.length > 0) return session.joinedUsers;
+        return session.messages
+          .filter((message) => message.role === "student" && Boolean(message.userId))
+          .map((message) => message.userId as string);
+      })
+    );
     return students.map((username) => {
-      const joinedSessions = filteredMonitorSessions.filter((session) => session.participants.includes(username));
+      const joinedSessions = filteredMonitorSessions.filter((session) => {
+        const joinedUsers = session.joinedUsers ?? [];
+        if (joinedUsers.includes(username)) return true;
+        return session.messages.some((message) => message.role === "student" && message.userId === username);
+      });
       const latestSession = joinedSessions[0];
       return {
         username,
-        joined: joinedSessions.length > 0,
+        joined: joinedUserSet.has(username),
         step: latestSession?.currentStep ?? null,
         groupName: latestSession?.groupName ?? null
       };
@@ -375,10 +388,18 @@ export default function TeacherPage() {
     const groups = selectedLearningActivity.groups.length
       ? selectedLearningActivity.groups
       : [{ groupId: "g-auto", groupName: "未分組", members: selectedLearningActivity.studentCandidates ?? [] }];
+    const joinedUserSet = new Set(
+      filteredMonitorSessions.flatMap((session) => {
+        if (session.joinedUsers && session.joinedUsers.length > 0) return session.joinedUsers;
+        return session.messages
+          .filter((message) => message.role === "student" && Boolean(message.userId))
+          .map((message) => message.userId as string);
+      })
+    );
 
     return groups.map((group) => {
       const joinedMembers = group.members.filter((member) =>
-        filteredMonitorSessions.some((session) => session.participants.includes(member))
+        joinedUserSet.has(member)
       );
       const groupSession = filteredMonitorSessions.find(
         (session) =>
