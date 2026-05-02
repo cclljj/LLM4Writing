@@ -479,6 +479,10 @@ export default function StudentPage() {
     session.participants.length > 0 &&
     session.participants.every((p) => responders.includes(p)) &&
     latestStepMessage?.role !== "ai";
+  const step1CompletedWaitingTeacher =
+    currentStep === 1 &&
+    latestStepMessage?.role === "system" &&
+    latestStepMessage.text.includes("步驟 1 子步驟已完成，等待教師切換下一步");
 
   const ownStep7Report = session && loginUser ? session.reports.step7[loginUser] : undefined;
   const ownStep10Report = session && loginUser ? session.reports.step10[loginUser] : undefined;
@@ -883,8 +887,13 @@ export default function StudentPage() {
                 <small>等待同組其他同學完成本題回覆...</small>
               </p>
             ) : null}
+            {step1CompletedWaitingTeacher ? (
+              <p style={{ marginTop: 10 }}>
+                <small>步驟 1 已完成，請等待老師切換到步驟 2。</small>
+              </p>
+            ) : null}
 
-            {isInputEnabled && canReplyToQuestion && !waitingGroupMembers && !isSendingMessage ? (
+            {isInputEnabled && canReplyToQuestion && !waitingGroupMembers && !isSendingMessage && !step1CompletedWaitingTeacher ? (
               <form onSubmit={sendMessage}>
                 <label>你的回答</label>
                 <textarea value={text} onChange={(e) => setText(e.target.value)} />
