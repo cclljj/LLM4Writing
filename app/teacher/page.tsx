@@ -201,6 +201,7 @@ export default function TeacherPage() {
     Array<{ id: string; role: string; userId?: string; text: string; at: string; step: number }>
   >([]);
   const refreshTokenRef = useRef(0);
+  const monitorPollingBusyRef = useRef(false);
 
   const classOptions = useMemo(
     () =>
@@ -532,6 +533,31 @@ export default function TeacherPage() {
     if (!showCourseStatusView || !selectedLearningActivityId) return;
     refreshMonitor().catch(() => undefined);
   }, [showCourseStatusView, selectedLearningActivityId]);
+
+  useEffect(() => {
+    if (tab !== "learning" || !showCourseStatusView || !selectedLearningActivityId) return;
+    let cancelled = false;
+
+    const pollMonitor = async () => {
+      if (cancelled || monitorPollingBusyRef.current || isLearningProcessing) return;
+      monitorPollingBusyRef.current = true;
+      try {
+        await refreshMonitor();
+      } finally {
+        monitorPollingBusyRef.current = false;
+      }
+    };
+
+    pollMonitor().catch(() => undefined);
+    const timer = window.setInterval(() => {
+      pollMonitor().catch(() => undefined);
+    }, 3000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [tab, showCourseStatusView, selectedLearningActivityId, isLearningProcessing]);
 
   useEffect(() => {
     setClassFilter("");
