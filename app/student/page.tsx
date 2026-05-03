@@ -1069,8 +1069,9 @@ export default function StudentPage() {
       {!session ? (
       <>
       {isLoadingOverview ? (
-        <div className="card" style={{ borderColor: "#bfdbfe", background: "#eff6ff" }}>
-          <small>系統正在載入資料中，請稍候...</small>
+        <div className="card" style={{ borderColor: "#2563eb", background: "#dbeafe", padding: "14px 16px" }}>
+          <p style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#1d4ed8" }}>系統正在載入資料中，請稍候...</p>
+          <small style={{ display: "block", marginTop: 6, color: "#1e3a8a" }}>載入完成後會自動顯示課程清單。</small>
         </div>
       ) : null}
       <div className="card">
@@ -1271,6 +1272,7 @@ export default function StudentPage() {
                         onClick={() =>
                           setHistoryReviewExpanded((prev) => ({ ...prev, [review.step]: !(prev[review.step] ?? false) }))
                         }
+                        style={{ fontSize: 12, lineHeight: 1.1, padding: "4px 8px", minHeight: "unset" }}
                       >
                         {historyReviewExpanded[review.step] ? "▾ 閉合" : "▸ 展開"}
                       </button>
@@ -1278,10 +1280,10 @@ export default function StudentPage() {
                     <p>
                       <small>此為歷史步驟回顧（僅本人與 AI 互動）。</small>
                     </p>
-                  </div>
                   {historyReviewExpanded[review.step] ? (
-                  <div className="card">
-                    <h2>互動內容</h2>
+                  <>
+                    <hr style={{ border: 0, borderTop: "1px solid #e5e7eb", margin: "10px 0" }} />
+                    <h3 style={{ margin: "0 0 8px" }}>互動內容</h3>
                     {review.messages.length > 0 ? (
                       review.messages.map((message) => (
                         <div key={`review-msg-${message.id}`} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
@@ -1343,8 +1345,9 @@ export default function StudentPage() {
                         </div>
                       </div>
                     ) : null}
-                  </div>
+                  </>
                   ) : null}
+                  </div>
                 </div>
               ))}
             </>
