@@ -664,8 +664,18 @@ export function upsertEssay(input: {
     }
   }
 
+  const nextEssayId = (() => {
+    const maxId = essays.reduce((max, essay) => {
+      const match = /^essay-(\d+)$/.exec(essay.id);
+      if (!match) return max;
+      const parsed = Number.parseInt(match[1] ?? "0", 10);
+      return Number.isFinite(parsed) ? Math.max(max, parsed) : max;
+    }, 0);
+    return `essay-${maxId + 1}`;
+  })();
+
   const created = {
-    id: `essay-${essays.length + 1}`,
+    id: nextEssayId,
     title: input.title,
     genre: input.genre,
     description: input.description,

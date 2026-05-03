@@ -1233,7 +1233,11 @@ export default function StudentPage() {
               <span>組員：{session.participants.length > 0 ? session.participants.join("、") : "—"}</span>
             </div>
             <div style={{ marginTop: 8 }}>
-              <p style={{ margin: 0 }}>引導說明：{currentActivity?.essayDescription || "—"}</p>
+              <p style={{ margin: 0 }}><strong>引導說明：</strong></p>
+              <div
+                style={{ marginTop: 4 }}
+                dangerouslySetInnerHTML={{ __html: renderMessageHtml(currentActivity?.essayDescription || "—") }}
+              />
             </div>
             <div>
               <p style={{ margin: "6px 0 0" }}>補充資料：{currentActivity?.supplemental || "—"}</p>

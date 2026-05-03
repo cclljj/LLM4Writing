@@ -59,7 +59,7 @@ type PersonalProgressRow = {
   lastMessageAt: string | null;
 };
 
-const genreOptions = ["議論文", "說明文", "抒情文", "其他"];
+const genreOptions = ["議論文", "記敘文", "說明文", "抒情文", "其他"];
 const groupInteractionSteps = [1, 2, 4];
 type CourseTab = "essay" | "openclass" | "group";
 

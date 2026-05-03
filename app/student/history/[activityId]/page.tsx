@@ -325,7 +325,11 @@ export default function StudentCourseHistoryPage() {
               <span>組員：{history.latestSession.participants.length > 0 ? history.latestSession.participants.join("、") : "—"}</span>
             </div>
             <div style={{ marginTop: 8 }}>
-              <p style={{ margin: 0 }}>引導說明：{history.activity.essayDescription || "—"}</p>
+              <p style={{ margin: 0 }}><strong>引導說明：</strong></p>
+              <div
+                style={{ marginTop: 4 }}
+                dangerouslySetInnerHTML={{ __html: renderMessageHtml(history.activity.essayDescription || "—") }}
+              />
             </div>
             <p style={{ margin: "6px 0 0" }}>補充資料：{history.activity.supplemental || "—"}</p>
           </div>
