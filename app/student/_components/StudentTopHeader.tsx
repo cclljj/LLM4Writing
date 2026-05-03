@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 
 type Identity = {
   username: string;
@@ -21,11 +20,21 @@ function readIdentity(): Identity {
 }
 
 export default function StudentTopHeader() {
-  const router = useRouter();
   const [identity, setIdentity] = useState<Identity>(() => readIdentity());
 
   useEffect(() => {
     setIdentity(readIdentity());
+    fetch("/api/auth/me")
+      .then((res) => res.json())
+      .then((data) => {
+        if (!data?.authenticated || !data.user) return;
+        setIdentity({
+          username: data.user.username ?? "",
+          name: data.user.name ?? "",
+          school: data.user.school ?? ""
+        });
+      })
+      .catch(() => undefined);
     const onStorage = () => setIdentity(readIdentity());
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
@@ -37,12 +46,13 @@ export default function StudentTopHeader() {
     return username || "學生";
   }, [identity]);
 
-  const logout = () => {
+  const logout = async () => {
+    await fetch("/api/auth/logout", { method: "POST" }).catch(() => undefined);
     localStorage.removeItem("username");
     localStorage.removeItem("name");
     localStorage.removeItem("school");
     localStorage.removeItem("classNumber");
-    router.push("/login");
+    window.location.href = "/login";
   };
 
   return (
