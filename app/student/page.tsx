@@ -278,7 +278,6 @@ export default function StudentPage() {
   const [showStep6OutlineRef, setShowStep6OutlineRef] = useState(false);
   const [isSendingMessage, setIsSendingMessage] = useState(false);
   const outlineCanvasRef = useRef<HTMLDivElement | null>(null);
-  const longPressTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -335,7 +334,7 @@ export default function StudentPage() {
     const saved = session.outlines[loginUser]?.trim() ?? "";
     setOutlineNodes(saved ? fromMermaid(saved) : makeDefaultOutlineNodes());
     setEditingNodeId(null);
-  }, [showOutlineEditor, session?.id, session?.currentStep, loginUser, session?.outlines]);
+  }, [showOutlineEditor, session?.id, session?.currentStep, loginUser]);
 
   useEffect(() => {
     if (!draggingNodeId) return;
@@ -1094,7 +1093,7 @@ export default function StudentPage() {
                 <>
                   {currentStep === 3 ? (
                     <>
-                      <small>按節點右上角 ➕ 新增下一層；第二層以下且無子節點可用 ➖ 刪除。長按節點可編輯文字，拖曳可調整位置與層次。</small>
+                      <small>按節點右上角 ➕ 新增下一層；第二層以下且無子節點可用 ➖ 刪除。雙擊節點可編輯文字，拖曳可調整位置與層次。</small>
                       <div
                         ref={outlineCanvasRef}
                         style={{
@@ -1142,14 +1141,12 @@ export default function StudentPage() {
                                 const box = event.currentTarget.getBoundingClientRect();
                                 setDragOffset({ x: event.clientX - box.left, y: event.clientY - box.top });
                                 setDraggingNodeId(node.id);
-                                if (longPressTimerRef.current) window.clearTimeout(longPressTimerRef.current);
-                                longPressTimerRef.current = window.setTimeout(() => {
-                                  setEditingNodeId(node.id);
-                                }, 500);
                               }}
-                              onMouseUp={() => {
-                                if (longPressTimerRef.current) window.clearTimeout(longPressTimerRef.current);
-                                longPressTimerRef.current = null;
+                              onDoubleClick={(event) => {
+                                event.stopPropagation();
+                                setDraggingNodeId(null);
+                                setDropTargetNodeId(null);
+                                setEditingNodeId(node.id);
                               }}
                               style={{
                                 position: "absolute",
