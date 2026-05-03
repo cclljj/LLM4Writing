@@ -406,6 +406,17 @@ export function switchStep(session: SessionState, step: number): SessionState {
   }
 
   session.currentStep = step;
+  if (step >= 4) {
+    const doneUsers = new Set(session.groupGate["3-complete"] ?? []);
+    session.participants.forEach((participant) => {
+      if (!doneUsers.has(participant)) return;
+      const snapshot = session.step3SubmittedOutlines?.[participant]?.trim() ?? "";
+      const outline = session.outlines[participant]?.trim() ?? "";
+      if (!snapshot && outline) {
+        session.step3SubmittedOutlines![participant] = outline;
+      }
+    });
+  }
   session.messages.push(
     makeMessage({
       role: "teacher",
