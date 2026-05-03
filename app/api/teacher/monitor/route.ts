@@ -38,6 +38,7 @@ export async function GET() {
         participants: s.participants,
         joinedUsers: s.joinedUsers ?? [],
         currentStep: s.currentStep,
+        personalSteps: s.personalSteps ?? {},
         messages: s.messages,
         groupGate: s.groupGate,
         stepState: s.stepState,

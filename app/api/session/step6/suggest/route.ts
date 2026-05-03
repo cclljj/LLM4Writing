@@ -59,7 +59,8 @@ export async function POST(request: NextRequest) {
   if (!session.participants.includes(user.username)) {
     return NextResponse.json({ error: "not_participant" }, { status: 403 });
   }
-  if (session.currentStep !== 6) {
+  const userStep = session.personalSteps?.[user.username] ?? session.currentStep;
+  if (userStep !== 6) {
     return NextResponse.json({ error: "invalid_step" }, { status: 400 });
   }
 

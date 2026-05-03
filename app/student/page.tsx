@@ -30,6 +30,7 @@ type ParticipatedCourse = {
 type SessionState = {
   id: string;
   currentStep: number;
+  personalSteps?: Record<string, number>;
   activityId?: string;
   activityTitle?: string;
   groupName?: string;
@@ -348,8 +349,9 @@ export default function StudentPage() {
 
   useEffect(() => {
     if (!session || !loginUser) return;
+    const ownStep = session.personalSteps?.[loginUser] ?? session.currentStep;
     setOutlineText(session.outlines[loginUser] ?? "");
-    if (session.currentStep === 6) {
+    if (ownStep === 6) {
       const latestDraft = session.draftStep6[loginUser] ?? "";
       setDraftText(latestDraft);
       setSavedDraft6Text(latestDraft);
@@ -357,23 +359,24 @@ export default function StudentPage() {
       setShowStep6OutlineRef(false);
       setStep6RefUser((prev) => (prev ? prev : loginUser));
     }
-    if (session.currentStep === 8) {
+    if (ownStep === 8) {
       const latestDraft = session.draftStep8[loginUser] ?? session.draftStep6[loginUser] ?? "";
       setDraftText(latestDraft);
       setSavedDraft8Text(latestDraft);
       setShowDraftEditor(false);
     }
-    if (session.currentStep === 3 || session.currentStep === 4) {
+    if (ownStep === 3 || ownStep === 4) {
       setShowOutlineEditor(false);
     }
     setOutlineDirty(false);
     if (!refUser && session.participants.length > 0) {
       setRefUser((session.participants.find((user) => user !== loginUser) ?? session.participants[0])!);
     }
-  }, [session?.id, session?.currentStep, loginUser]);
+  }, [session?.id, session?.currentStep, session?.personalSteps, loginUser]);
 
   useEffect(() => {
-    if (!session || session.currentStep !== 5 || !session.reports?.step5 || isAutoAdvancingStep5) return;
+    const ownStep = session && loginUser ? session.personalSteps?.[loginUser] ?? session.currentStep : 1;
+    if (!session || ownStep !== 5 || !session.reports?.step5 || isAutoAdvancingStep5) return;
     const timer = window.setTimeout(async () => {
       setIsAutoAdvancingStep5(true);
       try {
@@ -393,27 +396,30 @@ export default function StudentPage() {
       }
     }, 1200);
     return () => window.clearTimeout(timer);
-  }, [isAutoAdvancingStep5, session]);
+  }, [isAutoAdvancingStep5, loginUser, session]);
 
   useEffect(() => {
-    if (!session || !loginUser || session.currentStep !== 6) return;
+    const ownStep = session && loginUser ? session.personalSteps?.[loginUser] ?? session.currentStep : 1;
+    if (!session || !loginUser || ownStep !== 6) return;
     if (!step6RefUser || !session.participants.includes(step6RefUser)) {
       setStep6RefUser(loginUser);
     }
   }, [loginUser, session, step6RefUser]);
 
   useEffect(() => {
-    if (!(session?.currentStep === 3 || session?.currentStep === 4) || !loginUser) return;
-    const shouldSyncFromSession = session.currentStep === 4 || showOutlineEditor;
+    const ownStep = session && loginUser ? session.personalSteps?.[loginUser] ?? session.currentStep : 1;
+    if (!(ownStep === 3 || ownStep === 4) || !loginUser) return;
+    const shouldSyncFromSession = ownStep === 4 || showOutlineEditor;
     if (!shouldSyncFromSession) return;
     if (outlineDirty || draggingNodeId || editingNodeId) return;
-    const saved = session.outlines[loginUser]?.trim() ?? "";
+    const saved = session?.outlines[loginUser]?.trim() ?? "";
     setOutlineNodes(saved ? fromMermaid(saved) : makeDefaultOutlineNodes());
     setEditingNodeId(null);
   }, [
     showOutlineEditor,
     session?.id,
     session?.currentStep,
+    session?.personalSteps,
     loginUser,
     session?.outlines,
     outlineDirty,
@@ -482,7 +488,7 @@ export default function StudentPage() {
   );
   const interactiveMessages = useMemo(() => {
     if (!session) return [] as InteractiveItem[];
-    const currentStep = session.currentStep;
+    const currentStep = loginUser ? session.personalSteps?.[loginUser] ?? session.currentStep : session.currentStep;
     const currentMode = getMode(currentStep);
     const activeGateKey =
       currentStep === 1
@@ -498,7 +504,7 @@ export default function StudentPage() {
       responders.length > 0 &&
       !hasSubmittedThisTurn;
 
-    const stepMessages = sortedMessages.filter((m) => m.step === session.currentStep);
+    const stepMessages = sortedMessages.filter((m) => m.step === currentStep);
     let currentTurnStartIndex = -1;
     for (let i = stepMessages.length - 1; i >= 0; i -= 1) {
       const m = stepMessages[i]!;
@@ -560,6 +566,9 @@ export default function StudentPage() {
           return;
         }
         if (m.role === "system") {
+          if (currentStep >= 5 && m.userId && m.userId !== loginUser) {
+            return;
+          }
           if (currentStep === 3) {
             return;
           }
@@ -572,9 +581,10 @@ export default function StudentPage() {
     return result;
   }, [session, sortedMessages, loginUser]);
   const historyReviewSteps = useMemo(() => {
-    if (!session || !loginUser || session.currentStep <= 1) return [] as StepReview[];
+    const ownStep = session && loginUser ? session.personalSteps?.[loginUser] ?? session.currentStep : 1;
+    if (!session || !loginUser || ownStep <= 1) return [] as StepReview[];
     const reviews: StepReview[] = [];
-    for (let step = 1; step < session.currentStep; step += 1) {
+    for (let step = 1; step < ownStep; step += 1) {
       const messages = sortedMessages
         .filter((m) => m.step === step)
         .flatMap((m): InteractiveItem[] => {
@@ -598,7 +608,8 @@ export default function StudentPage() {
     return reviews;
   }, [loginUser, session, sortedMessages]);
   const step3SubmittedOutlinePreview = useMemo(() => {
-    if (!session || !loginUser || session.currentStep < 4) return null;
+    const ownStep = session && loginUser ? session.personalSteps?.[loginUser] ?? session.currentStep : 1;
+    if (!session || !loginUser || ownStep < 4) return null;
     const submitted = session.step3SubmittedOutlines?.[loginUser]?.trim() ?? "";
     if (!submitted) return null;
     return buildOutlinePreview(submitted);
@@ -779,7 +790,7 @@ export default function StudentPage() {
     }
   }
 
-  const currentStep = session?.currentStep ?? 1;
+  const currentStep = session && loginUser ? session.personalSteps?.[loginUser] ?? session.currentStep : session?.currentStep ?? 1;
   const currentMode = getMode(currentStep);
   const currentModeLabel =
     currentMode === "group_interaction"
@@ -1304,7 +1315,7 @@ export default function StudentPage() {
 
           <div className="card">
             <h2>
-              Step {session.currentStep} - {stepNameMap[session.currentStep] ?? "未知步驟"}
+              Step {currentStep} - {stepNameMap[currentStep] ?? "未知步驟"}
             </h2>
             <div>
               <small>

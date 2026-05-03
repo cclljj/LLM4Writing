@@ -38,6 +38,7 @@ export interface SessionState {
   id: string;
   createdAt: string;
   currentStep: number;
+  personalSteps?: Record<string, number>;
   participants: string[];
   joinedUsers?: string[];
   messages: ChatMessage[];

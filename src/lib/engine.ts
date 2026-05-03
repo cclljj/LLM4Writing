@@ -120,6 +120,7 @@ export function createSession(payload: StartSessionPayload): SessionState {
     id: sessionId,
     createdAt: now(),
     currentStep: 1,
+    personalSteps: Object.fromEntries(participants.map((id) => [id, 1])),
     participants,
     messages: [],
     groupGate: {},
@@ -204,6 +205,14 @@ function normalizeSessionRuntimeShape(session: SessionState): void {
   if (!session.step3SubmittedOutlines || typeof session.step3SubmittedOutlines !== "object") {
     session.step3SubmittedOutlines = {};
   }
+  if (!session.personalSteps || typeof session.personalSteps !== "object") {
+    session.personalSteps = {};
+  }
+  session.participants.forEach((participant) => {
+    if (typeof session.personalSteps?.[participant] !== "number") {
+      session.personalSteps![participant] = session.currentStep;
+    }
+  });
 }
 
 function ensureParticipants(session: SessionState, fallbackUserId: string): string[] {
@@ -406,6 +415,9 @@ export function switchStep(session: SessionState, step: number): SessionState {
   }
 
   session.currentStep = step;
+  session.participants.forEach((participant) => {
+    session.personalSteps![participant] = step;
+  });
   if (step >= 4) {
     const doneUsers = new Set(session.groupGate["3-complete"] ?? []);
     session.participants.forEach((participant) => {
@@ -537,9 +549,9 @@ function advanceStep1Or2SubstepAfterAi(
   session.messages.push(makeMessage({ role: "system", step, text: "步驟 2 子步驟已完成，等待教師切換下一步。" }));
 }
 
-export async function sendStudentMessage(session: SessionState, userId: string, text: string): Promise<SessionState> {
+export async function sendStudentMessage(session: SessionState, userId: string, text: string, stepOverride?: number): Promise<SessionState> {
   normalizeSessionRuntimeShape(session);
-  const step = session.currentStep;
+  const step = stepOverride ?? session.currentStep;
   const participants = ensureParticipants(session, userId);
 
   if (!participants.includes(userId)) {
@@ -612,9 +624,9 @@ export async function sendStudentMessage(session: SessionState, userId: string, 
     session.reflectionIndex[userId] = next;
 
     if (next < REFLECTION_QUESTIONS.length) {
-      session.messages.push(makeMessage({ role: "system", step, text: `下一題：${REFLECTION_QUESTIONS[next]}` }));
+      session.messages.push(makeMessage({ role: "system", userId, step, text: `下一題：${REFLECTION_QUESTIONS[next]}` }));
     } else {
-      session.messages.push(makeMessage({ role: "system", step, text: "個人反思完成。" }));
+      session.messages.push(makeMessage({ role: "system", userId, step, text: "個人反思完成。" }));
     }
     return session;
   }

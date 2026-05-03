@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { getCurrentUser } from "@/src/lib/auth-server";
 import { getSession, saveSession } from "@/src/lib/store";
-import { switchStep } from "@/src/lib/engine";
 import { isLlmConfigured, llmChatCompletionText, type LlmChatMessage } from "@/src/lib/llm-client";
 
 function nowIso(): string {
@@ -62,19 +61,18 @@ export async function POST(request: NextRequest) {
   if (!session.participants.includes(user.username)) {
     return NextResponse.json({ error: "not_participant" }, { status: 403 });
   }
-  if (session.currentStep !== 6) {
+  const userStep = session.personalSteps?.[user.username] ?? session.currentStep;
+  if (userStep !== 6) {
     return NextResponse.json({ error: "invalid_step" }, { status: 400 });
   }
 
   const finalDraft = body.draft;
   session.draftStep6[user.username] = finalDraft;
-
-  const step7 = switchStep(session, 7);
-  const feedback = await buildStep7Feedback(step7.promptConfig?.stepPrompts?.["7"], finalDraft);
-  step7.reports.step7[user.username] = feedback;
-  step7.messages.push(makeAiStep7Message(feedback, user.username));
-
-  const step8 = switchStep(step7, 8);
-  await saveSession(step8);
-  return NextResponse.json(step8);
+  const feedback = await buildStep7Feedback(session.promptConfig?.stepPrompts?.["7"], finalDraft);
+  session.reports.step7[user.username] = feedback;
+  session.messages.push(makeAiStep7Message(feedback, user.username));
+  session.personalSteps = session.personalSteps ?? {};
+  session.personalSteps[user.username] = 8;
+  await saveSession(session);
+  return NextResponse.json(session);
 }

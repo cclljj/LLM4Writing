@@ -45,6 +45,7 @@ type MonitorSession = {
   participants: string[];
   joinedUsers?: string[];
   currentStep: number;
+  personalSteps?: Record<string, number>;
   groupGate?: Record<string, string[]>;
   stepState?: { step1Substep: number; step2Substep: number };
   reflectionIndex?: Record<string, number>;
@@ -493,6 +494,18 @@ export default function TeacherPage() {
     }
 
     return { ready: false, text: "目前已是最後步驟或無下一步建議。" };
+  }
+
+  function getPersonalStepCountText(session: MonitorSession): string {
+    const counts = new Map<number, number>();
+    session.participants.forEach((participant) => {
+      const step = session.personalSteps?.[participant] ?? session.currentStep;
+      if (step < 5 || step > 10) return;
+      counts.set(step, (counts.get(step) ?? 0) + 1);
+    });
+    return [5, 6, 7, 8, 9, 10]
+      .map((step) => `S${step}:${counts.get(step) ?? 0}`)
+      .join(" / ");
   }
 
   useEffect(() => {
@@ -2087,6 +2100,7 @@ export default function TeacherPage() {
                         <th>小組名稱</th>
                         <th>成員名單</th>
                         <th>小組進度</th>
+                        <th>Step5-10 人數</th>
                         <th>步驟切換提示</th>
                         <th>動作</th>
                       </tr>
@@ -2099,6 +2113,9 @@ export default function TeacherPage() {
                           <td>{session.groupName ?? session.groupId ?? "未命名組"}</td>
                           <td>{session.participants.join(", ")}</td>
                           <td>Step {session.currentStep}</td>
+                          <td>
+                            <small>{getPersonalStepCountText(session)}</small>
+                          </td>
                           <td>
                             {(() => {
                               const hint = getStepAdvanceHint(session);

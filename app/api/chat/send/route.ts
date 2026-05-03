@@ -17,7 +17,8 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const updated = await sendStudentMessage(session, user.username, payload.text);
+    const userStep = session.personalSteps?.[user.username] ?? session.currentStep;
+    const updated = await sendStudentMessage(session, user.username, payload.text, userStep);
     await saveSession(updated);
     return NextResponse.json(updated);
   } catch (error) {

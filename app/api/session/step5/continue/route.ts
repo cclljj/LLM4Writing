@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/src/lib/auth-server";
 import { getSession, saveSession } from "@/src/lib/store";
-import { switchStep } from "@/src/lib/engine";
 
 export async function POST(request: NextRequest) {
   const user = await getCurrentUser();
@@ -21,14 +20,16 @@ export async function POST(request: NextRequest) {
   if (!session.participants.includes(user.username)) {
     return NextResponse.json({ error: "not_participant" }, { status: 403 });
   }
-  if (session.currentStep !== 5) {
+  const userStep = session.personalSteps?.[user.username] ?? session.currentStep;
+  if (userStep !== 5) {
     return NextResponse.json({ error: "invalid_step" }, { status: 400 });
   }
   if (!session.reports?.step5) {
     return NextResponse.json({ error: "step5_summary_not_ready" }, { status: 400 });
   }
 
-  const updated = switchStep(session, 6);
-  await saveSession(updated);
-  return NextResponse.json(updated);
+  session.personalSteps = session.personalSteps ?? {};
+  session.personalSteps[user.username] = 6;
+  await saveSession(session);
+  return NextResponse.json(session);
 }

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
 import { getCurrentUser } from "@/src/lib/auth-server";
 import { getSession, saveSession } from "@/src/lib/store";
-import { switchStep } from "@/src/lib/engine";
+import { REFLECTION_QUESTIONS } from "@/src/lib/spec";
 
 export async function POST(request: NextRequest) {
   const user = await getCurrentUser();
@@ -21,12 +22,24 @@ export async function POST(request: NextRequest) {
   if (!session.participants.includes(user.username)) {
     return NextResponse.json({ error: "not_participant" }, { status: 403 });
   }
-  if (session.currentStep !== 8) {
+  const userStep = session.personalSteps?.[user.username] ?? session.currentStep;
+  if (userStep !== 8) {
     return NextResponse.json({ error: "invalid_step" }, { status: 400 });
   }
 
   session.draftStep8[user.username] = body.draft;
-  const next = switchStep(session, 9);
-  await saveSession(next);
-  return NextResponse.json(next);
+  session.personalSteps = session.personalSteps ?? {};
+  session.personalSteps[user.username] = 9;
+  if ((session.reflectionIndex?.[user.username] ?? 0) === 0) {
+    session.messages.push({
+      id: randomUUID(),
+      role: "system",
+      userId: user.username,
+      text: `步驟 9 開始：${REFLECTION_QUESTIONS[0]}`,
+      at: new Date().toISOString(),
+      step: 9
+    });
+  }
+  await saveSession(session);
+  return NextResponse.json(session);
 }
