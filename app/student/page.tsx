@@ -345,10 +345,16 @@ export default function StudentPage() {
       const rect = canvas.getBoundingClientRect();
       const x = event.clientX - rect.left - dragOffset.x;
       const y = event.clientY - rect.top - dragOffset.y;
+      const limitX = Math.max(980, canvas.scrollWidth - 130);
+      const limitY = Math.max(520, canvas.scrollHeight - 80);
       setOutlineNodes((prev) =>
         prev.map((node) =>
           node.id === draggingNodeId
-            ? { ...node, x: Math.max(10, Math.min(980, x)), y: Math.max(10, Math.min(520, y)) }
+            ? {
+                ...node,
+                x: Math.max(10, Math.min(limitX, x)),
+                y: Math.max(10, Math.min(limitY, y))
+              }
             : node
         )
       );
@@ -527,6 +533,17 @@ export default function StudentPage() {
       map.set(node.parentId, list);
     });
     return map;
+  }, [outlineNodes]);
+  const outlineCanvasSize = useMemo(() => {
+    const defaultWidth = 1100;
+    const defaultHeight = 640;
+    if (outlineNodes.length === 0) return { width: defaultWidth, height: defaultHeight };
+    const maxX = Math.max(...outlineNodes.map((node) => node.x + 170));
+    const maxY = Math.max(...outlineNodes.map((node) => node.y + 130));
+    return {
+      width: Math.max(defaultWidth, maxX),
+      height: Math.max(defaultHeight, maxY)
+    };
   }, [outlineNodes]);
 
   function getDepth(nodeId: string): number {
@@ -986,33 +1003,41 @@ export default function StudentPage() {
           </div>
 
           {historyReviewSteps.length > 0 ? (
-            <div className="card">
-              <h2>前序步驟回顧</h2>
-              <small>以下僅顯示你在先前步驟與 AI 的互動紀錄。</small>
+            <>
+              <div className="card">
+                <h2>前序步驟回顧</h2>
+                <small>以下僅顯示你在先前步驟與 AI 的互動紀錄。</small>
+              </div>
               {historyReviewSteps.map((review) => (
-                <div key={`review-step-${review.step}`} style={{ borderTop: "1px solid #e5e7eb", padding: "10px 0" }}>
-                  <strong>
-                    Step {review.step} - {review.title}
-                  </strong>
-                  {review.messages.length > 0 ? (
-                    review.messages.map((message) => (
-                      <div key={`review-msg-${message.id}`} style={{ marginTop: 8, paddingLeft: 8 }}>
-                        <strong>{message.kind === "student" ? "你" : "AI"}</strong>
-                        <div
-                          style={{ marginTop: 4 }}
-                          dangerouslySetInnerHTML={{ __html: renderMessageHtml(message.text) }}
-                        />
-                        <small>{message.at}</small>
-                      </div>
-                    ))
-                  ) : (
-                    <p style={{ margin: "8px 0 0" }}>
-                      <small>此步驟目前沒有可顯示的個人互動紀錄。</small>
+                <div key={`review-step-wrap-${review.step}`}>
+                  <div className="card">
+                    <h2>
+                      Step {review.step} - {review.title}
+                    </h2>
+                    <p>
+                      <small>此為歷史步驟回顧（僅本人與 AI 互動）。</small>
                     </p>
-                  )}
+                  </div>
+                  <div className="card">
+                    <h2>互動內容</h2>
+                    {review.messages.length > 0 ? (
+                      review.messages.map((message) => (
+                        <div key={`review-msg-${message.id}`} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
+                          <strong>{message.kind === "student" ? "你" : "AI 回覆"}</strong>
+                          <div
+                            style={{ marginTop: 4 }}
+                            dangerouslySetInnerHTML={{ __html: renderMessageHtml(message.text) }}
+                          />
+                          <small>{message.at}</small>
+                        </div>
+                      ))
+                    ) : (
+                      <small>此步驟目前沒有可顯示的個人互動紀錄。</small>
+                    )}
+                  </div>
                 </div>
               ))}
-            </div>
+            </>
           ) : null}
 
           <div className="card">
@@ -1095,116 +1120,125 @@ export default function StudentPage() {
                     <>
                       <small>按節點右上角 ➕ 新增下一層；第二層以下且無子節點可用 ➖ 刪除。雙擊節點可編輯文字，拖曳可調整位置與層次。</small>
                       <div
-                        ref={outlineCanvasRef}
                         style={{
-                          position: "relative",
                           width: "100%",
-                          minHeight: 560,
+                          maxHeight: 560,
                           border: "1px solid #e5e7eb",
                           borderRadius: 10,
                           marginTop: 10,
-                          overflow: "hidden",
+                          overflow: "auto",
                           background: "linear-gradient(180deg, #f8fafc 0%, #ffffff 100%)"
                         }}
                       >
-                        <svg style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}>
-                          {outlineNodes
-                            .filter((node) => node.parentId)
-                            .map((node) => {
-                              const parent = outlineNodes.find((item) => item.id === node.parentId);
-                              if (!parent) return null;
-                              return (
-                                <line
-                                  key={`edge-${parent.id}-${node.id}`}
-                                  x1={parent.x + 60}
-                                  y1={parent.y + 34}
-                                  x2={node.x + 60}
-                                  y2={node.y}
-                                  stroke="#64748b"
-                                  strokeWidth={2}
-                                />
-                              );
-                            })}
-                        </svg>
+                        <div
+                          ref={outlineCanvasRef}
+                          style={{
+                            position: "relative",
+                            width: outlineCanvasSize.width,
+                            height: outlineCanvasSize.height,
+                            minWidth: "100%",
+                            minHeight: 560
+                          }}
+                        >
+                          <svg style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}>
+                            {outlineNodes
+                              .filter((node) => node.parentId)
+                              .map((node) => {
+                                const parent = outlineNodes.find((item) => item.id === node.parentId);
+                                if (!parent) return null;
+                                return (
+                                  <line
+                                    key={`edge-${parent.id}-${node.id}`}
+                                    x1={parent.x + 60}
+                                    y1={parent.y + 34}
+                                    x2={node.x + 60}
+                                    y2={node.y}
+                                    stroke="#64748b"
+                                    strokeWidth={2}
+                                  />
+                                );
+                              })}
+                          </svg>
 
-                        {outlineNodes.map((node) => {
-                          const children = childrenMap.get(node.id) ?? [];
-                          const depth = getDepth(node.id);
-                          const canDelete = depth >= 2 && children.length === 0;
-                          return (
-                            <div
-                              key={node.id}
-                              onMouseEnter={() => draggingNodeId && setDropTargetNodeId(node.id)}
-                              onMouseDown={(event) => {
-                                const target = event.target as HTMLElement;
-                                if (target.closest("button") || target.closest("input")) return;
-                                const box = event.currentTarget.getBoundingClientRect();
-                                setDragOffset({ x: event.clientX - box.left, y: event.clientY - box.top });
-                                setDraggingNodeId(node.id);
-                              }}
-                              onDoubleClick={(event) => {
-                                event.stopPropagation();
-                                setDraggingNodeId(null);
-                                setDropTargetNodeId(null);
-                                setEditingNodeId(node.id);
-                              }}
-                              style={{
-                                position: "absolute",
-                                left: node.x,
-                                top: node.y,
-                                width: 120,
-                                minHeight: 68,
-                                borderRadius: 10,
-                                border: node.id === dropTargetNodeId ? "2px solid #0ea5e9" : "1px solid #94a3b8",
-                                background: "#ffffff",
-                                boxShadow: "0 4px 14px rgba(15, 23, 42, 0.08)",
-                                padding: "8px 10px 6px",
-                                cursor: "move",
-                                userSelect: "none"
-                              }}
-                            >
-                              <div style={{ display: "flex", justifyContent: "flex-end", gap: 4, marginBottom: 4 }}>
-                                <button
-                                  type="button"
-                                  className="secondary"
-                                  style={{ width: 24, height: 24, padding: 0, lineHeight: 1 }}
-                                  onMouseDown={(e) => e.stopPropagation()}
-                                  onClick={() => addChildNode(node.id)}
-                                >
-                                  ➕
-                                </button>
-                                {canDelete ? (
+                          {outlineNodes.map((node) => {
+                            const children = childrenMap.get(node.id) ?? [];
+                            const depth = getDepth(node.id);
+                            const canDelete = depth >= 2 && children.length === 0;
+                            return (
+                              <div
+                                key={node.id}
+                                onMouseEnter={() => draggingNodeId && setDropTargetNodeId(node.id)}
+                                onMouseDown={(event) => {
+                                  const target = event.target as HTMLElement;
+                                  if (target.closest("button") || target.closest("input")) return;
+                                  const box = event.currentTarget.getBoundingClientRect();
+                                  setDragOffset({ x: event.clientX - box.left, y: event.clientY - box.top });
+                                  setDraggingNodeId(node.id);
+                                }}
+                                onDoubleClick={(event) => {
+                                  event.stopPropagation();
+                                  setDraggingNodeId(null);
+                                  setDropTargetNodeId(null);
+                                  setEditingNodeId(node.id);
+                                }}
+                                style={{
+                                  position: "absolute",
+                                  left: node.x,
+                                  top: node.y,
+                                  width: 120,
+                                  minHeight: 68,
+                                  borderRadius: 10,
+                                  border: node.id === dropTargetNodeId ? "2px solid #0ea5e9" : "1px solid #94a3b8",
+                                  background: "#ffffff",
+                                  boxShadow: "0 4px 14px rgba(15, 23, 42, 0.08)",
+                                  padding: "8px 10px 6px",
+                                  cursor: "move",
+                                  userSelect: "none"
+                                }}
+                              >
+                                <div style={{ display: "flex", justifyContent: "flex-end", gap: 4, marginBottom: 4 }}>
                                   <button
                                     type="button"
                                     className="secondary"
                                     style={{ width: 24, height: 24, padding: 0, lineHeight: 1 }}
                                     onMouseDown={(e) => e.stopPropagation()}
-                                    onClick={() => removeLeafNode(node.id)}
+                                    onClick={() => addChildNode(node.id)}
                                   >
-                                    ➖
+                                    ➕
                                   </button>
-                                ) : null}
-                              </div>
-                              {editingNodeId === node.id ? (
-                                <input
-                                  autoFocus
-                                  value={node.text}
-                                  onChange={(e) =>
-                                    setOutlineNodes((prev) =>
-                                      prev.map((item) => (item.id === node.id ? { ...item, text: e.target.value } : item))
-                                    )
-                                  }
-                                  onBlur={() => setEditingNodeId(null)}
-                                  onMouseDown={(e) => e.stopPropagation()}
-                                />
-                              ) : (
-                                <div style={{ fontSize: 13, fontWeight: 600, color: "#0f172a", whiteSpace: "pre-wrap" }}>
-                                  {node.text}
+                                  {canDelete ? (
+                                    <button
+                                      type="button"
+                                      className="secondary"
+                                      style={{ width: 24, height: 24, padding: 0, lineHeight: 1 }}
+                                      onMouseDown={(e) => e.stopPropagation()}
+                                      onClick={() => removeLeafNode(node.id)}
+                                    >
+                                      ➖
+                                    </button>
+                                  ) : null}
                                 </div>
-                              )}
-                            </div>
-                          );
-                        })}
+                                {editingNodeId === node.id ? (
+                                  <input
+                                    autoFocus
+                                    value={node.text}
+                                    onChange={(e) =>
+                                      setOutlineNodes((prev) =>
+                                        prev.map((item) => (item.id === node.id ? { ...item, text: e.target.value } : item))
+                                      )
+                                    }
+                                    onBlur={() => setEditingNodeId(null)}
+                                    onMouseDown={(e) => e.stopPropagation()}
+                                  />
+                                ) : (
+                                  <div style={{ fontSize: 13, fontWeight: 600, color: "#0f172a", whiteSpace: "pre-wrap" }}>
+                                    {node.text}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
                       <div className="row" style={{ marginTop: 10, gap: 10 }}>
                         <div style={{ width: 180 }}>
