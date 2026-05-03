@@ -4,6 +4,30 @@ import { createSession } from "@/src/lib/engine";
 import { findActivity, hydrateDomainState, resolvePromptConfigForActivity, resolveStructureTreeTemplate } from "@/src/lib/mock-data";
 import { listSessions, saveSession } from "@/src/lib/store";
 
+function isSingleNodeOutline(outline: string): boolean {
+  const raw = outline.trim();
+  if (!raw) return true;
+  const lines = raw
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !line.startsWith("graph "));
+  const nodeIds = new Set<string>();
+  for (const line of lines) {
+    const nodeMatch = line.match(/^([A-Za-z0-9_-]+)\s*\["([\s\S]*)"\]$/);
+    if (nodeMatch) {
+      nodeIds.add(nodeMatch[1]!);
+      continue;
+    }
+    const edgeMatch = line.match(/^([A-Za-z0-9_-]+)\s*-->\s*([A-Za-z0-9_-]+)$/);
+    if (edgeMatch) {
+      nodeIds.add(edgeMatch[1]!);
+      nodeIds.add(edgeMatch[2]!);
+    }
+  }
+  return nodeIds.size <= 1;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const user = await getCurrentUser();
@@ -67,7 +91,7 @@ export async function POST(request: NextRequest) {
       }
       const outlinePatched = Boolean(
         structureTreeTemplate &&
-        (!existing.outlines?.[user.username] || !existing.outlines[user.username].trim())
+        isSingleNodeOutline(existing.outlines?.[user.username] ?? "")
       );
       if (outlinePatched) {
         existing.outlines[user.username] = structureTreeTemplate;
