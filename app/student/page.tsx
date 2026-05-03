@@ -714,6 +714,8 @@ export default function StudentPage() {
     setError("");
     setIsSuggestingStep6(true);
     try {
+      const saved = await saveArtifact("draft6", draftText);
+      if (!saved) return;
       const response = await fetch("/api/session/step6/suggest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -861,8 +863,8 @@ export default function StudentPage() {
     }
   }
 
-  async function saveArtifact(type: "outline" | "draft6" | "draft8", content: string) {
-    if (!session) return;
+  async function saveArtifact(type: "outline" | "draft6" | "draft8", content: string): Promise<boolean> {
+    if (!session) return false;
     const response = await fetch("/api/session/artifact/save", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -872,12 +874,13 @@ export default function StudentPage() {
     const data = await response.json();
     if (!response.ok) {
       setError(data.error ?? "save_failed");
-      return;
+      return false;
     }
     if (type === "draft6") {
       setSavedDraft6Text(content);
     }
     setSession(data);
+    return true;
   }
 
   const stepSubstepText =
@@ -1715,7 +1718,7 @@ export default function StudentPage() {
                 {currentStep === 6 ? (
                   <div style={{ width: 180 }}>
                     <button type="button" className="secondary" onClick={requestStep6Suggestion} disabled={isSuggestingStep6 || isCompletingStep6}>
-                      AI 修改建議
+                      請 AI 針對目前內容給我修改建議
                     </button>
                   </div>
                 ) : null}

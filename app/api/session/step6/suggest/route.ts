@@ -8,7 +8,7 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
-function makeMessage(role: "student" | "ai", step: number, text: string, userId?: string) {
+function makeMessage(role: "ai", step: number, text: string, userId?: string) {
   return {
     id: randomUUID(),
     role,
@@ -68,16 +68,14 @@ export async function POST(request: NextRequest) {
 
   const timestamp = nowIso();
   const suggestion = await suggestWithLlm(session.promptConfig?.stepPrompts?.["6"], draft);
+  const singleLineDraft = (draft || "（目前無內容）").replace(/\r?\n/g, " ");
+  const singleLineSuggestion = suggestion.replace(/\r?\n/g, " ");
   const logText = [
-    "### Step6 AI 修改建議",
     `- 時間：${timestamp}`,
-    "- 文章內容：",
-    draft || "（目前無內容）",
-    "- AI 建議：",
-    suggestion
+    `- 文章內容：${singleLineDraft}`,
+    `- AI 修改建議：${singleLineSuggestion}`
   ].join("\n");
 
-  session.messages.push(makeMessage("student", 6, `我想請 AI 提供修改建議。`, user.username));
   session.messages.push(makeMessage("ai", 6, logText, user.username));
 
   await saveSession(session);
