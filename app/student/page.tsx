@@ -1431,19 +1431,12 @@ export default function StudentPage() {
 
               <div className="card">
                 <h2>我的結構樹（可編修）</h2>
-                <div className="row">
-                  <div style={{ width: 180 }}>
-                    <button type="button" className="secondary" onClick={() => setShowOutlineEditor((prev) => !prev)} disabled={step4CompletedByMe}>
-                      編修結構樹
-                    </button>
-                  </div>
-                </div>
                 {step4CompletedByMe ? (
                   <>
                     <small>你已確認完成此步驟，已鎖定編修。</small>
                     <pre style={{ marginTop: 8 }}>{session.outlines[loginUser] ?? "尚未提供"}</pre>
                   </>
-                ) : showOutlineEditor ? (
+                ) : (
                   <>
                     <small>雙擊節點可編輯，拖曳可調整位置與層次；完成後請先存檔。</small>
                     <div
@@ -1542,8 +1535,6 @@ export default function StudentPage() {
                       </div>
                     </div>
                   </>
-                ) : (
-                  <pre style={{ marginTop: 8 }}>{session.outlines[loginUser] ?? "尚未提供"}</pre>
                 )}
               </div>
             </>
@@ -1641,18 +1632,28 @@ export default function StudentPage() {
 
             {interactiveMessages.map((message) => (
               <div key={message.id} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
-                <strong>
-                  {message.kind === "question"
-                    ? "系統提問"
-                    : message.kind === "student"
-                      ? `學生${message.userId ? `(${message.userId})` : ""}`
-                      : "AI 回覆"}
-                </strong>
-                <div
-                  style={{ marginTop: 4 }}
-                  dangerouslySetInnerHTML={{ __html: renderMessageHtml(message.text) }}
-                />
-                <small>{message.at}</small>
+                {currentStep === 4 && message.kind === "student" ? (
+                  <p style={{ margin: 0 }}>
+                    <strong>{message.userId || "學生"}：</strong>
+                    <span style={{ marginLeft: 4, whiteSpace: "pre-wrap" }}>{message.text}</span>
+                    <small style={{ marginLeft: 6 }}>({message.at})</small>
+                  </p>
+                ) : (
+                  <>
+                    <strong>
+                      {message.kind === "question"
+                        ? "系統提問"
+                        : message.kind === "student"
+                          ? `學生${message.userId ? `(${message.userId})` : ""}`
+                          : "AI 回覆"}
+                    </strong>
+                    <div
+                      style={{ marginTop: 4 }}
+                      dangerouslySetInnerHTML={{ __html: renderMessageHtml(message.text) }}
+                    />
+                    <small>{message.at}</small>
+                  </>
+                )}
               </div>
             ))}
 
