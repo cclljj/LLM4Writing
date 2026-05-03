@@ -1086,9 +1086,6 @@ export default function StudentPage() {
           <div key={course.id} style={{ borderTop: "1px solid #e5e7eb", padding: "10px 0" }}>
             <strong>{course.title}</strong>（班級 {course.classNumber} / {course.genre} / {course.durationMinutes} 分鐘）
             <div>
-              <small>{course.supplemental}</small>
-            </div>
-            <div>
               <small>分組狀態：{course.groupStatus ?? "尚未分組"}</small>
             </div>
             <div className="row" style={{ marginTop: 8 }}>
@@ -1168,7 +1165,6 @@ export default function StudentPage() {
           <p>
             班級：{preparingCourse.classNumber} / 文體：{preparingCourse.genre} / 討論時長：{preparingCourse.durationMinutes} 分鐘
           </p>
-          <p>補充資料：{preparingCourse.supplemental}</p>
           <small>你已進入準備階段，請等待老師點選「開始上課」。</small>
           <div className="row" style={{ marginTop: 10 }}>
             <div style={{ width: 220 }}>
