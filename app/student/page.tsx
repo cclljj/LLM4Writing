@@ -1272,7 +1272,15 @@ export default function StudentPage() {
                         onClick={() =>
                           setHistoryReviewExpanded((prev) => ({ ...prev, [review.step]: !(prev[review.step] ?? false) }))
                         }
-                        style={{ fontSize: 12, lineHeight: 1.1, padding: "4px 8px", minHeight: "unset" }}
+                        style={{
+                          fontSize: 12,
+                          lineHeight: 1.1,
+                          padding: "3px 6px",
+                          minHeight: "unset",
+                          width: "fit-content",
+                          whiteSpace: "nowrap",
+                          flex: "0 0 auto"
+                        }}
                       >
                         {historyReviewExpanded[review.step] ? "▾ 閉合" : "▸ 展開"}
                       </button>
