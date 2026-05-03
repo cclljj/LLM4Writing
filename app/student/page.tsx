@@ -306,6 +306,7 @@ export default function StudentPage() {
   const [showDraftEditor, setShowDraftEditor] = useState(false);
   const [showStep6OutlineRef, setShowStep6OutlineRef] = useState(false);
   const [isSendingMessage, setIsSendingMessage] = useState(false);
+  const [isAutoAdvancingStep5, setIsAutoAdvancingStep5] = useState(false);
   const outlineCanvasRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -358,6 +359,29 @@ export default function StudentPage() {
       setRefUser((session.participants.find((user) => user !== loginUser) ?? session.participants[0])!);
     }
   }, [session?.id, session?.currentStep, loginUser]);
+
+  useEffect(() => {
+    if (!session || session.currentStep !== 5 || !session.reports?.step5 || isAutoAdvancingStep5) return;
+    const timer = window.setTimeout(async () => {
+      setIsAutoAdvancingStep5(true);
+      try {
+        const response = await fetch("/api/session/step5/continue", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId: session.id })
+        });
+        const data = await response.json();
+        if (response.ok && data?.id) {
+          setSession(data);
+        } else {
+          setError(data.error ?? "step5_auto_advance_failed");
+        }
+      } finally {
+        setIsAutoAdvancingStep5(false);
+      }
+    }, 1200);
+    return () => window.clearTimeout(timer);
+  }, [isAutoAdvancingStep5, session]);
 
   useEffect(() => {
     if (!(session?.currentStep === 3 || session?.currentStep === 4) || !loginUser) return;
@@ -1624,6 +1648,7 @@ export default function StudentPage() {
             <div className="card">
               <h2>摘要報告</h2>
               <pre>{session.reports.step5 ?? "系統尚未產生摘要。"}</pre>
+              <small>摘要顯示後將自動進入步驟 6。</small>
             </div>
           ) : null}
 
@@ -1651,7 +1676,7 @@ export default function StudentPage() {
             </div>
           ) : null}
 
-          {currentStep !== 3 ? (
+          {currentStep !== 3 && currentStep !== 5 ? (
           <div className="card">
             <h2>{currentStep === 4 ? "小組討論區" : "互動內容"}</h2>
             {currentMode === "non_interactive" ? (
