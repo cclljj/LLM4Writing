@@ -423,8 +423,6 @@ export default function TeacherPage() {
     const nextStep = step < 10 ? step + 1 : undefined;
     const stepMessages = session.messages.filter((m) => m.step === step);
     const studentUsers = new Set(stepMessages.filter((m) => m.role === "student" && m.userId).map((m) => m.userId as string));
-    const allParticipantsReplied =
-      session.participants.length > 0 && session.participants.every((participant) => studentUsers.has(participant));
 
     if (step === 1) {
       const ready = stepMessages.some(
@@ -460,37 +458,23 @@ export default function TeacherPage() {
         : { ready: false, text: "步驟 4 尚未全員確認完成。" };
     }
 
-    if ([3, 6, 8].includes(step)) {
+    if (step === 3) {
       const ready =
-        step === 3
-          ? session.participants.length > 0 &&
-            session.participants.every((participant) => (session.groupGate?.["3-complete"] ?? []).includes(participant))
-          : allParticipantsReplied;
+        session.participants.length > 0 &&
+        session.participants.every((participant) => (session.groupGate?.["3-complete"] ?? []).includes(participant));
       return ready
         ? { ready: true, text: `步驟 ${step} 已收齊完成條件，建議切換到 Step ${nextStep}。`, nextStep }
         : {
             ready: false,
-            text:
-              step === 3
-                ? "步驟 3 尚未全員完成結構樹。"
-                : `步驟 ${step} 尚未收齊所有學生回覆。`
+            text: "步驟 3 尚未全員完成結構樹。"
           };
     }
 
-    if ([5, 7].includes(step)) {
-      const ready = stepMessages.some((m) => m.role === "ai");
-      return ready
-        ? { ready: true, text: `步驟 ${step} 報告已產生，建議切換到 Step ${nextStep}。`, nextStep }
-        : { ready: false, text: `步驟 ${step} 報告尚未產生。` };
-    }
-
-    if (step === 9) {
-      const ready =
-        session.participants.length > 0 &&
-        session.participants.every((participant) => (session.reflectionIndex?.[participant] ?? 0) >= 4);
-      return ready
-        ? { ready: true, text: "步驟 9 反思已完成，建議切換到 Step 10。", nextStep }
-        : { ready: false, text: "步驟 9 反思尚未全部完成。" };
+    if (step >= 5 && step <= 10) {
+      return {
+        ready: false,
+        text: `步驟 ${step} 為個人步調階段，無需收齊全班回覆。各步驟人數：${getPersonalStepCountText(session)}`
+      };
     }
 
     return { ready: false, text: "目前已是最後步驟或無下一步建議。" };
@@ -1913,15 +1897,16 @@ export default function TeacherPage() {
             {isLearningProcessing ? (
               <div
                 style={{
-                  marginBottom: 10,
-                  padding: "10px 12px",
-                  border: "1px solid #bfdbfe",
-                  background: "#eff6ff",
-                  color: "#1d4ed8",
+                  marginBottom: 12,
+                  padding: "12px 14px",
+                  border: "1px solid #60a5fa",
+                  background: "#dbeafe",
+                  color: "#1e40af",
                   borderRadius: 8
                 }}
               >
-                <strong>Processing...</strong> {learningProcessingText}
+                <strong style={{ fontSize: 16 }}>資料載入中...</strong>
+                <div style={{ marginTop: 4 }}>{learningProcessingText}</div>
               </div>
             ) : null}
             <div style={{ overflowX: "auto" }}>
@@ -2031,6 +2016,18 @@ export default function TeacherPage() {
 
           {showCourseStatusView ? (
             <>
+              {isLearningProcessing ? (
+                <div
+                  className="card"
+                  style={{
+                    borderColor: "#60a5fa",
+                    background: "#dbeafe"
+                  }}
+                >
+                  <h2 style={{ marginBottom: 6 }}>系統處理中</h2>
+                  <p style={{ margin: 0, color: "#1e40af" }}>{learningProcessingText || "正在載入課程狀態資料，請稍候..."}</p>
+                </div>
+              ) : null}
               <div className="card">
                 <h2>全班加入狀態</h2>
                 <div style={{ overflowX: "auto" }}>
