@@ -1380,6 +1380,16 @@ export default function StudentPage() {
                   : "步驟切換由教師端控制，你的頁面會自動同步。"}
               </small>
             </p>
+            {currentStep === 10 ? (
+              <>
+                <hr style={{ border: 0, borderTop: "1px solid #e5e7eb", margin: "10px 0" }} />
+                <h3 style={{ margin: "0 0 8px" }}>總結報告</h3>
+                <div
+                  style={{ marginTop: 4 }}
+                  dangerouslySetInnerHTML={{ __html: renderMessageHtml(ownStep10Report ?? "系統尚未產生總結。") }}
+                />
+              </>
+            ) : null}
           </div>
 
           {currentStep === 3 ? (
@@ -1865,20 +1875,13 @@ export default function StudentPage() {
           ) : null}
 
           {currentStep === 10 ? (
-            <div className="card">
-              <h2>總結報告</h2>
-              <h3>步驟 8 最終作文</h3>
-              <pre>
-                {loginUser
-                  ? session.draftStep8[loginUser] ?? session.draftStep6[loginUser] ?? "尚未提交最終稿。"
-                  : "尚未提交最終稿。"}
-              </pre>
-              <h3 style={{ marginTop: 12 }}>AI 總結分析</h3>
-              <pre>{ownStep10Report ?? "系統尚未產生總結。"}</pre>
+            <div className="card" style={{ borderColor: "#bfdbfe", background: "#eff6ff" }}>
+              <h2>課程已完成</h2>
+              <small>整個課程已經結束，請等待老師指示進行後續課程。</small>
             </div>
           ) : null}
 
-          {currentStep !== 3 && currentStep !== 5 && currentStep !== 8 ? (
+          {currentStep !== 3 && currentStep !== 5 && currentStep !== 8 && currentStep !== 10 ? (
           <div className="card">
             <h2>{currentStep === 4 ? "小組討論區" : "互動內容"}</h2>
             {currentMode === "non_interactive" ? (
