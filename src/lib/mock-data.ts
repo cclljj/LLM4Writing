@@ -57,13 +57,32 @@ const stepOpeningTexts = loadStepOpeningTexts();
 
 const structureTreeMapByGenre = structureTreeConfig as Record<string, string>;
 
+const defaultStructureTreePath = "structure-tree/1.map";
+
+function resolveStructureTreePathByGenre(genre: string): string {
+  const normalized = genre.trim();
+  if (!normalized) return defaultStructureTreePath;
+  if (structureTreeMapByGenre[normalized]) return structureTreeMapByGenre[normalized]!;
+
+  const compact = normalized.replace(/\s+/g, "");
+  const directCompactKey = Object.keys(structureTreeMapByGenre).find((key) => key.replace(/\s+/g, "") === compact);
+  if (directCompactKey) return structureTreeMapByGenre[directCompactKey]!;
+
+  if (compact.includes("議論")) return structureTreeMapByGenre["議論文"] ?? defaultStructureTreePath;
+  if (compact.includes("記敘")) return structureTreeMapByGenre["記敘文"] ?? defaultStructureTreePath;
+  if (compact.includes("抒情")) return structureTreeMapByGenre["抒情文"] ?? defaultStructureTreePath;
+  if (compact.includes("說明")) return structureTreeMapByGenre["說明文"] ?? defaultStructureTreePath;
+
+  return defaultStructureTreePath;
+}
+
 function replaceEssayTitleInTemplate(template: string, essayTitle: string): string {
   const normalizedTitle = essayTitle.trim() || "未命名題目";
   return template.replaceAll("作文題目", normalizedTitle);
 }
 
 export function resolveStructureTreeTemplate(genre: string, essayTitle: string): string {
-  const relPath = structureTreeMapByGenre[genre]?.trim();
+  const relPath = resolveStructureTreePathByGenre(genre).trim();
   if (!relPath) return "";
   const filePath = path.join(process.cwd(), "src", "config", relPath);
   if (!existsSync(filePath)) return "";
