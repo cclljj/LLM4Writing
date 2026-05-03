@@ -1,0 +1,7 @@
+Migration completed at: Sat Apr 25 20:33:51 CST 2026
+Artifacts directory: .migration-artifacts/supabase-20260425-203309
+Source dump: .migration-artifacts/supabase-20260425-203309/source.dump
+Target pre-migration backup: .migration-artifacts/supabase-20260425-203309/target-pre-migration.dump
+Source counts: .migration-artifacts/supabase-20260425-203309/source-counts.csv
+Target counts: .migration-artifacts/supabase-20260425-203309/target-counts.csv
+Count comparison: OK
