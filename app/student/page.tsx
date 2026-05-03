@@ -1731,6 +1731,9 @@ export default function StudentPage() {
                   </div>
                 ) : null}
               </div>
+              {currentStep === 6 && isSuggestingStep6 ? (
+                <small style={{ display: "block", marginTop: 6, color: "#94a3b8" }}>AI 正在分析你的文章並產生修改建議，請稍候...</small>
+              ) : null}
               {currentStep === 6 ? (
                 <small style={{ display: "block", marginTop: 8, color: "#94a3b8" }}>未儲存字數：{unsavedDraft6Chars}</small>
               ) : null}
