@@ -336,7 +336,6 @@ export default function StudentPage() {
   const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [draftText, setDraftText] = useState("");
   const [refUser, setRefUser] = useState("");
-  const [showOutlineEditor, setShowOutlineEditor] = useState(false);
   const [showDraftEditor, setShowDraftEditor] = useState(false);
   const [showStep6OutlineRef, setShowStep6OutlineRef] = useState(false);
   const [isSendingMessage, setIsSendingMessage] = useState(false);
@@ -399,9 +398,6 @@ export default function StudentPage() {
       setSavedDraft8Text(latestDraft);
       setShowDraftEditor(false);
     }
-    if (ownStep === 3 || ownStep === 4) {
-      setShowOutlineEditor(false);
-    }
     setOutlineDirty(false);
     if (!refUser && session.participants.length > 0) {
       setRefUser((session.participants.find((user) => user !== loginUser) ?? session.participants[0])!);
@@ -444,14 +440,13 @@ export default function StudentPage() {
   useEffect(() => {
     const ownStep = session && loginUser ? session.personalSteps?.[loginUser] ?? session.currentStep : 1;
     if (!(ownStep === 3 || ownStep === 4) || !loginUser) return;
-    const shouldSyncFromSession = ownStep === 4 || showOutlineEditor;
+    const shouldSyncFromSession = ownStep === 3 || ownStep === 4;
     if (!shouldSyncFromSession) return;
     if (outlineDirty || draggingNodeId || editingNodeId) return;
     const saved = session?.outlines[loginUser]?.trim() ?? "";
     setOutlineNodes(saved ? fromMermaid(saved) : makeDefaultOutlineNodes());
     setEditingNodeId(null);
   }, [
-    showOutlineEditor,
     session?.id,
     session?.currentStep,
     session?.personalSteps,
@@ -770,7 +765,7 @@ export default function StudentPage() {
   async function completeStep4() {
     if (!session) return;
     setError("");
-    const outlineToSave = showOutlineEditor ? toMermaid(outlineNodes) : session.outlines[loginUser] ?? "";
+    const outlineToSave = currentStep === 3 || currentStep === 4 ? toMermaid(outlineNodes) : session.outlines[loginUser] ?? "";
     setOutlineText(outlineToSave);
     const response = await fetch("/api/session/step4/complete", {
       method: "POST",
@@ -1512,168 +1507,150 @@ export default function StudentPage() {
           {currentStep === 3 && loginUser ? (
             <div className="card">
               <h2>文章結構樹</h2>
-              <div className="row">
-                <div style={{ width: 180 }}>
-                  <button type="button" className="secondary" onClick={() => setShowOutlineEditor((prev) => !prev)}>
-                    文章結構樹
-                  </button>
-                </div>
-              </div>
-              {showOutlineEditor ? (
-                <>
-                  {currentStep === 3 ? (
-                    <>
-                      <small>按節點右上角 ➕ 新增下一層；第二層以下且無子節點可用 ➖ 刪除。雙擊節點可編輯文字，拖曳可調整位置與層次。</small>
-                      <div
-                        style={{
-                          width: "100%",
-                          maxHeight: 560,
-                          border: "1px solid #e5e7eb",
-                          borderRadius: 10,
-                          marginTop: 10,
-                          overflow: "auto",
-                          background: "linear-gradient(180deg, #f8fafc 0%, #ffffff 100%)"
-                        }}
-                      >
+              <>
+                <small>按節點右上角 ➕ 新增下一層；第二層以下且無子節點可用 ➖ 刪除。雙擊節點可編輯文字，拖曳可調整位置與層次。</small>
+                <div
+                  style={{
+                    width: "100%",
+                    maxHeight: 560,
+                    border: "1px solid #e5e7eb",
+                    borderRadius: 10,
+                    marginTop: 10,
+                    overflow: "auto",
+                    background: "linear-gradient(180deg, #f8fafc 0%, #ffffff 100%)"
+                  }}
+                >
+                  <div
+                    ref={outlineCanvasRef}
+                    style={{
+                      position: "relative",
+                      width: outlineCanvasSize.width,
+                      height: outlineCanvasSize.height,
+                      minWidth: "100%",
+                      minHeight: 560
+                    }}
+                  >
+                    <svg style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}>
+                      {outlineNodes
+                        .filter((node) => node.parentId)
+                        .map((node) => {
+                          const parent = outlineNodes.find((item) => item.id === node.parentId);
+                          if (!parent) return null;
+                          return (
+                            <line
+                              key={`edge-${parent.id}-${node.id}`}
+                              x1={parent.x + 60}
+                              y1={parent.y + 34}
+                              x2={node.x + 60}
+                              y2={node.y}
+                              stroke="#64748b"
+                              strokeWidth={2}
+                            />
+                          );
+                        })}
+                    </svg>
+
+                    {outlineNodes.map((node) => {
+                      const children = childrenMap.get(node.id) ?? [];
+                      const depth = getDepth(node.id);
+                      const canDelete = depth >= 2 && children.length === 0;
+                      return (
                         <div
-                          ref={outlineCanvasRef}
+                          key={node.id}
+                          onMouseEnter={() => draggingNodeId && setDropTargetNodeId(node.id)}
+                          onMouseDown={(event) => {
+                            const target = event.target as HTMLElement;
+                            if (target.closest("button") || target.closest("input")) return;
+                            const box = event.currentTarget.getBoundingClientRect();
+                            setDragOffset({ x: event.clientX - box.left, y: event.clientY - box.top });
+                            setDraggingNodeId(node.id);
+                          }}
+                          onDoubleClick={(event) => {
+                            event.stopPropagation();
+                            setDraggingNodeId(null);
+                            setDropTargetNodeId(null);
+                            setEditingNodeId(node.id);
+                          }}
                           style={{
-                            position: "relative",
-                            width: outlineCanvasSize.width,
-                            height: outlineCanvasSize.height,
-                            minWidth: "100%",
-                            minHeight: 560
+                            position: "absolute",
+                            left: node.x,
+                            top: node.y,
+                            width: 120,
+                            minHeight: 68,
+                            borderRadius: 10,
+                            border: node.id === dropTargetNodeId ? "2px solid #0ea5e9" : "1px solid #94a3b8",
+                            background: "#ffffff",
+                            boxShadow: "0 4px 14px rgba(15, 23, 42, 0.08)",
+                            padding: "8px 10px 6px",
+                            cursor: "move",
+                            userSelect: "none"
                           }}
                         >
-                          <svg style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}>
-                            {outlineNodes
-                              .filter((node) => node.parentId)
-                              .map((node) => {
-                                const parent = outlineNodes.find((item) => item.id === node.parentId);
-                                if (!parent) return null;
-                                return (
-                                  <line
-                                    key={`edge-${parent.id}-${node.id}`}
-                                    x1={parent.x + 60}
-                                    y1={parent.y + 34}
-                                    x2={node.x + 60}
-                                    y2={node.y}
-                                    stroke="#64748b"
-                                    strokeWidth={2}
-                                  />
-                                );
-                              })}
-                          </svg>
-
-                          {outlineNodes.map((node) => {
-                            const children = childrenMap.get(node.id) ?? [];
-                            const depth = getDepth(node.id);
-                            const canDelete = depth >= 2 && children.length === 0;
-                            return (
-                              <div
-                                key={node.id}
-                                onMouseEnter={() => draggingNodeId && setDropTargetNodeId(node.id)}
-                                onMouseDown={(event) => {
-                                  const target = event.target as HTMLElement;
-                                  if (target.closest("button") || target.closest("input")) return;
-                                  const box = event.currentTarget.getBoundingClientRect();
-                                  setDragOffset({ x: event.clientX - box.left, y: event.clientY - box.top });
-                                  setDraggingNodeId(node.id);
-                                }}
-                                onDoubleClick={(event) => {
-                                  event.stopPropagation();
-                                  setDraggingNodeId(null);
-                                  setDropTargetNodeId(null);
-                                  setEditingNodeId(node.id);
-                                }}
-                                style={{
-                                  position: "absolute",
-                                  left: node.x,
-                                  top: node.y,
-                                  width: 120,
-                                  minHeight: 68,
-                                  borderRadius: 10,
-                                  border: node.id === dropTargetNodeId ? "2px solid #0ea5e9" : "1px solid #94a3b8",
-                                  background: "#ffffff",
-                                  boxShadow: "0 4px 14px rgba(15, 23, 42, 0.08)",
-                                  padding: "8px 10px 6px",
-                                  cursor: "move",
-                                  userSelect: "none"
-                                }}
+                          <div style={{ display: "flex", justifyContent: "flex-end", gap: 4, marginBottom: 4 }}>
+                            <button
+                              type="button"
+                              className="secondary"
+                              style={{ width: 24, height: 24, padding: 0, lineHeight: 1 }}
+                              onMouseDown={(e) => e.stopPropagation()}
+                              onClick={() => addChildNode(node.id)}
+                            >
+                              ➕
+                            </button>
+                            {canDelete ? (
+                              <button
+                                type="button"
+                                className="secondary"
+                                style={{ width: 24, height: 24, padding: 0, lineHeight: 1 }}
+                                onMouseDown={(e) => e.stopPropagation()}
+                                onClick={() => removeLeafNode(node.id)}
                               >
-                                <div style={{ display: "flex", justifyContent: "flex-end", gap: 4, marginBottom: 4 }}>
-                                  <button
-                                    type="button"
-                                    className="secondary"
-                                    style={{ width: 24, height: 24, padding: 0, lineHeight: 1 }}
-                                    onMouseDown={(e) => e.stopPropagation()}
-                                    onClick={() => addChildNode(node.id)}
-                                  >
-                                    ➕
-                                  </button>
-                                  {canDelete ? (
-                                    <button
-                                      type="button"
-                                      className="secondary"
-                                      style={{ width: 24, height: 24, padding: 0, lineHeight: 1 }}
-                                      onMouseDown={(e) => e.stopPropagation()}
-                                      onClick={() => removeLeafNode(node.id)}
-                                    >
-                                      ➖
-                                    </button>
-                                  ) : null}
-                                </div>
-                                {editingNodeId === node.id ? (
-                                  <input
-                                    autoFocus
-                                    value={node.text}
-                                  onChange={(e) =>
-                                    {
-                                      setOutlineDirty(true);
-                                      setOutlineNodes((prev) =>
-                                        prev.map((item) => (item.id === node.id ? { ...item, text: e.target.value } : item))
-                                      );
-                                    }
-                                  }
-                                    onBlur={() => setEditingNodeId(null)}
-                                    onMouseDown={(e) => e.stopPropagation()}
-                                  />
-                                ) : (
-                                  <div style={{ fontSize: 13, fontWeight: 600, color: "#0f172a", whiteSpace: "pre-wrap" }}>
-                                    {node.text}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
+                                ➖
+                              </button>
+                            ) : null}
+                          </div>
+                          {editingNodeId === node.id ? (
+                            <input
+                              autoFocus
+                              value={node.text}
+                            onChange={(e) =>
+                              {
+                                setOutlineDirty(true);
+                                setOutlineNodes((prev) =>
+                                  prev.map((item) => (item.id === node.id ? { ...item, text: e.target.value } : item))
+                                );
+                              }
+                            }
+                              onBlur={() => setEditingNodeId(null)}
+                              onMouseDown={(e) => e.stopPropagation()}
+                            />
+                          ) : (
+                            <div style={{ fontSize: 13, fontWeight: 600, color: "#0f172a", whiteSpace: "pre-wrap" }}>
+                              {node.text}
+                            </div>
+                          )}
                         </div>
-                      </div>
-                      <div className="row" style={{ marginTop: 10, gap: 10 }}>
-                        <div style={{ width: 180 }}>
-                          <button type="button" onClick={saveOutlineTree}>
-                            儲存變更
-                          </button>
-                        </div>
-                        <div style={{ width: 180 }}>
-                          <button type="button" className="secondary" onClick={completeOutlineTree} disabled={step3CompletedByMe}>
-                            完成結構樹
-                          </button>
-                        </div>
-                      </div>
-                      {step3CompletedByMe ? (
-                        <small style={{ display: "block", marginTop: 8 }}>
-                          {waitingStep3Members ? "你已完成結構樹，等待其他同學完成..." : "你已完成結構樹，可等待老師切換下一步。"}
-                        </small>
-                      ) : null}
-                    </>
-                  ) : (
-                    <>
-                      <label style={{ marginTop: 10 }}>我的結構樹內容（唯讀）</label>
-                      <pre style={{ marginTop: 8 }}>{session.outlines[loginUser] ?? "尚未提供"}</pre>
-                    </>
-                  )}
-                </>
-              ) : null}
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="row" style={{ marginTop: 10, gap: 10 }}>
+                  <div style={{ width: 180 }}>
+                    <button type="button" onClick={saveOutlineTree}>
+                      儲存變更
+                    </button>
+                  </div>
+                  <div style={{ width: 180 }}>
+                    <button type="button" className="secondary" onClick={completeOutlineTree} disabled={step3CompletedByMe}>
+                      完成結構樹
+                    </button>
+                  </div>
+                </div>
+                {step3CompletedByMe ? (
+                  <small style={{ display: "block", marginTop: 8 }}>
+                    {waitingStep3Members ? "你已完成結構樹，等待其他同學完成..." : "你已完成結構樹，可等待老師切換下一步。"}
+                  </small>
+                ) : null}
+              </>
             </div>
           ) : null}
 
