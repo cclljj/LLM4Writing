@@ -55,6 +55,7 @@ export interface SessionState {
     step2Substep: number;
   };
   outlines: Record<string, string>;
+  step3SubmittedOutlines?: Record<string, string>;
   draftStep6: Record<string, string>;
   draftStep8: Record<string, string>;
   reports: {

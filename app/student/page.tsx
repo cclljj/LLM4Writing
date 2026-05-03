@@ -38,6 +38,7 @@ type SessionState = {
   groupGate?: Record<string, string[]>;
   stepState: { step1Substep: number; step2Substep: number };
   outlines: Record<string, string>;
+  step3SubmittedOutlines?: Record<string, string>;
   draftStep6: Record<string, string>;
   draftStep8: Record<string, string>;
   reports: { step5?: string; step7: Record<string, string>; step10: Record<string, string> };
@@ -66,6 +67,12 @@ type StepReview = {
   step: number;
   title: string;
   messages: InteractiveItem[];
+};
+
+type OutlinePreview = {
+  nodes: OutlineNode[];
+  width: number;
+  height: number;
 };
 
 type OutlineNode = {
@@ -246,6 +253,27 @@ function fromMermaid(text: string): OutlineNode[] {
   });
 
   return nodes.length > 0 ? nodes : makeDefaultOutlineNodes();
+}
+
+function buildOutlinePreview(outline: string): OutlinePreview {
+  const nodes = fromMermaid(outline || "").map((node) => ({ ...node }));
+  if (nodes.length === 0) {
+    return { nodes: makeDefaultOutlineNodes(), width: 520, height: 240 };
+  }
+  const minX = Math.min(...nodes.map((node) => node.x));
+  const minY = Math.min(...nodes.map((node) => node.y));
+  const normalized = nodes.map((node) => ({
+    ...node,
+    x: node.x - minX + 20,
+    y: node.y - minY + 20
+  }));
+  const maxX = Math.max(...normalized.map((node) => node.x + 130));
+  const maxY = Math.max(...normalized.map((node) => node.y + 80));
+  return {
+    nodes: normalized,
+    width: Math.max(520, maxX + 20),
+    height: Math.max(240, maxY + 20)
+  };
 }
 
 export default function StudentPage() {
@@ -512,6 +540,12 @@ export default function StudentPage() {
     }
     return reviews;
   }, [loginUser, session, sortedMessages]);
+  const step3SubmittedOutlinePreview = useMemo(() => {
+    if (!session || !loginUser || session.currentStep < 4) return null;
+    const submitted = session.step3SubmittedOutlines?.[loginUser]?.trim() ?? "";
+    if (!submitted) return null;
+    return buildOutlinePreview(submitted);
+  }, [loginUser, session]);
   const currentActivity = useMemo(
     () => {
       const all = [...classCourses];
@@ -585,11 +619,12 @@ export default function StudentPage() {
 
   async function completeOutlineTree() {
     if (!session) return;
-    await saveOutlineTree();
+    const mermaidText = toMermaid(outlineNodes);
+    setOutlineText(mermaidText);
     const response = await fetch("/api/session/step3/complete", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionId: session.id })
+      body: JSON.stringify({ sessionId: session.id, outline: mermaidText })
     });
     const data = await response.json();
     if (!response.ok) {
@@ -1034,6 +1069,53 @@ export default function StudentPage() {
                     ) : (
                       <small>此步驟目前沒有可顯示的個人互動紀錄。</small>
                     )}
+                    {review.step === 3 && step3SubmittedOutlinePreview ? (
+                      <div style={{ marginTop: 14, borderTop: "1px solid #e5e7eb", paddingTop: 10 }}>
+                        <strong>步驟三完成時繳交的結構樹</strong>
+                        <div style={{ marginTop: 8, overflow: "auto", border: "1px solid #e5e7eb", borderRadius: 8 }}>
+                          <svg
+                            width={step3SubmittedOutlinePreview.width}
+                            height={step3SubmittedOutlinePreview.height}
+                            style={{ display: "block", background: "#ffffff" }}
+                          >
+                            {step3SubmittedOutlinePreview.nodes
+                              .filter((node) => node.parentId)
+                              .map((node) => {
+                                const parent = step3SubmittedOutlinePreview.nodes.find((item) => item.id === node.parentId);
+                                if (!parent) return null;
+                                return (
+                                  <line
+                                    key={`review-edge-${parent.id}-${node.id}`}
+                                    x1={parent.x + 55}
+                                    y1={parent.y + 30}
+                                    x2={node.x + 55}
+                                    y2={node.y}
+                                    stroke="#64748b"
+                                    strokeWidth={2}
+                                  />
+                                );
+                              })}
+                            {step3SubmittedOutlinePreview.nodes.map((node) => (
+                              <g key={`review-node-${node.id}`}>
+                                <rect
+                                  x={node.x}
+                                  y={node.y}
+                                  width={110}
+                                  height={64}
+                                  rx={10}
+                                  ry={10}
+                                  fill="#f8fafc"
+                                  stroke="#94a3b8"
+                                />
+                                <text x={node.x + 55} y={node.y + 36} textAnchor="middle" fontSize="12" fill="#0f172a">
+                                  {node.text.length > 20 ? `${node.text.slice(0, 20)}...` : node.text}
+                                </text>
+                              </g>
+                            ))}
+                          </svg>
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               ))}

@@ -133,6 +133,7 @@ export function createSession(payload: StartSessionPayload): SessionState {
     promptConfig: payload.promptConfig ?? { stepPrompts: {}, subStepPrompts: {}, questionBanks: {} },
     stepState: { step1Substep: 1, step2Substep: 1 },
     outlines: {},
+    step3SubmittedOutlines: {},
     draftStep6: {},
     draftStep8: {},
     reports: { step7: {}, step10: {} }
@@ -199,6 +200,9 @@ function normalizeSessionRuntimeShape(session: SessionState): void {
   }
   if (!session.reports.step10 || typeof session.reports.step10 !== "object") {
     session.reports.step10 = {};
+  }
+  if (!session.step3SubmittedOutlines || typeof session.step3SubmittedOutlines !== "object") {
+    session.step3SubmittedOutlines = {};
   }
 }
 
