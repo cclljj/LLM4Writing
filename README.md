@@ -4,7 +4,6 @@ LLM4Writing 已改造成可直接部署於 Vercel 的原生架構版本。
 
 ## 專案定位
 
-- 來源：Fork from https://github.com/Shengche/llm4rwiting
 - 既有 Java/Wicket 程式碼仍保留於 `libs/` 與 `llm4class-web/`（作為歷史參考）
 - 現行可部署主應用為 root 的 Next.js App Router + Serverless API
 - 目前功能對齊基準：`SPEC.md`（現況版）
@@ -138,6 +137,6 @@ npx --yes vercel --prod
 
 ## 版本
 
-- `1.0`：無 `SPEC*.md` 的基準版本（已加註 fork 訊息）
+- `1.0`：無 `SPEC*.md` 的基準版本
 - `2.0`：Vercel-native 架構起始版本
 - `2.1`：加入 Postgres 持久化與現況版流程回補
