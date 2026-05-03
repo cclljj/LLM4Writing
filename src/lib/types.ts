@@ -57,6 +57,10 @@ export interface SessionState {
     matchedGenre: string;
     templatePath: string;
     fallbackUsed: boolean;
+    templateRawLength?: number;
+    parsedNodeCount?: number;
+    parsedEdgeCount?: number;
+    outlineSource?: "template" | "backfill" | "existing";
   };
   groupId?: string;
   groupName?: string;

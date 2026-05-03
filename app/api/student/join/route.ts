@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/src/lib/auth-server";
 import { createSession } from "@/src/lib/engine";
-import { findActivity, hydrateDomainState, resolvePromptConfigForActivity, resolveStructureTreeTemplate, resolveStructureTreeTemplateDebug } from "@/src/lib/mock-data";
+import { findActivity, hydrateDomainState, resolvePromptConfigForActivity, resolveStructureTreeTemplate, resolveStructureTreeTemplateDebugFull } from "@/src/lib/mock-data";
 import { listSessions, saveSession } from "@/src/lib/store";
 
 function isSingleNodeOutline(outline: string): boolean {
@@ -80,7 +80,6 @@ export async function POST(request: NextRequest) {
       if (!existing.outlines || typeof existing.outlines !== "object") {
         existing.outlines = {};
       }
-      existing.structureTreeDebug = resolveStructureTreeTemplateDebug(activity.genre);
       const structureTreeTemplate = resolveStructureTreeTemplate(activity.genre, activity.title);
       const resolvedConfig = resolvePromptConfigForActivity(activity.id);
       const nextStepOpenings = {
@@ -105,6 +104,11 @@ export async function POST(request: NextRequest) {
       if (outlinePatched) {
         existing.outlines[user.username] = structureTreeTemplate;
       }
+      existing.structureTreeDebug = resolveStructureTreeTemplateDebugFull(
+        activity.genre,
+        activity.title,
+        outlinePatched ? "backfill" : "existing"
+      );
 
       const messageJoinedUsers = Array.from(
         new Set(
@@ -141,13 +145,13 @@ export async function POST(request: NextRequest) {
       groupName: group?.groupName ?? "未分組",
       promptConfig: resolvePromptConfigForActivity(activity.id)
     });
-    session.structureTreeDebug = resolveStructureTreeTemplateDebug(activity.genre);
     const structureTreeTemplate = resolveStructureTreeTemplate(activity.genre, activity.title);
     if (structureTreeTemplate) {
       participants.forEach((participant) => {
         session.outlines[participant] = structureTreeTemplate;
       });
     }
+    session.structureTreeDebug = resolveStructureTreeTemplateDebugFull(activity.genre, activity.title, "template");
     session.joinedUsers = [user.username];
 
     await saveSession(session);

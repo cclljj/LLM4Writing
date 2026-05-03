@@ -38,6 +38,10 @@ type SessionState = {
     matchedGenre: string;
     templatePath: string;
     fallbackUsed: boolean;
+    templateRawLength?: number;
+    parsedNodeCount?: number;
+    parsedEdgeCount?: number;
+    outlineSource?: "template" | "backfill" | "existing";
   };
   groupName?: string;
   workflow: string;
@@ -1527,7 +1531,7 @@ export default function StudentPage() {
               {session.structureTreeDebug ? (
                 <div style={{ marginBottom: 8, padding: "8px 10px", border: "1px dashed #94a3b8", borderRadius: 8, background: "#f8fafc" }}>
                   <small>
-                    debug: inputGenre={session.structureTreeDebug.inputGenre || "—"} / matchedGenre={session.structureTreeDebug.matchedGenre || "—"} / templatePath={session.structureTreeDebug.templatePath || "—"} / fallback={session.structureTreeDebug.fallbackUsed ? "yes" : "no"}
+                    debug: inputGenre={session.structureTreeDebug.inputGenre || "—"} / matchedGenre={session.structureTreeDebug.matchedGenre || "—"} / templatePath={session.structureTreeDebug.templatePath || "—"} / fallback={session.structureTreeDebug.fallbackUsed ? "yes" : "no"} / rawLen={session.structureTreeDebug.templateRawLength ?? "—"} / nodes={session.structureTreeDebug.parsedNodeCount ?? "—"} / edges={session.structureTreeDebug.parsedEdgeCount ?? "—"} / source={session.structureTreeDebug.outlineSource || "—"}
                   </small>
                 </div>
               ) : null}

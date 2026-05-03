@@ -113,6 +113,65 @@ export function resolveStructureTreeTemplateDebug(genre: string): {
   };
 }
 
+function parseMermaidStats(text: string): { parsedNodeCount: number; parsedEdgeCount: number } {
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !line.startsWith("graph "))
+    .filter((line) => !line.startsWith("flowchart "))
+    .filter((line) => !line.startsWith("```"));
+  const nodeIds = new Set<string>();
+  let edgeCount = 0;
+  for (const line of lines) {
+    const nodeMatch = line.match(/^([A-Za-z0-9_-]+)\s*\["([\s\S]*)"\]$/);
+    if (nodeMatch) {
+      nodeIds.add(nodeMatch[1]!);
+      continue;
+    }
+    const edgeWithLabelMatch = line.match(/^([A-Za-z0-9_-]+)\s*-->\s*([A-Za-z0-9_-]+)\s*\["([\s\S]*)"\]$/);
+    if (edgeWithLabelMatch) {
+      nodeIds.add(edgeWithLabelMatch[1]!);
+      nodeIds.add(edgeWithLabelMatch[2]!);
+      edgeCount += 1;
+      continue;
+    }
+    const edgeMatch = line.match(/^([A-Za-z0-9_-]+)\s*-->\s*([A-Za-z0-9_-]+)$/);
+    if (edgeMatch) {
+      nodeIds.add(edgeMatch[1]!);
+      nodeIds.add(edgeMatch[2]!);
+      edgeCount += 1;
+    }
+  }
+  return { parsedNodeCount: nodeIds.size, parsedEdgeCount: edgeCount };
+}
+
+export function resolveStructureTreeTemplateDebugFull(
+  genre: string,
+  essayTitle: string,
+  outlineSource: "template" | "backfill" | "existing"
+): {
+  inputGenre: string;
+  matchedGenre: string;
+  templatePath: string;
+  fallbackUsed: boolean;
+  templateRawLength: number;
+  parsedNodeCount: number;
+  parsedEdgeCount: number;
+  outlineSource: "template" | "backfill" | "existing";
+} {
+  const base = resolveStructureTreeTemplateDebug(genre);
+  const template = resolveStructureTreeTemplate(genre, essayTitle);
+  const stats = parseMermaidStats(template);
+  return {
+    ...base,
+    templateRawLength: template.length,
+    parsedNodeCount: stats.parsedNodeCount,
+    parsedEdgeCount: stats.parsedEdgeCount,
+    outlineSource
+  };
+}
+
 type DomainState = {
   users: UserAccount[];
   userPasswords: Record<string, string>;

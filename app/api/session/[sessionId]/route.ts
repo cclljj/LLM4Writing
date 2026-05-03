@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession, saveSession } from "@/src/lib/store";
 import { reconcileCompletedStep9Users } from "@/src/lib/engine";
-import { findActivity, hydrateDomainState, resolvePromptConfigForActivity, resolveStructureTreeTemplate, resolveStructureTreeTemplateDebug } from "@/src/lib/mock-data";
+import { findActivity, hydrateDomainState, resolvePromptConfigForActivity, resolveStructureTreeTemplate, resolveStructureTreeTemplateDebugFull } from "@/src/lib/mock-data";
 
 function isSingleNodeOutline(outline: string): boolean {
   const raw = outline.trim();
@@ -65,16 +65,22 @@ export async function GET(_: Request, context: { params: Promise<{ sessionId: st
       changed = true;
     }
     if (activity) {
-      session.structureTreeDebug = resolveStructureTreeTemplateDebug(activity.genre);
       const structureTreeTemplate = resolveStructureTreeTemplate(activity.genre, activity.title);
+      let outlineBackfilled = false;
       if (structureTreeTemplate) {
         session.participants.forEach((participant) => {
           if (isSingleNodeOutline(session.outlines?.[participant] ?? "")) {
             session.outlines[participant] = structureTreeTemplate;
+            outlineBackfilled = true;
             changed = true;
           }
         });
       }
+      session.structureTreeDebug = resolveStructureTreeTemplateDebugFull(
+        activity.genre,
+        activity.title,
+        outlineBackfilled ? "backfill" : "existing"
+      );
     }
   }
   if (!session.step3SubmittedOutlines || typeof session.step3SubmittedOutlines !== "object") {
