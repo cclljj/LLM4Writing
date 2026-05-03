@@ -311,6 +311,8 @@ export default function StudentPage() {
   const [isSuggestingStep6, setIsSuggestingStep6] = useState(false);
   const [isCompletingStep6, setIsCompletingStep6] = useState(false);
   const [savedDraft6Text, setSavedDraft6Text] = useState("");
+  const [isCompletingStep8, setIsCompletingStep8] = useState(false);
+  const [savedDraft8Text, setSavedDraft8Text] = useState("");
   const [step6RefUser, setStep6RefUser] = useState("");
   const outlineCanvasRef = useRef<HTMLDivElement | null>(null);
 
@@ -356,7 +358,9 @@ export default function StudentPage() {
       setStep6RefUser((prev) => (prev ? prev : loginUser));
     }
     if (session.currentStep === 8) {
-      setDraftText(session.draftStep8[loginUser] ?? session.draftStep6[loginUser] ?? "");
+      const latestDraft = session.draftStep8[loginUser] ?? session.draftStep6[loginUser] ?? "";
+      setDraftText(latestDraft);
+      setSavedDraft8Text(latestDraft);
       setShowDraftEditor(false);
     }
     if (session.currentStep === 3 || session.currentStep === 4) {
@@ -753,6 +757,28 @@ export default function StudentPage() {
     }
   }
 
+  async function completeStep8ToStep9() {
+    if (!session || currentStep !== 8) return;
+    setError("");
+    setIsCompletingStep8(true);
+    try {
+      const response = await fetch("/api/session/step8/complete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: session.id, draft: draftText })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setError(data.error ?? "step8_complete_failed");
+        return;
+      }
+      setSavedDraft8Text(draftText);
+      setSession(data);
+    } finally {
+      setIsCompletingStep8(false);
+    }
+  }
+
   const currentStep = session?.currentStep ?? 1;
   const currentMode = getMode(currentStep);
   const currentModeLabel =
@@ -883,6 +909,9 @@ export default function StudentPage() {
     if (type === "draft6") {
       setSavedDraft6Text(content);
     }
+    if (type === "draft8") {
+      setSavedDraft8Text(content);
+    }
     setSession(data);
   }
 
@@ -966,6 +995,7 @@ export default function StudentPage() {
   const ownStep7Report = session && loginUser ? session.reports.step7[loginUser] : undefined;
   const ownStep10Report = session && loginUser ? session.reports.step10[loginUser] : undefined;
   const unsavedDraft6Chars = currentStep === 6 && draftText !== savedDraft6Text ? draftText.length : 0;
+  const unsavedDraft8Chars = currentStep === 8 && draftText !== savedDraft8Text ? draftText.length : 0;
   const displaySchool = profile?.school || loginSchool;
   const displayName = profile?.name || loginName;
   const identityLabel =
@@ -1730,12 +1760,25 @@ export default function StudentPage() {
                     </button>
                   </div>
                 ) : null}
+                {currentStep === 8 ? (
+                  <div style={{ width: 180 }}>
+                    <button type="button" className="secondary" onClick={completeStep8ToStep9} disabled={isCompletingStep8}>
+                      完成潤飾步驟
+                    </button>
+                  </div>
+                ) : null}
               </div>
               {currentStep === 6 && isSuggestingStep6 ? (
                 <small style={{ display: "block", marginTop: 6, color: "#94a3b8" }}>AI 正在分析你的文章並產生修改建議，請稍候...</small>
               ) : null}
+              {currentStep === 6 && isCompletingStep6 ? (
+                <small style={{ display: "block", marginTop: 6, color: "#94a3b8" }}>AI 正在產生步驟 7 分析回饋，請稍候...</small>
+              ) : null}
               {currentStep === 6 ? (
                 <small style={{ display: "block", marginTop: 8, color: "#94a3b8" }}>未儲存字數：{unsavedDraft6Chars}</small>
+              ) : null}
+              {currentStep === 8 ? (
+                <small style={{ display: "block", marginTop: 8, color: "#94a3b8" }}>未儲存字數：{unsavedDraft8Chars}</small>
               ) : null}
             </div>
           ) : null}
