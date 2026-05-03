@@ -790,6 +790,27 @@ export default function StudentPage() {
     }
   }
 
+  async function backStep8ToStep6() {
+    if (!session || currentStep !== 8) return;
+    setError("");
+    setIsCompletingStep8(true);
+    try {
+      const response = await fetch("/api/session/step8/back-to-step6", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: session.id })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setError(data.error ?? "step8_back_to_step6_failed");
+        return;
+      }
+      setSession(data);
+    } finally {
+      setIsCompletingStep8(false);
+    }
+  }
+
   const currentStep = session && loginUser ? session.personalSteps?.[loginUser] ?? session.currentStep : session?.currentStep ?? 1;
   const currentMode = getMode(currentStep);
   const currentModeLabel =
@@ -1768,6 +1789,13 @@ export default function StudentPage() {
                   <div style={{ width: 180 }}>
                     <button type="button" className="secondary" onClick={requestStep6Suggestion} disabled={isSuggestingStep6 || isCompletingStep6}>
                       AI 修改建議
+                    </button>
+                  </div>
+                ) : null}
+                {currentStep === 8 ? (
+                  <div style={{ width: 180 }}>
+                    <button type="button" className="secondary" onClick={backStep8ToStep6} disabled={isCompletingStep8}>
+                      回到步驟六
                     </button>
                   </div>
                 ) : null}
