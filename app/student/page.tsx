@@ -1400,9 +1400,11 @@ export default function StudentPage() {
             <div style={{ marginTop: 8 }}>
               <span className="badge">{stepModeLine}</span>
             </div>
-            <p>
-              <small>這是介紹詞</small>
-            </p>
+            {[1, 2, 3, 4, 6, 8, 9].includes(currentStep) ? (
+              <p>
+                <small>這是介紹詞</small>
+              </p>
+            ) : null}
             <p>
               <small>
                 {currentStep >= 5
