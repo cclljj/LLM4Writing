@@ -50,6 +50,7 @@ export interface SessionState {
   activityId?: string;
   activityTitle?: string;
   activityEssayDescription?: string;
+  activitySupplemental?: string;
   groupId?: string;
   groupName?: string;
   promptConfig: PromptConfig;
@@ -75,6 +76,7 @@ export interface StartSessionPayload {
   activityId?: string;
   activityTitle?: string;
   activityEssayDescription?: string;
+  activitySupplemental?: string;
   groupId?: string;
   groupName?: string;
   promptConfig?: PromptConfig;

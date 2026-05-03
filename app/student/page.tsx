@@ -1209,36 +1209,18 @@ export default function StudentPage() {
           </div>
 
           <div className="card" style={{ borderColor: "#93c5fd", background: "#eff6ff", padding: "10px 14px" }}>
-            <div
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: 10,
-                alignItems: "center",
-                lineHeight: 1.4
-              }}
-            >
-              <strong>題目：{session.activityTitle ?? currentActivity?.title ?? "未命名課程"}</strong>
-              <span>班級：{currentActivity?.classNumber ?? "—"}</span>
-              <span>文體：{currentActivity?.genre ?? "—"}</span>
-              <span>時長：{currentActivity?.durationMinutes ?? "—"} 分鐘</span>
-              <span>小組：{session.groupName ?? "—"}</span>
-              <span>組員：{session.participants.length > 0 ? session.participants.join("、") : "—"}</span>
-            </div>
-            <div style={{ marginTop: 8 }}>
-              <p style={{ margin: 0 }}><strong>引導說明：</strong></p>
-              <div
-                style={{ marginTop: 4 }}
-                dangerouslySetInnerHTML={{ __html: renderMessageHtml(currentActivity?.essayDescription || "—") }}
-              />
-            </div>
-            <div style={{ marginTop: 8 }}>
-              <p style={{ margin: 0 }}><strong>補充資料：</strong></p>
-              <div
-                style={{ marginTop: 4 }}
-                dangerouslySetInnerHTML={{ __html: renderMessageHtml(currentActivity?.supplemental || "—") }}
-              />
-            </div>
+            <p style={{ margin: 0, fontWeight: 700, fontSize: 20, lineHeight: 1.4 }}>
+              {session.activityTitle ?? currentActivity?.title ?? "未命名課程"}
+            </p>
+            <p style={{ margin: "6px 0 0", lineHeight: 1.5 }}>
+              文體：{currentActivity?.genre ?? "—"} / 時長：{currentActivity?.durationMinutes ?? "—"} 分鐘
+            </p>
+            <p style={{ margin: "4px 0 0", lineHeight: 1.5 }}>
+              班級：{currentActivity?.classNumber ?? "—"} / 組別：{session.groupName ?? "—"}
+            </p>
+            <p style={{ margin: "4px 0 0", lineHeight: 1.5 }}>
+              組員名單：{session.participants.length > 0 ? session.participants.join("、") : "—"}
+            </p>
           </div>
 
           {historyReviewSteps.length > 0 ? (

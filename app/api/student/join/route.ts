@@ -75,6 +75,7 @@ export async function POST(request: NextRequest) {
       activityId: activity.id,
       activityTitle: activity.title,
       activityEssayDescription: activity.essayDescription ?? "",
+      activitySupplemental: activity.supplemental ?? "",
       groupId: group?.groupId ?? "g-auto",
       groupName: group?.groupName ?? "未分組",
       promptConfig: resolvePromptConfigForActivity(activity.id)
