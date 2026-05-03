@@ -1232,8 +1232,12 @@ export default function StudentPage() {
                 dangerouslySetInnerHTML={{ __html: renderMessageHtml(currentActivity?.essayDescription || "—") }}
               />
             </div>
-            <div>
-              <p style={{ margin: "6px 0 0" }}>補充資料：{currentActivity?.supplemental || "—"}</p>
+            <div style={{ marginTop: 8 }}>
+              <p style={{ margin: 0 }}><strong>補充資料：</strong></p>
+              <div
+                style={{ marginTop: 4 }}
+                dangerouslySetInnerHTML={{ __html: renderMessageHtml(currentActivity?.supplemental || "—") }}
+              />
             </div>
           </div>
 
