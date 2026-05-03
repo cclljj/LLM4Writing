@@ -1,6 +1,6 @@
 import { Activity, ActivityGroup, PromptConfig, UserAccount } from "@/src/lib/types";
 import postgres, { Sql } from "postgres";
-import { promises as fs } from "node:fs";
+import { existsSync, promises as fs, readFileSync } from "node:fs";
 import path from "node:path";
 import systemPromptConfig from "@/src/config/system-prompt-config.json";
 import { getDatabaseUrl, getPostgresClientOptions, isDatabaseEnabled } from "@/src/lib/db-config";
@@ -35,6 +35,24 @@ type RawSystemPromptConfig = {
   step9Questions?: Record<string, string>;
   writingTasks?: Record<string, { questionBanks?: Record<string, string[]> }>;
 };
+
+function loadStepOpeningTexts(): Record<string, string> {
+  const steps = ["1", "2", "3", "4", "6", "8", "9"];
+  const baseDir = path.join(process.cwd(), "src", "config", "step-opening");
+  const result: Record<string, string> = {};
+  steps.forEach((step) => {
+    const filePath = path.join(baseDir, `${step}.txt`);
+    if (!existsSync(filePath)) return;
+    try {
+      result[step] = readFileSync(filePath, "utf8");
+    } catch {
+      // Ignore per-file read errors to avoid breaking prompt config generation.
+    }
+  });
+  return result;
+}
+
+const stepOpeningTexts = loadStepOpeningTexts();
 
 type DomainState = {
   users: UserAccount[];
@@ -509,7 +527,8 @@ export function resolvePromptConfigForActivity(activityId: string): PromptConfig
     stepPrompts,
     subStepPrompts,
     questionBanks: { ...baseQuestionBanks, ...scopedQuestionBanks },
-    step9Questions
+    step9Questions,
+    stepOpenings: stepOpeningTexts
   };
 }
 

@@ -24,6 +24,7 @@ export interface PromptConfig {
   subStepPrompts: Record<string, string>;
   questionBanks: Record<string, string[]>;
   step9Questions?: Record<string, string>;
+  stepOpenings?: Record<string, string>;
 }
 
 export interface ChatMessage {

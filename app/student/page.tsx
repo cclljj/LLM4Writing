@@ -45,6 +45,7 @@ type SessionState = {
   reports: { step5?: string; step7: Record<string, string>; step10: Record<string, string> };
   promptConfig?: {
     questionBanks?: Record<string, string[]>;
+    stepOpenings?: Record<string, string>;
   };
   messages: Array<{
     id: string;
@@ -1028,6 +1029,7 @@ export default function StudentPage() {
   const ownStep10Report = session && loginUser ? session.reports.step10[loginUser] : undefined;
   const unsavedDraft6Chars = currentStep === 6 && draftText !== savedDraft6Text ? draftText.length : 0;
   const unsavedDraft8Chars = currentStep === 8 && draftText !== savedDraft8Text ? draftText.length : 0;
+  const stepOpeningText = session?.promptConfig?.stepOpenings?.[String(currentStep)]?.trim() ?? "";
   return (
     <main>
       {error ? (
@@ -1400,9 +1402,11 @@ export default function StudentPage() {
             <div style={{ marginTop: 8 }}>
               <span className="badge">{stepModeLine}</span>
             </div>
-            {[1, 2, 3, 4, 6, 8, 9].includes(currentStep) ? (
+            {[1, 2, 3, 4, 6, 8, 9].includes(currentStep) && stepOpeningText ? (
               <p>
-                <small>這是介紹詞</small>
+                <small>
+                  <span dangerouslySetInnerHTML={{ __html: renderMessageHtml(stepOpeningText) }} />
+                </small>
               </p>
             ) : null}
             <p>

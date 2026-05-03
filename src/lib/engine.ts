@@ -137,7 +137,7 @@ export function createSession(payload: StartSessionPayload): SessionState {
     activitySupplemental: payload.activitySupplemental,
     groupId: payload.groupId,
     groupName: payload.groupName,
-    promptConfig: payload.promptConfig ?? { stepPrompts: {}, subStepPrompts: {}, questionBanks: {}, step9Questions: {} },
+    promptConfig: payload.promptConfig ?? { stepPrompts: {}, subStepPrompts: {}, questionBanks: {}, step9Questions: {}, stepOpenings: {} },
     stepState: { step1Substep: 1, step2Substep: 1 },
     outlines: {},
     step3SubmittedOutlines: {},
@@ -188,7 +188,7 @@ function normalizeSessionRuntimeShape(session: SessionState): void {
     session.stepState.step2Substep = 1;
   }
   if (!session.promptConfig || typeof session.promptConfig !== "object") {
-    session.promptConfig = { stepPrompts: {}, subStepPrompts: {}, questionBanks: {}, step9Questions: {} };
+    session.promptConfig = { stepPrompts: {}, subStepPrompts: {}, questionBanks: {}, step9Questions: {}, stepOpenings: {} };
   }
   if (!session.promptConfig.stepPrompts || typeof session.promptConfig.stepPrompts !== "object") {
     session.promptConfig.stepPrompts = {};
@@ -201,6 +201,9 @@ function normalizeSessionRuntimeShape(session: SessionState): void {
   }
   if (!session.promptConfig.step9Questions || typeof session.promptConfig.step9Questions !== "object") {
     session.promptConfig.step9Questions = {};
+  }
+  if (!session.promptConfig.stepOpenings || typeof session.promptConfig.stepOpenings !== "object") {
+    session.promptConfig.stepOpenings = {};
   }
   if (!session.reports || typeof session.reports !== "object") {
     session.reports = { step7: {}, step10: {} };
