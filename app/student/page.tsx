@@ -520,6 +520,12 @@ export default function StudentPage() {
     }
 
     const toQuestionText = (text: string): string | null => {
+      if (text.startsWith("引導說明：")) {
+        return text;
+      }
+      if (text.startsWith("補充資料：")) {
+        return text;
+      }
       if (text.includes("子步驟 ")) {
         const idx = text.indexOf("子步驟 ");
         const extracted = text.slice(idx).trim();
