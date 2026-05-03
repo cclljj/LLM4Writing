@@ -1962,6 +1962,9 @@ export default function StudentPage() {
                 <button type="button" className="secondary" onClick={completeStep6ToStep8} disabled={isCompletingStep6 || isSuggestingStep6}>
                   完成文章撰寫，進入下一步驟
                 </button>
+                {isCompletingStep6 ? (
+                  <small style={{ display: "block", marginTop: 6, color: "#94a3b8" }}>AI 正在處理中，請稍候...</small>
+                ) : null}
               </div>
             ) : null}
             {currentStep === 4 && step4CompletedByMe && !allStep4Completed ? (
