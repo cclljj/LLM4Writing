@@ -1,0 +1,40 @@
+```mermaid
+flowchart TD
+    A["說明文<br/>作文題目"]
+
+    A --> B["總說"]
+    A --> C["分說"]
+    A --> D["總說"]
+
+    %% 左側總說
+    B --> B1["說明具體<br/>事物的特點"]
+    B --> B2["說明抽象<br/>事理的概念"]
+
+    %% 分說
+    C --> C1["分項說明（一）"]
+    C --> C2["分項說明（二）"]
+    C --> C3["分項說明（三）"]
+
+    C1 --> C11["點擊編輯"]
+    C1 --> C12["點擊編輯"]
+
+    C2 --> C21["點擊編輯"]
+    C2 --> C22["點擊編輯"]
+
+    C3 --> C31["點擊編輯"]
+    C3 --> C32["點擊編輯"]
+
+    %% 右側總說
+    D --> D1["總結特點"]
+
+    %% 樣式
+    classDef top fill:#c6504d,color:#fff,stroke:#c6504d;
+    classDef main fill:#8265a7,color:#fff,stroke:#8265a7;
+    classDef sub fill:#47acc2,color:#fff,stroke:#47acc2;
+    classDef edit fill:#f2994a,color:#fff,stroke:#f2994a;
+
+    class A top;
+    class B,C,D main;
+    class B1,B2,C1,C2,C3,D1 sub;
+    class C11,C12,C21,C22,C31,C32 edit;
+```
