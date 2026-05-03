@@ -78,7 +78,23 @@ function getStep9Questions(session: SessionState): string[] {
   return getStep9QuestionsFromConfig(session.promptConfig?.step9Questions);
 }
 
+function appendStepOpeningToMessages(session: SessionState, step: number): void {
+  const opening = session.promptConfig?.stepOpenings?.[String(step)]?.trim();
+  if (!opening) return;
+  session.messages.push(
+    makeMessage({
+      role: "system",
+      step,
+      text: `步驟 ${step} 介紹詞：\n${opening}`
+    })
+  );
+}
+
 function initializeStepQuestion(session: SessionState, step: number): void {
+  if ([1, 2, 3, 4, 6, 8, 9].includes(step)) {
+    appendStepOpeningToMessages(session, step);
+  }
+
   if (step === 1) {
     session.stepState.step1Substep = 1;
     const q = buildStep1Question(session);
