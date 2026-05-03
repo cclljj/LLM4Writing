@@ -985,6 +985,11 @@ export default function StudentPage() {
               {interactiveMessages.length === 0 ? (
                 <small>請先描述你目前想建構的文章主軸，或直接提出你在結構樹規劃上遇到的問題。</small>
               ) : null}
+              {isSendingMessage ? (
+                <p style={{ marginTop: 10 }}>
+                  <small>AI 正在整理回覆中，請稍候...</small>
+                </p>
+              ) : null}
               {step3CompletedByMe ? (
                 <p style={{ marginTop: 10 }}>
                   <small>
