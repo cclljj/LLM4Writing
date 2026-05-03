@@ -315,6 +315,7 @@ export default function StudentPage() {
   const [isCompletingStep8, setIsCompletingStep8] = useState(false);
   const [savedDraft8Text, setSavedDraft8Text] = useState("");
   const [step6RefUser, setStep6RefUser] = useState("");
+  const [historyReviewExpanded, setHistoryReviewExpanded] = useState<Record<number, boolean>>({});
   const outlineCanvasRef = useRef<HTMLDivElement | null>(null);
   const lastOwnStepRef = useRef<number | null>(null);
 
@@ -623,6 +624,19 @@ export default function StudentPage() {
     if (!submitted) return null;
     return buildOutlinePreview(submitted);
   }, [loginUser, session]);
+  useEffect(() => {
+    if (historyReviewSteps.length === 0) {
+      setHistoryReviewExpanded({});
+      return;
+    }
+    setHistoryReviewExpanded((prev) => {
+      const next: Record<number, boolean> = {};
+      historyReviewSteps.forEach((review) => {
+        next[review.step] = prev[review.step] ?? false;
+      });
+      return next;
+    });
+  }, [historyReviewSteps]);
   const currentActivity = useMemo(
     () => {
       const all = [...classCourses];
@@ -1246,13 +1260,26 @@ export default function StudentPage() {
               {historyReviewSteps.map((review) => (
                 <div key={`review-step-wrap-${review.step}`}>
                   <div className="card">
-                    <h2>
-                      Step {review.step} - {review.title}
-                    </h2>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                      <h2 style={{ margin: 0 }}>
+                        Step {review.step} - {review.title}
+                      </h2>
+                      <button
+                        type="button"
+                        className="secondary"
+                        aria-expanded={historyReviewExpanded[review.step] ?? false}
+                        onClick={() =>
+                          setHistoryReviewExpanded((prev) => ({ ...prev, [review.step]: !(prev[review.step] ?? false) }))
+                        }
+                      >
+                        {historyReviewExpanded[review.step] ? "▾ 閉合" : "▸ 展開"}
+                      </button>
+                    </div>
                     <p>
                       <small>此為歷史步驟回顧（僅本人與 AI 互動）。</small>
                     </p>
                   </div>
+                  {historyReviewExpanded[review.step] ? (
                   <div className="card">
                     <h2>互動內容</h2>
                     {review.messages.length > 0 ? (
@@ -1317,6 +1344,7 @@ export default function StudentPage() {
                       </div>
                     ) : null}
                   </div>
+                  ) : null}
                 </div>
               ))}
             </>
