@@ -306,6 +306,7 @@ export default function StudentPage() {
   const [showDraftEditor, setShowDraftEditor] = useState(false);
   const [showStep6OutlineRef, setShowStep6OutlineRef] = useState(false);
   const [isSendingMessage, setIsSendingMessage] = useState(false);
+  const [isLoadingOverview, setIsLoadingOverview] = useState(false);
   const [isAutoAdvancingStep5, setIsAutoAdvancingStep5] = useState(false);
   const [isSuggestingStep6, setIsSuggestingStep6] = useState(false);
   const [isCompletingStep6, setIsCompletingStep6] = useState(false);
@@ -770,21 +771,26 @@ export default function StudentPage() {
   }
 
   async function refreshOverview() {
-    const response = await fetch("/api/student/overview");
-    const data = await response.json();
-    if (!response.ok) {
-      setError(data.error ?? "overview_failed");
-      return;
-    }
+    setIsLoadingOverview(true);
+    try {
+      const response = await fetch("/api/student/overview");
+      const data = await response.json();
+      if (!response.ok) {
+        setError(data.error ?? "overview_failed");
+        return;
+      }
 
-    setProfile(data.profile ?? null);
-    setMissingFields(data.missingFields ?? []);
-    setClassCourses(data.classCourses ?? []);
-    setUpcomingCourses(data.upcomingCourses ?? []);
-    setActiveCourses(data.activeCourses ?? []);
-    setPausedCourses(data.pausedCourses ?? []);
-    setParticipatedCourses(data.participatedCourses ?? []);
-    setError("");
+      setProfile(data.profile ?? null);
+      setMissingFields(data.missingFields ?? []);
+      setClassCourses(data.classCourses ?? []);
+      setUpcomingCourses(data.upcomingCourses ?? []);
+      setActiveCourses(data.activeCourses ?? []);
+      setPausedCourses(data.pausedCourses ?? []);
+      setParticipatedCourses(data.participatedCourses ?? []);
+      setError("");
+    } finally {
+      setIsLoadingOverview(false);
+    }
   }
 
   async function joinActivity(activityId: string) {
@@ -998,6 +1004,11 @@ export default function StudentPage() {
 
       {!session ? (
       <>
+      {isLoadingOverview ? (
+        <div className="card" style={{ borderColor: "#bfdbfe", background: "#eff6ff" }}>
+          <small>系統正在載入資料中，請稍候...</small>
+        </div>
+      ) : null}
       <div className="card">
         <h2>進行中課程（本班）</h2>
         {activeCourses.length === 0 ? <small>目前沒有進行中的課程。</small> : null}
@@ -1769,6 +1780,7 @@ export default function StudentPage() {
             ) : null}
 
             {interactiveMessages.map((message) => (
+              currentStep === 6 && message.kind === "student" ? null : (
               <div key={message.id} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
                 {currentStep === 4 && message.kind === "student" ? (
                   <p style={{ margin: 0 }}>
@@ -1793,7 +1805,7 @@ export default function StudentPage() {
                   </>
                 )}
               </div>
-            ))}
+            )))}
 
             {interactiveMessages.length === 0 ? <small>目前此步驟尚無互動內容。</small> : null}
             {currentStep === 4 && step4CompletedPeers.length > 0 ? (
