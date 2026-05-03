@@ -280,8 +280,6 @@ function buildOutlinePreview(outline: string): OutlinePreview {
 export default function StudentPage() {
   const router = useRouter();
   const [loginUser, setLoginUser] = useState("");
-  const [loginName, setLoginName] = useState("");
-  const [loginSchool, setLoginSchool] = useState("");
   const [profile, setProfile] = useState<{ name?: string; school?: string; classNumber?: string; ownerTeacherUsername?: string } | null>(null);
   const [missingFields, setMissingFields] = useState<string[]>([]);
   const [classCourses, setClassCourses] = useState<Course[]>([]);
@@ -325,8 +323,6 @@ export default function StudentPage() {
       .then((data) => {
         if (data?.authenticated) {
           setLoginUser(data.user.username);
-          setLoginName(data.user.name ?? "");
-          setLoginSchool(data.user.school ?? "");
         }
       })
       .catch(() => undefined);
@@ -832,11 +828,6 @@ export default function StudentPage() {
           : "個人反思";
   const isInputEnabled = currentMode !== "non_interactive";
 
-  async function logout() {
-    await fetch("/api/auth/logout", { method: "POST" });
-    window.location.href = "/login";
-  }
-
   async function refreshOverview() {
     setIsLoadingOverview(true);
     try {
@@ -1037,27 +1028,8 @@ export default function StudentPage() {
   const ownStep10Report = session && loginUser ? session.reports.step10[loginUser] : undefined;
   const unsavedDraft6Chars = currentStep === 6 && draftText !== savedDraft6Text ? draftText.length : 0;
   const unsavedDraft8Chars = currentStep === 8 && draftText !== savedDraft8Text ? draftText.length : 0;
-  const displaySchool = profile?.school || loginSchool;
-  const displayName = profile?.name || loginName;
-  const identityLabel =
-    displaySchool && displayName && loginUser ? `${displaySchool} – ${displayName} (${loginUser})` : loginUser || "學生";
-
   return (
     <main>
-      <div className="card">
-        <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
-          <h1 style={{ marginBottom: 0 }}>學生端課程首頁</h1>
-          <div>
-            <span className="badge" style={{ marginRight: 8 }}>
-              {identityLabel}
-            </span>
-            <button type="button" className="secondary" style={{ width: "auto" }} onClick={logout}>
-              登出
-            </button>
-          </div>
-        </div>
-      </div>
-
       {error ? (
         <div className="card" style={{ borderColor: "#fecaca", background: "#fff1f2" }}>
           <small>{error}</small>
@@ -1231,21 +1203,13 @@ export default function StudentPage() {
                   type="button"
                   className="secondary"
                   style={{ width: "auto" }}
-                  onClick={() => router.back()}
-                >
-                  返回上一層
-                </button>
-                <button
-                  type="button"
-                  className="secondary"
-                  style={{ width: "auto" }}
                   onClick={() => {
                     setSession(null);
                     setPreparingCourse(null);
                     refreshOverview().catch(() => undefined);
                   }}
                 >
-                  返回課程清單
+                  返回學生端課程首頁
                 </button>
               </div>
             </div>
