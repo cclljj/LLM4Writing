@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession, saveSession } from "@/src/lib/store";
 import { reconcileCompletedStep9Users } from "@/src/lib/engine";
+import { hydrateDomainState, resolvePromptConfigForActivity } from "@/src/lib/mock-data";
 
 export async function GET(_: Request, context: { params: Promise<{ sessionId: string }> }) {
   const { sessionId } = await context.params;
@@ -10,6 +11,23 @@ export async function GET(_: Request, context: { params: Promise<{ sessionId: st
     return NextResponse.json({ error: "session_not_found" }, { status: 404 });
   }
   let changed = false;
+  await hydrateDomainState();
+  if (session.activityId) {
+    const resolvedConfig = resolvePromptConfigForActivity(session.activityId);
+    const nextStepOpenings = {
+      ...(resolvedConfig.stepOpenings ?? {}),
+      ...(session.promptConfig?.stepOpenings ?? {})
+    };
+    const hadStepOpenings = Boolean(session.promptConfig?.stepOpenings && Object.keys(session.promptConfig.stepOpenings).length > 0);
+    if (!hadStepOpenings) {
+      session.promptConfig = {
+        ...resolvedConfig,
+        ...session.promptConfig,
+        stepOpenings: nextStepOpenings
+      };
+      changed = true;
+    }
+  }
   if (!session.step3SubmittedOutlines || typeof session.step3SubmittedOutlines !== "object") {
     session.step3SubmittedOutlines = {};
     changed = true;

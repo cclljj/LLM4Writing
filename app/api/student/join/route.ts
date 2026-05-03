@@ -45,6 +45,23 @@ export async function POST(request: NextRequest) {
       (s) => s.workflow === "spec10" && s.activityId === activity.id && s.participants.includes(user.username)
     );
     if (existing) {
+      const resolvedConfig = resolvePromptConfigForActivity(activity.id);
+      const nextStepOpenings = {
+        ...(resolvedConfig.stepOpenings ?? {}),
+        ...(existing.promptConfig?.stepOpenings ?? {})
+      };
+      const promptConfigPatched =
+        !existing.promptConfig?.stepOpenings ||
+        Object.keys(existing.promptConfig.stepOpenings).length === 0 ||
+        Object.keys(nextStepOpenings).length !== Object.keys(existing.promptConfig.stepOpenings).length;
+      if (promptConfigPatched) {
+        existing.promptConfig = {
+          ...resolvedConfig,
+          ...existing.promptConfig,
+          stepOpenings: nextStepOpenings
+        };
+      }
+
       const messageJoinedUsers = Array.from(
         new Set(
           existing.messages
@@ -61,7 +78,7 @@ export async function POST(request: NextRequest) {
       const joinedChanged =
         nextJoinedUsers.length !== prevJoinedUsers.length ||
         nextJoinedUsers.some((name) => !prevJoinedUsers.includes(name));
-      if (joinedChanged) {
+      if (joinedChanged || promptConfigPatched) {
         existing.joinedUsers = nextJoinedUsers;
         await saveSession(existing);
       }
