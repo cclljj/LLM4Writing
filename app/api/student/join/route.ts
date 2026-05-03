@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/src/lib/auth-server";
 import { createSession } from "@/src/lib/engine";
-import { findActivity, hydrateDomainState, resolvePromptConfigForActivity } from "@/src/lib/mock-data";
+import { findActivity, hydrateDomainState, resolvePromptConfigForActivity, resolveStructureTreeTemplate } from "@/src/lib/mock-data";
 import { listSessions, saveSession } from "@/src/lib/store";
 
 export async function POST(request: NextRequest) {
@@ -45,6 +45,10 @@ export async function POST(request: NextRequest) {
       (s) => s.workflow === "spec10" && s.activityId === activity.id && s.participants.includes(user.username)
     );
     if (existing) {
+      if (!existing.outlines || typeof existing.outlines !== "object") {
+        existing.outlines = {};
+      }
+      const structureTreeTemplate = resolveStructureTreeTemplate(activity.genre, activity.title);
       const resolvedConfig = resolvePromptConfigForActivity(activity.id);
       const nextStepOpenings = {
         ...(resolvedConfig.stepOpenings ?? {}),
@@ -60,6 +64,13 @@ export async function POST(request: NextRequest) {
           ...existing.promptConfig,
           stepOpenings: nextStepOpenings
         };
+      }
+      const outlinePatched = Boolean(
+        structureTreeTemplate &&
+        (!existing.outlines?.[user.username] || !existing.outlines[user.username].trim())
+      );
+      if (outlinePatched) {
+        existing.outlines[user.username] = structureTreeTemplate;
       }
 
       const messageJoinedUsers = Array.from(
@@ -78,7 +89,7 @@ export async function POST(request: NextRequest) {
       const joinedChanged =
         nextJoinedUsers.length !== prevJoinedUsers.length ||
         nextJoinedUsers.some((name) => !prevJoinedUsers.includes(name));
-      if (joinedChanged || promptConfigPatched) {
+      if (joinedChanged || promptConfigPatched || outlinePatched) {
         existing.joinedUsers = nextJoinedUsers;
         await saveSession(existing);
       }
@@ -97,6 +108,12 @@ export async function POST(request: NextRequest) {
       groupName: group?.groupName ?? "未分組",
       promptConfig: resolvePromptConfigForActivity(activity.id)
     });
+    const structureTreeTemplate = resolveStructureTreeTemplate(activity.genre, activity.title);
+    if (structureTreeTemplate) {
+      participants.forEach((participant) => {
+        session.outlines[participant] = structureTreeTemplate;
+      });
+    }
     session.joinedUsers = [user.username];
 
     await saveSession(session);

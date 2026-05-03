@@ -3,6 +3,7 @@ import postgres, { Sql } from "postgres";
 import { existsSync, promises as fs, readFileSync } from "node:fs";
 import path from "node:path";
 import systemPromptConfig from "@/src/config/system-prompt-config.json";
+import structureTreeConfig from "@/src/config/structure-tree.json";
 import { getDatabaseUrl, getPostgresClientOptions, isDatabaseEnabled } from "@/src/lib/db-config";
 
 type Essay = {
@@ -53,6 +54,26 @@ function loadStepOpeningTexts(): Record<string, string> {
 }
 
 const stepOpeningTexts = loadStepOpeningTexts();
+
+const structureTreeMapByGenre = structureTreeConfig as Record<string, string>;
+
+function replaceEssayTitleInTemplate(template: string, essayTitle: string): string {
+  const normalizedTitle = essayTitle.trim() || "未命名題目";
+  return template.replaceAll("作文題目", normalizedTitle);
+}
+
+export function resolveStructureTreeTemplate(genre: string, essayTitle: string): string {
+  const relPath = structureTreeMapByGenre[genre]?.trim();
+  if (!relPath) return "";
+  const filePath = path.join(process.cwd(), "src", "config", relPath);
+  if (!existsSync(filePath)) return "";
+  try {
+    const raw = readFileSync(filePath, "utf8");
+    return replaceEssayTitleInTemplate(raw, essayTitle);
+  } catch {
+    return "";
+  }
+}
 
 type DomainState = {
   users: UserAccount[];
