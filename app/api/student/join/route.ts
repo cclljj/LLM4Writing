@@ -11,12 +11,20 @@ function isSingleNodeOutline(outline: string): boolean {
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean)
-    .filter((line) => !line.startsWith("graph "));
+    .filter((line) => !line.startsWith("graph "))
+    .filter((line) => !line.startsWith("flowchart "))
+    .filter((line) => !line.startsWith("```"));
   const nodeIds = new Set<string>();
   for (const line of lines) {
     const nodeMatch = line.match(/^([A-Za-z0-9_-]+)\s*\["([\s\S]*)"\]$/);
     if (nodeMatch) {
       nodeIds.add(nodeMatch[1]!);
+      continue;
+    }
+    const edgeWithLabelMatch = line.match(/^([A-Za-z0-9_-]+)\s*-->\s*([A-Za-z0-9_-]+)\s*\["([\s\S]*)"\]$/);
+    if (edgeWithLabelMatch) {
+      nodeIds.add(edgeWithLabelMatch[1]!);
+      nodeIds.add(edgeWithLabelMatch[2]!);
       continue;
     }
     const edgeMatch = line.match(/^([A-Za-z0-9_-]+)\s*-->\s*([A-Za-z0-9_-]+)$/);

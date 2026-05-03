@@ -228,7 +228,9 @@ function fromMermaid(text: string): OutlineNode[] {
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean)
-    .filter((line) => !line.startsWith("graph "));
+    .filter((line) => !line.startsWith("graph "))
+    .filter((line) => !line.startsWith("flowchart "))
+    .filter((line) => !line.startsWith("```"));
 
   const nodeTextMap = new Map<string, string>();
   const parentMap = new Map<string, string | null>();
@@ -239,6 +241,15 @@ function fromMermaid(text: string): OutlineNode[] {
       const [, id, label] = nodeMatch;
       nodeTextMap.set(id, label.replaceAll('\\"', '"'));
       if (!parentMap.has(id)) parentMap.set(id, null);
+      continue;
+    }
+    const edgeWithLabelMatch = line.match(/^([A-Za-z0-9_-]+)\s*-->\s*([A-Za-z0-9_-]+)\s*\["([\s\S]*)"\]$/);
+    if (edgeWithLabelMatch) {
+      const [, parentId, childId, childLabel] = edgeWithLabelMatch;
+      parentMap.set(childId, parentId);
+      if (!parentMap.has(parentId)) parentMap.set(parentId, null);
+      if (!nodeTextMap.has(parentId)) nodeTextMap.set(parentId, parentId);
+      nodeTextMap.set(childId, childLabel.replaceAll('\\"', '"'));
       continue;
     }
     const edgeMatch = line.match(/^([A-Za-z0-9_-]+)\s*-->\s*([A-Za-z0-9_-]+)$/);
