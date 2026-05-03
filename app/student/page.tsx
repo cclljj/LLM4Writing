@@ -464,6 +464,9 @@ export default function StudentPage() {
           return;
         }
         if (m.role === "system") {
+          if (currentStep === 3) {
+            return;
+          }
           const q = toQuestionText(m.text);
           if (q) {
             result.push({ id: m.id, kind: "question", text: q, at: m.at });
