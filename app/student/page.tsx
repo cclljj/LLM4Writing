@@ -307,6 +307,10 @@ export default function StudentPage() {
   const [showStep6OutlineRef, setShowStep6OutlineRef] = useState(false);
   const [isSendingMessage, setIsSendingMessage] = useState(false);
   const [isAutoAdvancingStep5, setIsAutoAdvancingStep5] = useState(false);
+  const [isSuggestingStep6, setIsSuggestingStep6] = useState(false);
+  const [isCompletingStep6, setIsCompletingStep6] = useState(false);
+  const [savedDraft6Text, setSavedDraft6Text] = useState("");
+  const [step6RefUser, setStep6RefUser] = useState("");
   const outlineCanvasRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -343,9 +347,12 @@ export default function StudentPage() {
     if (!session || !loginUser) return;
     setOutlineText(session.outlines[loginUser] ?? "");
     if (session.currentStep === 6) {
-      setDraftText(session.draftStep6[loginUser] ?? "");
-      setShowDraftEditor(false);
+      const latestDraft = session.draftStep6[loginUser] ?? "";
+      setDraftText(latestDraft);
+      setSavedDraft6Text(latestDraft);
+      setShowDraftEditor(true);
       setShowStep6OutlineRef(false);
+      setStep6RefUser((prev) => (prev ? prev : loginUser));
     }
     if (session.currentStep === 8) {
       setDraftText(session.draftStep8[loginUser] ?? session.draftStep6[loginUser] ?? "");
@@ -382,6 +389,13 @@ export default function StudentPage() {
     }, 1200);
     return () => window.clearTimeout(timer);
   }, [isAutoAdvancingStep5, session]);
+
+  useEffect(() => {
+    if (!session || !loginUser || session.currentStep !== 6) return;
+    if (!step6RefUser || !session.participants.includes(step6RefUser)) {
+      setStep6RefUser(loginUser);
+    }
+  }, [loginUser, session, step6RefUser]);
 
   useEffect(() => {
     if (!(session?.currentStep === 3 || session?.currentStep === 4) || !loginUser) return;
@@ -695,6 +709,49 @@ export default function StudentPage() {
     setSession(data);
   }
 
+  async function requestStep6Suggestion() {
+    if (!session || currentStep !== 6) return;
+    setError("");
+    setIsSuggestingStep6(true);
+    try {
+      const response = await fetch("/api/session/step6/suggest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: session.id, draft: draftText })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setError(data.error ?? "step6_suggest_failed");
+        return;
+      }
+      setSession(data);
+    } finally {
+      setIsSuggestingStep6(false);
+    }
+  }
+
+  async function completeStep6ToStep8() {
+    if (!session || currentStep !== 6) return;
+    setError("");
+    setIsCompletingStep6(true);
+    try {
+      const response = await fetch("/api/session/step6/complete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: session.id, draft: draftText })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setError(data.error ?? "step6_complete_failed");
+        return;
+      }
+      setSavedDraft6Text(draftText);
+      setSession(data);
+    } finally {
+      setIsCompletingStep6(false);
+    }
+  }
+
   const currentStep = session?.currentStep ?? 1;
   const currentMode = getMode(currentStep);
   const currentModeLabel =
@@ -817,7 +874,9 @@ export default function StudentPage() {
       setError(data.error ?? "save_failed");
       return;
     }
-
+    if (type === "draft6") {
+      setSavedDraft6Text(content);
+    }
     setSession(data);
   }
 
@@ -900,6 +959,7 @@ export default function StudentPage() {
 
   const ownStep7Report = session && loginUser ? session.reports.step7[loginUser] : undefined;
   const ownStep10Report = session && loginUser ? session.reports.step10[loginUser] : undefined;
+  const unsavedDraft6Chars = currentStep === 6 && draftText !== savedDraft6Text ? draftText.length : 0;
   const displaySchool = profile?.school || loginSchool;
   const displayName = profile?.name || loginName;
   const identityLabel =
@@ -1600,46 +1660,68 @@ export default function StudentPage() {
               <h2>{currentStep === 6 ? "撰寫初稿" : "修改潤飾"}</h2>
               {currentStep === 6 ? (
                 <>
-                  <div className="row">
-                    <div style={{ width: 220 }}>
-                      <button type="button" className="secondary" onClick={() => setShowStep6OutlineRef((prev) => !prev)}>
-                        文章結構樹（唯讀參考）
-                      </button>
-                    </div>
-                  </div>
-                  {showStep6OutlineRef ? (
-                    <>
-                      <label style={{ marginTop: 10 }}>選擇要參考的結構樹</label>
-                      <select value={refUser} onChange={(e) => setRefUser(e.target.value)}>
-                        {session.participants.map((user) => (
-                          <option key={user} value={user}>
-                            {user}
-                          </option>
-                        ))}
-                      </select>
-                      <pre style={{ marginTop: 8 }}>{session.outlines[refUser] ?? "步驟 4 尚無儲存結構樹。"}</pre>
-                    </>
-                  ) : null}
+                  <label style={{ marginTop: 10 }}>同組結構樹（唯讀）</label>
+                  <select value={step6RefUser || loginUser} onChange={(e) => setStep6RefUser(e.target.value)}>
+                    {session.participants.map((user) => (
+                      <option key={user} value={user}>
+                        {user}
+                      </option>
+                    ))}
+                  </select>
+                  {(() => {
+                    const preview = buildOutlinePreview(session.outlines[step6RefUser || loginUser] ?? "");
+                    return (
+                      <div style={{ marginTop: 10, overflow: "auto", border: "1px solid #e5e7eb", borderRadius: 8 }}>
+                        <svg width={preview.width} height={preview.height} style={{ display: "block", background: "#ffffff" }}>
+                          {preview.nodes
+                            .filter((node) => node.parentId)
+                            .map((node) => {
+                              const parent = preview.nodes.find((item) => item.id === node.parentId);
+                              if (!parent) return null;
+                              return (
+                                <line
+                                  key={`step6-outline-edge-${parent.id}-${node.id}`}
+                                  x1={parent.x + 55}
+                                  y1={parent.y + 30}
+                                  x2={node.x + 55}
+                                  y2={node.y}
+                                  stroke="#64748b"
+                                  strokeWidth={2}
+                                />
+                              );
+                            })}
+                          {preview.nodes.map((node) => (
+                            <g key={`step6-outline-node-${node.id}`}>
+                              <rect x={node.x} y={node.y} width={110} height={64} rx={10} ry={10} fill="#f8fafc" stroke="#94a3b8" />
+                              <text x={node.x + 55} y={node.y + 36} textAnchor="middle" fontSize="12" fill="#0f172a">
+                                {node.text.length > 20 ? `${node.text.slice(0, 20)}...` : node.text}
+                              </text>
+                            </g>
+                          ))}
+                        </svg>
+                      </div>
+                    );
+                  })()}
                 </>
               ) : null}
-
-              <div className="row" style={{ marginTop: 10 }}>
+              {currentStep === 8 ? <small style={{ display: "block", marginTop: 8 }}>已預載步驟 6 初稿內容，可直接修改後儲存。</small> : null}
+              <textarea value={draftText} onChange={(e) => setDraftText(e.target.value)} rows={10} style={{ minHeight: 220 }} />
+              <div className="row" style={{ marginTop: 10, gap: 10 }}>
                 <div style={{ width: 180 }}>
-                  <button type="button" className="secondary" onClick={() => setShowDraftEditor((prev) => !prev)}>
-                    撰寫作文
+                  <button type="button" onClick={() => saveArtifact(currentStep === 6 ? "draft6" : "draft8", draftText)}>
+                    儲存文章
                   </button>
                 </div>
-              </div>
-              {showDraftEditor ? (
-                <>
-                  {currentStep === 8 ? <small>已預載步驟 6 初稿內容，可直接修改後儲存。</small> : null}
-                  <textarea value={draftText} onChange={(e) => setDraftText(e.target.value)} />
-                  <div style={{ width: 180, marginTop: 10 }}>
-                    <button type="button" onClick={() => saveArtifact(currentStep === 6 ? "draft6" : "draft8", draftText)}>
-                      儲存作文
+                {currentStep === 6 ? (
+                  <div style={{ width: 180 }}>
+                    <button type="button" className="secondary" onClick={requestStep6Suggestion} disabled={isSuggestingStep6 || isCompletingStep6}>
+                      AI 修改建議
                     </button>
                   </div>
-                </>
+                ) : null}
+              </div>
+              {currentStep === 6 ? (
+                <small style={{ display: "block", marginTop: 8, color: "#94a3b8" }}>未儲存字數：{unsavedDraft6Chars}</small>
               ) : null}
             </div>
           ) : null}
@@ -1768,6 +1850,13 @@ export default function StudentPage() {
                   </button>
                 ) : null}
               </form>
+            ) : null}
+            {currentStep === 6 ? (
+              <div style={{ marginTop: 10 }}>
+                <button type="button" className="secondary" onClick={completeStep6ToStep8} disabled={isCompletingStep6 || isSuggestingStep6}>
+                  完成文章撰寫，進入下一步驟
+                </button>
+              </div>
             ) : null}
             {currentStep === 4 && step4CompletedByMe && !allStep4Completed ? (
               <button type="button" className="secondary" style={{ marginTop: 10 }} disabled>
