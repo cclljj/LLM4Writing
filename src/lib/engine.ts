@@ -82,26 +82,6 @@ function initializeStepQuestion(session: SessionState, step: number): void {
   if (step === 1) {
     session.stepState.step1Substep = 1;
     const q = buildStep1Question(session);
-    const guide = session.activityEssayDescription?.trim() ?? "";
-    const supplemental = session.activitySupplemental?.trim() ?? "";
-    if (guide) {
-      session.messages.push(
-        makeMessage({
-          role: "system",
-          step,
-          text: `引導說明：${guide}`
-        })
-      );
-    }
-    if (supplemental) {
-      session.messages.push(
-        makeMessage({
-          role: "system",
-          step,
-          text: `補充資料：${supplemental}`
-        })
-      );
-    }
     session.messages.push(
       makeMessage({
         role: "system",

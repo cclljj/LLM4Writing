@@ -520,12 +520,6 @@ export default function StudentPage() {
     }
 
     const toQuestionText = (text: string): string | null => {
-      if (text.startsWith("引導說明：")) {
-        return text;
-      }
-      if (text.startsWith("補充資料：")) {
-        return text;
-      }
       if (text.includes("子步驟 ")) {
         const idx = text.indexOf("子步驟 ");
         const extracted = text.slice(idx).trim();
@@ -1227,6 +1221,20 @@ export default function StudentPage() {
             <p style={{ margin: "4px 0 0", lineHeight: 1.5 }}>
               組員名單：{session.participants.length > 0 ? session.participants.join("、") : "—"}
             </p>
+            <div style={{ marginTop: 10 }}>
+              <p style={{ margin: 0 }}><strong>引導說明</strong></p>
+              <div
+                style={{ marginTop: 4 }}
+                dangerouslySetInnerHTML={{ __html: renderMessageHtml(currentActivity?.essayDescription || "—") }}
+              />
+            </div>
+            <div style={{ marginTop: 10, borderTop: "1px solid #dbeafe", paddingTop: 8 }}>
+              <p style={{ margin: 0 }}><strong>補充資料</strong></p>
+              <div
+                style={{ marginTop: 4 }}
+                dangerouslySetInnerHTML={{ __html: renderMessageHtml(currentActivity?.supplemental || "—") }}
+              />
+            </div>
           </div>
 
           {historyReviewSteps.length > 0 ? (
@@ -1389,14 +1397,12 @@ export default function StudentPage() {
             <h2>
               Step {currentStep} - {stepNameMap[currentStep] ?? "未知步驟"}
             </h2>
-            <div>
-              <small>
-                任務：{session.activityTitle ?? "未命名"} / Session: {session.id}
-              </small>
-            </div>
             <div style={{ marginTop: 8 }}>
               <span className="badge">{stepModeLine}</span>
             </div>
+            <p>
+              <small>這是介紹詞</small>
+            </p>
             <p>
               <small>
                 {currentStep >= 5
@@ -1918,25 +1924,7 @@ export default function StudentPage() {
             {interactiveMessages.map((message) => (
               currentStep === 6 && message.kind === "student" ? null : (
               <div key={message.id} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
-                {currentStep === 1 && message.kind === "question" && message.text.startsWith("引導說明：") ? (
-                  <div>
-                    <strong>引導說明</strong>
-                    <div
-                      style={{ marginTop: 6 }}
-                      dangerouslySetInnerHTML={{ __html: renderMessageHtml(message.text.replace(/^引導說明：\s*/, "")) }}
-                    />
-                    <small>{message.at}</small>
-                  </div>
-                ) : currentStep === 1 && message.kind === "question" && message.text.startsWith("補充資料：") ? (
-                  <div style={{ borderTop: "1px solid #e5e7eb", paddingTop: 8 }}>
-                    <strong>補充資料</strong>
-                    <div
-                      style={{ marginTop: 6 }}
-                      dangerouslySetInnerHTML={{ __html: renderMessageHtml(message.text.replace(/^補充資料：\s*/, "")) }}
-                    />
-                    <small>{message.at}</small>
-                  </div>
-                ) : currentStep === 4 && message.kind === "student" ? (
+                {currentStep === 4 && message.kind === "student" ? (
                   <p style={{ margin: 0 }}>
                     <strong>{message.userId || "學生"}：</strong>
                     <span style={{ marginLeft: 4, whiteSpace: "pre-wrap" }}>{message.text}</span>
