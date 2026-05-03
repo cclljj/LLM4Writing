@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { getCurrentUser } from "@/src/lib/auth-server";
 import { getSession, saveSession } from "@/src/lib/store";
-import { REFLECTION_QUESTIONS } from "@/src/lib/spec";
+import { getStep9QuestionsFromConfig } from "@/src/lib/spec";
 
 export async function POST(request: NextRequest) {
   const user = await getCurrentUser();
@@ -31,11 +31,12 @@ export async function POST(request: NextRequest) {
   session.personalSteps = session.personalSteps ?? {};
   session.personalSteps[user.username] = 9;
   if ((session.reflectionIndex?.[user.username] ?? 0) === 0) {
+    const step9Questions = getStep9QuestionsFromConfig(session.promptConfig?.step9Questions);
     session.messages.push({
       id: randomUUID(),
       role: "system",
       userId: user.username,
-      text: `步驟 9 開始：${REFLECTION_QUESTIONS[0]}`,
+      text: `步驟 9 開始：${step9Questions[0]}`,
       at: new Date().toISOString(),
       step: 9
     });

@@ -32,6 +32,7 @@ type RawSystemPromptConfig = {
   stepPrompts?: Record<string, string>;
   subStepPrompts?: Record<string, string>;
   questionBanks?: Record<string, string[]>;
+  step9Questions?: Record<string, string>;
   writingTasks?: Record<string, { questionBanks?: Record<string, string[]> }>;
 };
 
@@ -472,7 +473,7 @@ export function getStudentUsernamesForActivityClass(activityId: string): string[
 export function resolvePromptConfigForActivity(activityId: string): PromptConfig {
   const activity = findActivity(activityId);
   if (!activity) {
-    return { systemPrompt: undefined, stepPrompts: {}, subStepPrompts: {}, questionBanks: {} };
+    return { systemPrompt: undefined, stepPrompts: {}, subStepPrompts: {}, questionBanks: {}, step9Questions: {} };
   }
 
   const raw = systemPromptConfig as RawSystemPromptConfig;
@@ -485,6 +486,11 @@ export function resolvePromptConfigForActivity(activityId: string): PromptConfig
       Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []
     ])
   ) as Record<string, string[]>;
+  const step9Questions = Object.fromEntries(
+    Object.entries(raw.step9Questions ?? {})
+      .filter(([key, value]) => ["1", "2", "3", "4"].includes(key) && typeof value === "string")
+      .map(([key, value]) => [key, value])
+  ) as Record<string, string>;
 
   const taskBanks = raw.writingTasks ?? {};
   const matchedTask =
@@ -502,7 +508,8 @@ export function resolvePromptConfigForActivity(activityId: string): PromptConfig
     systemPrompt,
     stepPrompts,
     subStepPrompts,
-    questionBanks: { ...baseQuestionBanks, ...scopedQuestionBanks }
+    questionBanks: { ...baseQuestionBanks, ...scopedQuestionBanks },
+    step9Questions
   };
 }
 

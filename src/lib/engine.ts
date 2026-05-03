@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { ChatMessage, SessionState, StartSessionPayload } from "@/src/lib/types";
-import { REFLECTION_QUESTIONS, STEP_DEFINITIONS, getModeByStep, getStepName } from "@/src/lib/spec";
+import { getStep9QuestionsFromConfig, STEP_DEFINITIONS, getModeByStep, getStepName } from "@/src/lib/spec";
 import { isLlmConfigured, llmChatCompletionText, LlmChatMessage } from "@/src/lib/llm-client";
 
 function now(): string {
@@ -74,6 +74,10 @@ function getCurrentSubstepKey(session: SessionState, step: number): string | nul
   return null;
 }
 
+function getStep9Questions(session: SessionState): string[] {
+  return getStep9QuestionsFromConfig(session.promptConfig?.step9Questions);
+}
+
 function initializeStepQuestion(session: SessionState, step: number): void {
   if (step === 1) {
     session.stepState.step1Substep = 1;
@@ -131,7 +135,7 @@ export function createSession(payload: StartSessionPayload): SessionState {
     activityTitle: payload.activityTitle,
     groupId: payload.groupId,
     groupName: payload.groupName,
-    promptConfig: payload.promptConfig ?? { stepPrompts: {}, subStepPrompts: {}, questionBanks: {} },
+    promptConfig: payload.promptConfig ?? { stepPrompts: {}, subStepPrompts: {}, questionBanks: {}, step9Questions: {} },
     stepState: { step1Substep: 1, step2Substep: 1 },
     outlines: {},
     step3SubmittedOutlines: {},
@@ -182,7 +186,7 @@ function normalizeSessionRuntimeShape(session: SessionState): void {
     session.stepState.step2Substep = 1;
   }
   if (!session.promptConfig || typeof session.promptConfig !== "object") {
-    session.promptConfig = { stepPrompts: {}, subStepPrompts: {}, questionBanks: {} };
+    session.promptConfig = { stepPrompts: {}, subStepPrompts: {}, questionBanks: {}, step9Questions: {} };
   }
   if (!session.promptConfig.stepPrompts || typeof session.promptConfig.stepPrompts !== "object") {
     session.promptConfig.stepPrompts = {};
@@ -192,6 +196,9 @@ function normalizeSessionRuntimeShape(session: SessionState): void {
   }
   if (!session.promptConfig.questionBanks || typeof session.promptConfig.questionBanks !== "object") {
     session.promptConfig.questionBanks = {};
+  }
+  if (!session.promptConfig.step9Questions || typeof session.promptConfig.step9Questions !== "object") {
+    session.promptConfig.step9Questions = {};
   }
   if (!session.reports || typeof session.reports !== "object") {
     session.reports = { step7: {}, step10: {} };
@@ -473,8 +480,9 @@ export function switchStep(session: SessionState, step: number): SessionState {
   }
 
   if (mode === "personal_reflection") {
+    const step9Questions = getStep9Questions(session);
     session.messages.push(
-      makeMessage({ role: "system", step, text: `步驟 9 開始：${REFLECTION_QUESTIONS[0]}` })
+      makeMessage({ role: "system", step, text: `步驟 9 開始：${step9Questions[0]}` })
     );
   }
 
@@ -619,12 +627,13 @@ export async function sendStudentMessage(session: SessionState, userId: string, 
   }
 
   if (mode === "personal_reflection") {
+    const step9Questions = getStep9Questions(session);
     const current = session.reflectionIndex[userId] ?? 0;
     const next = current + 1;
     session.reflectionIndex[userId] = next;
 
-    if (next < REFLECTION_QUESTIONS.length) {
-      session.messages.push(makeMessage({ role: "system", userId, step, text: `下一題：${REFLECTION_QUESTIONS[next]}` }));
+    if (next < step9Questions.length) {
+      session.messages.push(makeMessage({ role: "system", userId, step, text: `下一題：${step9Questions[next]}` }));
     } else {
       session.messages.push(makeMessage({ role: "system", userId, step, text: "個人反思完成。" }));
     }
