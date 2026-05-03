@@ -635,10 +635,12 @@ export default function StudentPage() {
   async function completeStep4() {
     if (!session) return;
     setError("");
+    const outlineToSave = showOutlineEditor ? toMermaid(outlineNodes) : session.outlines[loginUser] ?? "";
+    setOutlineText(outlineToSave);
     const response = await fetch("/api/session/step4/complete", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionId: session.id })
+      body: JSON.stringify({ sessionId: session.id, outline: outlineToSave })
     });
     const data = await response.json();
     if (!response.ok) {

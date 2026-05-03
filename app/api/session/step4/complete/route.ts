@@ -8,7 +8,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
-  const body = (await request.json()) as { sessionId?: string };
+  const body = (await request.json()) as { sessionId?: string; outline?: string };
   if (!body.sessionId) {
     return NextResponse.json({ error: "missing_required_fields" }, { status: 400 });
   }
@@ -23,6 +23,8 @@ export async function POST(request: NextRequest) {
   if (session.currentStep !== 4) {
     return NextResponse.json({ error: "invalid_step" }, { status: 400 });
   }
+  const outlineText = typeof body.outline === "string" ? body.outline : "";
+  session.outlines[user.username] = outlineText;
 
   const key = "4-complete";
   const doneUsers = new Set(session.groupGate[key] ?? []);
