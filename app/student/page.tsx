@@ -1374,7 +1374,11 @@ export default function StudentPage() {
               <span className="badge">{stepModeLine}</span>
             </div>
             <p>
-              <small>步驟切換由教師端控制，你的頁面會自動同步。</small>
+              <small>
+                {currentStep >= 5
+                  ? "此階段為個人步調，系統會依你的完成狀態自動推進步驟（例如步驟 9 完成後自動進入步驟 10）。"
+                  : "步驟切換由教師端控制，你的頁面會自動同步。"}
+              </small>
             </p>
           </div>
 
