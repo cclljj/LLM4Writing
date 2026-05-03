@@ -446,6 +446,9 @@ export default function StudentPage() {
     const result: InteractiveItem[] = [];
     stepMessages.forEach((m, idx) => {
         if (m.role === "student") {
+          if (currentStep === 3 && m.userId && m.userId !== loginUser) {
+            return;
+          }
           const isCurrentTurnMessage = currentTurnStartIndex >= 0 ? idx > currentTurnStartIndex : false;
           if (hidePeerAnswersBeforeOwn && isCurrentTurnMessage && m.userId && m.userId !== loginUser) {
             return;
@@ -454,6 +457,9 @@ export default function StudentPage() {
           return;
         }
         if (m.role === "ai") {
+          if (currentStep === 3 && m.userId !== loginUser) {
+            return;
+          }
           result.push({ id: m.id, kind: "ai", text: m.text, at: m.at });
           return;
         }

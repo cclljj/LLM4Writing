@@ -227,9 +227,15 @@ function ensureParticipants(session: SessionState, fallbackUserId: string): stri
   return session.participants;
 }
 
-function buildRecentContext(session: SessionState, step: number): string {
+function buildRecentContext(session: SessionState, step: number, userId?: string): string {
   const relevant = session.messages
-    .filter((m) => m.step === step && (m.role === "student" || m.role === "ai" || m.role === "system"))
+    .filter((m) => {
+      if (m.step !== step) return false;
+      if (m.role === "system") return true;
+      if (m.role === "student") return !userId || m.userId === userId;
+      if (m.role === "ai") return !userId || m.userId === userId;
+      return false;
+    })
     .slice(-12);
 
   return relevant
@@ -241,9 +247,15 @@ function buildRecentContext(session: SessionState, step: number): string {
     .join("\n");
 }
 
-function buildHistoryContextForStep3(session: SessionState): string {
+function buildHistoryContextForStep3(session: SessionState, userId: string): string {
   const relevant = session.messages
-    .filter((m) => (m.step === 1 || m.step === 2) && (m.role === "student" || m.role === "ai" || m.role === "system"))
+    .filter((m) => {
+      if (!(m.step === 1 || m.step === 2 || m.step === 3)) return false;
+      if (m.role === "system") return true;
+      if (m.role === "student") return m.userId === userId;
+      if (m.role === "ai") return !m.userId || m.userId === userId;
+      return false;
+    })
     .slice(-20);
   return relevant
     .map((m) => {
@@ -269,7 +281,7 @@ async function generateAiTextWithRetry(messages: LlmChatMessage[], temperature: 
   throw lastError instanceof Error ? lastError : new Error("llm_retry_exhausted");
 }
 
-async function generateAiTextForStep(session: SessionState, step: number, contextText: string): Promise<string> {
+async function generateAiTextForStep(session: SessionState, step: number, contextText: string, userId?: string): Promise<string> {
   const stepName = getStepName(step);
   const fallback =
     step === 3
@@ -297,8 +309,8 @@ async function generateAiTextForStep(session: SessionState, step: number, contex
   }
   systemParts.push(`目前步驟：${step}（${stepName}）。請嚴格遵守步驟與輸出格式要求。`);
 
-  const recent = buildRecentContext(session, step);
-  const step3History = step === 3 ? buildHistoryContextForStep3(session) : "";
+  const recent = buildRecentContext(session, step, step === 3 ? userId : undefined);
+  const step3History = step === 3 && userId ? buildHistoryContextForStep3(session, userId) : "";
   const messages: LlmChatMessage[] = [
     { role: "system", content: systemParts.join("\n\n") },
     {
@@ -550,7 +562,7 @@ export async function sendStudentMessage(session: SessionState, userId: string, 
   session.messages.push(makeMessage({ role: "student", userId, step, text }));
 
   if (mode === "personal_interaction") {
-    session.messages.push(makeMessage({ role: "ai", step, text: await generateAiTextForStep(session, step, text) }));
+    session.messages.push(makeMessage({ role: "ai", userId, step, text: await generateAiTextForStep(session, step, text, userId) }));
     return session;
   }
 
