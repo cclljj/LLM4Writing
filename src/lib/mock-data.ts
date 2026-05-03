@@ -59,21 +59,25 @@ const structureTreeMapByGenre = structureTreeConfig as Record<string, string>;
 
 const defaultStructureTreePath = "structure-tree/1.map";
 
-function resolveStructureTreePathByGenre(genre: string): string {
+function resolveStructureTreePathByGenre(genre: string): { path: string; matchedGenre: string; fallbackUsed: boolean } {
   const normalized = genre.trim();
-  if (!normalized) return defaultStructureTreePath;
-  if (structureTreeMapByGenre[normalized]) return structureTreeMapByGenre[normalized]!;
+  if (!normalized) return { path: defaultStructureTreePath, matchedGenre: "議論文", fallbackUsed: true };
+  if (structureTreeMapByGenre[normalized]) {
+    return { path: structureTreeMapByGenre[normalized]!, matchedGenre: normalized, fallbackUsed: false };
+  }
 
   const compact = normalized.replace(/\s+/g, "");
   const directCompactKey = Object.keys(structureTreeMapByGenre).find((key) => key.replace(/\s+/g, "") === compact);
-  if (directCompactKey) return structureTreeMapByGenre[directCompactKey]!;
+  if (directCompactKey) {
+    return { path: structureTreeMapByGenre[directCompactKey]!, matchedGenre: directCompactKey, fallbackUsed: false };
+  }
 
-  if (compact.includes("議論")) return structureTreeMapByGenre["議論文"] ?? defaultStructureTreePath;
-  if (compact.includes("記敘")) return structureTreeMapByGenre["記敘文"] ?? defaultStructureTreePath;
-  if (compact.includes("抒情")) return structureTreeMapByGenre["抒情文"] ?? defaultStructureTreePath;
-  if (compact.includes("說明")) return structureTreeMapByGenre["說明文"] ?? defaultStructureTreePath;
+  if (compact.includes("議論")) return { path: structureTreeMapByGenre["議論文"] ?? defaultStructureTreePath, matchedGenre: "議論文", fallbackUsed: false };
+  if (compact.includes("記敘")) return { path: structureTreeMapByGenre["記敘文"] ?? defaultStructureTreePath, matchedGenre: "記敘文", fallbackUsed: false };
+  if (compact.includes("抒情")) return { path: structureTreeMapByGenre["抒情文"] ?? defaultStructureTreePath, matchedGenre: "抒情文", fallbackUsed: false };
+  if (compact.includes("說明")) return { path: structureTreeMapByGenre["說明文"] ?? defaultStructureTreePath, matchedGenre: "說明文", fallbackUsed: false };
 
-  return defaultStructureTreePath;
+  return { path: defaultStructureTreePath, matchedGenre: "議論文", fallbackUsed: true };
 }
 
 function replaceEssayTitleInTemplate(template: string, essayTitle: string): string {
@@ -82,7 +86,7 @@ function replaceEssayTitleInTemplate(template: string, essayTitle: string): stri
 }
 
 export function resolveStructureTreeTemplate(genre: string, essayTitle: string): string {
-  const relPath = resolveStructureTreePathByGenre(genre).trim();
+  const relPath = resolveStructureTreePathByGenre(genre).path.trim();
   if (!relPath) return "";
   const filePath = path.join(process.cwd(), "src", "config", relPath);
   if (!existsSync(filePath)) return "";
@@ -92,6 +96,21 @@ export function resolveStructureTreeTemplate(genre: string, essayTitle: string):
   } catch {
     return "";
   }
+}
+
+export function resolveStructureTreeTemplateDebug(genre: string): {
+  inputGenre: string;
+  matchedGenre: string;
+  templatePath: string;
+  fallbackUsed: boolean;
+} {
+  const resolved = resolveStructureTreePathByGenre(genre);
+  return {
+    inputGenre: genre,
+    matchedGenre: resolved.matchedGenre,
+    templatePath: resolved.path,
+    fallbackUsed: resolved.fallbackUsed
+  };
 }
 
 type DomainState = {

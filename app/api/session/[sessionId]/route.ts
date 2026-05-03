@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession, saveSession } from "@/src/lib/store";
 import { reconcileCompletedStep9Users } from "@/src/lib/engine";
-import { findActivity, hydrateDomainState, resolvePromptConfigForActivity, resolveStructureTreeTemplate } from "@/src/lib/mock-data";
+import { findActivity, hydrateDomainState, resolvePromptConfigForActivity, resolveStructureTreeTemplate, resolveStructureTreeTemplateDebug } from "@/src/lib/mock-data";
 
 function isSingleNodeOutline(outline: string): boolean {
   const raw = outline.trim();
@@ -65,6 +65,7 @@ export async function GET(_: Request, context: { params: Promise<{ sessionId: st
       changed = true;
     }
     if (activity) {
+      session.structureTreeDebug = resolveStructureTreeTemplateDebug(activity.genre);
       const structureTreeTemplate = resolveStructureTreeTemplate(activity.genre, activity.title);
       if (structureTreeTemplate) {
         session.participants.forEach((participant) => {

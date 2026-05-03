@@ -52,6 +52,12 @@ export interface SessionState {
   activityTitle?: string;
   activityEssayDescription?: string;
   activitySupplemental?: string;
+  structureTreeDebug?: {
+    inputGenre: string;
+    matchedGenre: string;
+    templatePath: string;
+    fallbackUsed: boolean;
+  };
   groupId?: string;
   groupName?: string;
   promptConfig: PromptConfig;
