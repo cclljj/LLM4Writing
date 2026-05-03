@@ -295,6 +295,7 @@ export default function StudentPage() {
 
   const [outlineText, setOutlineText] = useState("");
   const [outlineNodes, setOutlineNodes] = useState<OutlineNode[]>(makeDefaultOutlineNodes);
+  const [outlineDirty, setOutlineDirty] = useState(false);
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
   const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null);
   const [dropTargetNodeId, setDropTargetNodeId] = useState<string | null>(null);
@@ -352,17 +353,30 @@ export default function StudentPage() {
     if (session.currentStep === 3 || session.currentStep === 4) {
       setShowOutlineEditor(false);
     }
+    setOutlineDirty(false);
     if (!refUser && session.participants.length > 0) {
       setRefUser((session.participants.find((user) => user !== loginUser) ?? session.participants[0])!);
     }
   }, [session?.id, session?.currentStep, loginUser]);
 
   useEffect(() => {
-    if (!(session?.currentStep === 3 || session?.currentStep === 4) || !showOutlineEditor || !loginUser) return;
+    if (!(session?.currentStep === 3 || session?.currentStep === 4) || !loginUser) return;
+    const shouldSyncFromSession = session.currentStep === 4 || showOutlineEditor;
+    if (!shouldSyncFromSession) return;
+    if (outlineDirty || draggingNodeId || editingNodeId) return;
     const saved = session.outlines[loginUser]?.trim() ?? "";
     setOutlineNodes(saved ? fromMermaid(saved) : makeDefaultOutlineNodes());
     setEditingNodeId(null);
-  }, [showOutlineEditor, session?.id, session?.currentStep, loginUser]);
+  }, [
+    showOutlineEditor,
+    session?.id,
+    session?.currentStep,
+    loginUser,
+    session?.outlines,
+    outlineDirty,
+    draggingNodeId,
+    editingNodeId
+  ]);
 
   useEffect(() => {
     if (!draggingNodeId) return;
@@ -375,6 +389,7 @@ export default function StudentPage() {
       const y = event.clientY - rect.top - dragOffset.y;
       const limitX = Math.max(980, canvas.scrollWidth - 130);
       const limitY = Math.max(520, canvas.scrollHeight - 80);
+      setOutlineDirty(true);
       setOutlineNodes((prev) =>
         prev.map((node) =>
           node.id === draggingNodeId
@@ -401,6 +416,7 @@ export default function StudentPage() {
           cursor = prev.find((node) => node.id === cursor?.parentId);
         }
         if (ancestorSet.has(dragging.id)) return prev;
+        setOutlineDirty(true);
         return prev.map((node) =>
           node.id === draggingNodeId ? { ...node, parentId: target.id, y: target.y + 120 } : node
         );
@@ -599,12 +615,14 @@ export default function StudentPage() {
       x: parent.x + siblings.length * 140,
       y: parent.y + 120
     };
+    setOutlineDirty(true);
     setOutlineNodes((prev) => [...prev, next]);
   }
 
   function removeLeafNode(nodeId: string) {
     const hasChildren = outlineNodes.some((node) => node.parentId === nodeId);
     if (hasChildren) return;
+    setOutlineDirty(true);
     setOutlineNodes((prev) => prev.filter((node) => node.id !== nodeId));
     if (editingNodeId === nodeId) setEditingNodeId(null);
   }
@@ -613,6 +631,7 @@ export default function StudentPage() {
     const mermaidText = toMermaid(outlineNodes);
     setOutlineText(mermaidText);
     await saveArtifact("outline", mermaidText);
+    setOutlineDirty(false);
   }
 
   async function completeOutlineTree() {
@@ -629,6 +648,7 @@ export default function StudentPage() {
       setError(data.error ?? "complete_step3_failed");
       return;
     }
+    setOutlineDirty(false);
     setSession(data);
   }
 
@@ -647,6 +667,7 @@ export default function StudentPage() {
       setError(data.error ?? "complete_step4_failed");
       return;
     }
+    setOutlineDirty(false);
     setSession(data);
   }
 
@@ -1334,11 +1355,14 @@ export default function StudentPage() {
                                   <input
                                     autoFocus
                                     value={node.text}
-                                    onChange={(e) =>
+                                  onChange={(e) =>
+                                    {
+                                      setOutlineDirty(true);
                                       setOutlineNodes((prev) =>
                                         prev.map((item) => (item.id === node.id ? { ...item, text: e.target.value } : item))
-                                      )
+                                      );
                                     }
+                                  }
                                     onBlur={() => setEditingNodeId(null)}
                                     onMouseDown={(e) => e.stopPropagation()}
                                   />
@@ -1515,7 +1539,10 @@ export default function StudentPage() {
                                 <input
                                   autoFocus
                                   value={node.text}
-                                  onChange={(e) => setOutlineNodes((prev) => prev.map((item) => (item.id === node.id ? { ...item, text: e.target.value } : item)))}
+                                  onChange={(e) => {
+                                    setOutlineDirty(true);
+                                    setOutlineNodes((prev) => prev.map((item) => (item.id === node.id ? { ...item, text: e.target.value } : item)));
+                                  }}
                                   onBlur={() => setEditingNodeId(null)}
                                   onMouseDown={(e) => e.stopPropagation()}
                                 />
