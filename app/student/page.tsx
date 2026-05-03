@@ -33,16 +33,6 @@ type SessionState = {
   personalSteps?: Record<string, number>;
   activityId?: string;
   activityTitle?: string;
-  structureTreeDebug?: {
-    inputGenre: string;
-    matchedGenre: string;
-    templatePath: string;
-    fallbackUsed: boolean;
-    templateRawLength?: number;
-    parsedNodeCount?: number;
-    parsedEdgeCount?: number;
-    outlineSource?: "template" | "backfill" | "existing";
-  };
   groupName?: string;
   workflow: string;
   participants: string[];
@@ -215,7 +205,7 @@ function makeDefaultOutlineNodes(): OutlineNode[] {
 }
 
 function escapeMermaidLabel(text: string): string {
-  return text.replaceAll('"', '\\"').replaceAll("\n", " ");
+  return text.replaceAll('"', '\\"').replace(/\r?\n/g, "<br/>");
 }
 
 function toMermaid(nodes: OutlineNode[]): string {
@@ -249,7 +239,7 @@ function fromMermaid(text: string): OutlineNode[] {
     const nodeMatch = line.match(/^([A-Za-z0-9_-]+)\s*\["([\s\S]*)"\]$/);
     if (nodeMatch) {
       const [, id, label] = nodeMatch;
-      nodeTextMap.set(id, label.replaceAll('\\"', '"'));
+      nodeTextMap.set(id, label.replaceAll('\\"', '"').replace(/<br\s*\/?>/gi, "\n"));
       if (!parentMap.has(id)) parentMap.set(id, null);
       continue;
     }
@@ -259,7 +249,7 @@ function fromMermaid(text: string): OutlineNode[] {
       parentMap.set(childId, parentId);
       if (!parentMap.has(parentId)) parentMap.set(parentId, null);
       if (!nodeTextMap.has(parentId)) nodeTextMap.set(parentId, parentId);
-      nodeTextMap.set(childId, childLabel.replaceAll('\\"', '"'));
+      nodeTextMap.set(childId, childLabel.replaceAll('\\"', '"').replace(/<br\s*\/?>/gi, "\n"));
       continue;
     }
     const edgeMatch = line.match(/^([A-Za-z0-9_-]+)\s*-->\s*([A-Za-z0-9_-]+)$/);
@@ -1528,13 +1518,6 @@ export default function StudentPage() {
           {currentStep === 3 && loginUser ? (
             <div className="card">
               <h2>文章結構樹</h2>
-              {session.structureTreeDebug ? (
-                <div style={{ marginBottom: 8, padding: "8px 10px", border: "1px dashed #94a3b8", borderRadius: 8, background: "#f8fafc" }}>
-                  <small>
-                    debug: inputGenre={session.structureTreeDebug.inputGenre || "—"} / matchedGenre={session.structureTreeDebug.matchedGenre || "—"} / templatePath={session.structureTreeDebug.templatePath || "—"} / fallback={session.structureTreeDebug.fallbackUsed ? "yes" : "no"} / rawLen={session.structureTreeDebug.templateRawLength ?? "—"} / nodes={session.structureTreeDebug.parsedNodeCount ?? "—"} / edges={session.structureTreeDebug.parsedEdgeCount ?? "—"} / source={session.structureTreeDebug.outlineSource || "—"}
-                  </small>
-                </div>
-              ) : null}
               <>
                 <small>按節點右上角 ➕ 新增下一層；第二層以下且無子節點可用 ➖ 刪除。雙擊節點可編輯文字，拖曳可調整位置與層次。</small>
                 <div

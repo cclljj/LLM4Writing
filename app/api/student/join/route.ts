@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/src/lib/auth-server";
 import { createSession } from "@/src/lib/engine";
-import { findActivity, hydrateDomainState, resolvePromptConfigForActivity, resolveStructureTreeTemplate, resolveStructureTreeTemplateDebugFull } from "@/src/lib/mock-data";
+import { findActivity, hydrateDomainState, resolvePromptConfigForActivity, resolveStructureTreeTemplate } from "@/src/lib/mock-data";
 import { listSessions, saveSession } from "@/src/lib/store";
 
 function isSingleNodeOutline(outline: string): boolean {
@@ -104,12 +104,6 @@ export async function POST(request: NextRequest) {
       if (outlinePatched) {
         existing.outlines[user.username] = structureTreeTemplate;
       }
-      existing.structureTreeDebug = resolveStructureTreeTemplateDebugFull(
-        activity.genre,
-        activity.title,
-        outlinePatched ? "backfill" : "existing"
-      );
-
       const messageJoinedUsers = Array.from(
         new Set(
           existing.messages
@@ -151,7 +145,6 @@ export async function POST(request: NextRequest) {
         session.outlines[participant] = structureTreeTemplate;
       });
     }
-    session.structureTreeDebug = resolveStructureTreeTemplateDebugFull(activity.genre, activity.title, "template");
     session.joinedUsers = [user.username];
 
     await saveSession(session);

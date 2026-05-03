@@ -157,7 +157,7 @@ export default function StudentCourseHistoryPage() {
       const nodeMatch = line.match(/^([A-Za-z0-9_-]+)\s*\["([\s\S]*)"\]$/);
       if (nodeMatch) {
         const [, id, label] = nodeMatch;
-        nodeTextMap.set(id, label.replaceAll('\\"', '"'));
+        nodeTextMap.set(id, label.replaceAll('\\"', '"').replace(/<br\s*\/?>/gi, "\n"));
         if (!parentMap.has(id)) parentMap.set(id, null);
         continue;
       }
@@ -167,7 +167,7 @@ export default function StudentCourseHistoryPage() {
         parentMap.set(childId, parentId);
         if (!parentMap.has(parentId)) parentMap.set(parentId, null);
         if (!nodeTextMap.has(parentId)) nodeTextMap.set(parentId, parentId);
-        nodeTextMap.set(childId, childLabel.replaceAll('\\"', '"'));
+        nodeTextMap.set(childId, childLabel.replaceAll('\\"', '"').replace(/<br\s*\/?>/gi, "\n"));
         continue;
       }
       const edgeMatch = line.match(/^([A-Za-z0-9_-]+)\s*-->\s*([A-Za-z0-9_-]+)$/);
