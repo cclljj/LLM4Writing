@@ -68,6 +68,8 @@ export async function GET(_: Request, context: { params: Promise<{ activityId: s
     },
     latestWork: {
       outline: latest.outlines[user.username] ?? "",
+      step3SubmittedOutline: latest.step3SubmittedOutlines?.[user.username] ?? "",
+      step4Outline: latest.outlines[user.username] ?? "",
       draftStep6: latest.draftStep6[user.username] ?? "",
       draftStep8: latest.draftStep8[user.username] ?? "",
       step7Report: latest.reports.step7[user.username] ?? "",

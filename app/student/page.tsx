@@ -624,6 +624,13 @@ export default function StudentPage() {
     if (!submitted) return null;
     return buildOutlinePreview(submitted);
   }, [loginUser, session]);
+  const step4OutlinePreview = useMemo(() => {
+    const ownStep = session && loginUser ? session.personalSteps?.[loginUser] ?? session.currentStep : 1;
+    if (!session || !loginUser || ownStep < 5) return null;
+    const step4Outline = session.outlines?.[loginUser]?.trim() ?? "";
+    if (!step4Outline) return null;
+    return buildOutlinePreview(step4Outline);
+  }, [loginUser, session]);
   useEffect(() => {
     if (historyReviewSteps.length === 0) {
       setHistoryReviewExpanded({});
@@ -1219,18 +1226,28 @@ export default function StudentPage() {
           <div className="card">
             <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
               <h2 style={{ marginBottom: 0 }}>課程內容</h2>
-              <button
-                type="button"
-                className="secondary"
-                style={{ width: "auto" }}
-                onClick={() => {
-                  setSession(null);
-                  setPreparingCourse(null);
-                  refreshOverview().catch(() => undefined);
-                }}
-              >
-                返回課程清單
-              </button>
+              <div className="row" style={{ gap: 8 }}>
+                <button
+                  type="button"
+                  className="secondary"
+                  style={{ width: "auto" }}
+                  onClick={() => router.back()}
+                >
+                  返回上一層
+                </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  style={{ width: "auto" }}
+                  onClick={() => {
+                    setSession(null);
+                    setPreparingCourse(null);
+                    refreshOverview().catch(() => undefined);
+                  }}
+                >
+                  返回課程清單
+                </button>
+              </div>
             </div>
           </div>
 
@@ -1341,6 +1358,53 @@ export default function StudentPage() {
                               })}
                             {step3SubmittedOutlinePreview.nodes.map((node) => (
                               <g key={`review-node-${node.id}`}>
+                                <rect
+                                  x={node.x}
+                                  y={node.y}
+                                  width={110}
+                                  height={64}
+                                  rx={10}
+                                  ry={10}
+                                  fill="#f8fafc"
+                                  stroke="#94a3b8"
+                                />
+                                <text x={node.x + 55} y={node.y + 36} textAnchor="middle" fontSize="12" fill="#0f172a">
+                                  {node.text.length > 20 ? `${node.text.slice(0, 20)}...` : node.text}
+                                </text>
+                              </g>
+                            ))}
+                          </svg>
+                        </div>
+                      </div>
+                    ) : null}
+                    {review.step === 4 && step4OutlinePreview ? (
+                      <div style={{ marginTop: 14, borderTop: "1px solid #e5e7eb", paddingTop: 10 }}>
+                        <strong>步驟四修正後結構樹</strong>
+                        <div style={{ marginTop: 8, overflow: "auto", border: "1px solid #e5e7eb", borderRadius: 8 }}>
+                          <svg
+                            width={step4OutlinePreview.width}
+                            height={step4OutlinePreview.height}
+                            style={{ display: "block", background: "#ffffff" }}
+                          >
+                            {step4OutlinePreview.nodes
+                              .filter((node) => node.parentId)
+                              .map((node) => {
+                                const parent = step4OutlinePreview.nodes.find((item) => item.id === node.parentId);
+                                if (!parent) return null;
+                                return (
+                                  <line
+                                    key={`review-s4-edge-${parent.id}-${node.id}`}
+                                    x1={parent.x + 55}
+                                    y1={parent.y + 30}
+                                    x2={node.x + 55}
+                                    y2={node.y}
+                                    stroke="#64748b"
+                                    strokeWidth={2}
+                                  />
+                                );
+                              })}
+                            {step4OutlinePreview.nodes.map((node) => (
+                              <g key={`review-s4-node-${node.id}`}>
                                 <rect
                                   x={node.x}
                                   y={node.y}
