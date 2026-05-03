@@ -82,11 +82,21 @@ function initializeStepQuestion(session: SessionState, step: number): void {
   if (step === 1) {
     session.stepState.step1Substep = 1;
     const q = buildStep1Question(session);
+    const guide = session.activityEssayDescription?.trim() ?? "";
+    if (guide) {
+      session.messages.push(
+        makeMessage({
+          role: "system",
+          step,
+          text: `引導說明：${guide}`
+        })
+      );
+    }
     session.messages.push(
       makeMessage({
         role: "system",
         step,
-        text: `步驟 1 開頭詞：${session.promptConfig.stepPrompts["1"] ?? "請開始審視題目。"}\n子步驟 1-1：${q}`
+        text: `子步驟 1-1：${q}`
       })
     );
   }
@@ -133,6 +143,7 @@ export function createSession(payload: StartSessionPayload): SessionState {
     phaseMax,
     activityId: payload.activityId,
     activityTitle: payload.activityTitle,
+    activityEssayDescription: payload.activityEssayDescription,
     groupId: payload.groupId,
     groupName: payload.groupName,
     promptConfig: payload.promptConfig ?? { stepPrompts: {}, subStepPrompts: {}, questionBanks: {}, step9Questions: {} },

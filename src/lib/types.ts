@@ -49,6 +49,7 @@ export interface SessionState {
   phaseMax: number;
   activityId?: string;
   activityTitle?: string;
+  activityEssayDescription?: string;
   groupId?: string;
   groupName?: string;
   promptConfig: PromptConfig;
@@ -73,6 +74,7 @@ export interface StartSessionPayload {
   phaseMax?: number;
   activityId?: string;
   activityTitle?: string;
+  activityEssayDescription?: string;
   groupId?: string;
   groupName?: string;
   promptConfig?: PromptConfig;
