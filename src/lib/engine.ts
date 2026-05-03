@@ -26,7 +26,7 @@ function pickQuestionFromBank(session: SessionState, key: string, fallback: stri
 function pickQuestionFromSubStepPrompt(session: SessionState, key: string, fallback: string): string {
   const prompt = session.promptConfig?.subStepPrompts?.[key];
   if (prompt) {
-    return `請討論：${prompt}`;
+    return prompt;
   }
   return fallback;
 }
@@ -78,23 +78,7 @@ function getStep9Questions(session: SessionState): string[] {
   return getStep9QuestionsFromConfig(session.promptConfig?.step9Questions);
 }
 
-function appendStepOpeningToMessages(session: SessionState, step: number): void {
-  const opening = session.promptConfig?.stepOpenings?.[String(step)]?.trim();
-  if (!opening) return;
-  session.messages.push(
-    makeMessage({
-      role: "system",
-      step,
-      text: `步驟 ${step} 介紹詞：\n${opening}`
-    })
-  );
-}
-
 function initializeStepQuestion(session: SessionState, step: number): void {
-  if ([1, 2, 3, 4, 6, 8, 9].includes(step)) {
-    appendStepOpeningToMessages(session, step);
-  }
-
   if (step === 1) {
     session.stepState.step1Substep = 1;
     const q = buildStep1Question(session);
@@ -114,17 +98,7 @@ function initializeStepQuestion(session: SessionState, step: number): void {
       makeMessage({
         role: "system",
         step,
-        text: `步驟 2 開頭詞：${session.promptConfig.stepPrompts["2"] ?? "請開始蒐集資料。"}\n子步驟 2-1：${q}`
-      })
-    );
-  }
-
-  if ([3, 4, 6, 8, 9].includes(step)) {
-    session.messages.push(
-      makeMessage({
-        role: "system",
-        step,
-        text: `步驟 ${step} 開頭詞：${session.promptConfig.stepPrompts[String(step)] ?? `請進入步驟 ${step}。`}`
+        text: `子步驟 2-1：${q}`
       })
     );
   }
