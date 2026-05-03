@@ -1,0 +1,47 @@
+flowchart TD
+    A["記敘文<br/>作文題目"]
+
+    A --> B["點題"]
+    A --> C["背景"]
+    A --> D["事件"]
+    A --> E["結果"]
+    A --> F["收尾"]
+
+    B --> B1["提及題目<br/>關鍵字"]
+    B --> B2["描述普遍<br/>的看法"]
+    B --> B3["提出個人<br/>的見解"]
+
+    C --> C1["時間"]
+    C --> C2["地點"]
+    C --> C3["人物"]
+    C --> C4["景色"]
+    C --> C5["物品"]
+
+    D --> D1["事件起因"]
+    D --> D2["事件經過"]
+    D --> D3["事件轉折"]
+
+    D1 --> D11["點擊編輯"]
+    D1 --> D12["點擊編輯"]
+
+    D2 --> D21["點擊編輯"]
+    D2 --> D22["點擊編輯"]
+
+    D3 --> D31["點擊編輯"]
+    D3 --> D32["點擊編輯"]
+
+    E --> E1["事件結局<br/>或體悟"]
+
+    F --> F1["內容總結"]
+    F --> F2["再次點題，<br/>前後呼應"]
+    F --> F3["寫下反思"]
+
+    classDef top fill:#c6504d,color:#fff,stroke:#c6504d;
+    classDef main fill:#8265a7,color:#fff,stroke:#8265a7;
+    classDef sub fill:#47acc2,color:#fff,stroke:#47acc2;
+    classDef edit fill:#ff9138,color:#fff,stroke:#ff9138;
+
+    class A top;
+    class B,C,D,E,F main;
+    class B1,B2,B3,C1,C2,C3,C4,C5,D1,D2,D3,E1,F1,F2,F3 sub;
+    class D11,D12,D21,D22,D31,D32 edit;
