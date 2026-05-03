@@ -620,7 +620,8 @@ function advanceStep1Or2SubstepAfterAi(
     if (completedSubstep < 5) {
       session.stepState.step1Substep += 1;
       const nextSub = session.stepState.step1Substep;
-      const q = nextQuestionFromAi?.trim() || buildStep1Question(session);
+      const mustUseQuestionBank = nextSub === 2 || nextSub === 5;
+      const q = mustUseQuestionBank ? buildStep1Question(session) : nextQuestionFromAi?.trim() || buildStep1Question(session);
       session.messages.push(makeMessage({ role: "system", step, text: `子步驟 1-${nextSub}：${q}` }));
       return;
     }
@@ -631,7 +632,8 @@ function advanceStep1Or2SubstepAfterAi(
   if (completedSubstep < 4) {
     session.stepState.step2Substep += 1;
     const nextSub = session.stepState.step2Substep;
-    const q = nextQuestionFromAi?.trim() || buildStep2Question(session);
+    const mustUseQuestionBank = nextSub === 4;
+    const q = mustUseQuestionBank ? buildStep2Question(session) : nextQuestionFromAi?.trim() || buildStep2Question(session);
     session.messages.push(makeMessage({ role: "system", step, text: `子步驟 2-${nextSub}：${q}` }));
     return;
   }

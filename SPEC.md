@@ -275,6 +275,7 @@ API 輸出給學習/分組流程使用：
 2. Step 2
 - `2-1`、`2-2`、`2-3`：取 `subStepPrompts["2-1"|"2-2"|"2-3"]`（無值時 fallback）
 - `2-4`：取 `questionBanks["2-4"]` 隨機抽題
+- 強制規則：`1-2`、`1-5`、`2-4` 不得被 AI 回覆中的「下一題」覆蓋，必須直接由對應 `questionBanks` 抽題
 
 `questionBanks` 的主要來源為 `writingTasks[essayId].questionBanks`（依任務 `essayId` 取用）。
 
