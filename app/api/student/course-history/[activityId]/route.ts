@@ -33,15 +33,23 @@ export async function GET(_: Request, context: { params: Promise<{ activityId: s
   const latest = sessions[0]!;
   const ownMessages = latest.messages.filter((message) => message.userId === user.username);
   const totalMessages = sessions.reduce((sum, session) => sum + session.messages.filter((m) => m.userId === user.username).length, 0);
-  const maxStepReached = sessions.reduce((max, session) => Math.max(max, session.currentStep), 1);
+  const maxStepReached = sessions.reduce(
+    (max, session) => Math.max(max, session.personalSteps?.[user.username] ?? session.currentStep),
+    1
+  );
 
   return NextResponse.json({
+    viewer: {
+      username: user.username
+    },
     activity: {
       id: activity.id,
       title: activity.title,
       classNumber: activity.classNumber,
       genre: activity.genre,
-      durationMinutes: activity.durationMinutes
+      durationMinutes: activity.durationMinutes,
+      essayDescription: activity.essayDescription ?? "",
+      supplemental: activity.supplemental ?? ""
     },
     summary: {
       sessionCount: sessions.length,
@@ -50,6 +58,13 @@ export async function GET(_: Request, context: { params: Promise<{ activityId: s
       maxStepReached,
       totalOwnMessages: totalMessages,
       ownMessagesInLatestSession: ownMessages.length
+    },
+    latestSession: {
+      sessionId: latest.id,
+      personalStep: latest.personalSteps?.[user.username] ?? latest.currentStep,
+      groupName: latest.groupName ?? "",
+      participants: latest.participants,
+      messages: latest.messages
     },
     latestWork: {
       outline: latest.outlines[user.username] ?? "",
@@ -61,7 +76,7 @@ export async function GET(_: Request, context: { params: Promise<{ activityId: s
     sessions: sessions.map((session) => ({
       sessionId: session.id,
       createdAt: session.createdAt,
-      currentStep: session.currentStep,
+      currentStep: session.personalSteps?.[user.username] ?? session.currentStep,
       ownMessageCount: session.messages.filter((message) => message.userId === user.username).length
     }))
   });

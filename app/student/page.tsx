@@ -1152,14 +1152,21 @@ export default function StudentPage() {
         {participatedCourses.length === 0 ? <small>目前沒有已參與課程紀錄。</small> : null}
         {participatedCourses.map((course) => (
           <div key={course.activityId} style={{ borderTop: "1px solid #e5e7eb", padding: "10px 0" }}>
-            <strong>{course.title}</strong>（班級 {course.classNumber}）
-            <div>
-              <small>
-                最近參與：{new Date(course.lastParticipatedAt).toLocaleString("zh-TW")} / 最近步驟 Step {course.lastStep} / 參與次數 {course.sessionCount}
-              </small>
-            </div>
-            <div style={{ width: 180, marginTop: 8 }}>
-              <button type="button" className="secondary" onClick={() => router.push(`/student/history/${course.activityId}`)}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+              <div>
+                <strong>{course.title}</strong>（班級 {course.classNumber}）
+                <div>
+                  <small>
+                    最近參與：{new Date(course.lastParticipatedAt).toLocaleString("zh-TW")} / 最近步驟 Step {course.lastStep} / 參與次數 {course.sessionCount}
+                  </small>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="secondary"
+                style={{ width: "fit-content", padding: "4px 10px", whiteSpace: "nowrap", flex: "0 0 auto" }}
+                onClick={() => router.push(`/student/history/${course.activityId}`)}
+              >
                 查詢紀錄
               </button>
             </div>

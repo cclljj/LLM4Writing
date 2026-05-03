@@ -50,11 +50,12 @@ export async function GET() {
   const byActivity = new Map<string, { lastAt: string; lastStep: number; lastSessionId: string; count: number }>();
   ownSessions.forEach((session) => {
     const aid = session.activityId!;
+    const ownStep = session.personalSteps?.[user.username] ?? session.currentStep;
     const existing = byActivity.get(aid);
     if (!existing) {
       byActivity.set(aid, {
         lastAt: session.createdAt,
-        lastStep: session.currentStep,
+        lastStep: ownStep,
         lastSessionId: session.id,
         count: 1
       });
@@ -63,7 +64,7 @@ export async function GET() {
 
     if (session.createdAt > existing.lastAt) {
       existing.lastAt = session.createdAt;
-      existing.lastStep = session.currentStep;
+      existing.lastStep = ownStep;
       existing.lastSessionId = session.id;
     }
     existing.count += 1;

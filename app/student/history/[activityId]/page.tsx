@@ -18,6 +18,25 @@ type HistoryActivity = {
   classNumber: string;
   genre: string;
   durationMinutes: number;
+  essayDescription: string;
+  supplemental: string;
+};
+
+type SessionMessage = {
+  id: string;
+  role: string;
+  userId?: string;
+  text: string;
+  at: string;
+  step: number;
+};
+
+type LatestSession = {
+  sessionId: string;
+  personalStep: number;
+  groupName: string;
+  participants: string[];
+  messages: SessionMessage[];
 };
 
 type LatestWork = {
@@ -36,8 +55,12 @@ type SessionItem = {
 };
 
 type HistoryPayload = {
+  viewer: {
+    username: string;
+  };
   activity: HistoryActivity;
   summary: HistorySummary;
+  latestSession: LatestSession;
   latestWork: LatestWork;
   sessions: SessionItem[];
 };
@@ -63,6 +86,41 @@ export default function StudentCourseHistoryPage() {
   const [loading, setLoading] = useState(true);
 
   const activityId = useMemo(() => String(params?.activityId ?? ""), [params?.activityId]);
+
+  const renderMessageHtml = (text: string): string => {
+    const lines = text.split(/\r?\n/);
+    const htmlParts: string[] = [];
+    let listBuffer: string[] = [];
+
+    const flushList = () => {
+      if (listBuffer.length === 0) return;
+      htmlParts.push(`<ul>${listBuffer.join("")}</ul>`);
+      listBuffer = [];
+    };
+
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      if (!line) {
+        flushList();
+        continue;
+      }
+      const escaped = line
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;")
+        .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+      if (escaped.startsWith("- ")) {
+        listBuffer.push(`<li>${escaped.slice(2)}</li>`);
+        continue;
+      }
+      flushList();
+      htmlParts.push(`<p style=\"margin:6px 0;\">${escaped}</p>`);
+    }
+    flushList();
+    return htmlParts.join("");
+  };
 
   useEffect(() => {
     if (!activityId) {
@@ -123,10 +181,75 @@ export default function StudentCourseHistoryPage() {
       {!loading && !error && history ? (
         <>
           <div className="card">
-            <h2>{history.activity.title}</h2>
-            <p>
-              班級：{history.activity.classNumber} / 文體：{history.activity.genre} / 討論時長：{history.activity.durationMinutes} 分鐘
-            </p>
+            <h2>課程內容</h2>
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 10,
+                alignItems: "center",
+                lineHeight: 1.4
+              }}
+            >
+              <strong>題目：{history.activity.title}</strong>
+              <span>班級：{history.activity.classNumber}</span>
+              <span>文體：{history.activity.genre}</span>
+              <span>時長：{history.activity.durationMinutes} 分鐘</span>
+              <span>小組：{history.latestSession.groupName || "—"}</span>
+              <span>組員：{history.latestSession.participants.length > 0 ? history.latestSession.participants.join("、") : "—"}</span>
+            </div>
+            <div style={{ marginTop: 8 }}>
+              <p style={{ margin: 0 }}>引導說明：{history.activity.essayDescription || "—"}</p>
+            </div>
+            <p style={{ margin: "6px 0 0" }}>補充資料：{history.activity.supplemental || "—"}</p>
+          </div>
+
+          <div className="card">
+            <h2>歷史步驟說明與互動內容</h2>
+            {Array.from(new Set(history.latestSession.messages.map((m) => m.step)))
+              .sort((a, b) => a - b)
+              .map((step) => {
+                const stepMessages = history.latestSession.messages.filter((m) => {
+                  if (m.step !== step) return false;
+                  if (m.role === "student") return m.userId === history.viewer.username;
+                  if (m.role === "ai") return !m.userId || m.userId === history.viewer.username;
+                  if (m.role === "system") return !m.userId || m.userId === history.viewer.username;
+                  return false;
+                });
+                return (
+                  <div key={`history-step-${step}`} style={{ borderTop: "1px solid #e5e7eb", padding: "10px 0" }}>
+                    <h3 style={{ margin: "0 0 8px" }}>
+                      Step {step} {stepNameMap[step] ? `- ${stepNameMap[step]}` : ""}
+                    </h3>
+                    {stepMessages.length === 0 ? (
+                      <small>此步驟沒有可顯示內容。</small>
+                    ) : (
+                      stepMessages.map((message) => (
+                        <div key={message.id} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
+                          <strong>
+                            {message.role === "student"
+                              ? "你"
+                              : message.role === "ai"
+                                ? "AI 回覆"
+                                : message.role === "system"
+                                  ? "系統訊息"
+                                  : message.role}
+                          </strong>
+                          <div
+                            style={{ marginTop: 4 }}
+                            dangerouslySetInnerHTML={{ __html: renderMessageHtml(message.text) }}
+                          />
+                          <small>{message.at}</small>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                );
+              })}
+          </div>
+
+          <div className="card">
+            <h2>參與摘要</h2>
             <small>
               共參與 {history.summary.sessionCount} 次，最近一次：{new Date(history.summary.lastParticipatedAt).toLocaleString("zh-TW")}（
               {history.summary.lastSessionId}）
@@ -137,40 +260,16 @@ export default function StudentCourseHistoryPage() {
                 {history.summary.ownMessagesInLatestSession} 則
               </small>
             </div>
-          </div>
-
-          <div className="card">
-            <h2>我的最後作品與回饋</h2>
-
-            <h3>文章結構樹</h3>
-            <pre>{history.latestWork.outline || "尚未儲存"}</pre>
-
-            <h3 style={{ marginTop: 12 }}>步驟 6 初稿</h3>
-            <pre>{history.latestWork.draftStep6 || "尚未儲存"}</pre>
-
-            <h3 style={{ marginTop: 12 }}>步驟 8 最終稿</h3>
-            <pre>{history.latestWork.draftStep8 || history.latestWork.draftStep6 || "尚未儲存"}</pre>
-
-            <h3 style={{ marginTop: 12 }}>步驟 7 分析回饋</h3>
-            <pre>{history.latestWork.step7Report || "尚未產生"}</pre>
-
-            <h3 style={{ marginTop: 12 }}>步驟 10 總結回饋</h3>
-            <pre>{history.latestWork.step10Report || "尚未產生"}</pre>
-          </div>
-
-          <div className="card">
-            <h2>歷次參與清單</h2>
-            {history.sessions.map((item) => (
-              <div key={item.sessionId} style={{ borderTop: "1px solid #e5e7eb", padding: "10px 0" }}>
-                <strong>{item.sessionId}</strong>
-                <div>
+            <div style={{ marginTop: 10 }}>
+              {history.sessions.map((item) => (
+                <div key={item.sessionId} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
                   <small>
                     {new Date(item.createdAt).toLocaleString("zh-TW")} / 最後進度 Step {item.currentStep}
                     {stepNameMap[item.currentStep] ? `（${stepNameMap[item.currentStep]}）` : ""} / 個人發言 {item.ownMessageCount} 則
                   </small>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </>
       ) : null}
