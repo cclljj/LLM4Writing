@@ -450,10 +450,13 @@ export default function TeacherPage() {
     }
 
     if (step === 4) {
-      const ready = allParticipantsReplied;
+      const completedUsers = session.groupGate?.["4-complete"] ?? [];
+      const ready =
+        session.participants.length > 0 &&
+        session.participants.every((participant) => completedUsers.includes(participant));
       return ready
-        ? { ready: true, text: "步驟 4 已收齊全組回覆，建議切換到 Step 5。", nextStep }
-        : { ready: false, text: "步驟 4 尚未收齊全組回覆。" };
+        ? { ready: true, text: "步驟 4 已全員確認完成，建議切換到 Step 5。", nextStep }
+        : { ready: false, text: "步驟 4 尚未全員確認完成。" };
     }
 
     if ([3, 6, 8].includes(step)) {

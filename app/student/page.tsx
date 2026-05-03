@@ -358,7 +358,7 @@ export default function StudentPage() {
   }, [session?.id, session?.currentStep, loginUser]);
 
   useEffect(() => {
-    if (session?.currentStep !== 3 || !showOutlineEditor || !loginUser) return;
+    if (!(session?.currentStep === 3 || session?.currentStep === 4) || !showOutlineEditor || !loginUser) return;
     const saved = session.outlines[loginUser]?.trim() ?? "";
     setOutlineNodes(saved ? fromMermaid(saved) : makeDefaultOutlineNodes());
     setEditingNodeId(null);
@@ -430,9 +430,7 @@ export default function StudentPage() {
         ? `1-${session.stepState.step1Substep ?? 1}`
         : currentStep === 2
           ? `2-${session.stepState.step2Substep ?? 1}`
-          : currentStep === 4
-            ? "4-1"
-            : null;
+          : null;
     const responders = activeGateKey ? session.groupGate?.[activeGateKey] ?? [] : [];
     const hasSubmittedThisTurn = Boolean(loginUser && responders.includes(loginUser));
     const hidePeerAnswersBeforeOwn =
@@ -445,7 +443,7 @@ export default function StudentPage() {
     let currentTurnStartIndex = -1;
     for (let i = stepMessages.length - 1; i >= 0; i -= 1) {
       const m = stepMessages[i]!;
-      if (activeGateKey && activeGateKey !== "4-1") {
+      if (activeGateKey) {
         if (m.role === "system" && m.text.includes(`子步驟 ${activeGateKey}：`)) {
           currentTurnStartIndex = i;
           break;
@@ -634,6 +632,22 @@ export default function StudentPage() {
     setSession(data);
   }
 
+  async function completeStep4() {
+    if (!session) return;
+    setError("");
+    const response = await fetch("/api/session/step4/complete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId: session.id })
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      setError(data.error ?? "complete_step4_failed");
+      return;
+    }
+    setSession(data);
+  }
+
   const currentStep = session?.currentStep ?? 1;
   const currentMode = getMode(currentStep);
   const currentModeLabel =
@@ -774,22 +788,33 @@ export default function StudentPage() {
       ? `1-${session?.stepState.step1Substep ?? 1}`
       : currentStep === 2
         ? `2-${session?.stepState.step2Substep ?? 1}`
-        : currentStep === 4
-          ? "4-1"
         : null;
   const responders = activeGateKey ? session?.groupGate?.[activeGateKey] ?? [] : [];
   const step3CompletedUsers = session?.groupGate?.["3-complete"] ?? [];
+  const step4CompletedUsers = session?.groupGate?.["4-complete"] ?? [];
   const step3CompletedByMe = Boolean(loginUser && step3CompletedUsers.includes(loginUser));
+  const step4CompletedByMe = Boolean(loginUser && step4CompletedUsers.includes(loginUser));
+  const allStep4Completed =
+    currentStep === 4 &&
+    !!session &&
+    session.participants.length > 0 &&
+    session.participants.every((participant) => step4CompletedUsers.includes(participant));
   const hasSubmittedThisTurn = Boolean(loginUser && responders.includes(loginUser));
   const allRespondedThisTurn =
     currentMode === "group_interaction" && !!session && session.participants.every((p) => responders.includes(p));
   const canReplyToQuestion =
+    currentStep === 4
+      ? !step4CompletedByMe
+      :
     currentMode === "group_interaction"
       ? !hasSubmittedThisTurn && !allRespondedThisTurn
       : currentStep === 3
         ? !step3CompletedByMe
         : Boolean(lastIsQuestion);
   const waitingGroupMembers =
+    currentStep === 4
+      ? !!session && step4CompletedByMe && !allStep4Completed
+      :
     currentMode === "group_interaction" &&
     !!session &&
     Array.isArray(responders) &&
@@ -800,6 +825,9 @@ export default function StudentPage() {
       .filter((message) => message.step === currentStep)
       .at(-1) ?? null;
   const waitingAiForGroup =
+    currentStep === 4
+      ? false
+      :
     currentMode === "group_interaction" &&
     !!session &&
     session.participants.length > 0 &&
@@ -1186,7 +1214,7 @@ export default function StudentPage() {
             </div>
           ) : null}
 
-          {(currentStep === 3 || currentStep === 4) && loginUser ? (
+          {currentStep === 3 && loginUser ? (
             <div className="card">
               <h2>文章結構樹</h2>
               <div className="row">
@@ -1348,21 +1376,175 @@ export default function StudentPage() {
                   )}
                 </>
               ) : null}
-
-              {currentStep === 4 ? (
-                <>
-                  <label style={{ marginTop: 14 }}>瀏覽組員結構樹（唯讀）</label>
-                  <select value={refUser} onChange={(e) => setRefUser(e.target.value)}>
-                    {(teammateUsers.length > 0 ? teammateUsers : session.participants).map((user) => (
-                      <option key={user} value={user}>
-                        {user}
-                      </option>
-                    ))}
-                  </select>
-                  <pre style={{ marginTop: 8 }}>{session.outlines[refUser] ?? "尚未提供"}</pre>
-                </>
-              ) : null}
             </div>
+          ) : null}
+
+          {currentStep === 4 && session && loginUser ? (
+            <>
+              <div className="card">
+                <h2>同組同學結構樹</h2>
+                <label style={{ marginTop: 10 }}>選擇同學</label>
+                <select value={refUser} onChange={(e) => setRefUser(e.target.value)}>
+                  {(teammateUsers.length > 0 ? teammateUsers : session.participants).map((user) => (
+                    <option key={user} value={user}>
+                      {user}
+                    </option>
+                  ))}
+                </select>
+                {(() => {
+                  const preview = buildOutlinePreview(session.outlines[refUser] ?? "");
+                  return (
+                    <div style={{ marginTop: 10, overflow: "auto", border: "1px solid #e5e7eb", borderRadius: 8 }}>
+                      <svg width={preview.width} height={preview.height} style={{ display: "block", background: "#ffffff" }}>
+                        {preview.nodes
+                          .filter((node) => node.parentId)
+                          .map((node) => {
+                            const parent = preview.nodes.find((item) => item.id === node.parentId);
+                            if (!parent) return null;
+                            return (
+                              <line
+                                key={`peer-edge-${parent.id}-${node.id}`}
+                                x1={parent.x + 55}
+                                y1={parent.y + 30}
+                                x2={node.x + 55}
+                                y2={node.y}
+                                stroke="#64748b"
+                                strokeWidth={2}
+                              />
+                            );
+                          })}
+                        {preview.nodes.map((node) => (
+                          <g key={`peer-node-${node.id}`}>
+                            <rect x={node.x} y={node.y} width={110} height={64} rx={10} ry={10} fill="#f8fafc" stroke="#94a3b8" />
+                            <text x={node.x + 55} y={node.y + 36} textAnchor="middle" fontSize="12" fill="#0f172a">
+                              {node.text.length > 20 ? `${node.text.slice(0, 20)}...` : node.text}
+                            </text>
+                          </g>
+                        ))}
+                      </svg>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              <div className="card">
+                <h2>我的結構樹（可編修）</h2>
+                <div className="row">
+                  <div style={{ width: 180 }}>
+                    <button type="button" className="secondary" onClick={() => setShowOutlineEditor((prev) => !prev)} disabled={step4CompletedByMe}>
+                      編修結構樹
+                    </button>
+                  </div>
+                </div>
+                {step4CompletedByMe ? (
+                  <>
+                    <small>你已確認完成此步驟，已鎖定編修。</small>
+                    <pre style={{ marginTop: 8 }}>{session.outlines[loginUser] ?? "尚未提供"}</pre>
+                  </>
+                ) : showOutlineEditor ? (
+                  <>
+                    <small>雙擊節點可編輯，拖曳可調整位置與層次；完成後請先存檔。</small>
+                    <div
+                      style={{
+                        width: "100%",
+                        maxHeight: 560,
+                        border: "1px solid #e5e7eb",
+                        borderRadius: 10,
+                        marginTop: 10,
+                        overflow: "auto",
+                        background: "linear-gradient(180deg, #f8fafc 0%, #ffffff 100%)"
+                      }}
+                    >
+                      <div
+                        ref={outlineCanvasRef}
+                        style={{ position: "relative", width: outlineCanvasSize.width, height: outlineCanvasSize.height, minWidth: "100%", minHeight: 560 }}
+                      >
+                        <svg style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}>
+                          {outlineNodes
+                            .filter((node) => node.parentId)
+                            .map((node) => {
+                              const parent = outlineNodes.find((item) => item.id === node.parentId);
+                              if (!parent) return null;
+                              return (
+                                <line key={`s4-edge-${parent.id}-${node.id}`} x1={parent.x + 60} y1={parent.y + 34} x2={node.x + 60} y2={node.y} stroke="#64748b" strokeWidth={2} />
+                              );
+                            })}
+                        </svg>
+                        {outlineNodes.map((node) => {
+                          const children = childrenMap.get(node.id) ?? [];
+                          const depth = getDepth(node.id);
+                          const canDelete = depth >= 2 && children.length === 0;
+                          return (
+                            <div
+                              key={`s4-node-${node.id}`}
+                              onMouseEnter={() => draggingNodeId && setDropTargetNodeId(node.id)}
+                              onMouseDown={(event) => {
+                                const target = event.target as HTMLElement;
+                                if (target.closest("button") || target.closest("input")) return;
+                                const box = event.currentTarget.getBoundingClientRect();
+                                setDragOffset({ x: event.clientX - box.left, y: event.clientY - box.top });
+                                setDraggingNodeId(node.id);
+                              }}
+                              onDoubleClick={(event) => {
+                                event.stopPropagation();
+                                setDraggingNodeId(null);
+                                setDropTargetNodeId(null);
+                                setEditingNodeId(node.id);
+                              }}
+                              style={{
+                                position: "absolute",
+                                left: node.x,
+                                top: node.y,
+                                width: 120,
+                                minHeight: 68,
+                                borderRadius: 10,
+                                border: node.id === dropTargetNodeId ? "2px solid #0ea5e9" : "1px solid #94a3b8",
+                                background: "#ffffff",
+                                boxShadow: "0 4px 14px rgba(15, 23, 42, 0.08)",
+                                padding: "8px 10px 6px",
+                                cursor: "move",
+                                userSelect: "none"
+                              }}
+                            >
+                              <div style={{ display: "flex", justifyContent: "flex-end", gap: 4, marginBottom: 4 }}>
+                                <button type="button" className="secondary" style={{ width: 24, height: 24, padding: 0, lineHeight: 1 }} onMouseDown={(e) => e.stopPropagation()} onClick={() => addChildNode(node.id)}>
+                                  ➕
+                                </button>
+                                {canDelete ? (
+                                  <button type="button" className="secondary" style={{ width: 24, height: 24, padding: 0, lineHeight: 1 }} onMouseDown={(e) => e.stopPropagation()} onClick={() => removeLeafNode(node.id)}>
+                                    ➖
+                                  </button>
+                                ) : null}
+                              </div>
+                              {editingNodeId === node.id ? (
+                                <input
+                                  autoFocus
+                                  value={node.text}
+                                  onChange={(e) => setOutlineNodes((prev) => prev.map((item) => (item.id === node.id ? { ...item, text: e.target.value } : item)))}
+                                  onBlur={() => setEditingNodeId(null)}
+                                  onMouseDown={(e) => e.stopPropagation()}
+                                />
+                              ) : (
+                                <div style={{ fontSize: 13, fontWeight: 600, color: "#0f172a", whiteSpace: "pre-wrap" }}>{node.text}</div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    <div className="row" style={{ marginTop: 10 }}>
+                      <div style={{ width: 180 }}>
+                        <button type="button" onClick={saveOutlineTree} disabled={step4CompletedByMe}>
+                          存檔
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <pre style={{ marginTop: 8 }}>{session.outlines[loginUser] ?? "尚未提供"}</pre>
+                )}
+              </div>
+            </>
           ) : null}
 
           {(currentStep === 6 || currentStep === 8) && loginUser ? (
@@ -1447,7 +1629,7 @@ export default function StudentPage() {
 
           {currentStep !== 3 ? (
           <div className="card">
-            <h2>互動內容</h2>
+            <h2>{currentStep === 4 ? "小組討論區" : "互動內容"}</h2>
             {currentMode === "non_interactive" ? (
               <small>本步驟為無互動模式，請閱讀系統/AI 產出內容。</small>
             ) : null}
@@ -1481,7 +1663,12 @@ export default function StudentPage() {
             ) : null}
             {waitingGroupMembers ? (
               <p style={{ marginTop: 10 }}>
-                <small>等待同組其他同學完成本題回覆...</small>
+                <small>{currentStep === 4 ? "你已確認完成此步驟，等待同組其他同學完成..." : "等待同組其他同學完成本題回覆..."}</small>
+              </p>
+            ) : null}
+            {currentStep === 4 && allStep4Completed ? (
+              <p style={{ marginTop: 10 }}>
+                <small>全組皆已確認完成此步驟，請等待老師切換至步驟 5。</small>
               </p>
             ) : null}
             {step1CompletedWaitingTeacher ? (
@@ -1502,12 +1689,22 @@ export default function StudentPage() {
             !step1CompletedWaitingTeacher &&
             !step2CompletedWaitingTeacher ? (
               <form onSubmit={sendMessage}>
-                <label>你的回答</label>
+                <label>{currentStep === 4 ? "我的發言" : "你的回答"}</label>
                 <textarea value={text} onChange={(e) => setText(e.target.value)} />
                 <button type="submit" style={{ marginTop: 10 }}>
                   發送訊息
                 </button>
+                {currentStep === 4 ? (
+                  <button type="button" className="secondary" style={{ marginTop: 10 }} onClick={completeStep4}>
+                    確認完成此步驟
+                  </button>
+                ) : null}
               </form>
+            ) : null}
+            {currentStep === 4 && step4CompletedByMe && !allStep4Completed ? (
+              <button type="button" className="secondary" style={{ marginTop: 10 }} disabled>
+                已確認完成此步驟
+              </button>
             ) : null}
 
             {error ? (

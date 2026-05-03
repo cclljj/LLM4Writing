@@ -574,6 +574,15 @@ export async function sendStudentMessage(session: SessionState, userId: string, 
     return result.session;
   }
 
+  if (step === 4) {
+    const completedUsers = new Set(session.groupGate["4-complete"] ?? []);
+    if (completedUsers.has(userId)) {
+      throw new Error("step4_already_completed");
+    }
+    session.messages.push(makeMessage({ role: "student", userId, step, text }));
+    return session;
+  }
+
   session.messages.push(makeMessage({ role: "student", userId, step, text }));
 
   if (mode === "personal_interaction") {
