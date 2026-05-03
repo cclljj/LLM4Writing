@@ -41,7 +41,7 @@ function loadStepOpeningTexts(): Record<string, string> {
   const baseDir = path.join(process.cwd(), "src", "config", "step-opening");
   const result: Record<string, string> = {};
   steps.forEach((step) => {
-    const filePath = path.join(baseDir, `${step}.txt`);
+    const filePath = path.join(baseDir, `${step}.md`);
     if (!existsSync(filePath)) return;
     try {
       result[step] = readFileSync(filePath, "utf8");
