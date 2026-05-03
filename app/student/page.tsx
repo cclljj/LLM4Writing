@@ -1306,11 +1306,11 @@ export default function StudentPage() {
                         {historyReviewExpanded[review.step] ? "▾ 閉合" : "▸ 展開"}
                       </button>
                     </div>
+                  {historyReviewExpanded[review.step] ? (
+                  <>
                     <p>
                       <small>此為歷史步驟回顧（僅本人與 AI 互動）。</small>
                     </p>
-                  {historyReviewExpanded[review.step] ? (
-                  <>
                     <hr style={{ border: 0, borderTop: "1px solid #e5e7eb", margin: "10px 0" }} />
                     <h3 style={{ margin: "0 0 8px" }}>互動內容</h3>
                     {review.messages.length > 0 ? (
