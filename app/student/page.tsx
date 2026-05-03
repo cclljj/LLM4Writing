@@ -316,6 +316,7 @@ export default function StudentPage() {
   const [savedDraft8Text, setSavedDraft8Text] = useState("");
   const [step6RefUser, setStep6RefUser] = useState("");
   const outlineCanvasRef = useRef<HTMLDivElement | null>(null);
+  const lastOwnStepRef = useRef<number | null>(null);
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -350,8 +351,9 @@ export default function StudentPage() {
   useEffect(() => {
     if (!session || !loginUser) return;
     const ownStep = session.personalSteps?.[loginUser] ?? session.currentStep;
+    const justEnteredStep6 = lastOwnStepRef.current !== 6 && ownStep === 6;
     setOutlineText(session.outlines[loginUser] ?? "");
-    if (ownStep === 6) {
+    if (ownStep === 6 && (justEnteredStep6 || !draftText)) {
       const latestDraft = session.draftStep6[loginUser] ?? "";
       setDraftText(latestDraft);
       setSavedDraft6Text(latestDraft);
@@ -372,6 +374,7 @@ export default function StudentPage() {
     if (!refUser && session.participants.length > 0) {
       setRefUser((session.participants.find((user) => user !== loginUser) ?? session.participants[0])!);
     }
+    lastOwnStepRef.current = ownStep;
   }, [session?.id, session?.currentStep, session?.personalSteps, loginUser]);
 
   useEffect(() => {
