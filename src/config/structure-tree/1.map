@@ -1,0 +1,40 @@
+```mermaid
+flowchart TD
+    A["議論文<br/>作文題目"]
+
+    A --> B["引論"]
+    A --> C["本論"]
+    A --> D["結論"]
+
+    %% 引論
+    B --> B1["提出<br/>發現的問題"]
+    B --> B2["核心論點"]
+
+    %% 本論
+    C --> C1["論點（一）"]
+    C --> C2["論點（二）"]
+    C --> C3["論點（三）"]
+
+    C1 --> C11["論據（例子、<br/>數據等）"]
+    C1 --> C12["論證（支持或<br/>反駁的說明）"]
+
+    C2 --> C21["論據（例子、<br/>數據等）"]
+    C2 --> C22["論證（支持或<br/>反駁的說明）"]
+
+    C3 --> C31["論據（例子、<br/>數據等）"]
+    C3 --> C32["論證（支持或<br/>反駁的說明）"]
+
+    %% 結論
+    D --> D1["提出解決方法<br/>或總結論點"]
+
+    %% 樣式
+    classDef top fill:#c6504d,color:#fff,stroke:#c6504d;
+    classDef main fill:#8265a7,color:#fff,stroke:#8265a7;
+    classDef sub fill:#47acc2,color:#fff,stroke:#47acc2;
+    classDef edit fill:#f2994a,color:#fff,stroke:#f2994a;
+
+    class A top;
+    class B,C,D main;
+    class B1,B2,C1,C2,C3,D1 sub;
+    class C11,C12,C21,C22,C31,C32 edit;
+```
