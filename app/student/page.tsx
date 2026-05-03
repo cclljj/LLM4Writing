@@ -1918,7 +1918,25 @@ export default function StudentPage() {
             {interactiveMessages.map((message) => (
               currentStep === 6 && message.kind === "student" ? null : (
               <div key={message.id} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
-                {currentStep === 4 && message.kind === "student" ? (
+                {currentStep === 1 && message.kind === "question" && message.text.startsWith("引導說明：") ? (
+                  <div>
+                    <strong>引導說明</strong>
+                    <div
+                      style={{ marginTop: 6 }}
+                      dangerouslySetInnerHTML={{ __html: renderMessageHtml(message.text.replace(/^引導說明：\s*/, "")) }}
+                    />
+                    <small>{message.at}</small>
+                  </div>
+                ) : currentStep === 1 && message.kind === "question" && message.text.startsWith("補充資料：") ? (
+                  <div style={{ borderTop: "1px solid #e5e7eb", paddingTop: 8 }}>
+                    <strong>補充資料</strong>
+                    <div
+                      style={{ marginTop: 6 }}
+                      dangerouslySetInnerHTML={{ __html: renderMessageHtml(message.text.replace(/^補充資料：\s*/, "")) }}
+                    />
+                    <small>{message.at}</small>
+                  </div>
+                ) : currentStep === 4 && message.kind === "student" ? (
                   <p style={{ margin: 0 }}>
                     <strong>{message.userId || "學生"}：</strong>
                     <span style={{ marginLeft: 4, whiteSpace: "pre-wrap" }}>{message.text}</span>
