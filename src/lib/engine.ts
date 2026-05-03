@@ -410,7 +410,60 @@ function buildStep7Report(session: SessionState, userId: string): string {
 
 function buildStep10Report(session: SessionState, userId: string): string {
   const essay = session.draftStep8[userId] ?? session.draftStep6[userId] ?? "(尚未提交作文)";
-  return `步驟 10 總結報告（${userId}）\n最終稿：${essay}\n總評：結構已改善，建議再精煉結語。`;
+  return `步驟 10 總結報告（${userId}）\n最終稿：${essay}\n總評：結構已改善，建議再精煉結語。\n\n整個課程操作結束，請等待老師的下一步指示。`;
+}
+
+function buildFullCourseContextForUser(session: SessionState, userId: string): string {
+  const relevant = session.messages
+    .filter((m) => {
+      if (m.role === "teacher") return false;
+      if (m.role === "student") return m.userId === userId;
+      if (m.role === "ai") return !m.userId || m.userId === userId;
+      if (m.role === "system") return !m.userId || m.userId === userId;
+      return false;
+    })
+    .slice(-80);
+
+  return relevant
+    .map((m) => {
+      if (m.role === "student") return `S${m.step}-學生(${userId})：${m.text}`;
+      if (m.role === "ai") return `S${m.step}-AI：${m.text}`;
+      return `S${m.step}-系統：${m.text}`;
+    })
+    .join("\n");
+}
+
+async function generateStep10Report(session: SessionState, userId: string): Promise<string> {
+  const fallback = buildStep10Report(session, userId);
+  if (!isLlmConfigured()) {
+    return fallback;
+  }
+
+  const systemParts: string[] = [];
+  if (session.promptConfig.systemPrompt) systemParts.push(session.promptConfig.systemPrompt);
+  const step10Prompt = session.promptConfig.stepPrompts["10"];
+  if (step10Prompt) systemParts.push(step10Prompt);
+  systemParts.push("請針對該學生在整個課程中的表現，輸出完整總結報告。");
+
+  const fullContext = buildFullCourseContextForUser(session, userId);
+  const finalEssay = session.draftStep8[userId] ?? session.draftStep6[userId] ?? "(尚未提交作文)";
+  const messages: LlmChatMessage[] = [
+    { role: "system", content: systemParts.join("\n\n") },
+    {
+      role: "user",
+      content:
+        `學生帳號：${userId}\n` +
+        `最終作文內容：\n${finalEssay}\n\n` +
+        `學生完整歷程紀錄（含前序步驟）：\n${fullContext || "(無)"}\n\n` +
+        "請輸出步驟 10 的總結報告，並在最後一段明確寫出：「整個課程操作結束，請等待老師的下一步指示」。"
+    }
+  ];
+
+  try {
+    return await generateAiTextWithRetry(messages, 0.6, 900);
+  } catch {
+    return fallback;
+  }
 }
 
 // --- existing non-LLM report builders below ---
@@ -475,7 +528,7 @@ export function switchStep(session: SessionState, step: number): SessionState {
       session.participants.forEach((participant) => {
         session.reports.step10[participant] = buildStep10Report(session, participant);
       });
-      session.messages.push(makeMessage({ role: "ai", step, text: "步驟 10 總結報告已生成。" }));
+      session.messages.push(makeMessage({ role: "ai", step, text: "步驟 10 總結報告已生成，整個課程操作結束，請等待老師的下一步指示。" }));
     }
   }
 
@@ -636,6 +689,11 @@ export async function sendStudentMessage(session: SessionState, userId: string, 
       session.messages.push(makeMessage({ role: "system", userId, step, text: `下一題：${step9Questions[next]}` }));
     } else {
       session.messages.push(makeMessage({ role: "system", userId, step, text: "個人反思完成。" }));
+      session.personalSteps = session.personalSteps ?? {};
+      session.personalSteps[userId] = 10;
+      const step10Report = await generateStep10Report(session, userId);
+      session.reports.step10[userId] = step10Report;
+      session.messages.push(makeMessage({ role: "ai", userId, step: 10, text: step10Report }));
     }
     return session;
   }
