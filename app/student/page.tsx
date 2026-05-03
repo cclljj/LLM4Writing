@@ -799,27 +799,6 @@ export default function StudentPage() {
     }
   }
 
-  async function backStep8ToStep6() {
-    if (!session || currentStep !== 8) return;
-    setError("");
-    setIsCompletingStep8(true);
-    try {
-      const response = await fetch("/api/session/step8/back-to-step6", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId: session.id })
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        setError(data.error ?? "step8_back_to_step6_failed");
-        return;
-      }
-      setSession(data);
-    } finally {
-      setIsCompletingStep8(false);
-    }
-  }
-
   const currentStep = session && loginUser ? session.personalSteps?.[loginUser] ?? session.currentStep : session?.currentStep ?? 1;
   const currentMode = getMode(currentStep);
   const currentModeLabel =
@@ -1803,13 +1782,6 @@ export default function StudentPage() {
                 ) : null}
                 {currentStep === 8 ? (
                   <div style={{ width: 180 }}>
-                    <button type="button" className="secondary" onClick={backStep8ToStep6} disabled={isCompletingStep8}>
-                      回到步驟六
-                    </button>
-                  </div>
-                ) : null}
-                {currentStep === 8 ? (
-                  <div style={{ width: 180 }}>
                     <button type="button" className="secondary" onClick={completeStep8ToStep9} disabled={isCompletingStep8}>
                       完成潤飾步驟
                     </button>
@@ -1863,7 +1835,7 @@ export default function StudentPage() {
             </div>
           ) : null}
 
-          {currentStep !== 3 && currentStep !== 5 ? (
+          {currentStep !== 3 && currentStep !== 5 && currentStep !== 8 ? (
           <div className="card">
             <h2>{currentStep === 4 ? "小組討論區" : "互動內容"}</h2>
             {currentMode === "non_interactive" ? (
