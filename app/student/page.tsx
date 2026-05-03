@@ -62,6 +62,12 @@ type InteractiveItem = {
   userId?: string;
 };
 
+type StepReview = {
+  step: number;
+  title: string;
+  messages: InteractiveItem[];
+};
+
 type OutlineNode = {
   id: string;
   parentId: string | null;
@@ -475,6 +481,32 @@ export default function StudentPage() {
       });
     return result;
   }, [session, sortedMessages, loginUser]);
+  const historyReviewSteps = useMemo(() => {
+    if (!session || !loginUser || session.currentStep <= 1) return [] as StepReview[];
+    const reviews: StepReview[] = [];
+    for (let step = 1; step < session.currentStep; step += 1) {
+      const messages = sortedMessages
+        .filter((m) => m.step === step)
+        .flatMap((m): InteractiveItem[] => {
+          if (m.role === "system" || m.role === "teacher") return [];
+          if (m.role === "student") {
+            if (m.userId !== loginUser) return [];
+            return [{ id: m.id, kind: "student", text: m.text, at: m.at, userId: m.userId }];
+          }
+          if (m.role === "ai") {
+            if (m.userId && m.userId !== loginUser) return [];
+            return [{ id: m.id, kind: "ai", text: m.text, at: m.at, userId: m.userId }];
+          }
+          return [];
+        });
+      reviews.push({
+        step,
+        title: stepNameMap[step] ?? `步驟 ${step}`,
+        messages
+      });
+    }
+    return reviews;
+  }, [loginUser, session, sortedMessages]);
   const currentActivity = useMemo(
     () => {
       const all = [...classCourses];
@@ -953,6 +985,36 @@ export default function StudentPage() {
               <p style={{ margin: "6px 0 0" }}>補充資料：{currentActivity?.supplemental || "—"}</p>
             </div>
           </div>
+
+          {historyReviewSteps.length > 0 ? (
+            <div className="card">
+              <h2>前序步驟回顧</h2>
+              <small>以下僅顯示你在先前步驟與 AI 的互動紀錄。</small>
+              {historyReviewSteps.map((review) => (
+                <div key={`review-step-${review.step}`} style={{ borderTop: "1px solid #e5e7eb", padding: "10px 0" }}>
+                  <strong>
+                    Step {review.step} - {review.title}
+                  </strong>
+                  {review.messages.length > 0 ? (
+                    review.messages.map((message) => (
+                      <div key={`review-msg-${message.id}`} style={{ marginTop: 8, paddingLeft: 8 }}>
+                        <strong>{message.kind === "student" ? "你" : "AI"}</strong>
+                        <div
+                          style={{ marginTop: 4 }}
+                          dangerouslySetInnerHTML={{ __html: renderMessageHtml(message.text) }}
+                        />
+                        <small>{message.at}</small>
+                      </div>
+                    ))
+                  ) : (
+                    <p style={{ margin: "8px 0 0" }}>
+                      <small>此步驟目前沒有可顯示的個人互動紀錄。</small>
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : null}
 
           <div className="card">
             <h2>
