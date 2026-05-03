@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession, saveSession } from "@/src/lib/store";
+import { reconcileCompletedStep9Users } from "@/src/lib/engine";
 
 export async function GET(_: Request, context: { params: Promise<{ sessionId: string }> }) {
   const { sessionId } = await context.params;
@@ -24,6 +25,10 @@ export async function GET(_: Request, context: { params: Promise<{ sessionId: st
         changed = true;
       }
     });
+  }
+  const reconciled = await reconcileCompletedStep9Users(session);
+  if (reconciled) {
+    changed = true;
   }
   if (changed) {
     await saveSession(session);

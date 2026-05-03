@@ -466,6 +466,34 @@ async function generateStep10Report(session: SessionState, userId: string): Prom
   }
 }
 
+async function finalizeStep9ForUser(session: SessionState, userId: string): Promise<void> {
+  session.personalSteps = session.personalSteps ?? {};
+  session.personalSteps[userId] = 10;
+  const step10Report = await generateStep10Report(session, userId);
+  session.reports.step10[userId] = step10Report;
+  session.messages.push(makeMessage({ role: "ai", userId, step: 10, text: step10Report }));
+}
+
+export async function reconcileCompletedStep9Users(session: SessionState): Promise<boolean> {
+  normalizeSessionRuntimeShape(session);
+  const step9Questions = getStep9Questions(session);
+  let changed = false;
+  for (const participant of session.participants) {
+    const userStep = session.personalSteps?.[participant] ?? session.currentStep;
+    const answeredCount = session.reflectionIndex?.[participant] ?? 0;
+    if (userStep !== 9 || answeredCount < step9Questions.length) continue;
+
+    const hasStep10Report = Boolean(session.reports.step10?.[participant]?.trim());
+    if (!hasStep10Report) {
+      await finalizeStep9ForUser(session, participant);
+    } else {
+      session.personalSteps![participant] = 10;
+    }
+    changed = true;
+  }
+  return changed;
+}
+
 // --- existing non-LLM report builders below ---
 
 export function switchStep(session: SessionState, step: number): SessionState {
@@ -689,11 +717,7 @@ export async function sendStudentMessage(session: SessionState, userId: string, 
       session.messages.push(makeMessage({ role: "system", userId, step, text: `下一題：${step9Questions[next]}` }));
     } else {
       session.messages.push(makeMessage({ role: "system", userId, step, text: "個人反思完成。" }));
-      session.personalSteps = session.personalSteps ?? {};
-      session.personalSteps[userId] = 10;
-      const step10Report = await generateStep10Report(session, userId);
-      session.reports.step10[userId] = step10Report;
-      session.messages.push(makeMessage({ role: "ai", userId, step: 10, text: step10Report }));
+      await finalizeStep9ForUser(session, userId);
     }
     return session;
   }

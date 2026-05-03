@@ -302,6 +302,7 @@ API 輸出給學習/分組流程使用：
 - 未達題目總數：系統送下一題
 - 完成：系統送「個人反思完成」，並自動將該學生 `personalSteps[user]` 推進到 Step10
 - 推進 Step10 後需立即產生該學生個人總結報告（依 `stepPrompts["10"]`）並寫入 `reports.step10[user]`，同時以 AI 訊息顯示在互動內容區
+- 相容性修復：若舊 session 發生 `reflectionIndex` 已達完成門檻但 `personalSteps[user]` 仍停在 Step9，讀取 session 時需自動補推進到 Step10 並補齊 `reports.step10[user]`
 
 ## 5.7 Artifact 儲存
 
