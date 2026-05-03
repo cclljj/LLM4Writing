@@ -817,6 +817,10 @@ export default function StudentPage() {
   const step4CompletedUsers = session?.groupGate?.["4-complete"] ?? [];
   const step3CompletedByMe = Boolean(loginUser && step3CompletedUsers.includes(loginUser));
   const step4CompletedByMe = Boolean(loginUser && step4CompletedUsers.includes(loginUser));
+  const step4CompletedPeers = useMemo(
+    () => (session?.participants ?? []).filter((participant) => participant !== loginUser && step4CompletedUsers.includes(participant)),
+    [loginUser, session?.participants, step4CompletedUsers]
+  );
   const allStep4Completed =
     currentStep === 4 &&
     !!session &&
@@ -1685,6 +1689,15 @@ export default function StudentPage() {
             ))}
 
             {interactiveMessages.length === 0 ? <small>目前此步驟尚無互動內容。</small> : null}
+            {currentStep === 4 && step4CompletedPeers.length > 0 ? (
+              <div style={{ marginTop: 8 }}>
+                {step4CompletedPeers.map((user) => (
+                  <p key={`step4-done-${user}`} style={{ margin: "4px 0" }}>
+                    <small>{user} 已確認完成此步驟。</small>
+                  </p>
+                ))}
+              </div>
+            ) : null}
 
             {isSendingMessage || waitingAiForGroup ? (
               <p style={{ marginTop: 10 }}>
