@@ -264,6 +264,13 @@ API 輸出給學習/分組流程使用：
 - 9 個人反思：`personal_reflection`
 - 10 總結報告：`non_interactive`
 
+### 子步驟 Prompt vs 題目文字（重要）
+
+- `PromptConfig.subStepPrompts` 中部分條目（例如 `1-3-2`, `1-3-3`）屬於「給 LLM 的指示」，不是要直接顯示給學生看的題目文字。
+- 對於此類條目：
+  - UI/系統提問應顯示「LLM 依 prompt 生成的問題」（由上一輪 LLM 回覆拆出的 `nextQuestion`）
+  - 不直接把 subStepPrompts 原文當作學生題目（避免學生看到開發用規則/框架文字）
+
 ## 5.2 學生回答品質檢查（送出前驗證）
 
 - 在 `sendStudentMessage` 寫入有效訊息前，會先做基本品質檢查。

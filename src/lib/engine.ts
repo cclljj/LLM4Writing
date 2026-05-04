@@ -32,6 +32,15 @@ function pickQuestionFromSubStepPrompt(session: SessionState, key: string, fallb
   return fallback;
 }
 
+function looksLikeInstructionPrompt(text: string): boolean {
+  // Heuristic: subStepPrompts may contain multi-paragraph instructions intended for the LLM,
+  // not a student-facing question.
+  if (text.includes("【") || text.includes("提問規則") || text.includes("批判性思考")) return true;
+  if (text.includes("請回答以下問題")) return true;
+  const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+  return lines.length >= 4 || text.length >= 160;
+}
+
 function buildStep1Question(session: SessionState): string {
   const s = session.stepState.step1Substep;
   const key =
@@ -49,7 +58,13 @@ function buildStep1Question(session: SessionState): string {
   if ([1, 2, 5].includes(s)) {
     return pickQuestionFromBank(session, key, fallback);
   }
-  return pickQuestionFromSubStepPrompt(session, key, fallback);
+  const candidate = pickQuestionFromSubStepPrompt(session, key, fallback);
+  if (looksLikeInstructionPrompt(candidate)) {
+    return s === 3
+      ? "請依上一則 AI 提問作答（本題要釐清關鍵字範圍與定義）。"
+      : "請依上一則 AI 提問作答（本題要延伸討論並補充理由/例子）。";
+  }
+  return candidate;
 }
 
 function buildStep2Question(session: SessionState): string {
@@ -698,14 +713,18 @@ function advanceStep1Or2SubstepAfterAi(
   if (step === 1) {
     if (completedSubstep === 3 && (session.stepState.step1Substep3Question ?? 1) < 3) {
       session.stepState.step1Substep3Question = (session.stepState.step1Substep3Question ?? 1) + 1;
-      const q = buildStep1Question(session);
+      const q =
+        nextQuestionFromAi?.trim() ||
+        "請用自己的話補充說明：你認為題目中的關鍵詞範圍包含什麼、不包含什麼？";
       const qIdx = session.stepState.step1Substep3Question;
       session.messages.push(makeMessage({ role: "system", step, text: `子步驟 1-3-${qIdx}：${q}` }));
       return;
     }
     if (completedSubstep === 4 && (session.stepState.step1Substep4Question ?? 1) < 3) {
       session.stepState.step1Substep4Question = (session.stepState.step1Substep4Question ?? 1) + 1;
-      const q = buildStep1Question(session);
+      const q =
+        nextQuestionFromAi?.trim() ||
+        "請再補充一點：你們的立場/判準是什麼？可以舉一個具體例子或理由嗎？";
       const qIdx = session.stepState.step1Substep4Question;
       session.messages.push(makeMessage({ role: "system", step, text: `子步驟 1-4-${qIdx}：${q}` }));
       return;
