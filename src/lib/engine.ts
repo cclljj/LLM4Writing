@@ -82,7 +82,13 @@ function buildStep2Question(session: SessionState): string {
   if (s === 4) {
     return pickQuestionFromBank(session, key, fallback);
   }
-  return pickQuestionFromSubStepPrompt(session, key, fallback);
+  const candidate = pickQuestionFromSubStepPrompt(session, key, fallback);
+  if (looksLikeInstructionPrompt(candidate)) {
+    return s === 1
+      ? "請依上一則 AI 提問作答（本題要選出可用例子並說明理由）。"
+      : "請依上一則 AI 提問作答。";
+  }
+  return candidate;
 }
 
 function getCurrentSubstepKey(session: SessionState, step: number): string | null {
@@ -724,7 +730,9 @@ function advanceStep1Or2SubstepAfterAi(
       session.stepState.step1Substep4Question = (session.stepState.step1Substep4Question ?? 1) + 1;
       const q =
         nextQuestionFromAi?.trim() ||
-        "請再補充一點：你們的立場/判準是什麼？可以舉一個具體例子或理由嗎？";
+        (session.stepState.step1Substep4Question === 2
+          ? "請從你們剛剛釐清的範圍出發：這篇文章最核心、最想傳達的一句話觀點是什麼？"
+          : "請再收斂一次：用一句話寫出你們的核心主張（最想讓讀者記住的觀點）。");
       const qIdx = session.stepState.step1Substep4Question;
       session.messages.push(makeMessage({ role: "system", step, text: `子步驟 1-4-${qIdx}：${q}` }));
       return;
@@ -752,7 +760,11 @@ function advanceStep1Or2SubstepAfterAi(
 
   if (completedSubstep === 1 && (session.stepState.step2Substep1Question ?? 1) < 3) {
     session.stepState.step2Substep1Question = (session.stepState.step2Substep1Question ?? 1) + 1;
-    const q = buildStep2Question(session);
+    const q =
+      nextQuestionFromAi?.trim() ||
+      (session.stepState.step2Substep1Question === 2
+        ? "請挑一個你覺得最好用的具體例子（可以是生活經驗/新聞/歷史），並用 1-2 句話說明這個例子是什麼。"
+        : "請說明：你選的這個例子，哪一個部分最能支持你的觀點？為什麼？");
     const qIdx = session.stepState.step2Substep1Question;
     session.messages.push(makeMessage({ role: "system", step, text: `子步驟 2-1-${qIdx}：${q}` }));
     return;
