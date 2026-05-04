@@ -58,6 +58,9 @@ export interface SessionState {
   stepState: {
     step1Substep: number;
     step2Substep: number;
+    step1Substep3Question?: number;
+    step1Substep4Question?: number;
+    step2Substep1Question?: number;
   };
   outlines: Record<string, string>;
   step3SubmittedOutlines?: Record<string, string>;

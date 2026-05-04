@@ -33,7 +33,8 @@ function pickQuestionFromSubStepPrompt(session: SessionState, key: string, fallb
 
 function buildStep1Question(session: SessionState): string {
   const s = session.stepState.step1Substep;
-  const key = `1-${s}`;
+  const key =
+    s === 3 ? `1-3-${session.stepState.step1Substep3Question ?? 1}` : s === 4 ? `1-4-${session.stepState.step1Substep4Question ?? 1}` : `1-${s}`;
   const fallbackMap: Record<number, string> = {
     1: "請先說明你對題目的初步理解。",
     2: "請補充你們小組目前的立場。",
@@ -52,7 +53,7 @@ function buildStep1Question(session: SessionState): string {
 
 function buildStep2Question(session: SessionState): string {
   const s = session.stepState.step2Substep;
-  const key = `2-${s}`;
+  const key = s === 1 ? `2-1-${session.stepState.step2Substep1Question ?? 1}` : `2-${s}`;
   const fallbackMap: Record<number, string> = {
     1: "請列出你們需要的資料來源。",
     2: "請評估資料可信度。",
@@ -69,9 +70,28 @@ function buildStep2Question(session: SessionState): string {
 }
 
 function getCurrentSubstepKey(session: SessionState, step: number): string | null {
-  if (step === 1) return `1-${session.stepState.step1Substep}`;
-  if (step === 2) return `2-${session.stepState.step2Substep}`;
+  if (step === 1) {
+    if (session.stepState.step1Substep === 3) return `1-3-${session.stepState.step1Substep3Question ?? 1}`;
+    if (session.stepState.step1Substep === 4) return `1-4-${session.stepState.step1Substep4Question ?? 1}`;
+    return `1-${session.stepState.step1Substep}`;
+  }
+  if (step === 2) {
+    if (session.stepState.step2Substep === 1) return `2-1-${session.stepState.step2Substep1Question ?? 1}`;
+    return `2-${session.stepState.step2Substep}`;
+  }
   return null;
+}
+
+function getCurrentGroupGateKey(session: SessionState, step: 1 | 2): string {
+  if (step === 1) {
+    const substep = session.stepState.step1Substep;
+    if (substep === 3) return `1-3-${session.stepState.step1Substep3Question ?? 1}`;
+    if (substep === 4) return `1-4-${session.stepState.step1Substep4Question ?? 1}`;
+    return `1-${substep}`;
+  }
+  const substep = session.stepState.step2Substep;
+  if (substep === 1) return `2-1-${session.stepState.step2Substep1Question ?? 1}`;
+  return `2-${substep}`;
 }
 
 function getStep9Questions(session: SessionState): string[] {
@@ -81,6 +101,8 @@ function getStep9Questions(session: SessionState): string[] {
 function initializeStepQuestion(session: SessionState, step: number): void {
   if (step === 1) {
     session.stepState.step1Substep = 1;
+    session.stepState.step1Substep3Question = 1;
+    session.stepState.step1Substep4Question = 1;
     const q = buildStep1Question(session);
     session.messages.push(
       makeMessage({
@@ -93,12 +115,13 @@ function initializeStepQuestion(session: SessionState, step: number): void {
 
   if (step === 2) {
     session.stepState.step2Substep = 1;
+    session.stepState.step2Substep1Question = 1;
     const q = buildStep2Question(session);
     session.messages.push(
       makeMessage({
         role: "system",
         step,
-        text: `子步驟 2-1：${q}`
+        text: `子步驟 2-1-1：${q}`
       })
     );
   }
@@ -128,7 +151,7 @@ export function createSession(payload: StartSessionPayload): SessionState {
     groupId: payload.groupId,
     groupName: payload.groupName,
     promptConfig: payload.promptConfig ?? { stepPrompts: {}, subStepPrompts: {}, questionBanks: {}, step9Questions: {}, stepOpenings: {} },
-    stepState: { step1Substep: 1, step2Substep: 1 },
+    stepState: { step1Substep: 1, step2Substep: 1, step1Substep3Question: 1, step1Substep4Question: 1, step2Substep1Question: 1 },
     outlines: {},
     step3SubmittedOutlines: {},
     draftStep6: {},
@@ -169,13 +192,22 @@ function normalizeSessionRuntimeShape(session: SessionState): void {
     session.reflectionIndex = {};
   }
   if (!session.stepState || typeof session.stepState !== "object") {
-    session.stepState = { step1Substep: 1, step2Substep: 1 };
+    session.stepState = { step1Substep: 1, step2Substep: 1, step1Substep3Question: 1, step1Substep4Question: 1, step2Substep1Question: 1 };
   }
   if (typeof session.stepState.step1Substep !== "number") {
     session.stepState.step1Substep = 1;
   }
   if (typeof session.stepState.step2Substep !== "number") {
     session.stepState.step2Substep = 1;
+  }
+  if (typeof session.stepState.step1Substep3Question !== "number") {
+    session.stepState.step1Substep3Question = 1;
+  }
+  if (typeof session.stepState.step1Substep4Question !== "number") {
+    session.stepState.step1Substep4Question = 1;
+  }
+  if (typeof session.stepState.step2Substep1Question !== "number") {
+    session.stepState.step2Substep1Question = 1;
   }
   if (!session.promptConfig || typeof session.promptConfig !== "object") {
     session.promptConfig = { stepPrompts: {}, subStepPrompts: {}, questionBanks: {}, step9Questions: {}, stepOpenings: {} };
@@ -587,7 +619,7 @@ function handleStep1Or2Group(
 ): { session: SessionState; allResponded: boolean; substep: number } {
   const step = session.currentStep;
   const substep = step === 1 ? session.stepState.step1Substep : session.stepState.step2Substep;
-  const gateKey = `${step}-${substep}`;
+  const gateKey = getCurrentGroupGateKey(session, step as 1 | 2);
 
   session.messages.push(makeMessage({ role: "student", userId, step, text }));
 
@@ -612,24 +644,60 @@ function advanceStep1Or2SubstepAfterAi(
   nextQuestionFromAi?: string
 ): void {
   if (step === 1) {
+    if (completedSubstep === 3 && (session.stepState.step1Substep3Question ?? 1) < 3) {
+      session.stepState.step1Substep3Question = (session.stepState.step1Substep3Question ?? 1) + 1;
+      const q = buildStep1Question(session);
+      const qIdx = session.stepState.step1Substep3Question;
+      session.messages.push(makeMessage({ role: "system", step, text: `子步驟 1-3-${qIdx}：${q}` }));
+      return;
+    }
+    if (completedSubstep === 4 && (session.stepState.step1Substep4Question ?? 1) < 3) {
+      session.stepState.step1Substep4Question = (session.stepState.step1Substep4Question ?? 1) + 1;
+      const q = buildStep1Question(session);
+      const qIdx = session.stepState.step1Substep4Question;
+      session.messages.push(makeMessage({ role: "system", step, text: `子步驟 1-4-${qIdx}：${q}` }));
+      return;
+    }
+
     if (completedSubstep < 5) {
       session.stepState.step1Substep += 1;
       const nextSub = session.stepState.step1Substep;
+      if (nextSub === 3) session.stepState.step1Substep3Question = 1;
+      if (nextSub === 4) session.stepState.step1Substep4Question = 1;
       const mustUseQuestionBank = nextSub === 2 || nextSub === 5;
       const q = mustUseQuestionBank ? buildStep1Question(session) : nextQuestionFromAi?.trim() || buildStep1Question(session);
-      session.messages.push(makeMessage({ role: "system", step, text: `子步驟 1-${nextSub}：${q}` }));
+      if (nextSub === 3) {
+        session.messages.push(makeMessage({ role: "system", step, text: `子步驟 1-3-1：${q}` }));
+      } else if (nextSub === 4) {
+        session.messages.push(makeMessage({ role: "system", step, text: `子步驟 1-4-1：${q}` }));
+      } else {
+        session.messages.push(makeMessage({ role: "system", step, text: `子步驟 1-${nextSub}：${q}` }));
+      }
       return;
     }
     session.messages.push(makeMessage({ role: "system", step, text: "步驟 1 子步驟已完成，等待教師切換下一步。" }));
     return;
   }
 
+  if (completedSubstep === 1 && (session.stepState.step2Substep1Question ?? 1) < 3) {
+    session.stepState.step2Substep1Question = (session.stepState.step2Substep1Question ?? 1) + 1;
+    const q = buildStep2Question(session);
+    const qIdx = session.stepState.step2Substep1Question;
+    session.messages.push(makeMessage({ role: "system", step, text: `子步驟 2-1-${qIdx}：${q}` }));
+    return;
+  }
+
   if (completedSubstep < 4) {
     session.stepState.step2Substep += 1;
     const nextSub = session.stepState.step2Substep;
+    if (nextSub === 1) session.stepState.step2Substep1Question = 1;
     const mustUseQuestionBank = nextSub === 4;
     const q = mustUseQuestionBank ? buildStep2Question(session) : nextQuestionFromAi?.trim() || buildStep2Question(session);
-    session.messages.push(makeMessage({ role: "system", step, text: `子步驟 2-${nextSub}：${q}` }));
+    if (nextSub === 1) {
+      session.messages.push(makeMessage({ role: "system", step, text: `子步驟 2-1-1：${q}` }));
+    } else {
+      session.messages.push(makeMessage({ role: "system", step, text: `子步驟 2-${nextSub}：${q}` }));
+    }
     return;
   }
   session.messages.push(makeMessage({ role: "system", step, text: "步驟 2 子步驟已完成，等待教師切換下一步。" }));
