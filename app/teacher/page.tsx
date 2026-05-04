@@ -59,6 +59,20 @@ type PersonalProgressRow = {
   lastMessageAt: string | null;
 };
 
+type OutlineNode = {
+  id: string;
+  parentId: string | null;
+  text: string;
+  x: number;
+  y: number;
+};
+
+type OutlinePreview = {
+  nodes: OutlineNode[];
+  width: number;
+  height: number;
+};
+
 const genreOptions = ["議論文", "記敘文", "說明文", "抒情文", "其他"];
 const groupInteractionSteps = [1, 2, 4];
 type CourseTab = "essay" | "openclass" | "group";
@@ -152,6 +166,109 @@ function renderMessageHtml(text: string): string {
 
   flushLists();
   return htmlParts.join("");
+}
+
+function extractMermaidText(text: string): string | null {
+  const fenced = text.match(/```mermaid\s*([\s\S]*?)```/i);
+  if (fenced?.[1]?.trim()) return fenced[1].trim();
+  const trimmed = text.trim();
+  if ((trimmed.includes("graph ") || trimmed.includes("flowchart ")) && trimmed.includes("-->")) {
+    return trimmed;
+  }
+  return null;
+}
+
+function fromMermaid(text: string): OutlineNode[] {
+  const raw = text.trim();
+  if (!raw) return [];
+  const lines = raw
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !line.startsWith("graph "))
+    .filter((line) => !line.startsWith("flowchart "))
+    .filter((line) => !line.startsWith("```"));
+
+  const nodeTextMap = new Map<string, string>();
+  const parentMap = new Map<string, string | null>();
+
+  for (const line of lines) {
+    const nodeMatch = line.match(/^([A-Za-z0-9_-]+)\s*\["([\s\S]*)"\]$/);
+    if (nodeMatch) {
+      const [, id, label] = nodeMatch;
+      nodeTextMap.set(id, label.replaceAll('\\"', '"').replace(/<br\s*\/?>/gi, "\n"));
+      if (!parentMap.has(id)) parentMap.set(id, null);
+      continue;
+    }
+    const edgeWithLabelMatch = line.match(/^([A-Za-z0-9_-]+)\s*-->\s*([A-Za-z0-9_-]+)\s*\["([\s\S]*)"\]$/);
+    if (edgeWithLabelMatch) {
+      const [, parentId, childId, childLabel] = edgeWithLabelMatch;
+      parentMap.set(childId, parentId);
+      if (!parentMap.has(parentId)) parentMap.set(parentId, null);
+      if (!nodeTextMap.has(parentId)) nodeTextMap.set(parentId, parentId);
+      nodeTextMap.set(childId, childLabel.replaceAll('\\"', '"').replace(/<br\s*\/?>/gi, "\n"));
+      continue;
+    }
+    const edgeMatch = line.match(/^([A-Za-z0-9_-]+)\s*-->\s*([A-Za-z0-9_-]+)$/);
+    if (edgeMatch) {
+      const [, parentId, childId] = edgeMatch;
+      parentMap.set(childId, parentId);
+      if (!parentMap.has(parentId)) parentMap.set(parentId, null);
+      if (!nodeTextMap.has(parentId)) nodeTextMap.set(parentId, parentId);
+      if (!nodeTextMap.has(childId)) nodeTextMap.set(childId, childId);
+    }
+  }
+
+  const ids = Array.from(nodeTextMap.keys());
+  if (ids.length === 0) return [];
+
+  const depthMap = new Map<string, number>();
+  const getDepth = (id: string): number => {
+    const cached = depthMap.get(id);
+    if (cached) return cached;
+    const parent = parentMap.get(id);
+    const depth = parent ? getDepth(parent) + 1 : 1;
+    depthMap.set(id, depth);
+    return depth;
+  };
+  ids.forEach((id) => getDepth(id));
+
+  const groups = new Map<number, string[]>();
+  ids.forEach((id) => {
+    const depth = depthMap.get(id) ?? 1;
+    const arr = groups.get(depth) ?? [];
+    arr.push(id);
+    groups.set(depth, arr);
+  });
+
+  const nodes: OutlineNode[] = [];
+  Array.from(groups.keys())
+    .sort((a, b) => a - b)
+    .forEach((depth) => {
+      const levelIds = groups.get(depth) ?? [];
+      levelIds.sort();
+      levelIds.forEach((id, idx) => {
+        nodes.push({
+          id,
+          parentId: parentMap.get(id) ?? null,
+          text: nodeTextMap.get(id) ?? id,
+          x: 120 + idx * 170,
+          y: 40 + (depth - 1) * 120
+        });
+      });
+    });
+  return nodes;
+}
+
+function buildOutlinePreview(mermaidText: string): OutlinePreview | null {
+  const nodes = fromMermaid(mermaidText).map((node) => ({ ...node }));
+  if (nodes.length === 0) return null;
+  const minX = Math.min(...nodes.map((node) => node.x));
+  const minY = Math.min(...nodes.map((node) => node.y));
+  const normalized = nodes.map((node) => ({ ...node, x: node.x - minX + 20, y: node.y - minY + 20 }));
+  const maxX = Math.max(...normalized.map((node) => node.x + 130));
+  const maxY = Math.max(...normalized.map((node) => node.y + 80));
+  return { nodes: normalized, width: Math.max(520, maxX + 20), height: Math.max(240, maxY + 20) };
 }
 
 export default function TeacherPage() {
@@ -2315,6 +2432,45 @@ export default function TeacherPage() {
                         {message.userId ? `(${message.userId})` : ""}
                       </strong>
                       <div dangerouslySetInnerHTML={{ __html: renderMessageHtml(message.text) }} />
+                      {([3, 4].includes(message.step) && extractMermaidText(message.text)) ? (() => {
+                        const preview = buildOutlinePreview(extractMermaidText(message.text) ?? "");
+                        if (!preview) return null;
+                        return (
+                          <div style={{ marginTop: 8, overflow: "auto", border: "1px solid #e5e7eb", borderRadius: 8, padding: 8, background: "#f8fafc" }}>
+                            <svg width={preview.width} height={preview.height} role="img" aria-label={`S${message.step} 結構樹`}>
+                              {preview.nodes
+                                .filter((node) => node.parentId)
+                                .map((node) => {
+                                  const parent = preview.nodes.find((item) => item.id === node.parentId);
+                                  if (!parent) return null;
+                                  return (
+                                    <line
+                                      key={`${parent.id}-${node.id}`}
+                                      x1={parent.x + 65}
+                                      y1={parent.y + 40}
+                                      x2={node.x + 65}
+                                      y2={node.y}
+                                      stroke="#94a3b8"
+                                      strokeWidth="2"
+                                    />
+                                  );
+                                })}
+                              {preview.nodes.map((node) => (
+                                <g key={node.id}>
+                                  <rect x={node.x} y={node.y} width="130" height="80" rx="12" fill="#fff" stroke="#64748b" />
+                                  <text x={node.x + 65} y={node.y + 28} textAnchor="middle" fontSize="12" fill="#0f172a">
+                                    {node.text.split("\n").map((line, idx) => (
+                                      <tspan key={`${node.id}-${idx}`} x={node.x + 65} dy={idx === 0 ? 0 : 16}>
+                                        {line}
+                                      </tspan>
+                                    ))}
+                                  </text>
+                                </g>
+                              ))}
+                            </svg>
+                          </div>
+                        );
+                      })() : null}
                     </div>
                   ))}
                   {groupMessages.length === 0 ? <small>目前此篩選條件下沒有 1/2/4 步驟對話。</small> : null}
@@ -2331,6 +2487,45 @@ export default function TeacherPage() {
                         {message.userId ? `(${message.userId})` : ""}
                       </strong>
                       <div dangerouslySetInnerHTML={{ __html: renderMessageHtml(message.text) }} />
+                      {([3, 4].includes(message.step) && extractMermaidText(message.text)) ? (() => {
+                        const preview = buildOutlinePreview(extractMermaidText(message.text) ?? "");
+                        if (!preview) return null;
+                        return (
+                          <div style={{ marginTop: 8, overflow: "auto", border: "1px solid #e5e7eb", borderRadius: 8, padding: 8, background: "#f8fafc" }}>
+                            <svg width={preview.width} height={preview.height} role="img" aria-label={`S${message.step} 結構樹`}>
+                              {preview.nodes
+                                .filter((node) => node.parentId)
+                                .map((node) => {
+                                  const parent = preview.nodes.find((item) => item.id === node.parentId);
+                                  if (!parent) return null;
+                                  return (
+                                    <line
+                                      key={`${parent.id}-${node.id}`}
+                                      x1={parent.x + 65}
+                                      y1={parent.y + 40}
+                                      x2={node.x + 65}
+                                      y2={node.y}
+                                      stroke="#94a3b8"
+                                      strokeWidth="2"
+                                    />
+                                  );
+                                })}
+                              {preview.nodes.map((node) => (
+                                <g key={node.id}>
+                                  <rect x={node.x} y={node.y} width="130" height="80" rx="12" fill="#fff" stroke="#64748b" />
+                                  <text x={node.x + 65} y={node.y + 28} textAnchor="middle" fontSize="12" fill="#0f172a">
+                                    {node.text.split("\n").map((line, idx) => (
+                                      <tspan key={`${node.id}-${idx}`} x={node.x + 65} dy={idx === 0 ? 0 : 16}>
+                                        {line}
+                                      </tspan>
+                                    ))}
+                                  </text>
+                                </g>
+                              ))}
+                            </svg>
+                          </div>
+                        );
+                      })() : null}
                     </div>
                   ))}
                   {personalMessages.length === 0 ? <small>目前此學生沒有可顯示對話。</small> : null}
