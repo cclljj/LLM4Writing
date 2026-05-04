@@ -37,7 +37,13 @@ type SessionState = {
   workflow: string;
   participants: string[];
   groupGate?: Record<string, string[]>;
-  stepState: { step1Substep: number; step2Substep: number };
+  stepState: {
+    step1Substep: number;
+    step2Substep: number;
+    step1Substep3Question?: number;
+    step1Substep4Question?: number;
+    step2Substep1Question?: number;
+  };
   outlines: Record<string, string>;
   step3SubmittedOutlines?: Record<string, string>;
   draftStep6: Record<string, string>;
@@ -103,6 +109,22 @@ function getMode(step: number): InteractionMode {
   if ([3, 6, 8].includes(step)) return "personal_interaction";
   if ([5, 7, 10].includes(step)) return "non_interactive";
   return "personal_reflection";
+}
+
+function getActiveGroupGateKey(session: SessionState | null, step: number): string | null {
+  if (!session) return null;
+  if (step === 1) {
+    const sub = session.stepState?.step1Substep ?? 1;
+    if (sub === 3) return `1-3-${session.stepState?.step1Substep3Question ?? 1}`;
+    if (sub === 4) return `1-4-${session.stepState?.step1Substep4Question ?? 1}`;
+    return `1-${sub}`;
+  }
+  if (step === 2) {
+    const sub = session.stepState?.step2Substep ?? 1;
+    if (sub === 1) return `2-1-${session.stepState?.step2Substep1Question ?? 1}`;
+    return `2-${sub}`;
+  }
+  return null;
 }
 
 function escapeHtml(input: string): string {
@@ -531,12 +553,7 @@ export default function StudentPage() {
     if (!session) return [] as InteractiveItem[];
     const currentStep = loginUser ? session.personalSteps?.[loginUser] ?? session.currentStep : session.currentStep;
     const currentMode = getMode(currentStep);
-    const activeGateKey =
-      currentStep === 1
-        ? `1-${session.stepState.step1Substep ?? 1}`
-        : currentStep === 2
-          ? `2-${session.stepState.step2Substep ?? 1}`
-          : null;
+    const activeGateKey = getActiveGroupGateKey(session, currentStep);
     const responders = activeGateKey ? session.groupGate?.[activeGateKey] ?? [] : [];
     const hasSubmittedThisTurn = Boolean(loginUser && responders.includes(loginUser));
     const hidePeerAnswersBeforeOwn =
@@ -564,7 +581,7 @@ export default function StudentPage() {
       if (text.includes("子步驟 ")) {
         const idx = text.indexOf("子步驟 ");
         const extracted = text.slice(idx).trim();
-        const m = extracted.match(/^子步驟\s+(\d-\d)：([\s\S]*)$/);
+        const m = extracted.match(/^子步驟\s+(\d-\d(?:-\d)?)：([\s\S]*)$/);
         if (!m) return extracted;
         const substep = m[1];
         const content = m[2]?.trim() ?? "";
@@ -990,19 +1007,24 @@ export default function StudentPage() {
 
   const stepSubstepText =
     currentStep === 1
-      ? `目前子步驟：1-${session?.stepState.step1Substep ?? 1}`
+      ? `目前子步驟：${
+          (session?.stepState.step1Substep ?? 1) === 3
+            ? `1-3-${session?.stepState.step1Substep3Question ?? 1}`
+            : (session?.stepState.step1Substep ?? 1) === 4
+              ? `1-4-${session?.stepState.step1Substep4Question ?? 1}`
+              : `1-${session?.stepState.step1Substep ?? 1}`
+        }`
       : currentStep === 2
-        ? `目前子步驟：2-${session?.stepState.step2Substep ?? 1}`
+        ? `目前子步驟：${
+            (session?.stepState.step2Substep ?? 1) === 1
+              ? `2-1-${session?.stepState.step2Substep1Question ?? 1}`
+              : `2-${session?.stepState.step2Substep ?? 1}`
+          }`
         : null;
   const stepModeLine = `${stepSubstepText ?? "目前子步驟：—"} ｜ 模式：${currentModeLabel}`;
   const lastInteractive = interactiveMessages[interactiveMessages.length - 1];
   const lastIsQuestion = lastInteractive?.kind === "question";
-  const activeGateKey =
-    currentStep === 1
-      ? `1-${session?.stepState.step1Substep ?? 1}`
-      : currentStep === 2
-        ? `2-${session?.stepState.step2Substep ?? 1}`
-        : null;
+  const activeGateKey = getActiveGroupGateKey(session, currentStep);
   const responders = activeGateKey ? session?.groupGate?.[activeGateKey] ?? [] : [];
   const step3CompletedUsers = session?.groupGate?.["3-complete"] ?? [];
   const step4CompletedUsers = session?.groupGate?.["4-complete"] ?? [];
