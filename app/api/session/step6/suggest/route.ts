@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { getCurrentUser } from "@/src/lib/auth-server";
 import { getSession, saveSession } from "@/src/lib/store";
 import { isLlmConfigured, llmChatCompletionText, type LlmChatMessage } from "@/src/lib/llm-client";
+import { buildStudentCourseContext } from "@/src/lib/llm-context";
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -19,7 +20,12 @@ function makeMessage(role: "student" | "ai", step: number, text: string, userId?
   };
 }
 
-async function suggestWithLlm(stepPrompt: string | undefined, essay: string): Promise<string> {
+async function suggestWithLlm(
+  stepPrompt: string | undefined,
+  essay: string,
+  activityTitle: string,
+  crossStepContext: string
+): Promise<string> {
   const fallback = "AI 建議：已收到你的草稿。建議先強化主論點句，並讓每段都對應一個清楚子論點，再補上具體例子與結語收束。";
   if (!isLlmConfigured()) return fallback;
 
@@ -32,7 +38,10 @@ async function suggestWithLlm(stepPrompt: string | undefined, essay: string): Pr
     },
     {
       role: "user",
-      content: `以下是學生目前文章：\n${essay}`
+      content:
+        `作文題目：${activityTitle || "未命名題目"}\n\n` +
+        `以下是該學生從 Step1 到目前步驟的歷史互動（僅本人 student/ai/必要 system，已做長度限制）：\n${crossStepContext || "(無)"}\n\n` +
+        `以下是學生目前文章：\n${essay}`
     }
   ];
 
@@ -66,9 +75,19 @@ export async function POST(request: NextRequest) {
 
   const draft = body.draft;
   session.draftStep6[user.username] = draft;
+  const crossStepContext = buildStudentCourseContext(session, user.username, 6, {
+    maxMessages: 48,
+    maxChars: 6500,
+    includeSystem: true
+  });
 
   const timestamp = nowIso();
-  const suggestion = await suggestWithLlm(session.promptConfig?.stepPrompts?.["6"], draft);
+  const suggestion = await suggestWithLlm(
+    session.promptConfig?.stepPrompts?.["6"],
+    draft,
+    session.activityTitle ?? "",
+    crossStepContext
+  );
   const logText = [
     "### Step6 AI 修改建議",
     `- 時間：${timestamp}`,

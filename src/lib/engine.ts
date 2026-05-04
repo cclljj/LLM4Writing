@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { ChatMessage, SessionState, StartSessionPayload } from "@/src/lib/types";
 import { getStep9QuestionsFromConfig, STEP_DEFINITIONS, getModeByStep, getStepName } from "@/src/lib/spec";
 import { isLlmConfigured, llmChatCompletionText, LlmChatMessage } from "@/src/lib/llm-client";
+import { buildStudentCourseContext } from "@/src/lib/llm-context";
 
 function now(): string {
   return new Date().toISOString();
@@ -274,45 +275,6 @@ function ensureParticipants(session: SessionState, fallbackUserId: string): stri
   return session.participants;
 }
 
-function buildRecentContext(session: SessionState, step: number, userId?: string): string {
-  const relevant = session.messages
-    .filter((m) => {
-      if (m.step !== step) return false;
-      if (m.role === "system") return true;
-      if (m.role === "student") return !userId || m.userId === userId;
-      if (m.role === "ai") return !userId || m.userId === userId;
-      return false;
-    })
-    .slice(-12);
-
-  return relevant
-    .map((m) => {
-      if (m.role === "student") return `學生${m.userId ? `(${m.userId})` : ""}：${m.text}`;
-      if (m.role === "ai") return `AI：${m.text}`;
-      return `系統：${m.text}`;
-    })
-    .join("\n");
-}
-
-function buildHistoryContextForStep3(session: SessionState, userId: string): string {
-  const relevant = session.messages
-    .filter((m) => {
-      if (!(m.step === 1 || m.step === 2 || m.step === 3)) return false;
-      if (m.role === "system") return true;
-      if (m.role === "student") return m.userId === userId;
-      if (m.role === "ai") return !m.userId || m.userId === userId;
-      return false;
-    })
-    .slice(-20);
-  return relevant
-    .map((m) => {
-      if (m.role === "student") return `S${m.step}-學生${m.userId ? `(${m.userId})` : ""}：${m.text}`;
-      if (m.role === "ai") return `S${m.step}-AI：${m.text}`;
-      return `S${m.step}-系統：${m.text}`;
-    })
-    .join("\n");
-}
-
 async function generateAiTextWithRetry(messages: LlmChatMessage[], temperature: number, maxTokens: number): Promise<string> {
   let lastError: unknown;
   for (let attempt = 1; attempt <= 3; attempt += 1) {
@@ -355,16 +317,31 @@ async function generateAiTextForStep(session: SessionState, step: number, contex
     }
   }
   systemParts.push(`目前步驟：${step}（${stepName}）。請嚴格遵守步驟與輸出格式要求。`);
-
-  const recent = buildRecentContext(session, step, step === 3 ? userId : undefined);
-  const step3History = step === 3 && userId ? buildHistoryContextForStep3(session, userId) : "";
+  const scopedSteps = new Set([1, 2, 4, 6, 8, 9]);
+  const scopedUserId = userId && scopedSteps.has(step) ? userId : undefined;
+  const crossStepContext = scopedUserId
+    ? buildStudentCourseContext(session, scopedUserId, step, { maxMessages: 48, maxChars: 6500, includeSystem: true })
+    : "";
+  const sameStepRecent = session.messages
+    .filter((m) => m.step === step)
+    .slice(-10)
+    .map((m) => {
+      if (m.role === "student") return `學生${m.userId ? `(${m.userId})` : ""}：${m.text}`;
+      if (m.role === "ai") return `AI：${m.text}`;
+      return `系統：${m.text}`;
+    })
+    .join("\n");
+  const essayTitle = session.activityTitle?.trim() || "未命名題目";
   const messages: LlmChatMessage[] = [
     { role: "system", content: systemParts.join("\n\n") },
     {
       role: "user",
       content:
-        `以下是最近對話內容（可能含系統指示）：\n${recent || "(無)"}\n\n` +
-        (step === 3 ? `以下是步驟 1/2 對談脈絡（用於引導結構樹）：\n${step3History || "(無)"}\n\n` : "") +
+        `作文題目：${essayTitle}\n\n` +
+        `以下是本步驟最近對話內容：\n${sameStepRecent || "(無)"}\n\n` +
+        (scopedUserId
+          ? `以下是該學生從 Step1 到目前步驟的歷史互動（僅本人 student/ai/必要 system，已做長度限制）：\n${crossStepContext || "(無)"}\n\n`
+          : "") +
         `目前事件：${contextText}\n\n` +
         (step === 3
           ? "請依據 stepPrompts[3] 的角色、目標與輸出格式，僅針對學生提問給出回覆與建議。禁止主動提問、禁止要求學生再回答新問題。請用自然、擬人化、像老師與學生對話的語氣回覆，不要使用生硬標題或固定模板標籤（例如「指出問題」「提示說明」）。"
@@ -726,7 +703,12 @@ export async function sendStudentMessage(session: SessionState, userId: string, 
   if (step === 1 || step === 2) {
     const result = handleStep1Or2Group(session, userId, text);
     if (result.allResponded) {
-      const aiRaw = await generateAiTextForStep(result.session, step, `all members answered step ${step} substep ${result.substep}`);
+      const aiRaw = await generateAiTextForStep(
+        result.session,
+        step,
+        `all members answered step ${step} substep ${result.substep}`,
+        userId
+      );
       const parsed = splitAiFeedbackAndQuestion(aiRaw);
       result.session.messages.push(
         makeMessage({
