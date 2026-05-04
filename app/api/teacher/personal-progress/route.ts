@@ -4,6 +4,10 @@ import { getAllActivities, hydrateDomainState } from "@/src/lib/mock-data";
 import { getSession } from "@/src/lib/store";
 import { getUsersVisibleToTeacherStore, listUsersStore } from "@/src/lib/user-store";
 
+function normalizeText(text: string): string {
+  return text.replace(/\r\n/g, "\n").trim();
+}
+
 export async function GET(request: NextRequest) {
   const user = await getCurrentUser();
   if (!user || (user.role !== "teacher" && user.role !== "admin")) {
@@ -48,9 +52,44 @@ export async function GET(request: NextRequest) {
   });
 
   const personalMessages = username
-    ? session.messages.filter(
-        (message) => message.userId === username || message.role === "ai" || message.role === "system"
-      )
+    ? (() => {
+        const base = session.messages.filter(
+          (message) => message.userId === username || message.role === "ai" || message.role === "system"
+        );
+        const stepPrompts = session.promptConfig?.stepPrompts ?? {};
+        const stepOpenings = session.promptConfig?.stepOpenings ?? {};
+
+        const filtered = base.filter((message) => {
+          if (message.role !== "system") return true;
+          const stepPrompt = stepPrompts[String(message.step)] ?? "";
+          if (!stepPrompt.trim()) return true;
+          return normalizeText(message.text) !== normalizeText(stepPrompt);
+        });
+
+        const withOpenings = [...filtered];
+        const stepsInView = Array.from(new Set(filtered.map((message) => message.step)));
+        stepsInView.forEach((step) => {
+          const opening = (stepOpenings[String(step)] ?? "").trim();
+          if (!opening) return;
+          const openingNormalized = normalizeText(opening);
+          const alreadyExists = withOpenings.some(
+            (message) => message.step === step && message.role === "system" && normalizeText(message.text) === openingNormalized
+          );
+          if (alreadyExists) return;
+
+          const firstStepIndex = withOpenings.findIndex((message) => message.step === step);
+          if (firstStepIndex < 0) return;
+          const anchor = withOpenings[firstStepIndex]!;
+          withOpenings.splice(firstStepIndex, 0, {
+            id: `opening-${session.id}-${username}-${step}`,
+            role: "system",
+            step,
+            at: anchor.at,
+            text: opening
+          });
+        });
+        return withOpenings;
+      })()
     : [];
 
   return NextResponse.json({
