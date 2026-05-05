@@ -38,6 +38,15 @@ npm run dev
 
 Open: [http://localhost:3000](http://localhost:3000)
 
+## Verification
+
+```bash
+npm test
+npm run build
+```
+
+`npm test` runs focused workflow tests for answer validation, Step1/2 group gates, fallback questions, and LLM response parsing.
+
 ## Environment Variables
 
 ### Remote LLM (optional)
@@ -58,9 +67,10 @@ Open: [http://localhost:3000](http://localhost:3000)
 
 ```text
 app/                Next.js pages + API routes
-src/lib/            engine, store, auth, mock-data, types
+src/lib/            engine, workflow helpers, LLM parsing, store, auth, types
 src/config/         prompt config and step openings
 scripts/            migration/utility scripts
+tests/              Node test runner workflow tests
 SPEC.md             implementation spec (source of truth)
 ```
 
@@ -125,6 +135,8 @@ Key fields:
 - `questionBanks`
 - `writingTasks[essayId].questionBanks`
 - `step9Questions`
+
+Step1/2 remote LLM calls prefer structured JSON output with `feedback` and `nextQuestion`. If parsing fails after retry, the engine falls back to `subStepPrompts_fallbacks` or built-in safe questions so the lesson flow can continue.
 
 ## Deployment
 

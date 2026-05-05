@@ -1,5 +1,5 @@
-import { InteractionMode, StepDefinition } from "@/src/lib/types";
-import systemPromptConfig from "@/src/config/system-prompt-config.json";
+import { InteractionMode, StepDefinition } from "./types";
+import systemPromptConfig from "../config/system-prompt-config.json";
 
 export const STEP_DEFINITIONS: StepDefinition[] = [
   { step: 1, name: "審視題目", mode: "group_interaction" },

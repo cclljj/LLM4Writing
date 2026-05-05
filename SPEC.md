@@ -352,6 +352,40 @@ API 輸出給學習/分組流程使用：
 
 也就是 Step 1 會使用 `systemPrompt + stepPrompts["1"]`，Step 2 會使用 `systemPrompt + stepPrompts["2"]`，餘依此類推。
 
+### Step1/2 LLM 結構化輸出契約
+
+Step1/2 的遠端 LLM 回覆優先使用 JSON 結構，避免用自然語言標記解析下一題造成不穩定：
+
+```json
+{
+  "feedback": "給全組的簡短回饋",
+  "nextQuestion": "下一題要問學生的一句完整問題"
+}
+```
+
+規則：
+
+- LLM 應只輸出 JSON 物件，不加 Markdown code fence 或額外說明。
+- `feedback` 與 `nextQuestion` 都必須是繁體中文。
+- `nextQuestion` 不可空白、不可照抄 prompt、不可寫「請依上一則 AI 提問作答」。
+- 後端會先解析 JSON；若不是 JSON，仍相容舊格式的「請回答以下問題」標記。
+- 若三次重試後仍無可用 `nextQuestion`，使用 `subStepPrompts_fallbacks` 對應 key；若仍缺漏，再使用內建安全 fallback。
+- `1-2`、`1-5`、`2-4` 等題庫控制步驟仍以 `questionBanks` 為準，不被 AI 產生的 `nextQuestion` 覆蓋。
+
+### 流程引擎模組邊界
+
+`src/lib/engine.ts` 保留對外 API（`createSession`、`switchStep`、`sendStudentMessage` 等），但將容易變動的核心規則拆成可測試模組：
+
+- `src/lib/answer-validation.ts`：學生回答品質檢查、題目貼上偵測、項目數偵測。
+- `src/lib/llm-response.ts`：Step1/2 JSON 與舊格式 LLM 回覆解析、`nextQuestion` 可用性檢查。
+- `src/lib/workflow-questions.ts`：題庫/子步驟/fallback 題目選取、group gate key、Step9 題目組裝。
+- `src/lib/workflow-step1-2.ts`：Step1/2 group gate 與子步驟推進。
+
+驗證命令：
+
+- `npm test`：執行 workflow 單元測試。
+- `npm run build`：執行 Next.js production build。
+
 ## 5.5 非互動步驟行為
 
 教師切到非互動步驟時即生成：
