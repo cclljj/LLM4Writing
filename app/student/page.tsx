@@ -449,7 +449,6 @@ export default function StudentPage() {
       setSavedDraft8Text(latestDraft);
       setShowDraftEditor(false);
     }
-    setOutlineDirty(false);
     if (!refUser && session.participants.length > 0) {
       setRefUser((session.participants.find((user) => user !== loginUser) ?? session.participants[0])!);
     }
@@ -496,6 +495,7 @@ export default function StudentPage() {
     if (outlineDirty || draggingNodeId || editingNodeId) return;
     const saved = session?.outlines[loginUser]?.trim() ?? "";
     setOutlineNodes(saved ? fromMermaid(saved) : makeDefaultOutlineNodes());
+    setOutlineDirty(false);
     setEditingNodeId(null);
   }, [
     session?.id,
