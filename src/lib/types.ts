@@ -44,6 +44,7 @@ export interface SessionState {
   personalSteps?: Record<string, number>;
   participants: string[];
   joinedUsers?: string[];
+  onlineUsersLastSeen?: Record<string, string>;
   messages: ChatMessage[];
   groupGate: Record<string, string[]>;
   reflectionIndex: Record<string, number>;

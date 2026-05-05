@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getSession, saveSession } from "@/src/lib/store";
 import { reconcileCompletedStep9Users } from "@/src/lib/engine";
 import { findActivity, hydrateDomainState, resolvePromptConfigForActivity, resolveStructureTreeTemplate } from "@/src/lib/mock-data";
+import { getCurrentUser } from "@/src/lib/auth-server";
+import { markUserOnline } from "@/src/lib/session-presence";
 
 function isSingleNodeOutline(outline: string): boolean {
   const raw = outline.trim();
@@ -43,6 +45,11 @@ export async function GET(_: Request, context: { params: Promise<{ sessionId: st
     return NextResponse.json({ error: "session_not_found" }, { status: 404 });
   }
   let changed = false;
+  const user = await getCurrentUser();
+  if (user?.role === "student" && session.participants.includes(user.username)) {
+    markUserOnline(session, user.username);
+    changed = true;
+  }
   await hydrateDomainState();
   if (session.activityId) {
     const activity = findActivity(session.activityId);

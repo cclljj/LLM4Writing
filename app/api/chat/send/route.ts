@@ -3,6 +3,7 @@ import { sendStudentMessage } from "@/src/lib/engine";
 import { getSession, saveSession } from "@/src/lib/store";
 import { SendMessagePayload } from "@/src/lib/types";
 import { getCurrentUser } from "@/src/lib/auth-server";
+import { markUserOnline } from "@/src/lib/session-presence";
 
 export async function POST(request: NextRequest) {
   const payload = (await request.json()) as SendMessagePayload;
@@ -17,6 +18,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    markUserOnline(session, user.username);
     const userStep = session.personalSteps?.[user.username] ?? session.currentStep;
     const updated = await sendStudentMessage(session, user.username, payload.text, userStep, {
       onBeforeGroupAi: async (snapshot) => {

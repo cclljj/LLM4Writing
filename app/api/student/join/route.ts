@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/src/lib/auth-server";
 import { createSession } from "@/src/lib/engine";
 import { findActivity, hydrateDomainState, resolvePromptConfigForActivity, resolveStructureTreeTemplate } from "@/src/lib/mock-data";
 import { listSessions, saveSession } from "@/src/lib/store";
+import { markUserOnline } from "@/src/lib/session-presence";
 
 function isSingleNodeOutline(outline: string): boolean {
   const raw = outline.trim();
@@ -120,8 +121,11 @@ export async function POST(request: NextRequest) {
       const joinedChanged =
         nextJoinedUsers.length !== prevJoinedUsers.length ||
         nextJoinedUsers.some((name) => !prevJoinedUsers.includes(name));
+      markUserOnline(existing, user.username);
       if (joinedChanged || promptConfigPatched || outlinePatched) {
         existing.joinedUsers = nextJoinedUsers;
+        await saveSession(existing);
+      } else {
         await saveSession(existing);
       }
       return NextResponse.json(existing);
@@ -146,6 +150,7 @@ export async function POST(request: NextRequest) {
       });
     }
     session.joinedUsers = [user.username];
+    markUserOnline(session, user.username);
 
     await saveSession(session);
     return NextResponse.json(session, { status: 201 });

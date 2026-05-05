@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/src/lib/auth-server";
 import { getAllActivities, hydrateDomainState } from "@/src/lib/mock-data";
 import { listSessions } from "@/src/lib/store";
 import { getUsersVisibleToTeacherStore, listUsersStore } from "@/src/lib/user-store";
+import { getOnlineUsers } from "@/src/lib/session-presence";
 
 function normalizeText(text: string): string {
   return text.replace(/\r\n/g, "\n").trim();
@@ -70,6 +71,7 @@ export async function GET() {
         groupName: s.groupName,
         participants: s.participants,
         joinedUsers: s.joinedUsers ?? [],
+        onlineUsers: getOnlineUsers(s),
         currentStep: s.currentStep,
         personalSteps: s.personalSteps ?? {},
         messages: withOpenings,

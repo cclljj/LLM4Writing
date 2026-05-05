@@ -44,6 +44,7 @@ type MonitorSession = {
   groupName?: string;
   participants: string[];
   joinedUsers?: string[];
+  onlineUsers?: string[];
   currentStep: number;
   personalSteps?: Record<string, number>;
   groupGate?: Record<string, string[]>;
@@ -551,9 +552,9 @@ export default function TeacherPage() {
   const classJoinRows = useMemo(() => {
     if (!selectedLearningActivity) return [];
     const students = selectedLearningActivity.studentCandidates ?? [];
-    const joinedUserSet = new Set(
+    const onlineUserSet = new Set(
       filteredMonitorSessions.flatMap((session) => {
-        if (session.joinedUsers && session.joinedUsers.length > 0) return session.joinedUsers;
+        if (session.onlineUsers && session.onlineUsers.length > 0) return session.onlineUsers;
         return session.messages
           .filter((message) => message.role === "student" && Boolean(message.userId))
           .map((message) => message.userId as string);
@@ -566,10 +567,13 @@ export default function TeacherPage() {
         return session.messages.some((message) => message.role === "student" && message.userId === username);
       });
       const latestSession = joinedSessions[0];
+      const latestPersonalStep = joinedSessions
+        .map((s) => s.personalSteps?.[username] ?? null)
+        .find((step) => typeof step === "number");
       return {
         username,
-        joined: joinedUserSet.has(username),
-        step: latestSession?.currentStep ?? null,
+        joined: onlineUserSet.has(username),
+        step: latestPersonalStep ?? latestSession?.currentStep ?? null,
         groupName: latestSession?.groupName ?? null
       };
     });
@@ -581,9 +585,9 @@ export default function TeacherPage() {
     const groups = selectedLearningActivity.groups.length
       ? selectedLearningActivity.groups
       : [{ groupId: "g-auto", groupName: "未分組", members: selectedLearningActivity.studentCandidates ?? [] }];
-    const joinedUserSet = new Set(
+    const onlineUserSet = new Set(
       filteredMonitorSessions.flatMap((session) => {
-        if (session.joinedUsers && session.joinedUsers.length > 0) return session.joinedUsers;
+        if (session.onlineUsers && session.onlineUsers.length > 0) return session.onlineUsers;
         return session.messages
           .filter((message) => message.role === "student" && Boolean(message.userId))
           .map((message) => message.userId as string);
@@ -592,7 +596,7 @@ export default function TeacherPage() {
 
     return groups.map((group) => {
       const joinedMembers = group.members.filter((member) =>
-        joinedUserSet.has(member)
+        onlineUserSet.has(member)
       );
       const groupSession = filteredMonitorSessions.find(
         (session) =>
@@ -609,6 +613,13 @@ export default function TeacherPage() {
       };
     });
   }, [selectedLearningActivity, filteredMonitorSessions]);
+
+  useEffect(() => {
+    if (!monitorSelected) return;
+    const latest = monitorSessions.find((session) => session.sessionId === monitorSelected.sessionId);
+    if (!latest) return;
+    setMonitorSelected(latest);
+  }, [monitorSessions, monitorSelected?.sessionId]);
 
   function getStepAdvanceHint(session: MonitorSession): { ready: boolean; text: string; nextStep?: number } {
     const step = session.currentStep;
