@@ -23,6 +23,12 @@ export default function HomePage() {
           <p>系統管理 / 學習管理 / 課程管理，含觀課與步驟切換。</p>
           <Link href="/teacher">前往教師端</Link>
         </div>
+
+        <div className="col card">
+          <h2>系統管理員端</h2>
+          <p>完整帳號、課程與主題管理權限。</p>
+          <Link href="/admin">前往系統管理員端</Link>
+        </div>
       </div>
     </main>
   );

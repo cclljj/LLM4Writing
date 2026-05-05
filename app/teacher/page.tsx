@@ -1,6 +1,7 @@
 "use client";
 
 import { DragEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 
 type UserRow = { username: string; name: string; school: string; role: string; ownerTeacherUsername?: string; classNumber?: string };
 type EssayRow = {
@@ -273,12 +274,15 @@ function buildOutlinePreview(mermaidText: string): OutlinePreview | null {
 }
 
 export default function TeacherPage() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const isAdminConsole = pathname === "/admin";
   const [loginUser, setLoginUser] = useState("");
   const [loginName, setLoginName] = useState("");
   const [loginSchool, setLoginSchool] = useState("");
   const [loginRole, setLoginRole] = useState<"teacher" | "admin">("teacher");
   const [tab, setTab] = useState<"system" | "learning" | "course">("system");
-  const [courseTab, setCourseTab] = useState<CourseTab>("essay");
+  const [courseTab, setCourseTab] = useState<CourseTab>("openclass");
   const [users, setUsers] = useState<UserRow[]>([]);
   const [essays, setEssays] = useState<EssayRow[]>([]);
   const [openClasses, setOpenClasses] = useState<OpenClassRow[]>([]);
@@ -705,15 +709,31 @@ export default function TeacherPage() {
           setLoginSchool(data.user.school ?? "");
           if (data.user.role === "admin") {
             setLoginRole("admin");
+            if (!isAdminConsole) {
+              router.replace("/admin");
+            }
           } else {
             setLoginRole("teacher");
+            if (isAdminConsole) {
+              router.replace("/teacher");
+            }
           }
+        } else {
+          router.replace("/login");
         }
       })
-      .catch(() => undefined);
+      .catch(() => {
+        router.replace("/login");
+      });
 
     refreshAll();
-  }, []);
+  }, [isAdminConsole, router]);
+
+  useEffect(() => {
+    if (loginRole !== "admin" && courseTab === "essay") {
+      setCourseTab("openclass");
+    }
+  }, [courseTab, loginRole]);
 
   useEffect(() => {
     if (!selectedActivityId || activities.length === 0) return;
@@ -1631,7 +1651,7 @@ export default function TeacherPage() {
     <main>
       <div className="card">
         <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
-          <h1 style={{ marginBottom: 0 }}>教師端管理台</h1>
+          <h1 style={{ marginBottom: 0 }}>{isAdminConsole ? "系統管理員控制台" : "教師端管理台"}</h1>
           <div>
             <span className="badge" style={{ marginRight: 8 }}>
               {identityLabel}
@@ -2714,9 +2734,11 @@ export default function TeacherPage() {
             <h2>課程管理</h2>
             <small>以下為第二層分頁，先選擇管理模組，再編輯對應內容。</small>
             <div className="row" style={{ marginTop: 10 }}>
-              <div style={{ width: 210 }}>
-              <button type="button" className={courseTab === "essay" ? "" : "secondary"} onClick={() => setCourseTab("essay")}>寫作主題管理</button>
-              </div>
+              {loginRole === "admin" ? (
+                <div style={{ width: 210 }}>
+                  <button type="button" className={courseTab === "essay" ? "" : "secondary"} onClick={() => setCourseTab("essay")}>寫作主題管理</button>
+                </div>
+              ) : null}
               <div style={{ width: 210 }}>
               <button type="button" className={courseTab === "openclass" ? "" : "secondary"} onClick={() => setCourseTab("openclass")}>寫作任務管理</button>
               </div>
@@ -2726,7 +2748,7 @@ export default function TeacherPage() {
             </div>
           </div>
 
-          {courseTab === "essay" ? (
+          {courseTab === "essay" && loginRole === "admin" ? (
             <div className="card">
               <h2>寫作主題管理</h2>
               <small>Prompt 與問題庫改由系統參數 JSON 管理；此處僅維護主題資料。</small>

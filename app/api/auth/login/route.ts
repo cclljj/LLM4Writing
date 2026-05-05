@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
     const response = NextResponse.json({
       ok: true,
       user,
-      redirectTo: user.role === "student" ? "/student" : "/teacher"
+      redirectTo: user.role === "student" ? "/student" : user.role === "admin" ? "/admin" : "/teacher"
     });
     response.cookies.set(AUTH_COOKIE_USER, user.username, {
       httpOnly: true,
