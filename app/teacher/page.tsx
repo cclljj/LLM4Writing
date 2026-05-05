@@ -732,7 +732,7 @@ export default function TeacherPage() {
     });
   }, [tab]);
 
-  async function refreshMonitor() {
+  async function refreshMonitor(): Promise<MonitorSession[]> {
     const fetchOpts: RequestInit = { cache: "no-store" };
     let response: Response | null = null;
     try {
@@ -745,11 +745,30 @@ export default function TeacherPage() {
     }
     if (!response?.ok) {
       setLearningWarning("monitor_load_failed");
-      return;
+      return [];
     }
     const data = await response.json();
-    setMonitorSessions(data.sessions ?? []);
+    const sessions = data.sessions ?? [];
+    setMonitorSessions(sessions);
     setLearningWarning("");
+    return sessions;
+  }
+
+  async function openCourseStatus(activityId: string) {
+    setSelectedLearningActivityId(activityId);
+    setShowCourseStatusView(true);
+    await runLearningAction("系統正在載入課程狀態，請稍候...", async () => {
+      const sessions = await refreshMonitor();
+      const targetSessions = sessions.filter((item: MonitorSession) => item.activityId === activityId);
+      if (targetSessions.length > 0) {
+        const first = targetSessions[0]!;
+        setMonitorSelected(first);
+        setProgressSessionId(first.sessionId);
+      } else {
+        setMonitorSelected(null);
+        setProgressSessionId("");
+      }
+    });
   }
 
   async function refreshAll(includeMonitor = false) {
@@ -2153,11 +2172,7 @@ export default function TeacherPage() {
                               style={viewDisabled ? disabledButtonStyle : enabledButtonStyle}
                               disabled={viewDisabled || isLearningProcessing}
                               onClick={() => {
-                                setSelectedLearningActivityId(activity.id);
-                                setShowCourseStatusView(true);
-                                runLearningAction("系統正在載入課程狀態，請稍候...", async () => {
-                                  await refreshMonitor();
-                                });
+                                openCourseStatus(activity.id).catch(() => undefined);
                               }}
                             >
                               查看狀態

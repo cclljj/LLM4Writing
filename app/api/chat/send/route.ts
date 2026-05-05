@@ -18,7 +18,11 @@ export async function POST(request: NextRequest) {
 
   try {
     const userStep = session.personalSteps?.[user.username] ?? session.currentStep;
-    const updated = await sendStudentMessage(session, user.username, payload.text, userStep);
+    const updated = await sendStudentMessage(session, user.username, payload.text, userStep, {
+      onBeforeGroupAi: async (snapshot) => {
+        await saveSession(snapshot);
+      }
+    });
     await saveSession(updated);
     return NextResponse.json(updated);
   } catch (error) {

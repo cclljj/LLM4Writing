@@ -685,6 +685,10 @@ export function advanceLegacyPhase(session: SessionState): SessionState {
   return session;
 }
 
+type SendMessageHooks = {
+  onBeforeGroupAi?: (session: SessionState) => Promise<void> | void;
+};
+
 function handleStep1Or2Group(
   session: SessionState,
   userId: string,
@@ -704,8 +708,6 @@ function handleStep1Or2Group(
   if (!allResponded) {
     return { session, allResponded: false, substep };
   }
-
-  session.groupGate[gateKey] = [];
 
   return { session, allResponded: true, substep };
 }
@@ -786,7 +788,13 @@ function advanceStep1Or2SubstepAfterAi(
   session.messages.push(makeMessage({ role: "system", step, text: "步驟 2 子步驟已完成，等待教師切換下一步。" }));
 }
 
-export async function sendStudentMessage(session: SessionState, userId: string, text: string, stepOverride?: number): Promise<SessionState> {
+export async function sendStudentMessage(
+  session: SessionState,
+  userId: string,
+  text: string,
+  stepOverride?: number,
+  hooks?: SendMessageHooks
+): Promise<SessionState> {
   normalizeSessionRuntimeShape(session);
   const step = stepOverride ?? session.currentStep;
   const participants = ensureParticipants(session, userId);
@@ -814,6 +822,9 @@ export async function sendStudentMessage(session: SessionState, userId: string, 
   if (step === 1 || step === 2) {
     const result = handleStep1Or2Group(session, userId, text);
     if (result.allResponded) {
+      if (hooks?.onBeforeGroupAi) {
+        await hooks.onBeforeGroupAi(result.session);
+      }
       const aiRaw = await generateAiTextForStep(
         result.session,
         step,
@@ -828,6 +839,8 @@ export async function sendStudentMessage(session: SessionState, userId: string, 
           text: parsed.feedbackText
         })
       );
+      const completedGateKey = getCurrentGroupGateKey(result.session, step as 1 | 2);
+      result.session.groupGate[completedGateKey] = [];
       advanceStep1Or2SubstepAfterAi(result.session, step as 1 | 2, result.substep, parsed.nextQuestion);
     }
     return result.session;
