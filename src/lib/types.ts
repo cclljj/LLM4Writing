@@ -22,6 +22,7 @@ export interface PromptConfig {
   systemPrompt?: string;
   stepPrompts: Record<string, string>;
   subStepPrompts: Record<string, string>;
+  subStepPromptsFallbacks?: Record<string, string>;
   questionBanks: Record<string, string[]>;
   step9Questions?: Record<string, string>;
   stepOpenings?: Record<string, string>;

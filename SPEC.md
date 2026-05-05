@@ -323,6 +323,9 @@ API 輸出給學習/分組流程使用：
 子步驟轉接規則：
 - 在 Step1/2 的 AI 回覆中，若包含「請回答以下問題」段落，系統會將該段落內容抽出，作為「下一子步驟」的系統提問。
 - 同時，該段落不再保留於當前 AI 回覆，避免重複顯示。
+- 若 AI 回覆無法解析出「下一題」，系統需改用 `subStepPrompts_fallbacks`（程式內映射為 `subStepPromptsFallbacks`）對應 key 的 fallback 問題：
+  - `1-3-1/2/3`、`1-4-1/2/3`、`2-1-1/2/3`、`2-2`、`2-3`
+- 若對應 key 不存在 fallback，才使用內建最後保底問句，確保流程不中斷。
 
 ## 5.4 LLM Prompt 組裝
 
@@ -865,6 +868,7 @@ Behavior:
   systemPrompt?: string;
   stepPrompts: Record<string, string>;
   subStepPrompts: Record<string, string>;
+  subStepPromptsFallbacks?: Record<string, string>;
   questionBanks: Record<string, string[]>;
   step9Questions?: Record<string, string>;
 }

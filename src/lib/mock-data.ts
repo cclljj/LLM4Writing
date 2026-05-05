@@ -32,6 +32,7 @@ type RawSystemPromptConfig = {
   systemPrompt?: string;
   stepPrompts?: Record<string, string>;
   subStepPrompts?: Record<string, string>;
+  subStepPrompts_fallbacks?: Record<string, string>;
   questionBanks?: Record<string, string[]>;
   step9Questions?: Record<string, string>;
   writingTasks?: Record<string, { questionBanks?: Record<string, string[]> }>;
@@ -535,13 +536,21 @@ export function getStudentUsernamesForActivityClass(activityId: string): string[
 export function resolvePromptConfigForActivity(activityId: string): PromptConfig {
   const activity = findActivity(activityId);
   if (!activity) {
-    return { systemPrompt: undefined, stepPrompts: {}, subStepPrompts: {}, questionBanks: {}, step9Questions: {} };
+    return {
+      systemPrompt: undefined,
+      stepPrompts: {},
+      subStepPrompts: {},
+      subStepPromptsFallbacks: {},
+      questionBanks: {},
+      step9Questions: {}
+    };
   }
 
   const raw = systemPromptConfig as RawSystemPromptConfig;
   const systemPrompt = typeof raw.systemPrompt === "string" ? raw.systemPrompt : undefined;
   const stepPrompts = { ...(raw.stepPrompts ?? {}) };
   const subStepPrompts = { ...(raw.subStepPrompts ?? {}) };
+  const subStepPromptsFallbacks = { ...(raw.subStepPrompts_fallbacks ?? {}) };
   const baseQuestionBanks = Object.fromEntries(
     Object.entries(raw.questionBanks ?? {}).map(([key, value]) => [
       key,
@@ -570,6 +579,7 @@ export function resolvePromptConfigForActivity(activityId: string): PromptConfig
     systemPrompt,
     stepPrompts,
     subStepPrompts,
+    subStepPromptsFallbacks,
     questionBanks: { ...baseQuestionBanks, ...scopedQuestionBanks },
     step9Questions,
     stepOpenings: stepOpeningTexts

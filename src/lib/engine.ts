@@ -32,6 +32,12 @@ function pickQuestionFromSubStepPrompt(session: SessionState, key: string, fallb
   return fallback;
 }
 
+function pickQuestionFromSubStepFallback(session: SessionState, key: string, fallback: string): string {
+  const prompt = session.promptConfig?.subStepPromptsFallbacks?.[key];
+  if (prompt) return prompt;
+  return fallback;
+}
+
 function looksLikeInstructionPrompt(text: string): boolean {
   // Heuristic: subStepPrompts may contain multi-paragraph instructions intended for the LLM,
   // not a student-facing question.
@@ -176,7 +182,15 @@ export function createSession(payload: StartSessionPayload): SessionState {
     activitySupplemental: payload.activitySupplemental,
     groupId: payload.groupId,
     groupName: payload.groupName,
-    promptConfig: payload.promptConfig ?? { stepPrompts: {}, subStepPrompts: {}, questionBanks: {}, step9Questions: {}, stepOpenings: {} },
+    promptConfig:
+      payload.promptConfig ?? {
+        stepPrompts: {},
+        subStepPrompts: {},
+        subStepPromptsFallbacks: {},
+        questionBanks: {},
+        step9Questions: {},
+        stepOpenings: {}
+      },
     stepState: { step1Substep: 1, step2Substep: 1, step1Substep3Question: 1, step1Substep4Question: 1, step2Substep1Question: 1 },
     outlines: {},
     step3SubmittedOutlines: {},
@@ -236,13 +250,23 @@ function normalizeSessionRuntimeShape(session: SessionState): void {
     session.stepState.step2Substep1Question = 1;
   }
   if (!session.promptConfig || typeof session.promptConfig !== "object") {
-    session.promptConfig = { stepPrompts: {}, subStepPrompts: {}, questionBanks: {}, step9Questions: {}, stepOpenings: {} };
+    session.promptConfig = {
+      stepPrompts: {},
+      subStepPrompts: {},
+      subStepPromptsFallbacks: {},
+      questionBanks: {},
+      step9Questions: {},
+      stepOpenings: {}
+    };
   }
   if (!session.promptConfig.stepPrompts || typeof session.promptConfig.stepPrompts !== "object") {
     session.promptConfig.stepPrompts = {};
   }
   if (!session.promptConfig.subStepPrompts || typeof session.promptConfig.subStepPrompts !== "object") {
     session.promptConfig.subStepPrompts = {};
+  }
+  if (!session.promptConfig.subStepPromptsFallbacks || typeof session.promptConfig.subStepPromptsFallbacks !== "object") {
+    session.promptConfig.subStepPromptsFallbacks = {};
   }
   if (!session.promptConfig.questionBanks || typeof session.promptConfig.questionBanks !== "object") {
     session.promptConfig.questionBanks = {};
@@ -751,21 +775,29 @@ function advanceStep1Or2SubstepAfterAi(
   if (step === 1) {
     if (completedSubstep === 3 && (session.stepState.step1Substep3Question ?? 1) < 3) {
       session.stepState.step1Substep3Question = (session.stepState.step1Substep3Question ?? 1) + 1;
+      const qIdx = session.stepState.step1Substep3Question;
       const q =
         nextQuestionFromAi?.trim() ||
-        "請用自己的話補充說明：你認為題目中的關鍵詞範圍包含什麼、不包含什麼？";
-      const qIdx = session.stepState.step1Substep3Question;
+        pickQuestionFromSubStepFallback(
+          session,
+          `1-3-${qIdx}`,
+          "請用自己的話補充說明：你認為題目中的關鍵詞範圍包含什麼、不包含什麼？"
+        );
       session.messages.push(makeMessage({ role: "system", step, text: `子步驟 1-3-${qIdx}：${q}` }));
       return;
     }
     if (completedSubstep === 4 && (session.stepState.step1Substep4Question ?? 1) < 3) {
       session.stepState.step1Substep4Question = (session.stepState.step1Substep4Question ?? 1) + 1;
+      const qIdx = session.stepState.step1Substep4Question;
       const q =
         nextQuestionFromAi?.trim() ||
-        (session.stepState.step1Substep4Question === 2
-          ? "請從你們剛剛釐清的範圍出發：這篇文章最核心、最想傳達的一句話觀點是什麼？"
-          : "請再收斂一次：用一句話寫出你們的核心主張（最想讓讀者記住的觀點）。");
-      const qIdx = session.stepState.step1Substep4Question;
+        pickQuestionFromSubStepFallback(
+          session,
+          `1-4-${qIdx}`,
+          qIdx === 2
+            ? "請從你們剛剛釐清的範圍出發：這篇文章最核心、最想傳達的一句話觀點是什麼？"
+            : "請再收斂一次：用一句話寫出你們的核心主張（最想讓讀者記住的觀點）。"
+        );
       session.messages.push(makeMessage({ role: "system", step, text: `子步驟 1-4-${qIdx}：${q}` }));
       return;
     }
@@ -779,9 +811,19 @@ function advanceStep1Or2SubstepAfterAi(
       const q = mustUseQuestionBank
         ? buildStep1Question(session)
         : nextSub === 3
-          ? nextQuestionFromAi?.trim() || "請先用一個生活中的具體例子，說明你認為題目關鍵詞在這裡代表什麼。"
+          ? nextQuestionFromAi?.trim() ||
+            pickQuestionFromSubStepFallback(
+              session,
+              "1-3-1",
+              "請先用一個生活中的具體例子，說明你認為題目關鍵詞在這裡代表什麼。"
+            )
           : nextSub === 4
-            ? nextQuestionFromAi?.trim() || "請根據剛才的討論，用一句話說出你們最核心、最想傳達的觀點。"
+            ? nextQuestionFromAi?.trim() ||
+              pickQuestionFromSubStepFallback(
+                session,
+                "1-4-1",
+                "請根據剛才的討論，用一句話說出你們最核心、最想傳達的觀點。"
+              )
             : nextQuestionFromAi?.trim() || buildStep1Question(session);
       if (nextSub === 3) {
         session.messages.push(makeMessage({ role: "system", step, text: `子步驟 1-3-1：${q}` }));
@@ -798,12 +840,16 @@ function advanceStep1Or2SubstepAfterAi(
 
   if (completedSubstep === 1 && (session.stepState.step2Substep1Question ?? 1) < 3) {
     session.stepState.step2Substep1Question = (session.stepState.step2Substep1Question ?? 1) + 1;
+    const qIdx = session.stepState.step2Substep1Question;
     const q =
       nextQuestionFromAi?.trim() ||
-      (session.stepState.step2Substep1Question === 2
-        ? "請挑一個你覺得最好用的具體例子（可以是生活經驗/新聞/歷史），並用 1-2 句話說明這個例子是什麼。"
-        : "請說明：你選的這個例子，哪一個部分最能支持你的觀點？為什麼？");
-    const qIdx = session.stepState.step2Substep1Question;
+      pickQuestionFromSubStepFallback(
+        session,
+        `2-1-${qIdx}`,
+        qIdx === 2
+          ? "請挑一個你覺得最好用的具體例子（可以是生活經驗/新聞/歷史），並用 1-2 句話說明這個例子是什麼。"
+          : "請說明：你選的這個例子，哪一個部分最能支持你的觀點？為什麼？"
+      );
     session.messages.push(makeMessage({ role: "system", step, text: `子步驟 2-1-${qIdx}：${q}` }));
     return;
   }
@@ -813,7 +859,14 @@ function advanceStep1Or2SubstepAfterAi(
     const nextSub = session.stepState.step2Substep;
     if (nextSub === 1) session.stepState.step2Substep1Question = 1;
     const mustUseQuestionBank = nextSub === 4;
-    const q = mustUseQuestionBank ? buildStep2Question(session) : nextQuestionFromAi?.trim() || buildStep2Question(session);
+    const q = mustUseQuestionBank
+      ? buildStep2Question(session)
+      : nextQuestionFromAi?.trim() ||
+        pickQuestionFromSubStepFallback(
+          session,
+          `2-${nextSub}`,
+          buildStep2Question(session)
+        );
     if (nextSub === 1) {
       session.messages.push(makeMessage({ role: "system", step, text: `子步驟 2-1-1：${q}` }));
     } else {
