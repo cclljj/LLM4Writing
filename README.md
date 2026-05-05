@@ -1,45 +1,34 @@
 # LLM4Writing (Vercel-native)
 
-LLM4Writing 已改造成可直接部署於 Vercel 的原生架構版本。
+[![Deploy to Vercel](https://github.com/cclljj/llm4writing_fork/actions/workflows/vercel-deploy.yml/badge.svg)](https://github.com/cclljj/llm4writing_fork/actions/workflows/vercel-deploy.yml)
+[![Next.js](https://img.shields.io/badge/Next.js-16.2.4-000000?logo=nextdotjs)](https://nextjs.org/)
+[![React](https://img.shields.io/badge/React-19.2.0-149ECA?logo=react&logoColor=white)](https://react.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.8.3-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Node](https://img.shields.io/badge/Node.js-20%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
+[![Security Policy](https://img.shields.io/badge/Security-Policy-blue)](./SECURITY.md)
 
-## 專案定位
+LLM4Writing 是一個以 **Next.js App Router + Serverless API** 為核心的 AI 寫作教學系統，支援學生端（10 步驟寫作流程）與教師端（課程管理、分組、進度監控）。
 
-- 現行可部署主應用為 root 的 Next.js App Router + Serverless API
-- 目前功能對齊基準：`SPEC.md`（現況版）
+目前 `main` 分支為唯一持續維護版本，系統行為以 [`SPEC.md`](./SPEC.md) 為準。
 
-## 協作流程
+## Features
 
-- 所有需求必須先開 GitHub Issue 再實作
-- 每次任務都要先檢查是否需要更新 `SPEC.md`
-- 完整流程請見 [`TASK.md`](TASK.md)
-- Supabase 資料庫遷移流程請見 [`SUPABASE_MIGRATION.md`](SUPABASE_MIGRATION.md)
-- GitHub 模板：
-  - Issue: `.github/ISSUE_TEMPLATE/task_change.yml`
-  - PR: `.github/pull_request_template.md`
+- 學生端完整學習流程：Step1~Step10
+- 教師端課程管理、分組、切步驟與監控
+- Prompt 配置外部化：`src/config/system-prompt-config.json`
+- Step1/2 子步驟 fallback 題庫（LLM 抽題失敗時不中斷）
+- 選配遠端 LLM（OpenAI-compatible），未設定時可 fallback
+- Postgres 儲存（未配置時 fallback 到本地檔案 + memory）
 
-## 架構
+## Tech Stack
 
-- Frontend: Next.js (`app/`)
+- Frontend: Next.js 16, React 19
 - Backend: Next.js Route Handlers (`app/api/**`)
 - Runtime: Vercel Serverless Functions
-- Storage: Postgres（支援 Vercel/Neon 連線字串；無 DB 時 fallback `.data/domain-state.json` + memory）
+- Storage: Postgres (`SUPABASE_DB_URL` / `POSTGRES_URL` / `DATABASE_URL`)
+- Language: TypeScript
 
-## 已回補流程（依 SPEC_generated_by_AI）
-
-1. 學生端活動列表（ActivityPage）
-2. 任務加入討論 + 歷史紀錄（含 CourseDetailModal 詳情確認）
-3. Phase1~5 聊天流程（含 Phase5 仍可輸入）
-4. 教師端三大模組入口：帳號管理 / 課程管理 / 學習管理
-5. 課堂觀察（小組進度與對話檢視）與步驟切換
-6. 寫作主題與開課管理（Vercel-native 版 CRUD）
-7. Prompt / 問題庫改為系統參數 JSON（檔案版）
-8. 學生端課程視圖精簡：課程資訊改為單行整併顯示，子步驟與模式同列，對話紀錄以 HTML 排版渲染
-9. 學生端互動區：小組互動提示移至輸入框下方小字，依「最後一則系統提問」才顯示回答輸入框
-10. 學生端課程進行畫面：上方題目/引導說明/補充資料改為正常字級；中段顯示過濾後互動內容（含系統提問、學生作答、AI 回覆，不顯示 system prompt）；底部提供 `<hr>` 後完整對話紀錄除錯區
-11. 小組互動答題保護：首位提交後其餘成員仍可輸入；在自己提交前不顯示其他同學當題答案
-12. 教師端課程狀態內容：新增「步驟切換提示」欄，當條件達成時提示可切到下一步並可一鍵套用建議步驟
-
-## 本機開發
+## Quick Start
 
 ```bash
 cp .env.example .env.local
@@ -47,95 +36,126 @@ npm install
 npm run dev
 ```
 
-開啟 `http://localhost:3000`
+Open: [http://localhost:3000](http://localhost:3000)
 
-## Vercel 部署
+## Environment Variables
+
+### Remote LLM (optional)
+
+- `LLM_URL` - OpenAI-compatible chat completions URL
+- `LLM_KEY` - API key
+- `LLM_MODEL` - model name
+
+若三者任一缺漏，系統會使用內建 fallback 回覆，保障流程可持續。
+
+### Database
+
+- `SUPABASE_DB_URL`（建議優先）
+- `POSTGRES_URL` / `DATABASE_URL`（相容 fallback）
+- `SUPABASE_POOL_MODE=transaction|session`（可選）
+
+## Project Structure
+
+```text
+app/                Next.js pages + API routes
+src/lib/            engine, store, auth, mock-data, types
+src/config/         prompt config and step openings
+scripts/            migration/utility scripts
+SPEC.md             implementation spec (source of truth)
+```
+
+## Main Pages
+
+- `/login`
+- `/student`
+- `/student/history/[activityId]`
+- `/teacher`
+
+## API Overview
+
+### Auth
+- `POST /api/auth/login`
+- `POST /api/auth/logout`
+- `GET /api/auth/me`
+
+### Student
+- `GET /api/student/overview`
+- `GET /api/student/activities`
+- `POST /api/student/join`
+- `GET /api/student/history`
+- `GET /api/student/course-history/[activityId]`
+
+### Session / Chat
+- `POST /api/session/start`
+- `GET /api/session/[sessionId]`
+- `POST /api/chat/send`
+- `POST /api/session/advance-phase`
+- `POST /api/session/step3/complete`
+- `POST /api/session/step4/complete`
+- `POST /api/session/step5/continue`
+- `POST /api/session/step6/suggest`
+- `POST /api/session/step6/complete`
+- `POST /api/session/step8/complete`
+
+### Teacher/Admin
+- `POST /api/teacher/step`
+- `GET /api/teacher/monitor`
+- `GET /api/teacher/personal-progress`
+- `POST /api/teacher/course-control`
+- `GET/POST /api/admin/users`
+- `GET/POST /api/admin/essays`
+- `GET/POST /api/admin/openclasses`
+- `GET /api/admin/activities`
+- `POST /api/admin/groups`
+- `GET/POST /api/admin/prompts/essay`
+- `GET/POST /api/admin/prompts/openclass`
+
+## Prompt Configuration
+
+Prompt config file: [`src/config/system-prompt-config.json`](./src/config/system-prompt-config.json)
+
+Key fields:
+
+- `systemPrompt`
+- `stepPrompts`
+- `stepPrompts_old` (for reference)
+- `subStepPrompts`
+- `subStepPrompts_fallbacks`
+- `questionBanks`
+- `writingTasks[essayId].questionBanks`
+- `step9Questions`
+
+## Deployment
+
+### Vercel
 
 ```bash
 npx --yes vercel --prod
 ```
 
-## Supabase 遷移
+CI workflow: [`.github/workflows/vercel-deploy.yml`](./.github/workflows/vercel-deploy.yml)
 
-- 完整流程（遷移腳本 + 環境變數切換 + 驗證/回復）請參考 [`SUPABASE_MIGRATION.md`](SUPABASE_MIGRATION.md)
-- 腳本：
-  - `scripts/supabase/migrate_to_supabase.sh`
-  - `scripts/supabase/verify_migration.sh`
+## Documentation Index
 
-已設定/可用頁面：
+- Spec: [`SPEC.md`](./SPEC.md)
+- Security policy: [`SECURITY.md`](./SECURITY.md)
+- Task workflow: [`TASK.md`](./TASK.md)
+- Supabase migration: [`SUPABASE_MIGRATION.md`](./SUPABASE_MIGRATION.md)
+- Vercel migration notes: [`VERCEL_MIGRATION.md`](./VERCEL_MIGRATION.md)
 
-- `/` 首頁
-- `/login` 登入頁
-- `/student` 學生端
-- `/teacher` 教師端
+## Collaboration Rules
 
-## 登入流程
+- 需求先開 Issue 再實作
+- 功能變更需檢查並同步 `SPEC.md`
+- PR/Issue 模板位於 `.github/`
 
-- 預設測試帳號：
-  - 學生：`student / student123`
-  - 教師：`teacher / teacher123`
-- 可透過環境變數覆寫：`DEFAULT_STUDENT_USER`、`DEFAULT_STUDENT_PASS`、`DEFAULT_TEACHER_USER`、`DEFAULT_TEACHER_PASS`
+## Test Accounts
 
-## API 一覽
+- Student: `student / student123`
+- Teacher: `teacher / teacher123`
 
-- Auth
-  - `POST /api/auth/login`
-  - `POST /api/auth/logout`
-  - `GET /api/auth/me`
-- Student
-  - `GET /api/student/activities`
-  - `POST /api/student/join`
-  - `GET /api/student/history`
-- Session
-  - `POST /api/session/start`
-  - `GET /api/session/:sessionId`
-  - `POST /api/chat/send`
-  - `POST /api/session/advance-phase`
-- Teacher/Admin
-  - `POST /api/teacher/step`
-  - `GET /api/teacher/monitor`
-  - `GET/POST /api/admin/users`
-  - `GET/POST /api/admin/essays`
-  - `GET/POST /api/admin/openclasses`
-  - `GET /api/admin/activities`
-  - `POST /api/admin/groups`
-  - `GET /api/teacher/personal-progress`
-  - `GET/POST /api/admin/prompts/essay`（唯讀，POST 不可寫）
-  - `GET/POST /api/admin/prompts/openclass`（唯讀，POST 不可寫）
-
-## 系統參數（Prompt）
-
-- 檔案：`src/config/system-prompt-config.json`
-- 說明：全系統統一使用，不再依主題或任務做覆蓋
-- 維護方式：由開發人員修改檔案後，透過 CI/CD 重新部署
-- 課程進行中 LLM 組裝規則：
-  - `systemPrompt + stepPrompts[步驟編號]`
-  - Step1/2 另會帶入目前子步驟對應的 `subStepPrompts[x-y]` 與 `questionBanks[x-y]`（若存在）
-  - 子步驟問題庫以 `writingTasks[essayId].questionBanks` 為主要來源
-
-## Remote LLM（環境變數）
-
-系統可透過環境變數改用遠端 LLM（供應商無綁定，採 OpenAI-compatible Chat Completions 介面）。
-
-- `LLM_URL`：Chat Completions API URL（例如 OpenRouter：`https://openrouter.ai/api/v1/chat/completions`）
-- `LLM_KEY`：API Key（請勿 commit）
-- `LLM_MODEL`：模型名稱（例如 OpenRouter free model）
-
-若三個變數都未設定，系統會使用內建 stub 回覆（可讓 UI 跑起來，但不是真正 LLM）。
-若遠端 LLM 回應格式異常或暫時失敗，系統也會自動 fallback 回覆，避免中斷課堂流程。
-
-## Postgres 注意事項
-
-- 首次使用時，系統會自動建立 `llm4writing_sessions` table
-- `payload` 以 `JSONB` 儲存完整 session 狀態
-- 資料庫連線優先讀取 `SUPABASE_DB_URL`（建議只設定這個）
-- 若使用 Supabase pooler，建議改用 transaction pooler 連線（常見為 `:6543`），可降低 `MaxClientsInSessionMode` 風險
-- 可選環境變數 `SUPABASE_POOL_MODE=transaction|session` 強制指定模式（未指定時會依 URL 自動判斷）
-- `POSTGRES_URL` / `DATABASE_URL` 僅作舊環境相容 fallback
-- 若三者都未設定，會自動使用 in-memory store（重啟即遺失）
-
-## 版本
-
-- `1.0`：無 `SPEC*.md` 的基準版本
-- `2.0`：Vercel-native 架構起始版本
-- `2.1`：加入 Postgres 持久化與現況版流程回補
+可由環境變數覆寫：
+- `DEFAULT_STUDENT_USER`
+- `DEFAULT_STUDENT_PASS`
+- `DEFAULT_TEACHER_USER`
+- `DEFAULT_TEACHER_PASS`
