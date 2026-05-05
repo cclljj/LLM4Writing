@@ -582,6 +582,25 @@ function isUsableNextQuestion(text?: string): boolean {
   return true;
 }
 
+function isNextQuestionSubStepPromptDriven(session: SessionState, step: 1 | 2, completedSubstep: number): boolean {
+  if (step === 1) {
+    if (completedSubstep === 3 && (session.stepState.step1Substep3Question ?? 1) < 3) return true;
+    if (completedSubstep === 4 && (session.stepState.step1Substep4Question ?? 1) < 3) return true;
+    if (completedSubstep < 5) {
+      const nextSub = completedSubstep + 1;
+      return nextSub === 3 || nextSub === 4;
+    }
+    return false;
+  }
+
+  if (completedSubstep === 1 && (session.stepState.step2Substep1Question ?? 1) < 3) return true;
+  if (completedSubstep < 4) {
+    const nextSub = completedSubstep + 1;
+    return nextSub === 2 || nextSub === 3;
+  }
+  return false;
+}
+
 function buildStep7Report(session: SessionState, userId: string): string {
   const essay = session.draftStep6[userId] ?? "(尚未撰寫初稿)";
   return `步驟 7 分析回饋（${userId}）\n初稿：${essay}\n建議：請加強論點與例證的連結。`;
@@ -945,13 +964,16 @@ export async function sendStudentMessage(
         `all members answered step ${step} substep ${result.substep}`,
         userId
       );
-      result.session.messages.push(
-        makeMessage({
-          role: "ai",
-          step,
-          text: parsed.feedbackText
-        })
-      );
+      const shouldEmitAiFeedback = !isNextQuestionSubStepPromptDriven(result.session, step as 1 | 2, result.substep);
+      if (shouldEmitAiFeedback) {
+        result.session.messages.push(
+          makeMessage({
+            role: "ai",
+            step,
+            text: parsed.feedbackText
+          })
+        );
+      }
       const completedGateKey = getCurrentGroupGateKey(result.session, step as 1 | 2);
       result.session.groupGate[completedGateKey] = [];
       advanceStep1Or2SubstepAfterAi(result.session, step as 1 | 2, result.substep, parsed.nextQuestion);
