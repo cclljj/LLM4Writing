@@ -485,7 +485,7 @@ async function generateAiTextForStep(session: SessionState, step: number, contex
     }
   }
   systemParts.push(`目前步驟：${step}（${stepName}）。請嚴格遵守步驟與輸出格式要求。`);
-  const scopedSteps = new Set([1, 2, 4, 6, 8, 9]);
+  const scopedSteps = new Set([1, 2, 3, 4, 6, 8, 9]);
   const scopedUserId = userId && scopedSteps.has(step) ? userId : undefined;
   const crossStepContext = scopedUserId
     ? buildStudentCourseContext(session, scopedUserId, step, { maxMessages: 48, maxChars: 6500, includeSystem: true })

@@ -20,18 +20,38 @@ export function buildStudentCourseContext(
   const maxChars = options.maxChars ?? 6000;
   const includeSystem = options.includeSystem ?? true;
 
+  const participantSet = new Set(session.participants ?? []);
+  const isGroupPhase = currentStep >= 1 && currentStep <= 4;
+
   const scoped = session.messages.filter((m) => {
     if (m.step > currentStep) return false;
+
+    // Step 1-4: group phase, include all teammates' answers and AI/system records.
+    if (isGroupPhase) {
+      if (m.role === "student") return Boolean(m.userId && participantSet.has(m.userId));
+      if (m.role === "ai") return !m.userId || participantSet.has(m.userId);
+      if (m.role === "system") return includeSystem && (!m.userId || participantSet.has(m.userId)) && isNecessarySystemMessage(m.text);
+      return false;
+    }
+
+    // Step 5+: keep shared memory from Step1-4, while Step5+ keeps only self history.
+    if (m.step <= 4) {
+      if (m.role === "student") return Boolean(m.userId && participantSet.has(m.userId));
+      if (m.role === "ai") return !m.userId || participantSet.has(m.userId);
+      if (m.role === "system") return includeSystem && (!m.userId || participantSet.has(m.userId)) && isNecessarySystemMessage(m.text);
+      return false;
+    }
+
     if (m.role === "student") return m.userId === userId;
-    if (m.role === "ai") return m.userId === userId;
+    if (m.role === "ai") return !m.userId || m.userId === userId;
     if (m.role === "system") return includeSystem && (!m.userId || m.userId === userId) && isNecessarySystemMessage(m.text);
     return false;
   });
 
   const sliced = scoped.slice(-maxMessages);
   const lines = sliced.map((m) => {
-    if (m.role === "student") return `S${m.step}-學生(${userId})：${m.text}`;
-    if (m.role === "ai") return `S${m.step}-AI：${m.text}`;
+    if (m.role === "student") return `S${m.step}-學生(${m.userId ?? userId})：${m.text}`;
+    if (m.role === "ai") return `S${m.step}-AI${m.userId ? `(${m.userId})` : ""}：${m.text}`;
     return `S${m.step}-系統：${m.text}`;
   });
 
@@ -45,4 +65,3 @@ export function buildStudentCourseContext(
   }
   return kept.reverse().join("\n");
 }
-
