@@ -393,6 +393,8 @@ export default function StudentPage() {
   const [historyReviewExpanded, setHistoryReviewExpanded] = useState<Record<number, boolean>>({});
   const outlineCanvasRef = useRef<HTMLDivElement | null>(null);
   const lastOwnStepRef = useRef<number | null>(null);
+  const autoSaveSeqRef = useRef(0);
+  const longPressTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     fetch("/api/auth/me", { cache: "no-store" })
@@ -779,15 +781,66 @@ export default function StudentPage() {
       y: parent.y + 120
     };
     setOutlineDirty(true);
-    setOutlineNodes((prev) => [...prev, next]);
+    setOutlineNodes((prev) => {
+      const nextNodes = [...prev, next];
+      autoSaveOutlineNodes(nextNodes).catch(() => undefined);
+      return nextNodes;
+    });
   }
 
   function removeLeafNode(nodeId: string) {
     const hasChildren = outlineNodes.some((node) => node.parentId === nodeId);
     if (hasChildren) return;
     setOutlineDirty(true);
-    setOutlineNodes((prev) => prev.filter((node) => node.id !== nodeId));
+    setOutlineNodes((prev) => {
+      const nextNodes = prev.filter((node) => node.id !== nodeId);
+      autoSaveOutlineNodes(nextNodes).catch(() => undefined);
+      return nextNodes;
+    });
     if (editingNodeId === nodeId) setEditingNodeId(null);
+  }
+
+  async function autoSaveOutlineNodes(nodes: OutlineNode[]) {
+    if (!session || !loginUser) return;
+    const seq = ++autoSaveSeqRef.current;
+    const mermaidText = toMermaid(nodes);
+    setOutlineText(mermaidText);
+    await saveArtifact("outline", mermaidText);
+    if (seq === autoSaveSeqRef.current) {
+      setOutlineDirty(false);
+    }
+  }
+
+  function finishNodeEditing(nodeId: string, nextText?: string) {
+    setEditingNodeId(null);
+    setOutlineDirty(true);
+    setOutlineNodes((prev) => {
+      const nextNodes =
+        nextText === undefined
+          ? prev
+          : prev.map((item) => (item.id === nodeId ? { ...item, text: nextText } : item));
+      autoSaveOutlineNodes(nextNodes).catch(() => undefined);
+      return nextNodes;
+    });
+  }
+
+  function scheduleLongPressEdit(nodeId: string) {
+    if (longPressTimerRef.current) {
+      window.clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    longPressTimerRef.current = window.setTimeout(() => {
+      setDraggingNodeId(null);
+      setDropTargetNodeId(null);
+      setEditingNodeId(nodeId);
+      longPressTimerRef.current = null;
+    }, 500);
+  }
+
+  function clearLongPressEdit() {
+    if (!longPressTimerRef.current) return;
+    window.clearTimeout(longPressTimerRef.current);
+    longPressTimerRef.current = null;
   }
 
   async function saveOutlineTree() {
@@ -1610,7 +1663,7 @@ export default function StudentPage() {
             <div className="card">
               <h2>文章結構樹</h2>
               <>
-                <small>按節點右上角 ➕ 新增下一層；第二層以下且無子節點可用 ➖ 刪除。雙擊節點可編輯文字，拖曳可調整位置與層次。</small>
+                <small>按節點右上角 ➕ 新增下一層；第二層以下且無子節點可用 ➖ 刪除。雙擊節點可編輯文字，拖曳可調整位置與層次。每次新增、刪除或完成文字編輯都會自動儲存。</small>
                 <div
                   style={{
                     width: "100%",
@@ -1666,7 +1719,22 @@ export default function StudentPage() {
                             const box = event.currentTarget.getBoundingClientRect();
                             setDragOffset({ x: event.clientX - box.left, y: event.clientY - box.top });
                             setDraggingNodeId(node.id);
+                            scheduleLongPressEdit(node.id);
                           }}
+                          onMouseUp={clearLongPressEdit}
+                          onMouseLeave={() => {
+                            clearLongPressEdit();
+                            if (editingNodeId === node.id) {
+                              finishNodeEditing(node.id);
+                            }
+                          }}
+                          onTouchStart={(event) => {
+                            const target = event.target as HTMLElement;
+                            if (target.closest("button") || target.closest("input")) return;
+                            scheduleLongPressEdit(node.id);
+                          }}
+                          onTouchEnd={clearLongPressEdit}
+                          onTouchMove={clearLongPressEdit}
                           onDoubleClick={(event) => {
                             event.stopPropagation();
                             setDraggingNodeId(null);
@@ -1714,16 +1782,21 @@ export default function StudentPage() {
                             <input
                               autoFocus
                               value={node.text}
-                            onChange={(e) =>
-                              {
+                              onChange={(e) => {
                                 setOutlineDirty(true);
                                 setOutlineNodes((prev) =>
                                   prev.map((item) => (item.id === node.id ? { ...item, text: e.target.value } : item))
                                 );
-                              }
-                            }
-                              onBlur={() => setEditingNodeId(null)}
+                              }}
+                              onBlur={(e) => finishNodeEditing(node.id, e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  finishNodeEditing(node.id, (e.target as HTMLInputElement).value);
+                                }
+                              }}
                               onMouseDown={(e) => e.stopPropagation()}
+                              onMouseLeave={() => finishNodeEditing(node.id)}
                             />
                           ) : (
                             <div style={{ fontSize: 13, fontWeight: 600, color: "#0f172a", whiteSpace: "pre-wrap" }}>
@@ -1736,11 +1809,6 @@ export default function StudentPage() {
                   </div>
                 </div>
                 <div className="row" style={{ marginTop: 10, gap: 10 }}>
-                  <div style={{ width: 180 }}>
-                    <button type="button" onClick={saveOutlineTree}>
-                      儲存變更
-                    </button>
-                  </div>
                   <div style={{ width: 180 }}>
                     <button type="button" className="secondary" onClick={completeOutlineTree} disabled={step3CompletedByMe}>
                       完成結構樹
@@ -1854,7 +1922,22 @@ export default function StudentPage() {
                                 const box = event.currentTarget.getBoundingClientRect();
                                 setDragOffset({ x: event.clientX - box.left, y: event.clientY - box.top });
                                 setDraggingNodeId(node.id);
+                                scheduleLongPressEdit(node.id);
                               }}
+                              onMouseUp={clearLongPressEdit}
+                              onMouseLeave={() => {
+                                clearLongPressEdit();
+                                if (editingNodeId === node.id) {
+                                  finishNodeEditing(node.id);
+                                }
+                              }}
+                              onTouchStart={(event) => {
+                                const target = event.target as HTMLElement;
+                                if (target.closest("button") || target.closest("input")) return;
+                                scheduleLongPressEdit(node.id);
+                              }}
+                              onTouchEnd={clearLongPressEdit}
+                              onTouchMove={clearLongPressEdit}
                               onDoubleClick={(event) => {
                                 event.stopPropagation();
                                 setDraggingNodeId(null);
@@ -1894,8 +1977,15 @@ export default function StudentPage() {
                                     setOutlineDirty(true);
                                     setOutlineNodes((prev) => prev.map((item) => (item.id === node.id ? { ...item, text: e.target.value } : item)));
                                   }}
-                                  onBlur={() => setEditingNodeId(null)}
+                                  onBlur={(e) => finishNodeEditing(node.id, e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                      e.preventDefault();
+                                      finishNodeEditing(node.id, (e.target as HTMLInputElement).value);
+                                    }
+                                  }}
                                   onMouseDown={(e) => e.stopPropagation()}
+                                  onMouseLeave={() => finishNodeEditing(node.id)}
                                 />
                               ) : (
                                 <div style={{ fontSize: 13, fontWeight: 600, color: "#0f172a", whiteSpace: "pre-wrap" }}>{node.text}</div>
