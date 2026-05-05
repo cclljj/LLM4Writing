@@ -1724,9 +1724,6 @@ export default function StudentPage() {
                           onMouseUp={clearLongPressEdit}
                           onMouseLeave={() => {
                             clearLongPressEdit();
-                            if (editingNodeId === node.id) {
-                              finishNodeEditing(node.id);
-                            }
                           }}
                           onTouchStart={(event) => {
                             const target = event.target as HTMLElement;
@@ -1796,7 +1793,6 @@ export default function StudentPage() {
                                 }
                               }}
                               onMouseDown={(e) => e.stopPropagation()}
-                              onMouseLeave={() => finishNodeEditing(node.id)}
                             />
                           ) : (
                             <div style={{ fontSize: 13, fontWeight: 600, color: "#0f172a", whiteSpace: "pre-wrap" }}>
@@ -1927,9 +1923,6 @@ export default function StudentPage() {
                               onMouseUp={clearLongPressEdit}
                               onMouseLeave={() => {
                                 clearLongPressEdit();
-                                if (editingNodeId === node.id) {
-                                  finishNodeEditing(node.id);
-                                }
                               }}
                               onTouchStart={(event) => {
                                 const target = event.target as HTMLElement;
@@ -1985,7 +1978,6 @@ export default function StudentPage() {
                                     }
                                   }}
                                   onMouseDown={(e) => e.stopPropagation()}
-                                  onMouseLeave={() => finishNodeEditing(node.id)}
                                 />
                               ) : (
                                 <div style={{ fontSize: 13, fontWeight: 600, color: "#0f172a", whiteSpace: "pre-wrap" }}>{node.text}</div>
