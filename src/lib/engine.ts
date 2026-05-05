@@ -67,8 +67,16 @@ function buildStep1Question(session: SessionState): string {
   const candidate = pickQuestionFromSubStepPrompt(session, key, fallback);
   if (looksLikeInstructionPrompt(candidate)) {
     return s === 3
-      ? "請依上一則 AI 提問作答（本題要釐清關鍵字範圍與定義）。"
-      : "請依上一則 AI 提問作答（本題要延伸討論並補充理由/例子）。";
+      ? pickQuestionFromSubStepFallback(
+          session,
+          key,
+          "請用自己的話說明：題目關鍵詞在你的理解中包含哪些情況、不包含哪些情況？"
+        )
+      : pickQuestionFromSubStepFallback(
+          session,
+          key,
+          "請延伸剛才的想法，補上一個理由或例子，讓你的主張更完整。"
+        );
   }
   return candidate;
 }
@@ -91,8 +99,18 @@ function buildStep2Question(session: SessionState): string {
   const candidate = pickQuestionFromSubStepPrompt(session, key, fallback);
   if (looksLikeInstructionPrompt(candidate)) {
     return s === 1
-      ? "請依上一則 AI 提問作答（本題要選出可用例子並說明理由）。"
-      : "請依上一則 AI 提問作答。";
+      ? pickQuestionFromSubStepFallback(
+          session,
+          key,
+          "請挑一個最能支持你主張的具體例子，並說明為什麼選它。"
+        )
+      : pickQuestionFromSubStepFallback(
+          session,
+          key,
+          s === 2
+            ? "請把例子補充得更具體：時間、地點、人物、事件，並說明它如何支持你的主張。"
+            : "請從這個例子再往前推：造成這個現象的深層原因是什麼？"
+        );
   }
   return candidate;
 }
@@ -779,12 +797,14 @@ function advanceStep1Or2SubstepAfterAi(
   completedSubstep: number,
   nextQuestionFromAi?: string
 ): void {
+  const safeNextQuestion = isUsableNextQuestion(nextQuestionFromAi) ? nextQuestionFromAi!.trim() : "";
+
   if (step === 1) {
     if (completedSubstep === 3 && (session.stepState.step1Substep3Question ?? 1) < 3) {
       session.stepState.step1Substep3Question = (session.stepState.step1Substep3Question ?? 1) + 1;
       const qIdx = session.stepState.step1Substep3Question;
       const q =
-        nextQuestionFromAi?.trim() ||
+        safeNextQuestion ||
         pickQuestionFromSubStepFallback(
           session,
           `1-3-${qIdx}`,
@@ -797,7 +817,7 @@ function advanceStep1Or2SubstepAfterAi(
       session.stepState.step1Substep4Question = (session.stepState.step1Substep4Question ?? 1) + 1;
       const qIdx = session.stepState.step1Substep4Question;
       const q =
-        nextQuestionFromAi?.trim() ||
+        safeNextQuestion ||
         pickQuestionFromSubStepFallback(
           session,
           `1-4-${qIdx}`,
@@ -818,20 +838,20 @@ function advanceStep1Or2SubstepAfterAi(
       const q = mustUseQuestionBank
         ? buildStep1Question(session)
         : nextSub === 3
-          ? nextQuestionFromAi?.trim() ||
+          ? safeNextQuestion ||
             pickQuestionFromSubStepFallback(
               session,
               "1-3-1",
               "請先用一個生活中的具體例子，說明你認為題目關鍵詞在這裡代表什麼。"
             )
           : nextSub === 4
-            ? nextQuestionFromAi?.trim() ||
+            ? safeNextQuestion ||
               pickQuestionFromSubStepFallback(
                 session,
                 "1-4-1",
                 "請根據剛才的討論，用一句話說出你們最核心、最想傳達的觀點。"
               )
-            : nextQuestionFromAi?.trim() || buildStep1Question(session);
+            : safeNextQuestion || buildStep1Question(session);
       if (nextSub === 3) {
         session.messages.push(makeMessage({ role: "system", step, text: `子步驟 1-3-1：${q}` }));
       } else if (nextSub === 4) {
@@ -849,7 +869,7 @@ function advanceStep1Or2SubstepAfterAi(
     session.stepState.step2Substep1Question = (session.stepState.step2Substep1Question ?? 1) + 1;
     const qIdx = session.stepState.step2Substep1Question;
     const q =
-      nextQuestionFromAi?.trim() ||
+      safeNextQuestion ||
       pickQuestionFromSubStepFallback(
         session,
         `2-1-${qIdx}`,
@@ -866,7 +886,6 @@ function advanceStep1Or2SubstepAfterAi(
     const nextSub = session.stepState.step2Substep;
     if (nextSub === 1) session.stepState.step2Substep1Question = 1;
     const mustUseQuestionBank = nextSub === 4;
-    const safeNextQuestion = isUsableNextQuestion(nextQuestionFromAi) ? nextQuestionFromAi!.trim() : "";
     const q = mustUseQuestionBank
       ? buildStep2Question(session)
       : safeNextQuestion ||
