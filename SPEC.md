@@ -344,9 +344,11 @@ API 輸出給學習/分組流程使用：
 
 - 反思題來源：`promptConfig.step9Questions`（key: `"1"~"4"`）
 - 若 `step9Questions` 缺漏或不完整，fallback 到內建 4 題預設值
-- student 每送一次訊息，`reflectionIndex[user] + 1`
-- 未達題目總數：系統送下一題
-- 完成：系統送「個人反思完成」，並自動將該學生 `personalSteps[user]` 推進到 Step10
+- 進入 Step9 時，系統一次顯示 4 題；學生需一次送出四題答案（`Q1~Q4`）
+- 後端會逐題驗證作答品質：
+  - 任一題太短、敷衍或直接貼題，整份拒收，並回覆「第 N 題需要補強」
+  - 全部通過才視為完成
+- 通過後：系統送「個人反思完成」，並自動將該學生 `personalSteps[user]` 推進到 Step10
 - 推進 Step10 後需立即產生該學生個人總結報告（依 `stepPrompts["10"]`）並寫入 `reports.step10[user]`，同時以 AI 訊息顯示在互動內容區
 - 相容性修復：若舊 session 發生 `reflectionIndex` 已達完成門檻但 `personalSteps[user]` 仍停在 Step9，讀取 session 時需自動補推進到 Step10 並補齊 `reports.step10[user]`
 

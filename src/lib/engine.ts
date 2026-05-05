@@ -120,6 +120,10 @@ function getStep9Questions(session: SessionState): string[] {
   return getStep9QuestionsFromConfig(session.promptConfig?.step9Questions);
 }
 
+function buildStep9BatchPrompt(questions: string[]): string {
+  return `步驟 9 請一次回答以下四題：\n1. ${questions[0]}\n2. ${questions[1]}\n3. ${questions[2]}\n4. ${questions[3]}\n\n請在下方依序填答四題後一次送出。`;
+}
+
 function initializeStepQuestion(session: SessionState, step: number): void {
   if (step === 1) {
     session.stepState.step1Substep = 1;
@@ -663,7 +667,7 @@ export function switchStep(session: SessionState, step: number): SessionState {
   if (mode === "personal_reflection") {
     const step9Questions = getStep9Questions(session);
     session.messages.push(
-      makeMessage({ role: "system", step, text: `步驟 9 開始：${step9Questions[0]}` })
+      makeMessage({ role: "system", step, text: buildStep9BatchPrompt(step9Questions) })
     );
   }
 
@@ -880,16 +884,39 @@ export async function sendStudentMessage(
 
   if (mode === "personal_reflection") {
     const step9Questions = getStep9Questions(session);
-    const current = session.reflectionIndex[userId] ?? 0;
-    const next = current + 1;
-    session.reflectionIndex[userId] = next;
-
-    if (next < step9Questions.length) {
-      session.messages.push(makeMessage({ role: "system", userId, step, text: `下一題：${step9Questions[next]}` }));
-    } else {
-      session.messages.push(makeMessage({ role: "system", userId, step, text: "個人反思完成。" }));
-      await finalizeStep9ForUser(session, userId);
+    const answers = new Map<number, string>();
+    const pattern = /Q([1-4])\s*:\s*([\s\S]*?)(?=\nQ[1-4]\s*:|$)/g;
+    for (const match of text.matchAll(pattern)) {
+      const idx = Number(match[1]);
+      const body = (match[2] ?? "").trim();
+      if (idx >= 1 && idx <= 4) {
+        answers.set(idx, body);
+      }
     }
+    if (answers.size !== 4) {
+      throw new Error("請一次完整回答四題（Q1~Q4）後再送出。");
+    }
+
+    const lowEffortPatterns = /^(不知道|不會|隨便|沒意見|無|沒有|\.{2,}|。{2,}|哈+|呵+|lol)$/i;
+    for (let i = 1; i <= 4; i += 1) {
+      const answer = (answers.get(i) ?? "").trim();
+      const question = step9Questions[i - 1] ?? "";
+      if (answer.length < 8) {
+        throw new Error(`第 ${i} 題需要再具體一些（內容太短），請補強後再送出。`);
+      }
+      if (lowEffortPatterns.test(answer)) {
+        throw new Error(`第 ${i} 題看起來比較像敷衍作答，請再認真補強。`);
+      }
+      const normalizedQuestion = normalizeForCompare(question);
+      const normalizedAnswer = normalizeForCompare(answer);
+      if (normalizedAnswer && normalizedQuestion && normalizedAnswer === normalizedQuestion) {
+        throw new Error(`第 ${i} 題目前像是貼上題目本身，請用自己的話作答。`);
+      }
+    }
+
+    session.reflectionIndex[userId] = step9Questions.length;
+    session.messages.push(makeMessage({ role: "system", userId, step, text: "個人反思完成。" }));
+    await finalizeStep9ForUser(session, userId);
     return session;
   }
 

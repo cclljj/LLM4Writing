@@ -32,11 +32,12 @@ export async function POST(request: NextRequest) {
   session.personalSteps[user.username] = 9;
   if ((session.reflectionIndex?.[user.username] ?? 0) === 0) {
     const step9Questions = getStep9QuestionsFromConfig(session.promptConfig?.step9Questions);
+    const step9Prompt = `步驟 9 請一次回答以下四題：\n1. ${step9Questions[0]}\n2. ${step9Questions[1]}\n3. ${step9Questions[2]}\n4. ${step9Questions[3]}\n\n請在下方依序填答四題後一次送出。`;
     session.messages.push({
       id: randomUUID(),
       role: "system",
       userId: user.username,
-      text: `步驟 9 開始：${step9Questions[0]}`,
+      text: step9Prompt,
       at: new Date().toISOString(),
       step: 9
     });

@@ -368,6 +368,7 @@ export default function StudentPage() {
   const [dropTargetNodeId, setDropTargetNodeId] = useState<string | null>(null);
   const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [draftText, setDraftText] = useState("");
+  const [step9Answers, setStep9Answers] = useState(["", "", "", ""]);
   const [refUser, setRefUser] = useState("");
   const [showDraftEditor, setShowDraftEditor] = useState(false);
   const [showStep6OutlineRef, setShowStep6OutlineRef] = useState(false);
@@ -983,6 +984,32 @@ export default function StudentPage() {
     }
   }
 
+  async function submitStep9Batch(e: FormEvent) {
+    e.preventDefault();
+    if (!session || currentStep !== 9 || !isInputEnabled) return;
+    const payload = `Q1: ${step9Answers[0]}\nQ2: ${step9Answers[1]}\nQ3: ${step9Answers[2]}\nQ4: ${step9Answers[3]}`;
+    setError("");
+    setIsSendingMessage(true);
+    try {
+      const response = await fetch("/api/chat/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: session.id, userId: loginUser, text: payload })
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        setError(data.error ?? "send_failed");
+        return;
+      }
+
+      setSession(data);
+      setStep9Answers(["", "", "", ""]);
+    } finally {
+      setIsSendingMessage(false);
+    }
+  }
+
   async function saveArtifact(type: "outline" | "draft6" | "draft8", content: string) {
     if (!session) return;
     const response = await fetch("/api/session/artifact/save", {
@@ -1092,6 +1119,20 @@ export default function StudentPage() {
   const unsavedDraft6Chars = currentStep === 6 && draftText !== savedDraft6Text ? draftText.length : 0;
   const unsavedDraft8Chars = currentStep === 8 && draftText !== savedDraft8Text ? draftText.length : 0;
   const stepOpeningText = session?.promptConfig?.stepOpenings?.[String(currentStep)]?.trim() ?? "";
+  const step9QuestionTexts = useMemo(() => {
+    if (currentStep !== 9) return [] as string[];
+    const latestSystem = [...(session?.messages ?? [])]
+      .filter((message) => message.step === 9 && message.role === "system")
+      .at(-1)?.text;
+    if (!latestSystem) return [] as string[];
+    const extracted = Array.from(latestSystem.matchAll(/\n?[1-4]\.\s*(.+)/g)).map((m) => (m[1] ?? "").trim());
+    return extracted.slice(0, 4);
+  }, [currentStep, session?.messages]);
+
+  useEffect(() => {
+    if (currentStep !== 9) return;
+    setStep9Answers(["", "", "", ""]);
+  }, [currentStep, session?.id]);
   return (
     <main>
       {error ? (
@@ -2038,6 +2079,7 @@ export default function StudentPage() {
 
             {isInputEnabled &&
             canReplyToQuestion &&
+            currentStep !== 9 &&
             !waitingGroupMembers &&
             !isSendingMessage &&
             !step1CompletedWaitingTeacher &&
@@ -2053,6 +2095,26 @@ export default function StudentPage() {
                     確認完成此步驟
                   </button>
                 ) : null}
+              </form>
+            ) : null}
+            {currentStep === 9 ? (
+              <form onSubmit={submitStep9Batch}>
+                {([0, 1, 2, 3] as const).map((idx) => (
+                  <div key={`step9-q-${idx}`} style={{ marginTop: 10 }}>
+                    <label>{step9QuestionTexts[idx] ? `第 ${idx + 1} 題：${step9QuestionTexts[idx]}` : `第 ${idx + 1} 題`}</label>
+                    <textarea
+                      value={step9Answers[idx]}
+                      onChange={(e) => {
+                        const next = [...step9Answers];
+                        next[idx] = e.target.value;
+                        setStep9Answers(next);
+                      }}
+                    />
+                  </div>
+                ))}
+                <button type="submit" style={{ marginTop: 10 }} disabled={isSendingMessage}>
+                  一次送出四題答案
+                </button>
               </form>
             ) : null}
             {currentStep === 6 ? (
