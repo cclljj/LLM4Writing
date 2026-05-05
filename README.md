@@ -4,7 +4,6 @@ LLM4Writing 已改造成可直接部署於 Vercel 的原生架構版本。
 
 ## 專案定位
 
-- 既有 Java/Wicket 程式碼仍保留於 `libs/` 與 `llm4class-web/`（作為歷史參考）
 - 現行可部署主應用為 root 的 Next.js App Router + Serverless API
 - 目前功能對齊基準：`SPEC.md`（現況版）
 
