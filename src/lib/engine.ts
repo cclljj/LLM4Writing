@@ -557,6 +557,13 @@ function splitAiFeedbackAndQuestion(aiText: string): { feedbackText: string; nex
   };
 }
 
+function isUsableNextQuestion(text?: string): boolean {
+  const q = (text ?? "").trim();
+  if (!q) return false;
+  if (q.includes("請依上一則 AI 提問作答")) return false;
+  return true;
+}
+
 function buildStep7Report(session: SessionState, userId: string): string {
   const essay = session.draftStep6[userId] ?? "(尚未撰寫初稿)";
   return `步驟 7 分析回饋（${userId}）\n初稿：${essay}\n建議：請加強論點與例證的連結。`;
@@ -859,14 +866,13 @@ function advanceStep1Or2SubstepAfterAi(
     const nextSub = session.stepState.step2Substep;
     if (nextSub === 1) session.stepState.step2Substep1Question = 1;
     const mustUseQuestionBank = nextSub === 4;
+    const safeNextQuestion = isUsableNextQuestion(nextQuestionFromAi) ? nextQuestionFromAi!.trim() : "";
     const q = mustUseQuestionBank
       ? buildStep2Question(session)
-      : nextQuestionFromAi?.trim() ||
-        pickQuestionFromSubStepFallback(
-          session,
-          `2-${nextSub}`,
-          buildStep2Question(session)
-        );
+      : safeNextQuestion ||
+        pickQuestionFromSubStepFallback(session, `2-${nextSub}`, nextSub === 2
+          ? "請把你的例子補充得更具體：時間、地點、人物、發生了什麼，以及它如何連回你的主張？"
+          : "請再往前一步：根據你剛才的例子，推論造成這個現象的深層原因是什麼？請至少說出一個因果鏈。");
     if (nextSub === 1) {
       session.messages.push(makeMessage({ role: "system", step, text: `子步驟 2-1-1：${q}` }));
     } else {
