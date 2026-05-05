@@ -546,6 +546,7 @@ student 可儲存三種內容：
   - 小組訊息檢視（1/2/4）
   - 個人進度與個人互動訊息（完整步驟紀錄，不限 3/6/8）
   - 小組對話紀錄與個人對話紀錄需用 HTML 排版渲染 Markdown 訊息（可顯示標題、粗體、段落、清單）
+  - UX 要求：第一次點擊「查看狀態」即需完成載入並直接帶出該課程詳細資料（若有 session，預設選中該課程第一筆 session），不可要求再次點擊才顯示詳情
 - 「全班加入狀態」與「分組狀態總覽」的人數統計需依「實際已加入課程者」計算，不得以分組 participants 名單直接視為已加入
 - 學習管理操作（課程狀態切換、載入狀態、載入個人進度、切換步驟等）需顯示 processing 提示，完成或失敗後自動結束提示；處理期間相關按鈕 disabled
 - 學習管理進入分頁時需主動刷新資料；課程清單載入不得被 monitor/session 查詢阻塞
@@ -612,7 +613,7 @@ Response:
 Error:
 
 - `401 { error: "invalid_credentials" }`
-- `503 { error: "auth_service_unavailable" }`
+- `503 { error: "auth_service_unavailable", detail: string, hint: string }`
 - 實作要求：資料表初始化若首次失敗，不可將失敗狀態永久快取；後續請求必須可重試初始化
 - 實作要求：若使用者資料表已存在，登入流程不得強依賴 `CREATE TABLE` 權限
 - 實作要求：初始化過程中若遇 DDL/DML 權限不足（例如 `permission denied`），不得直接造成登入不可用；應容錯並繼續使用既有資料表/資料
@@ -626,6 +627,14 @@ Error:
 ### `POST /api/auth/logout`
 
 - 清除 cookie
+
+### `GET /api/health`
+
+- 回傳基礎服務狀態與儲存模式
+- 需包含 DB 可用性檢查欄位：
+  - `db.enabled`（是否啟用 DB）
+  - `db.ok`（DB 連線檢查是否成功）
+  - `db.detail`（連線失敗時的安全診斷訊息，不可含敏感憑證）
 
 ## 7.2 Student
 
