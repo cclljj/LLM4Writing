@@ -24,7 +24,7 @@ export default function StudentTopHeader() {
 
   useEffect(() => {
     setIdentity(readIdentity());
-    fetch("/api/auth/me")
+    fetch("/api/auth/me", { cache: "no-store" })
       .then((res) => res.json())
       .then((data) => {
         if (!data?.authenticated || !data.user) return;

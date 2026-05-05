@@ -355,6 +355,7 @@ function buildOutlinePreview(outline: string): OutlinePreview {
 export default function StudentPage() {
   const router = useRouter();
   const [showDebugLog, setShowDebugLog] = useState(false);
+  const [authReady, setAuthReady] = useState(false);
   const [loginUser, setLoginUser] = useState("");
   const [profile, setProfile] = useState<{ name?: string; school?: string; classNumber?: string; ownerTeacherUsername?: string } | null>(null);
   const [missingFields, setMissingFields] = useState<string[]>([]);
@@ -394,19 +395,27 @@ export default function StudentPage() {
   const lastOwnStepRef = useRef<number | null>(null);
 
   useEffect(() => {
-    fetch("/api/auth/me")
+    fetch("/api/auth/me", { cache: "no-store" })
       .then((res) => res.json())
       .then((data) => {
-        if (data?.authenticated) {
+        if (data?.authenticated && data?.user?.username) {
           setLoginUser(data.user.username);
+        } else {
+          setLoginUser("");
+          router.push("/login");
         }
       })
-      .catch(() => undefined);
+      .catch(() => {
+        setLoginUser("");
+        router.push("/login");
+      })
+      .finally(() => setAuthReady(true));
   }, []);
 
   useEffect(() => {
+    if (!authReady || !loginUser) return;
     refreshOverview();
-  }, []);
+  }, [authReady, loginUser]);
 
   useEffect(() => {
     if (!session) return;
@@ -905,7 +914,7 @@ export default function StudentPage() {
   async function refreshOverview() {
     setIsLoadingOverview(true);
     try {
-      const response = await fetch("/api/student/overview");
+      const response = await fetch("/api/student/overview", { cache: "no-store" });
       const data = await response.json();
       if (!response.ok) {
         setError(data.error ?? "overview_failed");
@@ -926,6 +935,10 @@ export default function StudentPage() {
   }
 
   async function joinActivity(activityId: string) {
+    if (!loginUser) {
+      setError("auth_not_ready");
+      return;
+    }
     setError("");
     const response = await fetch("/api/student/join", {
       method: "POST",
