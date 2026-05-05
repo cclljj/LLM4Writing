@@ -390,6 +390,32 @@ async function generateAiTextWithRetry(messages: LlmChatMessage[], temperature: 
   throw lastError instanceof Error ? lastError : new Error("llm_retry_exhausted");
 }
 
+async function generateStep1Or2AiWithQuestionRetry(
+  session: SessionState,
+  step: 1 | 2,
+  contextText: string,
+  userId: string
+): Promise<{ feedbackText: string; nextQuestion?: string }> {
+  let lastParsed: { feedbackText: string; nextQuestion?: string } = {
+    feedbackText: "已收到大家的回覆。",
+    nextQuestion: undefined
+  };
+
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    const aiRaw = await generateAiTextForStep(session, step, contextText, userId);
+    const parsed = splitAiFeedbackAndQuestion(aiRaw);
+    lastParsed = parsed;
+    if (parsed.nextQuestion?.trim()) {
+      return parsed;
+    }
+    if (attempt < 3) {
+      await new Promise((resolve) => setTimeout(resolve, 120));
+    }
+  }
+
+  return lastParsed;
+}
+
 async function generateAiTextForStep(session: SessionState, step: number, contextText: string, userId?: string): Promise<string> {
   const stepName = getStepName(step);
   const fallback =
@@ -835,13 +861,12 @@ export async function sendStudentMessage(
       if (hooks?.onBeforeGroupAi) {
         await hooks.onBeforeGroupAi(result.session);
       }
-      const aiRaw = await generateAiTextForStep(
+      const parsed = await generateStep1Or2AiWithQuestionRetry(
         result.session,
-        step,
+        step as 1 | 2,
         `all members answered step ${step} substep ${result.substep}`,
         userId
       );
-      const parsed = splitAiFeedbackAndQuestion(aiRaw);
       result.session.messages.push(
         makeMessage({
           role: "ai",
