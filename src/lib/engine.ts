@@ -750,7 +750,13 @@ function advanceStep1Or2SubstepAfterAi(
       if (nextSub === 3) session.stepState.step1Substep3Question = 1;
       if (nextSub === 4) session.stepState.step1Substep4Question = 1;
       const mustUseQuestionBank = nextSub === 2 || nextSub === 5;
-      const q = mustUseQuestionBank ? buildStep1Question(session) : nextQuestionFromAi?.trim() || buildStep1Question(session);
+      const q = mustUseQuestionBank
+        ? buildStep1Question(session)
+        : nextSub === 3
+          ? nextQuestionFromAi?.trim() || "請先用一個生活中的具體例子，說明你認為題目關鍵詞在這裡代表什麼。"
+          : nextSub === 4
+            ? nextQuestionFromAi?.trim() || "請根據剛才的討論，用一句話說出你們最核心、最想傳達的觀點。"
+            : nextQuestionFromAi?.trim() || buildStep1Question(session);
       if (nextSub === 3) {
         session.messages.push(makeMessage({ role: "system", step, text: `子步驟 1-3-1：${q}` }));
       } else if (nextSub === 4) {

@@ -218,6 +218,13 @@ function renderMessageHtml(text: string): string {
   return htmlParts.join("");
 }
 
+function looksLikeInstructionPromptText(text: string): boolean {
+  if (text.includes("【") || text.includes("提問規則") || text.includes("批判性思考")) return true;
+  if (text.includes("請回答以下問題")) return true;
+  const lines = text.split(/\r?\n/).filter((line) => line.trim().length > 0);
+  return lines.length >= 4 || text.length >= 160;
+}
+
 function newNodeId(): string {
   return `n-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
@@ -587,7 +594,7 @@ export default function StudentPage() {
         const substep = m[1];
         const content = m[2]?.trim() ?? "";
         // Do not leak prompt instructions in student-facing interaction stream.
-        if (content.startsWith("請討論：")) {
+        if (content.startsWith("請討論：") || looksLikeInstructionPromptText(content)) {
           return `子步驟 ${substep}：請依上一則 AI 提問進行回答。`;
         }
         return `子步驟 ${substep}：${content}`;
