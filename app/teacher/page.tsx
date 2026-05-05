@@ -342,6 +342,12 @@ export default function TeacherPage() {
 
   const [progressSessionId, setProgressSessionId] = useState("");
   const [selectedLearningActivityId, setSelectedLearningActivityId] = useState("");
+  const [learningSchoolFilter, setLearningSchoolFilter] = useState("all");
+  const [learningClassFilter, setLearningClassFilter] = useState("all");
+  const [learningCourseFilter, setLearningCourseFilter] = useState("all");
+  const [learningStatusFilter, setLearningStatusFilter] = useState("all");
+  const [learningPage, setLearningPage] = useState(1);
+  const [learningJumpPage, setLearningJumpPage] = useState("1");
   const [showCourseStatusView, setShowCourseStatusView] = useState(false);
   const [isLearningProcessing, setIsLearningProcessing] = useState(false);
   const [learningProcessingText, setLearningProcessingText] = useState("");
@@ -410,6 +416,40 @@ export default function TeacherPage() {
       );
     });
   }, [users, roleFilter, schoolFilter, classFilter, userQuery]);
+
+  const learningSchoolOptions = useMemo(
+    () => Array.from(new Set(activities.map((item) => item.school).filter(Boolean))).sort((a, b) => a.localeCompare(b, "zh-Hant")),
+    [activities]
+  );
+
+  const learningClassOptions = useMemo(() => {
+    const scoped = learningSchoolFilter === "all" ? activities : activities.filter((item) => item.school === learningSchoolFilter);
+    return Array.from(new Set(scoped.map((item) => item.classNumber).filter(Boolean))).sort((a, b) => b.localeCompare(a, "zh-Hant"));
+  }, [activities, learningSchoolFilter]);
+
+  const learningCourseOptions = useMemo(() => {
+    let scoped = activities;
+    if (learningSchoolFilter !== "all") scoped = scoped.filter((item) => item.school === learningSchoolFilter);
+    if (learningClassFilter !== "all") scoped = scoped.filter((item) => item.classNumber === learningClassFilter);
+    return scoped.map((item) => ({ id: item.id, label: item.title }));
+  }, [activities, learningSchoolFilter, learningClassFilter]);
+
+  const filteredLearningActivities = useMemo(() => {
+    return activities.filter((item) => {
+      if (learningSchoolFilter !== "all" && item.school !== learningSchoolFilter) return false;
+      if (learningClassFilter !== "all" && item.classNumber !== learningClassFilter) return false;
+      if (learningCourseFilter !== "all" && item.id !== learningCourseFilter) return false;
+      if (learningStatusFilter !== "all" && (item.courseStatus ?? "not_started") !== learningStatusFilter) return false;
+      return true;
+    });
+  }, [activities, learningSchoolFilter, learningClassFilter, learningCourseFilter, learningStatusFilter]);
+
+  const learningPageSize = 10;
+  const totalLearningPages = Math.max(1, Math.ceil(filteredLearningActivities.length / learningPageSize));
+  const pagedLearningActivities = useMemo(() => {
+    const start = (learningPage - 1) * learningPageSize;
+    return filteredLearningActivities.slice(start, start + learningPageSize);
+  }, [filteredLearningActivities, learningPage]);
 
   const sortedUsers = useMemo(() => {
     const getSortValue = (user: UserRow): string => {
@@ -724,6 +764,20 @@ export default function TeacherPage() {
       setUserPage(totalUserPages);
     }
   }, [userPage, totalUserPages]);
+
+  useEffect(() => {
+    setLearningPage(1);
+  }, [learningSchoolFilter, learningClassFilter, learningCourseFilter, learningStatusFilter]);
+
+  useEffect(() => {
+    if (learningPage > totalLearningPages) {
+      setLearningPage(totalLearningPages);
+    }
+  }, [learningPage, totalLearningPages]);
+
+  useEffect(() => {
+    setLearningJumpPage(String(learningPage));
+  }, [learningPage]);
 
   useEffect(() => {
     if (tab !== "learning") return;
@@ -2105,6 +2159,51 @@ export default function TeacherPage() {
                 <div style={{ marginTop: 4 }}>{learningProcessingText}</div>
               </div>
             ) : null}
+            <div className="row" style={{ marginBottom: 10, gap: 8 }}>
+              <div className="col">
+                <label>學校篩選</label>
+                <select value={learningSchoolFilter} onChange={(e) => setLearningSchoolFilter(e.target.value)}>
+                  <option value="all">全部</option>
+                  {learningSchoolOptions.map((school) => (
+                    <option key={school} value={school}>
+                      {school}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="col">
+                <label>班級篩選</label>
+                <select value={learningClassFilter} onChange={(e) => setLearningClassFilter(e.target.value)}>
+                  <option value="all">全部</option>
+                  {learningClassOptions.map((classNumber) => (
+                    <option key={classNumber} value={classNumber}>
+                      {classNumber}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="col">
+                <label>課程篩選</label>
+                <select value={learningCourseFilter} onChange={(e) => setLearningCourseFilter(e.target.value)}>
+                  <option value="all">全部</option>
+                  {learningCourseOptions.map((course) => (
+                    <option key={course.id} value={course.id}>
+                      {course.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="col">
+                <label>狀態篩選</label>
+                <select value={learningStatusFilter} onChange={(e) => setLearningStatusFilter(e.target.value)}>
+                  <option value="all">全部</option>
+                  <option value="not_started">尚未開始</option>
+                  <option value="in_progress">進行中</option>
+                  <option value="paused">暫停中</option>
+                  <option value="ended">已結束</option>
+                </select>
+              </div>
+            </div>
             <div style={{ overflowX: "auto" }}>
               <table className="pro-table">
                 <thead>
@@ -2117,7 +2216,7 @@ export default function TeacherPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {activities.map((activity) => {
+                  {pagedLearningActivities.map((activity) => {
                     const status = activity.courseStatus;
                     const startDisabled = status !== "not_started";
                     const pauseResumeDisabled = status === "not_started" || status === "ended";
@@ -2199,7 +2298,55 @@ export default function TeacherPage() {
                 </tbody>
               </table>
             </div>
-            {activities.length === 0 ? (
+            <div className="row" style={{ marginTop: 10, alignItems: "center", gap: 8 }}>
+              <small>
+                第 {learningPage} / {totalLearningPages} 頁，共 {filteredLearningActivities.length} 筆（每頁 10 筆）
+              </small>
+              <button
+                type="button"
+                className="secondary"
+                style={{ width: "auto" }}
+                disabled={learningPage <= 1}
+                onClick={() => setLearningPage((prev) => Math.max(1, prev - 1))}
+              >
+                上一頁
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                style={{ width: "auto" }}
+                disabled={learningPage >= totalLearningPages}
+                onClick={() => setLearningPage((prev) => Math.min(totalLearningPages, prev + 1))}
+              >
+                下一頁
+              </button>
+              <label style={{ marginLeft: 8 }}>跳到第</label>
+              <input
+                type="number"
+                min={1}
+                max={totalLearningPages}
+                value={learningJumpPage}
+                onChange={(e) => setLearningJumpPage(e.target.value)}
+                style={{ width: 90 }}
+              />
+              <span>頁</span>
+              <button
+                type="button"
+                className="secondary"
+                style={{ width: "auto" }}
+                onClick={() => {
+                  const parsed = Number(learningJumpPage);
+                  if (!Number.isFinite(parsed)) return;
+                  const target = Math.min(totalLearningPages, Math.max(1, Math.trunc(parsed)));
+                  setLearningPage(target);
+                }}
+              >
+                前往
+              </button>
+            </div>
+            {filteredLearningActivities.length === 0 ? (
+              <small>目前此篩選條件下沒有課程資料。</small>
+            ) : activities.length === 0 ? (
               <small>目前沒有可顯示的課程資料。請按「重新整理」或確認此帳號是否有可見課程。</small>
             ) : null}
             {learningWarning ? <small>{learningWarning}</small> : null}
