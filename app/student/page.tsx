@@ -354,6 +354,7 @@ function buildOutlinePreview(outline: string): OutlinePreview {
 
 export default function StudentPage() {
   const router = useRouter();
+  const [showDebugLog, setShowDebugLog] = useState(false);
   const [loginUser, setLoginUser] = useState("");
   const [profile, setProfile] = useState<{ name?: string; school?: string; classNumber?: string; ownerTeacherUsername?: string } | null>(null);
   const [missingFields, setMissingFields] = useState<string[]>([]);
@@ -693,6 +694,13 @@ export default function StudentPage() {
     if (!step4Outline) return null;
     return buildOutlinePreview(step4Outline);
   }, [loginUser, session]);
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      setShowDebugLog(params.get("debug") === "yes");
+    }
+  }, []);
+
   useEffect(() => {
     if (historyReviewSteps.length === 0) {
       setHistoryReviewExpanded({});
@@ -2148,23 +2156,27 @@ export default function StudentPage() {
           </div>
           ) : null}
 
-          <hr />
-          <div className="card">
-            <h2>完整對話紀錄（除錯）</h2>
-            {sortedMessages.map((message) => (
-              <div key={message.id} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
-                <strong>
-                  [S{message.step}] {message.role}
-                  {message.userId ? `(${message.userId})` : ""}
-                </strong>
-                <div
-                  style={{ marginTop: 4 }}
-                  dangerouslySetInnerHTML={{ __html: renderMessageHtml(message.text) }}
-                />
-                <small>{message.at}</small>
+          {showDebugLog ? (
+            <>
+              <hr />
+              <div className="card">
+                <h2>完整對話紀錄（除錯）</h2>
+                {sortedMessages.map((message) => (
+                  <div key={message.id} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
+                    <strong>
+                      [S{message.step}] {message.role}
+                      {message.userId ? `(${message.userId})` : ""}
+                    </strong>
+                    <div
+                      style={{ marginTop: 4 }}
+                      dangerouslySetInnerHTML={{ __html: renderMessageHtml(message.text) }}
+                    />
+                    <small>{message.at}</small>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </>
+          ) : null}
         </>
       ) : null}
     </main>
