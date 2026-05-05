@@ -1,6 +1,6 @@
 # LLM4Writing 現行系統規格書（Implementation Spec）
 
-- 文件版本：`2026-04-18`
+- 文件版本：`2026-05-06`
 - 對齊程式：目前 `main` 分支（Next.js 16 App Router 版本）
 - 文件用途：讓其他 AI / 工程師可依本文件重建「相同行為」系統
 - 規格性質：**以現行實作為準**（非產品理想狀態）
@@ -189,6 +189,7 @@ API 輸出給學習/分組流程使用：
   id: string;
   createdAt: string;
   currentStep: number;
+  personalSteps?: Record<string, number>;
   participants: string[];
   messages: ChatMessage[];
   groupGate: Record<string, string[]>;
@@ -197,11 +198,20 @@ API 輸出給學習/分組流程使用：
   phaseMax: number;
   activityId?: string;
   activityTitle?: string;
+  activityEssayDescription?: string;
+  activitySupplemental?: string;
   groupId?: string;
   groupName?: string;
   promptConfig: PromptConfig;
-  stepState: { step1Substep: number; step2Substep: number };
+  stepState: {
+    step1Substep: number;
+    step2Substep: number;
+    step1Substep3Question?: number;
+    step1Substep4Question?: number;
+    step2Substep1Question?: number;
+  };
   outlines: Record<string, string>;
+  step3SubmittedOutlines?: Record<string, string>;
   draftStep6: Record<string, string>;
   draftStep8: Record<string, string>;
   reports: {
@@ -300,22 +310,24 @@ API 輸出給學習/分組流程使用：
   - 全組已作答同學都應顯示「等待遠端 AI 回答中...」
   - 不再顯示「等待同組其他同學完成本題回覆...」
 
-## 5.2 Step 1 / Step 2 子步驟門檻
+### Step 1 / Step 2 子步驟門檻（補充）
 
 - Step1 有 5 個子步驟
 - Step2 有 4 個子步驟
 - 每個子步驟需「全部 participants 都回覆至少一次」，AI 才回覆並進入下一子步
 - Gate key 格式：`"{step}-{substep}"`
 
-## 5.3 問題來源優先序
+### 問題來源優先序（補充）
 
 依 `SPEC_yunchieh.md` 對應規則：
 
 1. Step 1
 - `1-1`、`1-2`、`1-5`：取 `questionBanks["1-1"|"1-2"|"1-5"]` 隨機抽題
-- `1-3`、`1-4`：取 `subStepPrompts["1-3"|"1-4"]`（無值時 fallback）
+- `1-3` 子輪次：取 `subStepPrompts["1-3-1"|"1-3-2"|"1-3-3"]`（無值時 fallback）
+- `1-4` 子輪次：取 `subStepPrompts["1-4-1"|"1-4-2"|"1-4-3"]`（無值時 fallback）
 2. Step 2
-- `2-1`、`2-2`、`2-3`：取 `subStepPrompts["2-1"|"2-2"|"2-3"]`（無值時 fallback）
+- `2-1` 子輪次：取 `subStepPrompts["2-1-1"|"2-1-2"|"2-1-3"]`（無值時 fallback）
+- `2-2`、`2-3`：取 `subStepPrompts["2-2"|"2-3"]`（無值時 fallback）
 - `2-4`：取 `questionBanks["2-4"]` 隨機抽題
 - 強制規則：`1-2`、`1-5`、`2-4` 不得被 AI 回覆中的「下一題」覆蓋，必須直接由對應 `questionBanks` 抽題
 
@@ -334,7 +346,7 @@ API 輸出給學習/分組流程使用：
 
 1. 全域 `systemPrompt`
 2. 當前步驟 `stepPrompts[String(step)]`
-3. 若為 Step 1/2，附加目前子步驟 key（例如 `1-3`）對應的：
+3. 若為 Step 1/2，附加目前子步驟 key（例如 `1-3-2`、`2-1-1`）對應的：
 - `subStepPrompts[key]`（若存在）
 - `questionBanks[key]`（若存在）
 
@@ -892,6 +904,7 @@ Behavior:
   subStepPromptsFallbacks?: Record<string, string>;
   questionBanks: Record<string, string[]>;
   step9Questions?: Record<string, string>;
+  stepOpenings?: Record<string, string>;
 }
 ```
 

@@ -70,6 +70,7 @@ SPEC.md             implementation spec (source of truth)
 - `/student`
 - `/student/history/[activityId]`
 - `/teacher`
+- `/admin`
 
 ## API Overview
 
@@ -120,7 +121,7 @@ Key fields:
 - `stepPrompts`
 - `stepPrompts_old` (for reference)
 - `subStepPrompts`
-- `subStepPrompts_fallbacks`
+- `subStepPrompts_fallbacks`（程式內映射為 `subStepPromptsFallbacks`）
 - `questionBanks`
 - `writingTasks[essayId].questionBanks`
 - `step9Questions`
