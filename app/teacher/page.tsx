@@ -712,7 +712,6 @@ export default function TeacherPage() {
   }, [selectedActivityId, activities]);
 
   useEffect(() => {
-    setShowCourseStatusView(false);
     setMonitorSelected(null);
     setProgressRows([]);
     setPersonalMessages([]);
