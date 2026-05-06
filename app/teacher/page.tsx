@@ -1553,6 +1553,8 @@ export default function TeacherPage() {
     if (!response.ok) {
       if (data.error === "essay_disabled") {
         setError("此主題已停用，無法建立新的寫作任務。");
+      } else if (data.error === "duplicate_class_essay_assignment") {
+        setError("此班級已被指派相同的寫作主題，無法重複指派。");
       } else {
         setError(data.error ?? "save_openclass_failed");
       }
