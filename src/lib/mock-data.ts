@@ -813,6 +813,17 @@ export function upsertOpenClass(input: {
   return { ok: true as const, saved: toOpenClassView(created) };
 }
 
+export function deleteOpenClassTask(activityId: string) {
+  const idx = openClasses.findIndex((item) => item.id === activityId);
+  if (idx < 0) {
+    return { ok: false as const, error: "activity_not_found" };
+  }
+  openClasses.splice(idx, 1);
+  delete activityGroupMap[activityId];
+  delete courseStatusMap[activityId];
+  return { ok: true as const };
+}
+
 export function resetUserPassword(username: string, newPassword: string) {
   if (!users.some((user) => user.username === username)) {
     return false;

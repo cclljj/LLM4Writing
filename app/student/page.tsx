@@ -369,6 +369,7 @@ export default function StudentPage() {
   const [activeCourses, setActiveCourses] = useState<Course[]>([]);
   const [pausedCourses, setPausedCourses] = useState<Course[]>([]);
   const [participatedCourses, setParticipatedCourses] = useState<ParticipatedCourse[]>([]);
+  const [activityStatusMap, setActivityStatusMap] = useState<Record<string, "not_started" | "in_progress" | "paused" | "ended">>({});
   const [preparingCourse, setPreparingCourse] = useState<Course | null>(null);
   const [session, setSession] = useState<SessionState | null>(null);
   const [text, setText] = useState("");
@@ -422,6 +423,14 @@ export default function StudentPage() {
   useEffect(() => {
     if (!authReady || !loginUser) return;
     refreshOverview();
+  }, [authReady, loginUser]);
+
+  useEffect(() => {
+    if (!authReady || !loginUser) return;
+    const timer = window.setInterval(() => {
+      refreshOverview().catch(() => undefined);
+    }, 5000);
+    return () => window.clearInterval(timer);
   }, [authReady, loginUser]);
 
   useEffect(() => {
@@ -848,15 +857,13 @@ export default function StudentPage() {
     longPressTimerRef.current = null;
   }
 
-  async function saveOutlineTree() {
-    const mermaidText = toMermaid(outlineNodes);
-    setOutlineText(mermaidText);
-    await saveArtifact("outline", mermaidText);
-    setOutlineDirty(false);
-  }
-
   async function completeOutlineTree() {
     if (!session) return;
+    const courseStatus = activityStatusMap[session.activityId ?? ""];
+    if (courseStatus && courseStatus !== "in_progress") {
+      setError(courseStatus === "paused" ? "課程目前暫停中，請等待老師繼續上課。" : "課程目前不可提交，請等待老師指示。");
+      return;
+    }
     const mermaidText = toMermaid(outlineNodes);
     setOutlineText(mermaidText);
     const response = await fetch("/api/session/step3/complete", {
@@ -875,6 +882,11 @@ export default function StudentPage() {
 
   async function completeStep4() {
     if (!session) return;
+    const courseStatus = activityStatusMap[session.activityId ?? ""];
+    if (courseStatus && courseStatus !== "in_progress") {
+      setError(courseStatus === "paused" ? "課程目前暫停中，請等待老師繼續上課。" : "課程目前不可提交，請等待老師指示。");
+      return;
+    }
     setError("");
     const outlineToSave = currentStep === 3 || currentStep === 4 ? toMermaid(outlineNodes) : session.outlines[loginUser] ?? "";
     setOutlineText(outlineToSave);
@@ -894,6 +906,11 @@ export default function StudentPage() {
 
   async function requestStep6Suggestion() {
     if (!session || currentStep !== 6) return;
+    const courseStatus = activityStatusMap[session.activityId ?? ""];
+    if (courseStatus && courseStatus !== "in_progress") {
+      setError(courseStatus === "paused" ? "課程目前暫停中，請等待老師繼續上課。" : "課程目前不可操作，請等待老師指示。");
+      return;
+    }
     setError("");
     setIsSuggestingStep6(true);
     try {
@@ -958,6 +975,15 @@ export default function StudentPage() {
   }
 
   const currentStep = session && loginUser ? session.personalSteps?.[loginUser] ?? session.currentStep : session?.currentStep ?? 1;
+  const currentActivityStatus = session?.activityId ? activityStatusMap[session.activityId] : undefined;
+  const courseStatusBlockedMessage =
+    currentActivityStatus === "paused"
+      ? "課程目前暫停中，已暫停互動與提交，請等待老師繼續上課。"
+      : currentActivityStatus === "ended"
+        ? "課程已結束，無法再互動或提交。請等待老師後續指示。"
+        : currentActivityStatus === "not_started"
+          ? "課程尚未開始，請等待老師開始上課。"
+          : "";
   const currentMode = getMode(currentStep);
   const currentModeLabel =
     currentMode === "group_interaction"
@@ -967,7 +993,7 @@ export default function StudentPage() {
         : currentMode === "non_interactive"
           ? "無互動"
           : "個人反思";
-  const isInputEnabled = currentMode !== "non_interactive";
+  const isInputEnabled = currentMode !== "non_interactive" && (!currentActivityStatus || currentActivityStatus === "in_progress");
 
   async function refreshOverview() {
     setIsLoadingOverview(true);
@@ -986,6 +1012,17 @@ export default function StudentPage() {
       setActiveCourses(data.activeCourses ?? []);
       setPausedCourses(data.pausedCourses ?? []);
       setParticipatedCourses(data.participatedCourses ?? []);
+      const allCourses: Course[] = [
+        ...(data.classCourses ?? []),
+        ...(data.upcomingCourses ?? []),
+        ...(data.activeCourses ?? []),
+        ...(data.pausedCourses ?? [])
+      ];
+      const statusMap = allCourses.reduce((acc, course) => {
+        if (course.id && course.courseStatus) acc[course.id] = course.courseStatus;
+        return acc;
+      }, {} as Record<string, "not_started" | "in_progress" | "paused" | "ended">);
+      setActivityStatusMap(statusMap);
       setError("");
     } finally {
       setIsLoadingOverview(false);
@@ -1932,12 +1969,12 @@ export default function StudentPage() {
                 <h2>我的結構樹（可編修）</h2>
                 {step4CompletedByMe ? (
                   <>
-                    <small>你已確認完成此步驟，已鎖定編修。</small>
+                    <small>你已確認完成此步驟，已鎖定編修；你的變更已自動儲存。</small>
                     <pre style={{ marginTop: 8 }}>{session.outlines[loginUser] ?? "尚未提供"}</pre>
                   </>
                 ) : (
                   <>
-                    <small>雙擊節點可編輯，拖曳可調整位置與層次；完成後請先存檔。</small>
+                    <small>此步驟建議先與同學討論，再修改自己的結構樹。按節點右上角 ➕ 新增下一層；第二層以下且無子節點可用 ➖ 刪除。雙擊或長按節點可編輯文字，拖曳可調整位置與層次。每次新增、刪除或完成文字編輯都會自動儲存。</small>
                     <div
                       style={{
                         width: "100%",
@@ -2045,13 +2082,6 @@ export default function StudentPage() {
                             </div>
                           );
                         })}
-                      </div>
-                    </div>
-                    <div className="row" style={{ marginTop: 10 }}>
-                      <div style={{ width: 180 }}>
-                        <button type="button" onClick={saveOutlineTree} disabled={step4CompletedByMe}>
-                          存檔
-                        </button>
                       </div>
                     </div>
                   </>
@@ -2244,6 +2274,11 @@ export default function StudentPage() {
             {step2CompletedWaitingTeacher ? (
               <p style={{ marginTop: 10 }}>
                 <small>步驟 2 子步驟已完成，請等待老師切換下一步。</small>
+              </p>
+            ) : null}
+            {courseStatusBlockedMessage ? (
+              <p style={{ marginTop: 10 }}>
+                <small>{courseStatusBlockedMessage}</small>
               </p>
             ) : null}
 

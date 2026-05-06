@@ -125,6 +125,30 @@ export async function listSessions(): Promise<SessionState[]> {
     .filter((item): item is SessionState => Boolean(item));
 }
 
+export async function deleteSessionsByActivityId(activityId: string): Promise<number> {
+  if (!activityId.trim()) return 0;
+  if (!isDatabaseEnabled()) {
+    let count = 0;
+    const memory = getMemoryStore();
+    Array.from(memory.entries()).forEach(([id, session]) => {
+      if (session.activityId === activityId) {
+        memory.delete(id);
+        count += 1;
+      }
+    });
+    return count;
+  }
+
+  await ensureSessionTable();
+  const sql = getSqlClient();
+  const rows = await sql<{ id: string }[]>`
+    DELETE FROM llm4writing_sessions
+    WHERE payload->>'activityId' = ${activityId}
+    RETURNING id
+  `;
+  return rows.length;
+}
+
 export function getStorageMode(): "postgres" | "memory" {
   return isDatabaseEnabled() ? "postgres" : "memory";
 }

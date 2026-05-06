@@ -292,7 +292,7 @@ export default function TeacherPage() {
   const [loginName, setLoginName] = useState("");
   const [loginSchool, setLoginSchool] = useState("");
   const [loginRole, setLoginRole] = useState<"teacher" | "admin">("teacher");
-  const [tab, setTab] = useState<"system" | "learning" | "course">("system");
+  const [tab, setTab] = useState<"system" | "learning" | "course" | "diagnostics">("system");
   const [courseTab, setCourseTab] = useState<CourseTab>("openclass");
   const [users, setUsers] = useState<UserRow[]>([]);
   const [essays, setEssays] = useState<EssayRow[]>([]);
@@ -1045,6 +1045,30 @@ export default function TeacherPage() {
     });
   }
 
+  async function deleteActivityTask(activityId: string, title: string) {
+    if (!isAdminConsole || loginRole !== "admin") return;
+    const confirmed = window.confirm(`是否要刪除「${title}」的所有資料？\n\n此操作會刪除寫作任務、分組資料與學生參與過程，且無法復原。`);
+    if (!confirmed) return;
+    await runLearningAction("系統正在刪除寫作任務課程資料，請稍候...", async () => {
+      const response = await fetch("/api/admin/activities", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ activityId })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setError(data.error ?? "delete_activity_failed");
+        return;
+      }
+      await refreshAll(showCourseStatusView);
+      if (selectedLearningActivityId === activityId) {
+        setShowCourseStatusView(false);
+        setSelectedLearningActivityId("");
+        setMonitorSelected(null);
+      }
+    });
+  }
+
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
     window.location.href = "/login";
@@ -1768,11 +1792,15 @@ export default function TeacherPage() {
         <div style={{ width: 180 }}>
           <button type="button" className={tab === "learning" ? "" : "secondary"} onClick={() => setTab("learning")}>學習管理</button>
         </div>
+        {isAdminConsole ? (
+          <div style={{ width: 180 }}>
+            <button type="button" className={tab === "diagnostics" ? "" : "secondary"} onClick={() => setTab("diagnostics")}>診斷面板</button>
+          </div>
+        ) : null}
       </div>
 
       {tab === "system" ? (
         <>
-        {isAdminConsole ? <AdminPromptDiagnostics /> : null}
         <div className="card">
           <h2>帳號管理</h2>
           <div className="row" style={{ marginBottom: 10 }}>
@@ -2418,6 +2446,19 @@ export default function TeacherPage() {
                             >
                               重新整理
                             </button>
+                            {isAdminConsole ? (
+                              <button
+                                type="button"
+                                className="secondary"
+                                style={{ width: "auto", background: "#ffe4e6", color: "#9f1239", borderColor: "#fecdd3" }}
+                                disabled={isLearningProcessing}
+                                onClick={() => {
+                                  deleteActivityTask(activity.id, activity.title).catch(() => undefined);
+                                }}
+                              >
+                                刪除
+                              </button>
+                            ) : null}
                           </div>
                         </td>
                       </tr>
@@ -3208,6 +3249,10 @@ export default function TeacherPage() {
             </div>
           ) : null}
         </>
+      ) : null}
+
+      {tab === "diagnostics" && isAdminConsole ? (
+        <AdminPromptDiagnostics />
       ) : null}
     </main>
   );

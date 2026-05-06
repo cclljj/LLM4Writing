@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/src/lib/auth-server";
-import { getAllActivities, hydrateDomainState } from "@/src/lib/mock-data";
+import { deleteOpenClassTask, flushDomainState, getAllActivities, hydrateDomainState } from "@/src/lib/mock-data";
 import { getUsersVisibleToTeacherStore, listUsersStore } from "@/src/lib/user-store";
+import { deleteSessionsByActivityId } from "@/src/lib/store";
 
 export async function GET() {
   const user = await getCurrentUser();
@@ -31,4 +32,26 @@ export async function GET() {
   }));
 
   return NextResponse.json({ activities });
+}
+
+export async function DELETE(request: Request) {
+  const user = await getCurrentUser();
+  if (!user || user.role !== "admin") {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
+
+  const body = (await request.json().catch(() => ({}))) as { activityId?: string };
+  const activityId = (body.activityId ?? "").trim();
+  if (!activityId) {
+    return NextResponse.json({ error: "missing_activity_id" }, { status: 400 });
+  }
+
+  await hydrateDomainState();
+  const deleted = deleteOpenClassTask(activityId);
+  if (!deleted.ok) {
+    return NextResponse.json({ error: deleted.error }, { status: 404 });
+  }
+  await flushDomainState();
+  const removedSessions = await deleteSessionsByActivityId(activityId);
+  return NextResponse.json({ ok: true, removedSessions });
 }
