@@ -9,6 +9,10 @@ function isTeacherPath(pathname: string): boolean {
   return pathname === "/teacher" || pathname.startsWith("/teacher/");
 }
 
+function isAdminPath(pathname: string): boolean {
+  return pathname === "/admin" || pathname.startsWith("/admin/");
+}
+
 export function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const username = request.cookies.get(AUTH_COOKIE_USER)?.value;
@@ -17,7 +21,7 @@ export function middleware(request: NextRequest) {
 
   if (pathname === "/login" && isAuthed) {
     const url = request.nextUrl.clone();
-    url.pathname = role === "student" ? "/student" : "/teacher";
+    url.pathname = role === "student" ? "/student" : role === "admin" ? "/admin" : "/teacher";
     url.search = "";
     return NextResponse.redirect(url);
   }
@@ -50,9 +54,23 @@ export function middleware(request: NextRequest) {
     }
   }
 
+  if (isAdminPath(pathname)) {
+    if (!isAuthed) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/login";
+      return NextResponse.redirect(url);
+    }
+
+    if (role !== "admin") {
+      const url = request.nextUrl.clone();
+      url.pathname = role === "student" ? "/student" : "/teacher";
+      return NextResponse.redirect(url);
+    }
+  }
+
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ["/login", "/student/:path*", "/teacher/:path*"]
+  matcher: ["/login", "/student/:path*", "/teacher/:path*", "/admin/:path*"]
 };

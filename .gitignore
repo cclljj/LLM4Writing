@@ -51,3 +51,8 @@ node_modules/
 .mvn
 .vercel
 .env*.local
+
+### Test/runtime artifacts ###
+.data/
+test-results/
+playwright-report/

@@ -2,6 +2,7 @@
 
 import { DragEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import AdminPromptDiagnostics from "./_components/AdminPromptDiagnostics";
 import TeacherDashboard, { TeacherDashboardData } from "./_components/TeacherDashboard";
 
 type UserRow = { username: string; name: string; school: string; role: string; ownerTeacherUsername?: string; classNumber?: string };
@@ -1781,6 +1782,8 @@ export default function TeacherPage() {
       </div>
 
       {tab === "system" ? (
+        <>
+        {isAdminConsole ? <AdminPromptDiagnostics /> : null}
         <div className="card">
           <h2>帳號管理</h2>
           <div className="row" style={{ marginBottom: 10 }}>
@@ -2273,6 +2276,7 @@ export default function TeacherPage() {
             </div>
           </div>
         </div>
+        </>
       ) : null}
 
       {tab === "learning" ? (

@@ -429,7 +429,20 @@ student 可儲存三種內容：
   - `app/student/_components/StudentTopHeader.tsx`
 - 教師端已拆出：
   - `app/teacher/_components/TeacherDashboard.tsx`
+  - `app/teacher/_components/AdminPromptDiagnostics.tsx`
 - 第一階段元件拆分以 presentational components 為主，不改變既有 session polling、API 呼叫、流程推進與資料儲存行為。
+
+## 6.0.1 前端 E2E 測試
+
+- 使用 Playwright：`playwright.config.ts`
+- 指令：`npm run test:e2e`
+- E2E dev server 固定以記憶體資料源執行，避免本機 `.env.local` / DB 狀態影響預設測試帳號。
+- 初始 E2E 覆蓋：
+  - student 登入後導向 `/student`
+  - teacher 登入後導向 `/teacher`
+  - admin 登入後導向 `/admin`
+  - `/admin` 可見 Prompt / LLM 診斷面板
+  - `/teacher` 不可見 Prompt / LLM 診斷面板
 
 ## 6.1 `/login`
 
@@ -672,6 +685,11 @@ student 可儲存三種內容：
 
 - 與原管理端功能一致，保留帳號管理、學習管理、課程管理全部功能。
 - 頁面主標題固定為「系統管理員控制台」。
+- 帳號管理頁上方需顯示 admin-only「Prompt / LLM 診斷面板」；教師端 `/teacher` 不顯示此面板。
+- Prompt / LLM 診斷面板需顯示：
+  - LLM 設定狀態（僅顯示 URL/key/model 是否存在，不顯示 secret）
+  - prompt config key counts（stepPrompts、subStepPrompts、fallbacks、questionBanks、writingTasks、step9Questions、stepOpenings）
+  - 近期 spec10 session 摘要（課程、組別、step、成員數、訊息數、最後事件）
 - 課程管理中可使用「寫作主題管理」、「寫作任務管理」、「組別管理」全部模組。
 - 組別管理：
   - 先選任務（顯示為「班級 + 任務 + id」）
@@ -892,6 +910,22 @@ Request:
 - `end`：`in_progress|paused -> ended`
 
 ## 7.5 Admin/Course APIs
+
+### `GET /api/admin/diagnostics`
+
+- 權限：admin only
+- 用途：供 `/admin` Prompt / LLM 診斷面板讀取非敏感診斷摘要
+- 回傳：
+  - `llm.configured`
+  - `llm.urlPresent`
+  - `llm.keyPresent`
+  - `llm.modelPresent`
+  - `llm.model`
+  - `promptConfig` 各類 key count
+  - `sessions.total`
+  - `sessions.spec10`
+  - `sessions.recent`
+- 不得回傳 `LLM_KEY`、資料庫 URL 或其他 secret。
 
 ### `GET/POST /api/admin/essays`
 

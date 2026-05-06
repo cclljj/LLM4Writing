@@ -44,10 +44,12 @@ Open: [http://localhost:3000](http://localhost:3000)
 
 ```bash
 npm test
+npm run test:e2e
 npm run build
 ```
 
 `npm test` runs focused workflow tests for answer validation, Step1/2 group gates, fallback questions, and LLM response parsing.
+`npm run test:e2e` runs Playwright browser tests for role login/routing and admin-only diagnostics visibility.
 
 ## Environment Variables
 
@@ -73,7 +75,7 @@ app/*/_components/  focused UI components used by large pages
 src/lib/            engine, workflow helpers, LLM parsing, store, auth, types
 src/config/         prompt config and step openings
 scripts/            migration/utility scripts
-tests/              Node test runner workflow tests
+tests/              Node workflow tests and Playwright E2E tests
 SPEC.md             implementation spec (source of truth)
 ```
 
@@ -112,6 +114,7 @@ SPEC.md             implementation spec (source of truth)
 - `POST /api/session/step8/complete`
 
 ### Teacher/Admin
+- `GET /api/admin/diagnostics`
 - `POST /api/teacher/step`
 - `GET /api/teacher/monitor`
 - `GET /api/teacher/personal-progress`
