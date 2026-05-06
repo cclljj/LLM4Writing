@@ -777,6 +777,17 @@ export function upsertOpenClass(input: {
     return { ok: false as const, error: "essay_disabled" };
   }
 
+  const duplicate = openClasses.find(
+    (openClass) =>
+      openClass.school === input.school &&
+      openClass.classNumber === input.classNumber &&
+      openClass.essayId === input.essayId &&
+      openClass.id !== input.id
+  );
+  if (duplicate) {
+    return { ok: false as const, error: "duplicate_class_essay_assignment" };
+  }
+
   if (input.id) {
     if (existing) {
       existing.school = input.school;
