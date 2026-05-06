@@ -9,6 +9,9 @@ export type DashboardRisk = {
   level: "ok" | "watch" | "stuck";
   text: string;
   pendingMembers: string[];
+  affectedUsers?: string[];
+  reasons?: string[];
+  suggestions?: string[];
 };
 
 export type DashboardHint = {
@@ -105,8 +108,25 @@ export default function TeacherDashboard<TSession extends DashboardSession>({
                 <td>Step {row.session.currentStep}</td>
                 <td>
                   <small>{row.hint.ready ? row.hint.text : row.risk.text}</small>
+                  {!row.hint.ready && row.risk.reasons && row.risk.reasons.length > 1 ? (
+                    <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>
+                      {row.risk.reasons.slice(1).map((reason) => (
+                        <li key={`${row.session.sessionId}-${reason}`}>
+                          <small>{reason}</small>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
                   {row.risk.pendingMembers.length > 0 ? (
                     <small style={{ display: "block", marginTop: 4 }}>未完成：{row.risk.pendingMembers.join("、")}</small>
+                  ) : null}
+                  {!row.hint.ready && row.risk.affectedUsers && row.risk.affectedUsers.length > 0 ? (
+                    <small style={{ display: "block", marginTop: 4 }}>需關注：{row.risk.affectedUsers.join("、")}</small>
+                  ) : null}
+                  {!row.hint.ready && row.risk.suggestions && row.risk.suggestions.length > 0 ? (
+                    <small style={{ display: "block", marginTop: 6, color: "#0f766e" }}>
+                      建議：{row.risk.suggestions[0]}
+                    </small>
                   ) : null}
                 </td>
                 <td>

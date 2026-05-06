@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { getCurrentUser } from "@/src/lib/auth-server";
+import { recordArtifactUpdateSignal } from "@/src/lib/learning-diagnostics";
 import { getSession, saveSession } from "@/src/lib/store";
 import { isLlmConfigured, llmChatCompletionText, type LlmChatMessage } from "@/src/lib/llm-client";
 import { buildStudentCourseContext } from "@/src/lib/llm-context";
@@ -77,6 +78,7 @@ export async function POST(request: NextRequest) {
 
   const draft = body.draft;
   session.draftStep6[user.username] = draft;
+  recordArtifactUpdateSignal(session, "draft6", user.username);
   const crossStepContext = buildStudentCourseContext(session, user.username, 6, {
     maxMessages: 48,
     maxChars: 6500,

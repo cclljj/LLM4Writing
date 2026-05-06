@@ -2,7 +2,9 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { buildStudentNextAction } from "@/src/lib/student-next-action";
 import GroupWaitingStatus from "./_components/GroupWaitingStatus";
+import NextActionCard from "./_components/NextActionCard";
 import Step3ToolHint from "./_components/Step3ToolHint";
 import StudentProgressRail from "./_components/StudentProgressRail";
 
@@ -1224,6 +1226,24 @@ export default function StudentPage() {
   const ownStep10Report = session && loginUser ? session.reports.step10[loginUser] : undefined;
   const unsavedDraft6Chars = currentStep === 6 && draftText !== savedDraft6Text ? draftText.length : 0;
   const unsavedDraft8Chars = currentStep === 8 && draftText !== savedDraft8Text ? draftText.length : 0;
+  const nextAction = buildStudentNextAction({
+    currentStep,
+    currentMode,
+    canReplyToQuestion,
+    isSendingMessage,
+    waitingAiForGroup,
+    waitingGroupMembers,
+    waitingGroupMemberNames: groupPendingMembers,
+    step1CompletedWaitingTeacher,
+    step2CompletedWaitingTeacher,
+    step3CompletedByMe,
+    waitingStep3Members,
+    step4CompletedByMe,
+    allStep4Completed,
+    draftTextLength: draftText.trim().length,
+    unsavedDraftChars: currentStep === 8 ? unsavedDraft8Chars : unsavedDraft6Chars,
+    step9AnsweredCount: step9Answers.filter((answer) => answer.trim().length > 0).length
+  });
   const stepOpeningText = session?.promptConfig?.stepOpenings?.[String(currentStep)]?.trim() ?? "";
   const step9QuestionTexts = useMemo(() => {
     if (currentStep !== 9) return [] as string[];
@@ -1449,6 +1469,7 @@ export default function StudentPage() {
           </div>
 
           <StudentProgressRail currentStep={currentStep} />
+          <NextActionCard action={nextAction} />
 
           {historyReviewSteps.length > 0 ? (
             <>

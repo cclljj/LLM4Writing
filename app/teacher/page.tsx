@@ -2,6 +2,7 @@
 
 import { DragEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { ArtifactDiagnostics, buildAdvancedStuckRisk, QualitySignals } from "@/src/lib/learning-diagnostics";
 import AdminPromptDiagnostics from "./_components/AdminPromptDiagnostics";
 import TeacherDashboard, { TeacherDashboardData } from "./_components/TeacherDashboard";
 
@@ -59,6 +60,8 @@ type MonitorSession = {
     step2Substep1Question?: number;
   };
   reflectionIndex?: Record<string, number>;
+  qualitySignals?: QualitySignals;
+  artifactDiagnostics?: ArtifactDiagnostics;
   messages: Array<{ id: string; role: string; userId?: string; text: string; at: string; step: number }>;
 };
 
@@ -590,42 +593,26 @@ export default function TeacherPage() {
     level: "ok" | "watch" | "stuck";
     text: string;
     pendingMembers: string[];
+    affectedUsers: string[];
+    reasons: string[];
+    suggestions: string[];
     minutesSinceLastEvent: number | null;
   } {
-    const gateKey = getMonitorGateKey(session);
-    const responders = gateKey ? session.groupGate?.[gateKey] ?? [] : [];
-    const pendingMembers =
-      gateKey && session.currentStep <= 4
-        ? session.participants.filter((participant) => !responders.includes(participant))
-        : [];
-    const latest = getSessionLastEventAt(session);
-    const minutesSinceLastEvent = latest ? Math.floor((Date.now() - latest.getTime()) / 60000) : null;
-    const hasPending = pendingMembers.length > 0;
     const isReady = getStepAdvanceHint(session).ready;
-
     if (isReady) {
-      return { level: "ok", text: "已達切換條件，可一鍵推進。", pendingMembers: [], minutesSinceLastEvent };
-    }
-    if (hasPending && minutesSinceLastEvent !== null && minutesSinceLastEvent >= 10) {
+      const latest = getSessionLastEventAt(session);
+      const minutesSinceLastEvent = latest ? Math.floor((Date.now() - latest.getTime()) / 60000) : null;
       return {
-        level: "stuck",
-        text: `可能卡關：${pendingMembers.length} 位學生尚未完成，已 ${minutesSinceLastEvent} 分鐘沒有新事件。`,
-        pendingMembers,
+        level: "ok",
+        text: "已達切換條件，可一鍵推進。",
+        pendingMembers: [],
+        affectedUsers: [],
+        reasons: ["已達切換條件，可一鍵推進。"],
+        suggestions: ["可使用儀表板的一鍵推進按鈕切換到下一步。"],
         minutesSinceLastEvent
       };
     }
-    if (hasPending) {
-      return {
-        level: "watch",
-        text: `${pendingMembers.length} 位學生尚未完成目前任務。`,
-        pendingMembers,
-        minutesSinceLastEvent
-      };
-    }
-    if (minutesSinceLastEvent !== null && minutesSinceLastEvent >= 10) {
-      return { level: "watch", text: `已 ${minutesSinceLastEvent} 分鐘沒有新事件，建議查看小組狀況。`, pendingMembers, minutesSinceLastEvent };
-    }
-    return { level: "ok", text: "目前進行正常。", pendingMembers, minutesSinceLastEvent };
+    return buildAdvancedStuckRisk(session);
   }
 
   const classJoinRows = useMemo(() => {

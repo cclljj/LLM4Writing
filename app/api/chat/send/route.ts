@@ -17,6 +17,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "session_not_found" }, { status: 404 });
   }
 
+  const qualitySignalsBeforeSend = JSON.stringify(session.qualitySignals ?? {});
+
   try {
     markUserOnline(session, user.username);
     const userStep = session.personalSteps?.[user.username] ?? session.currentStep;
@@ -28,6 +30,9 @@ export async function POST(request: NextRequest) {
     await saveSession(updated);
     return NextResponse.json(updated);
   } catch (error) {
+    if (JSON.stringify(session.qualitySignals ?? {}) !== qualitySignalsBeforeSend) {
+      await saveSession(session).catch(() => undefined);
+    }
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "send_failed" },
       { status: 400 }

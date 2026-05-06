@@ -2,7 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { ChatMessage, SessionState } from "../src/lib/types";
 import { validateStudentAnswer } from "../src/lib/answer-validation";
+import { buildAdvancedStuckRisk, recordRejectedAnswerSignal } from "../src/lib/learning-diagnostics";
 import { isUsableNextQuestion, splitAiFeedbackAndQuestion } from "../src/lib/llm-response";
+import { buildStudentNextAction } from "../src/lib/student-next-action";
 import { buildStep1Question, buildStep2Question } from "../src/lib/workflow-questions";
 import { advanceStep1Or2SubstepAfterAi, handleStep1Or2Group } from "../src/lib/workflow-step1-2";
 
@@ -18,6 +20,8 @@ function baseSession(overrides: Partial<SessionState> = {}): SessionState {
     personalSteps: { s1: 1, s2: 1 },
     participants: ["s1", "s2"],
     messages: [],
+    qualitySignals: { rejectedAnswerCounts: {}, rejectedAnswerLastAt: {} },
+    artifactSignals: { outlineUpdatedAt: {}, draftStep6UpdatedAt: {}, draftStep8UpdatedAt: {} },
     groupGate: {},
     reflectionIndex: { s1: 0, s2: 0 },
     workflow: "spec10",
@@ -132,4 +136,107 @@ test("Step1/2 advancement preserves questionBanks and uses fallback when LLM nex
   advanceStep1Or2SubstepAfterAi(step2Session, 2, 1, undefined, makeMessage);
   assert.equal(step2Session.stepState.step2Substep1Question, 2);
   assert.match(step2Session.messages.at(-1)?.text ?? "", /fallback：請挑一個具體例子/);
+});
+
+test("advanced stuck risk combines rejection, idle, Step3, and Step6 signals", () => {
+  const session = {
+    ...baseSession({
+      currentStep: 3,
+      groupGate: { "3-complete": ["s2"] },
+      messages: [makeMessage({ role: "student", userId: "s1", step: 3, text: "我還沒想到" })]
+    }),
+    artifactDiagnostics: { step3OutlineChars: { s1: 0, s2: 40 }, step3OutlineUpdatedAt: { s2: "2026-05-06T00:03:00.000Z" }, draftStep6Chars: {} }
+  };
+  session.messages[0]!.at = "2026-05-06T00:00:00.000Z";
+  recordRejectedAnswerSignal(session, "s1", "1-1", "2026-05-06T00:01:00.000Z");
+  recordRejectedAnswerSignal(session, "s1", "1-1", "2026-05-06T00:02:00.000Z");
+
+  const risk = buildAdvancedStuckRisk(session, new Date("2026-05-06T00:15:00.000Z").getTime());
+  assert.equal(risk.level, "stuck");
+  assert.deepEqual(risk.pendingMembers, ["s1"]);
+  assert.match(risk.reasons.join("\n"), /多次送出未通過回答品質檢查/);
+  assert.match(risk.reasons.join("\n"), /Step3 結構樹/);
+  assert.match(risk.reasons.join("\n"), /一段時間未更新/);
+  assert.ok(risk.suggestions.some((suggestion) => suggestion.includes("完成結構樹")));
+
+  const step6Risk = buildAdvancedStuckRisk(
+    {
+      ...baseSession({
+        currentStep: 6,
+        personalSteps: { s1: 6, s2: 8 },
+        messages: [makeMessage({ role: "student", userId: "s1", step: 6, text: "開頭" })]
+      }),
+      artifactDiagnostics: { draftStep6Chars: { s1: 12 } }
+    },
+    new Date("2026-05-06T00:15:00.000Z").getTime()
+  );
+  assert.match(step6Risk.reasons.join("\n"), /Step6 初稿字數偏低/);
+});
+
+test("student next-action card gives concrete action instead of generic status", () => {
+  assert.match(
+    buildStudentNextAction({
+      currentStep: 1,
+      currentMode: "group_interaction",
+      canReplyToQuestion: true,
+      isSendingMessage: false,
+      waitingAiForGroup: false,
+      waitingGroupMembers: false,
+      waitingGroupMemberNames: [],
+      step1CompletedWaitingTeacher: false,
+      step2CompletedWaitingTeacher: false,
+      step3CompletedByMe: false,
+      waitingStep3Members: false,
+      step4CompletedByMe: false,
+      allStep4Completed: false,
+      draftTextLength: 0,
+      unsavedDraftChars: 0,
+      step9AnsweredCount: 0
+    }).body,
+    /回答目前系統提問/
+  );
+
+  assert.match(
+    buildStudentNextAction({
+      currentStep: 3,
+      currentMode: "personal_interaction",
+      canReplyToQuestion: true,
+      isSendingMessage: false,
+      waitingAiForGroup: false,
+      waitingGroupMembers: false,
+      waitingGroupMemberNames: [],
+      step1CompletedWaitingTeacher: false,
+      step2CompletedWaitingTeacher: false,
+      step3CompletedByMe: false,
+      waitingStep3Members: false,
+      step4CompletedByMe: false,
+      allStep4Completed: false,
+      draftTextLength: 0,
+      unsavedDraftChars: 0,
+      step9AnsweredCount: 0
+    }).body,
+    /完成結構樹/
+  );
+
+  assert.match(
+    buildStudentNextAction({
+      currentStep: 6,
+      currentMode: "personal_interaction",
+      canReplyToQuestion: false,
+      isSendingMessage: false,
+      waitingAiForGroup: false,
+      waitingGroupMembers: false,
+      waitingGroupMemberNames: [],
+      step1CompletedWaitingTeacher: false,
+      step2CompletedWaitingTeacher: false,
+      step3CompletedByMe: true,
+      waitingStep3Members: false,
+      step4CompletedByMe: true,
+      allStep4Completed: true,
+      draftTextLength: 20,
+      unsavedDraftChars: 20,
+      step9AnsweredCount: 0
+    }).body,
+    /至少完成開頭/
+  );
 });

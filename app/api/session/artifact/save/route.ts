@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/src/lib/auth-server";
+import { recordArtifactUpdateSignal } from "@/src/lib/learning-diagnostics";
 import { getSession, saveSession } from "@/src/lib/store";
 import { markUserOnline } from "@/src/lib/session-presence";
 
@@ -31,14 +32,17 @@ export async function POST(request: NextRequest) {
 
   if (body.type === "outline") {
     session.outlines[user.username] = body.content;
+    recordArtifactUpdateSignal(session, "outline", user.username);
   }
 
   if (body.type === "draft6") {
     session.draftStep6[user.username] = body.content;
+    recordArtifactUpdateSignal(session, "draft6", user.username);
   }
 
   if (body.type === "draft8") {
     session.draftStep8[user.username] = body.content;
+    recordArtifactUpdateSignal(session, "draft8", user.username);
   }
 
   await saveSession(session);

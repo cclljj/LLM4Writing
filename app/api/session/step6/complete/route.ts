@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { getCurrentUser } from "@/src/lib/auth-server";
+import { recordArtifactUpdateSignal } from "@/src/lib/learning-diagnostics";
 import { getSession, saveSession } from "@/src/lib/store";
 import { isLlmConfigured, llmChatCompletionText, type LlmChatMessage } from "@/src/lib/llm-client";
 import { markUserOnline } from "@/src/lib/session-presence";
@@ -70,6 +71,7 @@ export async function POST(request: NextRequest) {
 
   const finalDraft = body.draft;
   session.draftStep6[user.username] = finalDraft;
+  recordArtifactUpdateSignal(session, "draft6", user.username);
   const feedback = await buildStep7Feedback(session.promptConfig?.stepPrompts?.["7"], finalDraft);
   session.reports.step7[user.username] = feedback;
   session.messages.push(makeAiStep7Message(feedback, user.username));

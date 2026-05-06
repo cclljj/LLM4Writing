@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/src/lib/auth-server";
+import { recordArtifactUpdateSignal } from "@/src/lib/learning-diagnostics";
 import { getSession, saveSession } from "@/src/lib/store";
 import { markUserOnline } from "@/src/lib/session-presence";
 
@@ -27,6 +28,7 @@ export async function POST(request: NextRequest) {
   }
   const outlineText = typeof body.outline === "string" ? body.outline : "";
   session.outlines[user.username] = outlineText;
+  recordArtifactUpdateSignal(session, "outline", user.username);
 
   const key = "4-complete";
   const doneUsers = new Set(session.groupGate[key] ?? []);

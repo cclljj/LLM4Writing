@@ -77,7 +77,14 @@ export async function GET() {
         messages: withOpenings,
         groupGate: s.groupGate,
         stepState: s.stepState,
-        reflectionIndex: s.reflectionIndex
+        reflectionIndex: s.reflectionIndex,
+        qualitySignals: s.qualitySignals ?? { rejectedAnswerCounts: {}, rejectedAnswerLastAt: {} },
+        artifactDiagnostics: {
+          step3OutlineChars: Object.fromEntries(Object.entries(s.outlines ?? {}).map(([userId, outline]) => [userId, outline.length])),
+          step3OutlineUpdatedAt: s.artifactSignals?.outlineUpdatedAt ?? {},
+          draftStep6Chars: Object.fromEntries(Object.entries(s.draftStep6 ?? {}).map(([userId, draft]) => [userId, draft.length])),
+          draftStep6UpdatedAt: s.artifactSignals?.draftStep6UpdatedAt ?? {}
+        }
       };
     });
 

@@ -4,6 +4,7 @@ import { STEP_DEFINITIONS, getModeByStep, getStepName } from "@/src/lib/spec";
 import { isLlmConfigured, llmChatCompletionText, LlmChatMessage } from "@/src/lib/llm-client";
 import { buildStudentCourseContext } from "@/src/lib/llm-context";
 import { normalizeForCompare, validateStudentAnswer } from "@/src/lib/answer-validation";
+import { recordRejectedAnswerSignal } from "@/src/lib/learning-diagnostics";
 import { splitAiFeedbackAndQuestion } from "@/src/lib/llm-response";
 import { buildStep1Question, buildStep2Question, buildStep9BatchPrompt, getCurrentGroupGateKey, getCurrentSubstepKey, getStep9Questions } from "@/src/lib/workflow-questions";
 import { advanceStep1Or2SubstepAfterAi, handleStep1Or2Group, isNextQuestionSubStepPromptDriven } from "@/src/lib/workflow-step1-2";
@@ -62,6 +63,8 @@ export function createSession(payload: StartSessionPayload): SessionState {
     personalSteps: Object.fromEntries(participants.map((id) => [id, 1])),
     participants,
     messages: [],
+    qualitySignals: { rejectedAnswerCounts: {}, rejectedAnswerLastAt: {} },
+    artifactSignals: { outlineUpdatedAt: {}, draftStep6UpdatedAt: {}, draftStep8UpdatedAt: {} },
     groupGate: {},
     reflectionIndex: Object.fromEntries(participants.map((id) => [id, 0])),
     workflow,
@@ -117,6 +120,27 @@ function normalizeSessionRuntimeShape(session: SessionState): void {
   }
   if (!session.groupGate || typeof session.groupGate !== "object") {
     session.groupGate = {};
+  }
+  if (!session.qualitySignals || typeof session.qualitySignals !== "object") {
+    session.qualitySignals = { rejectedAnswerCounts: {}, rejectedAnswerLastAt: {} };
+  }
+  if (!session.qualitySignals.rejectedAnswerCounts || typeof session.qualitySignals.rejectedAnswerCounts !== "object") {
+    session.qualitySignals.rejectedAnswerCounts = {};
+  }
+  if (!session.qualitySignals.rejectedAnswerLastAt || typeof session.qualitySignals.rejectedAnswerLastAt !== "object") {
+    session.qualitySignals.rejectedAnswerLastAt = {};
+  }
+  if (!session.artifactSignals || typeof session.artifactSignals !== "object") {
+    session.artifactSignals = { outlineUpdatedAt: {}, draftStep6UpdatedAt: {}, draftStep8UpdatedAt: {} };
+  }
+  if (!session.artifactSignals.outlineUpdatedAt || typeof session.artifactSignals.outlineUpdatedAt !== "object") {
+    session.artifactSignals.outlineUpdatedAt = {};
+  }
+  if (!session.artifactSignals.draftStep6UpdatedAt || typeof session.artifactSignals.draftStep6UpdatedAt !== "object") {
+    session.artifactSignals.draftStep6UpdatedAt = {};
+  }
+  if (!session.artifactSignals.draftStep8UpdatedAt || typeof session.artifactSignals.draftStep8UpdatedAt !== "object") {
+    session.artifactSignals.draftStep8UpdatedAt = {};
   }
   if (!session.reflectionIndex || typeof session.reflectionIndex !== "object") {
     session.reflectionIndex = {};
@@ -569,6 +593,8 @@ export async function sendStudentMessage(
 
   const validationError = validateStudentAnswer(session, userId, step, text);
   if (validationError) {
+    const rejectionScope = step === 1 || step === 2 ? getCurrentGroupGateKey(session, step as 1 | 2) : `step-${step}`;
+    recordRejectedAnswerSignal(session, userId, rejectionScope, now());
     throw new Error(validationError);
   }
 

@@ -172,6 +172,27 @@ a {
   background: #f0fdf4;
 }
 
+.next-action-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.next-action-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 6px;
+  background: linear-gradient(180deg, #2563eb, #14b8a6);
+}
+
+.next-action-kicker {
+  margin-bottom: 4px;
+  color: #0369a1;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
 .metric-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));

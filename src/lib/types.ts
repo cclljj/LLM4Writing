@@ -37,6 +37,17 @@ export interface ChatMessage {
   step: number;
 }
 
+export interface QualitySignals {
+  rejectedAnswerCounts?: Record<string, number>;
+  rejectedAnswerLastAt?: Record<string, string>;
+}
+
+export interface ArtifactSignals {
+  outlineUpdatedAt?: Record<string, string>;
+  draftStep6UpdatedAt?: Record<string, string>;
+  draftStep8UpdatedAt?: Record<string, string>;
+}
+
 export interface SessionState {
   id: string;
   createdAt: string;
@@ -46,6 +57,8 @@ export interface SessionState {
   joinedUsers?: string[];
   onlineUsersLastSeen?: Record<string, string>;
   messages: ChatMessage[];
+  qualitySignals?: QualitySignals;
+  artifactSignals?: ArtifactSignals;
   groupGate: Record<string, string[]>;
   reflectionIndex: Record<string, number>;
   workflow: SessionWorkflow;
