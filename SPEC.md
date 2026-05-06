@@ -418,6 +418,19 @@ student 可儲存三種內容：
 
 ## 6. 前端頁面規格
 
+## 6.0 前端元件拆分原則
+
+- 大型頁面仍保留資料讀取、流程控制與 API 呼叫協調。
+- 可重用或可獨立閱讀的純 UI 區塊需放在同層 `_components` 目錄。
+- 學生端已拆出：
+  - `app/student/_components/StudentProgressRail.tsx`
+  - `app/student/_components/GroupWaitingStatus.tsx`
+  - `app/student/_components/Step3ToolHint.tsx`
+  - `app/student/_components/StudentTopHeader.tsx`
+- 教師端已拆出：
+  - `app/teacher/_components/TeacherDashboard.tsx`
+- 第一階段元件拆分以 presentational components 為主，不改變既有 session polling、API 呼叫、流程推進與資料儲存行為。
+
 ## 6.1 `/login`
 
 - 帳密登入，寫入 HTTP-only cookie：

@@ -2,6 +2,7 @@
 
 import { DragEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import TeacherDashboard, { TeacherDashboardData } from "./_components/TeacherDashboard";
 
 type UserRow = { username: string; name: string; school: string; role: string; ownerTeacherUsername?: string; classNumber?: string };
 type EssayRow = {
@@ -691,7 +692,7 @@ export default function TeacherPage() {
     });
   }, [selectedLearningActivity, filteredMonitorSessions]);
 
-  const teacherDashboard = useMemo(() => {
+  const teacherDashboard = useMemo<TeacherDashboardData<MonitorSession>>(() => {
     const sessions = filteredMonitorSessions;
     const readySessions = sessions.filter((session) => getStepAdvanceHint(session).ready);
     const riskRows = sessions
@@ -2501,109 +2502,20 @@ export default function TeacherPage() {
                   <p style={{ margin: 0, color: "#1e40af" }}>{learningProcessingText || "正在載入課程狀態資料，請稍候..."}</p>
                 </div>
               ) : null}
-              <div className="card">
-                <h2>課堂儀表板</h2>
-                <div className="metric-grid">
-                  <div className="metric-card">
-                    <span className="metric-value">{teacherDashboard.sessionCount}</span>
-                    <small>小組 sessions</small>
-                  </div>
-                  <div className="metric-card">
-                    <span className="metric-value">{teacherDashboard.joinedCount}</span>
-                    <small>已加入學生</small>
-                  </div>
-                  <div className="metric-card">
-                    <span className="metric-value">{teacherDashboard.onlineCount}</span>
-                    <small>目前在線學生</small>
-                  </div>
-                  <div className="metric-card">
-                    <span className="metric-value">{teacherDashboard.readyCount}</span>
-                    <small>可切下一步小組</small>
-                  </div>
-                  <div className="metric-card">
-                    <span className="metric-value">{teacherDashboard.stuckCount}</span>
-                    <small>高風險卡關</small>
-                  </div>
-                  <div className="metric-card">
-                    <span className="metric-value">{teacherDashboard.watchCount}</span>
-                    <small>需留意小組</small>
-                  </div>
-                </div>
-                <div style={{ overflowX: "auto", marginTop: 12 }}>
-                  <table className="pro-table">
-                    <thead>
-                      <tr>
-                        <th>狀態</th>
-                        <th>小組</th>
-                        <th>目前進度</th>
-                        <th>提醒</th>
-                        <th>一鍵管理</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {teacherDashboard.riskRows.map(({ session, risk, hint }) => (
-                        <tr key={`dashboard-${session.sessionId}`}>
-                          <td>
-                            <span className="badge">
-                              {hint.ready ? "可推進" : risk.level === "stuck" ? "高風險" : risk.level === "watch" ? "留意" : "正常"}
-                            </span>
-                          </td>
-                          <td>{session.groupName ?? session.groupId ?? "未命名組"}</td>
-                          <td>Step {session.currentStep}</td>
-                          <td>
-                            <small>{hint.ready ? hint.text : risk.text}</small>
-                            {risk.pendingMembers.length > 0 ? (
-                              <small style={{ display: "block", marginTop: 4 }}>未完成：{risk.pendingMembers.join("、")}</small>
-                            ) : null}
-                          </td>
-                          <td>
-                            <div className="row" style={{ gap: 8 }}>
-                              {hint.ready && hint.nextStep ? (
-                                <button
-                                  type="button"
-                                  style={{ width: "auto" }}
-                                  disabled={isLearningProcessing}
-                                  onClick={() => applyStepSwitch(session.sessionId, hint.nextStep!)}
-                                >
-                                  推進 Step {hint.nextStep}
-                                </button>
-                              ) : null}
-                              <button
-                                type="button"
-                                className="secondary"
-                                style={{ width: "auto" }}
-                                disabled={isLearningProcessing}
-                                onClick={() => {
-                                  setMonitorSelected(session);
-                                  setGroupViewStep("all");
-                                  setProgressSessionId(session.sessionId);
-                                }}
-                              >
-                                查看對話
-                              </button>
-                              <button
-                                type="button"
-                                className="secondary"
-                                style={{ width: "auto" }}
-                                disabled={isLearningProcessing}
-                                onClick={() => {
-                                  setProgressSessionId(session.sessionId);
-                                  loadProgress(session.sessionId);
-                                }}
-                              >
-                                個人進度
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                {teacherDashboard.riskRows.length === 0 ? (
-                  <small style={{ display: "block", marginTop: 8 }}>目前沒有卡關或可推進提示。若剛開始上課，請等待學生加入後重新整理。</small>
-                ) : null}
-              </div>
+              <TeacherDashboard
+                dashboard={teacherDashboard}
+                isProcessing={isLearningProcessing}
+                onAdvanceStep={(sessionId, step) => applyStepSwitch(sessionId, step)}
+                onInspectDialogue={(session) => {
+                  setMonitorSelected(session);
+                  setGroupViewStep("all");
+                  setProgressSessionId(session.sessionId);
+                }}
+                onLoadProgress={(sessionId) => {
+                  setProgressSessionId(sessionId);
+                  loadProgress(sessionId);
+                }}
+              />
 
               <div className="card">
                 <h2>全班加入狀態</h2>

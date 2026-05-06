@@ -69,6 +69,7 @@ npm run build
 
 ```text
 app/                Next.js pages + API routes
+app/*/_components/  focused UI components used by large pages
 src/lib/            engine, workflow helpers, LLM parsing, store, auth, types
 src/config/         prompt config and step openings
 scripts/            migration/utility scripts
