@@ -427,11 +427,16 @@ export default function StudentPage() {
 
   useEffect(() => {
     if (!authReady || !loginUser) return;
+    // Avoid overloading backend while class is in progress: when session exists, use lightweight status polling only.
     const timer = window.setInterval(() => {
-      refreshOverview().catch(() => undefined);
-    }, 5000);
+      if (session?.id) {
+        refreshActivityStatuses().catch(() => undefined);
+      } else {
+        refreshOverview().catch(() => undefined);
+      }
+    }, session?.id ? 5000 : 15000);
     return () => window.clearInterval(timer);
-  }, [authReady, loginUser]);
+  }, [authReady, loginUser, session?.id]);
 
   useEffect(() => {
     if (!session) return;
@@ -1027,6 +1032,18 @@ export default function StudentPage() {
     } finally {
       setIsLoadingOverview(false);
     }
+  }
+
+  async function refreshActivityStatuses() {
+    const response = await fetch("/api/student/activities", { cache: "no-store" });
+    const data = await response.json();
+    if (!response.ok) return;
+    const list: Course[] = data.activities ?? [];
+    const statusMap = list.reduce((acc, course) => {
+      if (course.id && course.courseStatus) acc[course.id] = course.courseStatus;
+      return acc;
+    }, {} as Record<string, "not_started" | "in_progress" | "paused" | "ended">);
+    setActivityStatusMap(statusMap);
   }
 
   async function joinActivity(activityId: string) {
