@@ -49,7 +49,13 @@ type MonitorSession = {
   currentStep: number;
   personalSteps?: Record<string, number>;
   groupGate?: Record<string, string[]>;
-  stepState?: { step1Substep: number; step2Substep: number };
+  stepState?: {
+    step1Substep: number;
+    step2Substep: number;
+    step1Substep3Question?: number;
+    step1Substep4Question?: number;
+    step2Substep1Question?: number;
+  };
   reflectionIndex?: Record<string, number>;
   messages: Array<{ id: string; role: string; userId?: string; text: string; at: string; step: number }>;
 };
@@ -553,6 +559,73 @@ export default function TeacherPage() {
     return `${school} + ${classNumber} + ${groupNumber}`;
   }
 
+  function getMonitorGateKey(session: MonitorSession): string | null {
+    if (session.currentStep === 1) {
+      const sub = session.stepState?.step1Substep ?? 1;
+      if (sub === 3) return `1-3-${session.stepState?.step1Substep3Question ?? 1}`;
+      if (sub === 4) return `1-4-${session.stepState?.step1Substep4Question ?? 1}`;
+      return `1-${sub}`;
+    }
+    if (session.currentStep === 2) {
+      const sub = session.stepState?.step2Substep ?? 1;
+      if (sub === 1) return `2-1-${session.stepState?.step2Substep1Question ?? 1}`;
+      return `2-${sub}`;
+    }
+    if (session.currentStep === 3) return "3-complete";
+    if (session.currentStep === 4) return "4-complete";
+    return null;
+  }
+
+  function getSessionLastEventAt(session: MonitorSession): Date | null {
+    const latest = session.messages
+      .map((message) => new Date(message.at).getTime())
+      .filter((time) => Number.isFinite(time))
+      .sort((a, b) => b - a)[0];
+    return typeof latest === "number" ? new Date(latest) : null;
+  }
+
+  function getStuckRisk(session: MonitorSession): {
+    level: "ok" | "watch" | "stuck";
+    text: string;
+    pendingMembers: string[];
+    minutesSinceLastEvent: number | null;
+  } {
+    const gateKey = getMonitorGateKey(session);
+    const responders = gateKey ? session.groupGate?.[gateKey] ?? [] : [];
+    const pendingMembers =
+      gateKey && session.currentStep <= 4
+        ? session.participants.filter((participant) => !responders.includes(participant))
+        : [];
+    const latest = getSessionLastEventAt(session);
+    const minutesSinceLastEvent = latest ? Math.floor((Date.now() - latest.getTime()) / 60000) : null;
+    const hasPending = pendingMembers.length > 0;
+    const isReady = getStepAdvanceHint(session).ready;
+
+    if (isReady) {
+      return { level: "ok", text: "已達切換條件，可一鍵推進。", pendingMembers: [], minutesSinceLastEvent };
+    }
+    if (hasPending && minutesSinceLastEvent !== null && minutesSinceLastEvent >= 10) {
+      return {
+        level: "stuck",
+        text: `可能卡關：${pendingMembers.length} 位學生尚未完成，已 ${minutesSinceLastEvent} 分鐘沒有新事件。`,
+        pendingMembers,
+        minutesSinceLastEvent
+      };
+    }
+    if (hasPending) {
+      return {
+        level: "watch",
+        text: `${pendingMembers.length} 位學生尚未完成目前任務。`,
+        pendingMembers,
+        minutesSinceLastEvent
+      };
+    }
+    if (minutesSinceLastEvent !== null && minutesSinceLastEvent >= 10) {
+      return { level: "watch", text: `已 ${minutesSinceLastEvent} 分鐘沒有新事件，建議查看小組狀況。`, pendingMembers, minutesSinceLastEvent };
+    }
+    return { level: "ok", text: "目前進行正常。", pendingMembers, minutesSinceLastEvent };
+  }
+
   const classJoinRows = useMemo(() => {
     if (!selectedLearningActivity) return [];
     const students = selectedLearningActivity.studentCandidates ?? [];
@@ -617,6 +690,37 @@ export default function TeacherPage() {
       };
     });
   }, [selectedLearningActivity, filteredMonitorSessions]);
+
+  const teacherDashboard = useMemo(() => {
+    const sessions = filteredMonitorSessions;
+    const readySessions = sessions.filter((session) => getStepAdvanceHint(session).ready);
+    const riskRows = sessions
+      .map((session) => ({ session, risk: getStuckRisk(session), hint: getStepAdvanceHint(session) }))
+      .filter((row) => row.risk.level !== "ok" || row.hint.ready)
+      .sort((a, b) => {
+        const rank = { stuck: 0, watch: 1, ok: 2 } as const;
+        return rank[a.risk.level] - rank[b.risk.level];
+      });
+    const joinedUsers = new Set(
+      sessions.flatMap((session) => {
+        const joined = session.joinedUsers && session.joinedUsers.length > 0 ? session.joinedUsers : [];
+        const active = session.messages
+          .filter((message) => message.role === "student" && Boolean(message.userId))
+          .map((message) => message.userId as string);
+        return [...joined, ...active];
+      })
+    );
+    const onlineUsers = new Set(sessions.flatMap((session) => session.onlineUsers ?? []));
+    return {
+      sessionCount: sessions.length,
+      joinedCount: joinedUsers.size,
+      onlineCount: onlineUsers.size,
+      readyCount: readySessions.length,
+      stuckCount: riskRows.filter((row) => row.risk.level === "stuck").length,
+      watchCount: riskRows.filter((row) => row.risk.level === "watch").length,
+      riskRows
+    };
+  }, [filteredMonitorSessions]);
 
   useEffect(() => {
     if (!monitorSelected) return;
@@ -2397,6 +2501,110 @@ export default function TeacherPage() {
                   <p style={{ margin: 0, color: "#1e40af" }}>{learningProcessingText || "正在載入課程狀態資料，請稍候..."}</p>
                 </div>
               ) : null}
+              <div className="card">
+                <h2>課堂儀表板</h2>
+                <div className="metric-grid">
+                  <div className="metric-card">
+                    <span className="metric-value">{teacherDashboard.sessionCount}</span>
+                    <small>小組 sessions</small>
+                  </div>
+                  <div className="metric-card">
+                    <span className="metric-value">{teacherDashboard.joinedCount}</span>
+                    <small>已加入學生</small>
+                  </div>
+                  <div className="metric-card">
+                    <span className="metric-value">{teacherDashboard.onlineCount}</span>
+                    <small>目前在線學生</small>
+                  </div>
+                  <div className="metric-card">
+                    <span className="metric-value">{teacherDashboard.readyCount}</span>
+                    <small>可切下一步小組</small>
+                  </div>
+                  <div className="metric-card">
+                    <span className="metric-value">{teacherDashboard.stuckCount}</span>
+                    <small>高風險卡關</small>
+                  </div>
+                  <div className="metric-card">
+                    <span className="metric-value">{teacherDashboard.watchCount}</span>
+                    <small>需留意小組</small>
+                  </div>
+                </div>
+                <div style={{ overflowX: "auto", marginTop: 12 }}>
+                  <table className="pro-table">
+                    <thead>
+                      <tr>
+                        <th>狀態</th>
+                        <th>小組</th>
+                        <th>目前進度</th>
+                        <th>提醒</th>
+                        <th>一鍵管理</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {teacherDashboard.riskRows.map(({ session, risk, hint }) => (
+                        <tr key={`dashboard-${session.sessionId}`}>
+                          <td>
+                            <span className="badge">
+                              {hint.ready ? "可推進" : risk.level === "stuck" ? "高風險" : risk.level === "watch" ? "留意" : "正常"}
+                            </span>
+                          </td>
+                          <td>{session.groupName ?? session.groupId ?? "未命名組"}</td>
+                          <td>Step {session.currentStep}</td>
+                          <td>
+                            <small>{hint.ready ? hint.text : risk.text}</small>
+                            {risk.pendingMembers.length > 0 ? (
+                              <small style={{ display: "block", marginTop: 4 }}>未完成：{risk.pendingMembers.join("、")}</small>
+                            ) : null}
+                          </td>
+                          <td>
+                            <div className="row" style={{ gap: 8 }}>
+                              {hint.ready && hint.nextStep ? (
+                                <button
+                                  type="button"
+                                  style={{ width: "auto" }}
+                                  disabled={isLearningProcessing}
+                                  onClick={() => applyStepSwitch(session.sessionId, hint.nextStep!)}
+                                >
+                                  推進 Step {hint.nextStep}
+                                </button>
+                              ) : null}
+                              <button
+                                type="button"
+                                className="secondary"
+                                style={{ width: "auto" }}
+                                disabled={isLearningProcessing}
+                                onClick={() => {
+                                  setMonitorSelected(session);
+                                  setGroupViewStep("all");
+                                  setProgressSessionId(session.sessionId);
+                                }}
+                              >
+                                查看對話
+                              </button>
+                              <button
+                                type="button"
+                                className="secondary"
+                                style={{ width: "auto" }}
+                                disabled={isLearningProcessing}
+                                onClick={() => {
+                                  setProgressSessionId(session.sessionId);
+                                  loadProgress(session.sessionId);
+                                }}
+                              >
+                                個人進度
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {teacherDashboard.riskRows.length === 0 ? (
+                  <small style={{ display: "block", marginTop: 8 }}>目前沒有卡關或可推進提示。若剛開始上課，請等待學生加入後重新整理。</small>
+                ) : null}
+              </div>
+
               <div className="card">
                 <h2>全班加入狀態</h2>
                 <div style={{ overflowX: "auto" }}>

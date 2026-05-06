@@ -15,6 +15,8 @@ LLM4Writing 是一個以 **Next.js App Router + Serverless API** 為核心的 AI
 
 - 學生端完整學習流程：Step1~Step10
 - 教師端課程管理、分組、切步驟與監控
+- 學生端進度軌、小組等待狀態與 Step3 結構樹工具提示
+- 教師端課堂儀表板、卡關偵測與一鍵推進/檢視入口
 - Prompt 配置外部化：`src/config/system-prompt-config.json`
 - Step1/2 子步驟 fallback 題庫（LLM 抽題失敗時不中斷）
 - 選配遠端 LLM（OpenAI-compatible），未設定時可 fallback

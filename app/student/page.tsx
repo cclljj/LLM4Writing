@@ -1194,6 +1194,33 @@ export default function StudentPage() {
     !!session &&
     step3CompletedByMe &&
     !session.participants.every((participant) => step3CompletedUsers.includes(participant));
+  const groupStatusResponders = currentStep === 4 ? step4CompletedUsers : responders;
+  const groupPendingMembers = session?.participants.filter((participant) => !groupStatusResponders.includes(participant)) ?? [];
+  const groupSubmittedCount = Math.min(groupStatusResponders.length, session?.participants.length ?? 0);
+  const groupTotalCount = session?.participants.length ?? 0;
+  const groupStatusAllDone = currentStep === 4 ? allStep4Completed : allRespondedThisTurn;
+  const groupStatusSubmittedByMe = currentStep === 4 ? step4CompletedByMe : hasSubmittedThisTurn;
+  const showGroupStatusCard = Boolean(session && currentMode === "group_interaction" && [1, 2, 4].includes(currentStep));
+  const groupStatusTitle = groupStatusAllDone
+    ? currentStep === 4
+      ? "全組已確認完成，等待老師切換下一步"
+      : "全組已完成本題，AI 正在整理下一步"
+    : groupStatusSubmittedByMe
+      ? "你的部分已完成，正在等待同組同學"
+      : "輪到你完成目前任務";
+  const groupStatusTone = groupStatusAllDone ? "success" : groupStatusSubmittedByMe ? "warning" : "";
+  const progressItems = Array.from({ length: 10 }, (_, idx) => {
+    const step = idx + 1;
+    const status = step < currentStep ? "completed" : step === currentStep ? "current" : "upcoming";
+    return { step, name: stepNameMap[step] ?? `Step ${step}`, status };
+  });
+  const outlineSaveLabel = step3CompletedByMe
+    ? "已完成送出"
+    : outlineDirty
+      ? "有未儲存變更，完成編輯後會自動儲存"
+      : editingNodeId
+        ? "正在編輯節點，按 Enter 可完成並儲存"
+        : "結構樹已同步";
 
   const ownStep7Report = session && loginUser ? session.reports.step7[loginUser] : undefined;
   const ownStep10Report = session && loginUser ? session.reports.step10[loginUser] : undefined;
@@ -1423,6 +1450,27 @@ export default function StudentPage() {
             </div>
           </div>
 
+          <div className="card">
+            <h2>學習進度</h2>
+            <div className="step-rail" aria-label="Step1 到 Step10 學習進度">
+              {progressItems.map((item) => (
+                <div key={item.step} className={`step-rail-item ${item.status}`} aria-current={item.status === "current" ? "step" : undefined}>
+                  <span className="step-rail-number">
+                    {item.status === "completed" ? "已完成" : item.status === "current" ? "進行中" : "待開始"}
+                  </span>
+                  <span className="step-rail-name">
+                    Step {item.step}
+                    <br />
+                    {item.name}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <small style={{ display: "block", marginTop: 8 }}>
+              目前你在 Step {currentStep}「{stepNameMap[currentStep] ?? "未知步驟"}」。Step5 之後會依個人完成狀態自動推進。
+            </small>
+          </div>
+
           {historyReviewSteps.length > 0 ? (
             <>
               <div className="card">
@@ -1612,6 +1660,21 @@ export default function StudentPage() {
             ) : null}
           </div>
 
+          {showGroupStatusCard ? (
+            <div className={`card status-panel ${groupStatusTone}`}>
+              <h2 style={{ marginBottom: 6 }}>小組等待狀態</h2>
+              <p style={{ margin: 0, fontWeight: 700 }}>{groupStatusTitle}</p>
+              <p style={{ margin: "6px 0 0" }}>
+                {currentStep === 4 ? "完成確認" : activeGateKey ? `目前題目：${activeGateKey}` : "目前題目：—"} / 已完成 {groupSubmittedCount} / {groupTotalCount}
+              </p>
+              {groupPendingMembers.length > 0 ? (
+                <small style={{ display: "block", marginTop: 6 }}>尚未完成：{groupPendingMembers.join("、")}</small>
+              ) : (
+                <small style={{ display: "block", marginTop: 6 }}>全組已完成，請等待系統或老師推進。</small>
+              )}
+            </div>
+          ) : null}
+
           {currentStep === 3 ? (
             <div className="card">
               <h2>互動內容</h2>
@@ -1663,7 +1726,13 @@ export default function StudentPage() {
             <div className="card">
               <h2>文章結構樹</h2>
               <>
-                <small>按節點右上角 ➕ 新增下一層；第二層以下且無子節點可用 ➖ 刪除。雙擊節點可編輯文字，拖曳可調整位置與層次。每次新增、刪除或完成文字編輯都會自動儲存。</small>
+                <div className="status-panel">
+                  <strong>Step3 工具提示</strong>
+                  <p style={{ margin: "6px 0 0" }}>
+                    ➕ 新增下一層、➖ 刪除無子節點的第二層以下節點；雙擊或手機長按可編輯文字，按 Enter 或點空白處完成並儲存；拖曳節點可調整位置與層次。
+                  </p>
+                  <small style={{ display: "block", marginTop: 6 }}>狀態：{outlineSaveLabel}</small>
+                </div>
                 <div
                   style={{
                     width: "100%",
