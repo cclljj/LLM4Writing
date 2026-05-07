@@ -87,8 +87,8 @@ test("#225: teacher page group record renders step3 and step4 outlines for each 
   const src = readFileSync(resolve(thisDir, "../app/teacher/page.tsx"), "utf8");
   assert.ok(src.includes("步驟三完成結構樹"), "teacher group view must label step-3 submitted outline");
   assert.ok(src.includes("步驟四對比修正後"), "teacher group view must label step-4 revised outline");
-  assert.ok(src.includes("step3SubmittedOutlines?.[participant]"), "teacher group view must read per-participant step3SubmittedOutlines");
-  assert.ok(src.includes("outlines?.[participant]"), "teacher group view must read per-participant outlines");
+  assert.ok(src.includes("step3SubmittedOutlines?.[p]") || src.includes("step3SubmittedOutlines?.[participant]"), "teacher group view must read per-participant step3SubmittedOutlines");
+  assert.ok(src.includes("outlines?.[p]") || src.includes("outlines?.[participant]"), "teacher group view must read per-participant outlines");
 });
 
 test("#225: teacher page individual record renders step3 and step4 outlines for selected user", async () => {

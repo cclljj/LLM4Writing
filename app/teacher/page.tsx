@@ -2823,35 +2823,76 @@ export default function TeacherPage() {
                       </select>
                     </div>
                   </div>
-                  {monitorSelected.participants.length > 0 && (monitorSelected.outlines || monitorSelected.step3SubmittedOutlines) ? (
-                    <div style={{ marginBottom: 16 }}>
-                      <strong>步驟三／四 結構樹（各組員）</strong>
-                      {monitorSelected.participants.map((participant) => {
-                        const submitted = monitorSelected.step3SubmittedOutlines?.[participant];
-                        const current = monitorSelected.outlines?.[participant];
-                        if (!submitted && !current) return null;
-                        return (
-                          <div key={participant} style={{ marginTop: 12, paddingTop: 8, borderTop: "1px solid #e5e7eb" }}>
-                            <small style={{ fontWeight: 600 }}>{participant}</small>
-                            {submitted ? renderOutlineSvg(submitted, "步驟三完成結構樹") : null}
-                            {current && current !== submitted ? renderOutlineSvg(current, "步驟四對比修正後") : null}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : null}
-                  {groupMessages.map((message) => (
-                    <div key={message.id} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
-                      <strong>
-                        [S{message.step}] {message.role}
-                        {message.userId ? `(${message.userId})` : ""}
-                      </strong>
-                      <div dangerouslySetInnerHTML={{ __html: renderMessageHtml(message.text) }} />
-                      {([3, 4].includes(message.step) && extractMermaidText(message.text))
-                        ? renderOutlineSvg(extractMermaidText(message.text)!, `S${message.step} 結構樹`)
-                        : null}
-                    </div>
-                  ))}
+                  {(() => {
+                    // Find positions to insert outline blocks
+                    const lastStep2Idx = groupMessages.reduce((acc, m, i) => (m.step === 2 ? i : acc), -1);
+                    const lastStep4Idx = groupMessages.reduce((acc, m, i) => (m.step === 4 ? i : acc), -1);
+
+                    const hasStep3 = monitorSelected.participants.some((p) => monitorSelected.step3SubmittedOutlines?.[p]);
+                    const hasStep4Revised = monitorSelected.participants.some((p) => {
+                      const s = monitorSelected.step3SubmittedOutlines?.[p];
+                      const c = monitorSelected.outlines?.[p];
+                      return c && c !== s;
+                    });
+
+                    const step3Block = hasStep3 ? (
+                      <div key="outline-step3-block" style={{ borderTop: "2px solid #cbd5e1", padding: "12px 0", marginTop: 4 }}>
+                        <strong style={{ fontSize: 13, color: "#334155" }}>▶ 步驟三 各組員完成結構樹</strong>
+                        {monitorSelected.participants.map((p) => {
+                          const submitted = monitorSelected.step3SubmittedOutlines?.[p];
+                          if (!submitted) return null;
+                          return (
+                            <div key={p} style={{ marginTop: 8 }}>
+                              <small style={{ fontWeight: 600 }}>{p}</small>
+                              {renderOutlineSvg(submitted, "步驟三完成結構樹")}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : null;
+
+                    const step4Block = hasStep4Revised ? (
+                      <div key="outline-step4-block" style={{ borderTop: "2px solid #cbd5e1", padding: "12px 0", marginTop: 4 }}>
+                        <strong style={{ fontSize: 13, color: "#334155" }}>▶ 步驟四 各組員修正後結構樹</strong>
+                        {monitorSelected.participants.map((p) => {
+                          const s = monitorSelected.step3SubmittedOutlines?.[p];
+                          const c = monitorSelected.outlines?.[p];
+                          if (!c || c === s) return null;
+                          return (
+                            <div key={p} style={{ marginTop: 8 }}>
+                              <small style={{ fontWeight: 600 }}>{p}</small>
+                              {renderOutlineSvg(c, "步驟四對比修正後")}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : null;
+
+                    const nodes = groupMessages.flatMap((message, idx) => {
+                      const msgNode = (
+                        <div key={message.id} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
+                          <strong>
+                            [S{message.step}] {message.role}
+                            {message.userId ? `(${message.userId})` : ""}
+                          </strong>
+                          <div dangerouslySetInnerHTML={{ __html: renderMessageHtml(message.text) }} />
+                          {([3, 4].includes(message.step) && extractMermaidText(message.text))
+                            ? renderOutlineSvg(extractMermaidText(message.text)!, `S${message.step} 結構樹`)
+                            : null}
+                        </div>
+                      );
+                      const extras = [];
+                      if (idx === lastStep2Idx && step3Block) extras.push(step3Block);
+                      if (idx === lastStep4Idx && step4Block) extras.push(step4Block);
+                      return [msgNode, ...extras];
+                    });
+
+                    // No step-2 messages found but outlines available → append at end
+                    if (lastStep2Idx === -1 && step3Block) nodes.push(step3Block);
+                    if (lastStep4Idx === -1 && step4Block) nodes.push(step4Block);
+
+                    return nodes;
+                  })()}
                   {groupMessages.length === 0 ? <small>目前此篩選條件下沒有 1/2/4 步驟對話。</small> : null}
                 </div>
               ) : null}
@@ -2859,25 +2900,50 @@ export default function TeacherPage() {
               {personalMessages.length > 0 ? (
                 <div className="card">
                   <h2>個人對話紀錄</h2>
-                  {(userStep3SubmittedOutline || userOutline) ? (
-                    <div style={{ marginBottom: 16 }}>
-                      <strong>步驟三／四 結構樹</strong>
-                      {userStep3SubmittedOutline ? renderOutlineSvg(userStep3SubmittedOutline, "步驟三完成結構樹") : null}
-                      {userOutline && userOutline !== userStep3SubmittedOutline ? renderOutlineSvg(userOutline, "步驟四對比修正後") : null}
-                    </div>
-                  ) : null}
-                  {personalMessages.map((message) => (
-                    <div key={message.id} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
-                      <strong>
-                        [S{message.step}] {message.role}
-                        {message.userId ? `(${message.userId})` : ""}
-                      </strong>
-                      <div dangerouslySetInnerHTML={{ __html: renderMessageHtml(message.text) }} />
-                      {([3, 4].includes(message.step) && extractMermaidText(message.text))
-                        ? renderOutlineSvg(extractMermaidText(message.text)!, `S${message.step} 結構樹`)
-                        : null}
-                    </div>
-                  ))}
+                  {(() => {
+                    const lastStep3Idx = personalMessages.reduce((acc, m, i) => (m.step === 3 ? i : acc), -1);
+                    const lastStep4Idx = personalMessages.reduce((acc, m, i) => (m.step === 4 ? i : acc), -1);
+                    const hasStep4Revised = Boolean(userOutline && userOutline !== userStep3SubmittedOutline);
+
+                    const step3Block = userStep3SubmittedOutline ? (
+                      <div key="personal-outline-step3" style={{ borderTop: "2px solid #cbd5e1", padding: "12px 0", marginTop: 4 }}>
+                        <strong style={{ fontSize: 13, color: "#334155" }}>▶ 步驟三完成結構樹</strong>
+                        {renderOutlineSvg(userStep3SubmittedOutline, "步驟三完成結構樹")}
+                      </div>
+                    ) : null;
+
+                    const step4Block = hasStep4Revised ? (
+                      <div key="personal-outline-step4" style={{ borderTop: "2px solid #cbd5e1", padding: "12px 0", marginTop: 4 }}>
+                        <strong style={{ fontSize: 13, color: "#334155" }}>▶ 步驟四對比修正後結構樹</strong>
+                        {renderOutlineSvg(userOutline, "步驟四對比修正後")}
+                      </div>
+                    ) : null;
+
+                    const nodes = personalMessages.flatMap((message, idx) => {
+                      const msgNode = (
+                        <div key={message.id} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
+                          <strong>
+                            [S{message.step}] {message.role}
+                            {message.userId ? `(${message.userId})` : ""}
+                          </strong>
+                          <div dangerouslySetInnerHTML={{ __html: renderMessageHtml(message.text) }} />
+                          {([3, 4].includes(message.step) && extractMermaidText(message.text))
+                            ? renderOutlineSvg(extractMermaidText(message.text)!, `S${message.step} 結構樹`)
+                            : null}
+                        </div>
+                      );
+                      const extras = [];
+                      if (idx === lastStep3Idx && step3Block) extras.push(step3Block);
+                      if (idx === lastStep4Idx && step4Block) extras.push(step4Block);
+                      return [msgNode, ...extras];
+                    });
+
+                    // No step-3 messages found but outlines available → append
+                    if (lastStep3Idx === -1 && step3Block) nodes.push(step3Block);
+                    if (lastStep4Idx === -1 && step4Block) nodes.push(step4Block);
+
+                    return nodes;
+                  })()}
                   {personalMessages.length === 0 ? <small>目前此學生沒有可顯示對話。</small> : null}
                 </div>
               ) : null}
