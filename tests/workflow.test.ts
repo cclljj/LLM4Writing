@@ -5,6 +5,7 @@ import { validateStudentAnswer } from "../src/lib/answer-validation";
 import { buildAdvancedStuckRisk, recordRejectedAnswerSignal } from "../src/lib/learning-diagnostics";
 import { isTruncatedFinishReason, pickAssistantTextResult } from "../src/lib/llm-openai-response";
 import { isUsableNextQuestion, splitAiFeedbackAndQuestion } from "../src/lib/llm-response";
+import { getStructureTreeNodePermissions } from "../src/lib/structure-tree-permissions";
 import { buildStudentNextAction } from "../src/lib/student-next-action";
 import { buildStep1Question, buildStep2Question } from "../src/lib/workflow-questions";
 import { advanceStep1Or2SubstepAfterAi, handleStep1Or2Group, recoverStalledStep1Or2AiWait } from "../src/lib/workflow-step1-2";
@@ -86,6 +87,29 @@ test("OpenAI-compatible response parser detects truncated assistant output", () 
   assert.equal(parsed.text, "這是一段被長度限制截斷的回覆");
   assert.equal(isTruncatedFinishReason(parsed.finishReason), true);
   assert.equal(isTruncatedFinishReason("stop"), false);
+});
+
+test("structure tree node permissions lock first and second levels", () => {
+  assert.deepEqual(getStructureTreeNodePermissions(1, 2), {
+    canAddChild: false,
+    canDelete: false,
+    canEditText: false
+  });
+  assert.deepEqual(getStructureTreeNodePermissions(2, 0), {
+    canAddChild: true,
+    canDelete: false,
+    canEditText: false
+  });
+  assert.deepEqual(getStructureTreeNodePermissions(3, 1), {
+    canAddChild: true,
+    canDelete: false,
+    canEditText: true
+  });
+  assert.deepEqual(getStructureTreeNodePermissions(4, 0), {
+    canAddChild: true,
+    canDelete: true,
+    canEditText: true
+  });
 });
 
 test("question-bank steps are sourced from questionBanks and instruction-like prompts use fallbacks", () => {

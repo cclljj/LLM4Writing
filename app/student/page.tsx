@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { getStructureTreeNodePermissions } from "@/src/lib/structure-tree-permissions";
 import { buildStudentNextAction } from "@/src/lib/student-next-action";
 import GroupWaitingStatus from "./_components/GroupWaitingStatus";
 import NextActionCard from "./_components/NextActionCard";
@@ -792,6 +793,8 @@ export default function StudentPage() {
     const parent = outlineNodes.find((node) => node.id === parentId);
     if (!parent) return;
     const siblings = outlineNodes.filter((node) => node.parentId === parentId);
+    const permissions = getStructureTreeNodePermissions(getDepth(parentId), siblings.length);
+    if (!permissions.canAddChild) return;
     const next: OutlineNode = {
       id: newNodeId(),
       parentId,
@@ -809,7 +812,8 @@ export default function StudentPage() {
 
   function removeLeafNode(nodeId: string) {
     const hasChildren = outlineNodes.some((node) => node.parentId === nodeId);
-    if (hasChildren) return;
+    const permissions = getStructureTreeNodePermissions(getDepth(nodeId), hasChildren ? 1 : 0);
+    if (!permissions.canDelete) return;
     setOutlineDirty(true);
     setOutlineNodes((prev) => {
       const nextNodes = prev.filter((node) => node.id !== nodeId);
@@ -832,6 +836,7 @@ export default function StudentPage() {
 
   function finishNodeEditing(nodeId: string, nextText?: string) {
     setEditingNodeId(null);
+    if (!getStructureTreeNodePermissions(getDepth(nodeId), childrenMap.get(nodeId)?.length ?? 0).canEditText) return;
     setOutlineDirty(true);
     setOutlineNodes((prev) => {
       const nextNodes =
@@ -844,6 +849,7 @@ export default function StudentPage() {
   }
 
   function scheduleLongPressEdit(nodeId: string) {
+    if (!getStructureTreeNodePermissions(getDepth(nodeId), childrenMap.get(nodeId)?.length ?? 0).canEditText) return;
     if (longPressTimerRef.current) {
       window.clearTimeout(longPressTimerRef.current);
       longPressTimerRef.current = null;
@@ -1272,13 +1278,22 @@ export default function StudentPage() {
       ? "你的部分已完成，正在等待同組同學"
       : "輪到你完成目前任務";
   const groupStatusTone = groupStatusAllDone ? "success" : groupStatusSubmittedByMe ? "warning" : "";
-  const outlineSaveLabel = step3CompletedByMe
-    ? "已完成送出"
-    : outlineDirty
-      ? "有未儲存變更，完成編輯後會自動儲存"
-      : editingNodeId
-        ? "正在編輯節點，按 Enter 可完成並儲存"
-        : "結構樹已同步";
+  const outlineSaveLabel =
+    currentStep === 4
+      ? step4CompletedByMe
+        ? "已確認完成，編修已鎖定"
+        : outlineDirty
+          ? "有未儲存變更，完成編輯後會自動儲存"
+          : editingNodeId
+            ? "正在編輯節點，按 Enter 可完成並儲存"
+            : "結構樹已同步"
+      : step3CompletedByMe
+        ? "已完成送出"
+        : outlineDirty
+          ? "有未儲存變更，完成編輯後會自動儲存"
+          : editingNodeId
+            ? "正在編輯節點，按 Enter 可完成並儲存"
+            : "結構樹已同步";
 
   const ownStep7Report = session && loginUser ? session.reports.step7[loginUser] : undefined;
   const ownStep10Report = session && loginUser ? session.reports.step10[loginUser] : undefined;
@@ -1826,7 +1841,7 @@ export default function StudentPage() {
                     {outlineNodes.map((node) => {
                       const children = childrenMap.get(node.id) ?? [];
                       const depth = getDepth(node.id);
-                      const canDelete = depth >= 2 && children.length === 0;
+                      const permissions = getStructureTreeNodePermissions(depth, children.length);
                       return (
                         <div
                           key={node.id}
@@ -1834,6 +1849,7 @@ export default function StudentPage() {
                           onMouseDown={(event) => {
                             const target = event.target as HTMLElement;
                             if (target.closest("button") || target.closest("input")) return;
+                            if (!permissions.canEditText) return;
                             const box = event.currentTarget.getBoundingClientRect();
                             setDragOffset({ x: event.clientX - box.left, y: event.clientY - box.top });
                             setDraggingNodeId(node.id);
@@ -1846,12 +1862,14 @@ export default function StudentPage() {
                           onTouchStart={(event) => {
                             const target = event.target as HTMLElement;
                             if (target.closest("button") || target.closest("input")) return;
+                            if (!permissions.canEditText) return;
                             scheduleLongPressEdit(node.id);
                           }}
                           onTouchEnd={clearLongPressEdit}
                           onTouchMove={clearLongPressEdit}
                           onDoubleClick={(event) => {
                             event.stopPropagation();
+                            if (!permissions.canEditText) return;
                             setDraggingNodeId(null);
                             setDropTargetNodeId(null);
                             setEditingNodeId(node.id);
@@ -1867,21 +1885,23 @@ export default function StudentPage() {
                             background: "#ffffff",
                             boxShadow: "0 4px 14px rgba(15, 23, 42, 0.08)",
                             padding: "8px 10px 6px",
-                            cursor: "move",
+                            cursor: permissions.canEditText ? "move" : "default",
                             userSelect: "none"
                           }}
                         >
                           <div style={{ display: "flex", justifyContent: "flex-end", gap: 4, marginBottom: 4 }}>
-                            <button
-                              type="button"
-                              className="secondary"
-                              style={{ width: 24, height: 24, padding: 0, lineHeight: 1 }}
-                              onMouseDown={(e) => e.stopPropagation()}
-                              onClick={() => addChildNode(node.id)}
-                            >
-                              ➕
-                            </button>
-                            {canDelete ? (
+                            {permissions.canAddChild ? (
+                              <button
+                                type="button"
+                                className="secondary"
+                                style={{ width: 24, height: 24, padding: 0, lineHeight: 1 }}
+                                onMouseDown={(e) => e.stopPropagation()}
+                                onClick={() => addChildNode(node.id)}
+                              >
+                                ➕
+                              </button>
+                            ) : null}
+                            {permissions.canDelete ? (
                               <button
                                 type="button"
                                 className="secondary"
@@ -1893,7 +1913,7 @@ export default function StudentPage() {
                               </button>
                             ) : null}
                           </div>
-                          {editingNodeId === node.id ? (
+                          {permissions.canEditText && editingNodeId === node.id ? (
                             <input
                               autoFocus
                               value={node.text}
@@ -1995,7 +2015,8 @@ export default function StudentPage() {
                   </>
                 ) : (
                   <>
-                    <small>此步驟建議先與同學討論，再修改自己的結構樹。按節點右上角 ➕ 新增下一層；第二層以下且無子節點可用 ➖ 刪除。雙擊或長按節點可編輯文字，拖曳可調整位置與層次。每次新增、刪除或完成文字編輯都會自動儲存。</small>
+                    <small style={{ display: "block", marginBottom: 8 }}>此步驟建議先與同學討論，再修改自己的結構樹。</small>
+                    <Step3ToolHint statusLabel={outlineSaveLabel} title="Step4 工具提示" />
                     <div
                       style={{
                         width: "100%",
@@ -2025,7 +2046,7 @@ export default function StudentPage() {
                         {outlineNodes.map((node) => {
                           const children = childrenMap.get(node.id) ?? [];
                           const depth = getDepth(node.id);
-                          const canDelete = depth >= 2 && children.length === 0;
+                          const permissions = getStructureTreeNodePermissions(depth, children.length);
                           return (
                             <div
                               key={`s4-node-${node.id}`}
@@ -2033,6 +2054,7 @@ export default function StudentPage() {
                               onMouseDown={(event) => {
                                 const target = event.target as HTMLElement;
                                 if (target.closest("button") || target.closest("input")) return;
+                                if (!permissions.canEditText) return;
                                 const box = event.currentTarget.getBoundingClientRect();
                                 setDragOffset({ x: event.clientX - box.left, y: event.clientY - box.top });
                                 setDraggingNodeId(node.id);
@@ -2045,12 +2067,14 @@ export default function StudentPage() {
                               onTouchStart={(event) => {
                                 const target = event.target as HTMLElement;
                                 if (target.closest("button") || target.closest("input")) return;
+                                if (!permissions.canEditText) return;
                                 scheduleLongPressEdit(node.id);
                               }}
                               onTouchEnd={clearLongPressEdit}
                               onTouchMove={clearLongPressEdit}
                               onDoubleClick={(event) => {
                                 event.stopPropagation();
+                                if (!permissions.canEditText) return;
                                 setDraggingNodeId(null);
                                 setDropTargetNodeId(null);
                                 setEditingNodeId(node.id);
@@ -2066,21 +2090,23 @@ export default function StudentPage() {
                                 background: "#ffffff",
                                 boxShadow: "0 4px 14px rgba(15, 23, 42, 0.08)",
                                 padding: "8px 10px 6px",
-                                cursor: "move",
+                                cursor: permissions.canEditText ? "move" : "default",
                                 userSelect: "none"
                               }}
                             >
                               <div style={{ display: "flex", justifyContent: "flex-end", gap: 4, marginBottom: 4 }}>
-                                <button type="button" className="secondary" style={{ width: 24, height: 24, padding: 0, lineHeight: 1 }} onMouseDown={(e) => e.stopPropagation()} onClick={() => addChildNode(node.id)}>
-                                  ➕
-                                </button>
-                                {canDelete ? (
+                                {permissions.canAddChild ? (
+                                  <button type="button" className="secondary" style={{ width: 24, height: 24, padding: 0, lineHeight: 1 }} onMouseDown={(e) => e.stopPropagation()} onClick={() => addChildNode(node.id)}>
+                                    ➕
+                                  </button>
+                                ) : null}
+                                {permissions.canDelete ? (
                                   <button type="button" className="secondary" style={{ width: 24, height: 24, padding: 0, lineHeight: 1 }} onMouseDown={(e) => e.stopPropagation()} onClick={() => removeLeafNode(node.id)}>
                                     ➖
                                   </button>
                                 ) : null}
                               </div>
-                              {editingNodeId === node.id ? (
+                              {permissions.canEditText && editingNodeId === node.id ? (
                                 <input
                                   autoFocus
                                   value={node.text}
