@@ -2036,7 +2036,40 @@ export default function StudentPage() {
                 {step4CompletedByMe ? (
                   <>
                     <small>你已確認完成此步驟，已鎖定編修；你的變更已自動儲存。</small>
-                    <pre style={{ marginTop: 8 }}>{session.outlines[loginUser] ?? "尚未提供"}</pre>
+                    {(() => {
+                      const preview = buildOutlinePreview(session.outlines[loginUser] ?? "");
+                      return (
+                        <div style={{ marginTop: 8, overflow: "auto", border: "1px solid #e5e7eb", borderRadius: 8 }}>
+                          <svg width={preview.width} height={preview.height} style={{ display: "block", background: "#ffffff" }}>
+                            {preview.nodes
+                              .filter((node) => node.parentId)
+                              .map((node) => {
+                                const parent = preview.nodes.find((item) => item.id === node.parentId);
+                                if (!parent) return null;
+                                return (
+                                  <line
+                                    key={`s4-done-edge-${parent.id}-${node.id}`}
+                                    x1={parent.x + 55}
+                                    y1={parent.y + 30}
+                                    x2={node.x + 55}
+                                    y2={node.y}
+                                    stroke="#64748b"
+                                    strokeWidth={2}
+                                  />
+                                );
+                              })}
+                            {preview.nodes.map((node) => (
+                              <g key={`s4-done-node-${node.id}`}>
+                                <rect x={node.x} y={node.y} width={110} height={64} rx={10} ry={10} fill="#f8fafc" stroke="#94a3b8" />
+                                <text x={node.x + 55} y={node.y + 36} textAnchor="middle" fontSize="12" fill="#0f172a">
+                                  {node.text.length > 20 ? `${node.text.slice(0, 20)}...` : node.text}
+                                </text>
+                              </g>
+                            ))}
+                          </svg>
+                        </div>
+                      );
+                    })()}
                   </>
                 ) : (
                   <>
