@@ -5,6 +5,7 @@ import { recordArtifactUpdateSignal } from "@/src/lib/learning-diagnostics";
 import { getSession, saveSession } from "@/src/lib/store";
 import { isLlmConfigured, llmChatCompletionText, type LlmChatMessage } from "@/src/lib/llm-client";
 import { buildStudentCourseContext } from "@/src/lib/llm-context";
+import { sanitizeStudentFacingText } from "@/src/lib/llm-response";
 import { markUserOnline } from "@/src/lib/session-presence";
 
 function nowIso(): string {
@@ -86,11 +87,13 @@ export async function POST(request: NextRequest) {
   });
 
   const timestamp = nowIso();
-  const suggestion = await suggestWithLlm(
+  const suggestion = sanitizeStudentFacingText(
+    await suggestWithLlm(
     session.promptConfig?.stepPrompts?.["6"],
     draft,
     session.activityTitle ?? "",
     crossStepContext
+    )
   );
   const logText = [
     "### Step6 AI 修改建議",

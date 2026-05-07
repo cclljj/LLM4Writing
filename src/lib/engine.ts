@@ -5,7 +5,7 @@ import { isLlmConfigured, llmChatCompletionText, LlmChatMessage } from "@/src/li
 import { buildStudentCourseContext } from "@/src/lib/llm-context";
 import { normalizeForCompare, validateStudentAnswer } from "@/src/lib/answer-validation";
 import { recordRejectedAnswerSignal } from "@/src/lib/learning-diagnostics";
-import { splitAiFeedbackAndQuestion } from "@/src/lib/llm-response";
+import { sanitizeStudentFacingText, splitAiFeedbackAndQuestion } from "@/src/lib/llm-response";
 import { buildStep1Question, buildStep2Question, buildStep9BatchPrompt, getCurrentGroupGateKey, getCurrentSubstepKey, getStep9Questions } from "@/src/lib/workflow-questions";
 import { advanceStep1Or2SubstepAfterAi, handleStep1Or2Group, isNextQuestionSubStepPromptDriven } from "@/src/lib/workflow-step1-2";
 
@@ -445,7 +445,7 @@ async function generateStep10Report(session: SessionState, userId: string): Prom
 async function finalizeStep9ForUser(session: SessionState, userId: string): Promise<void> {
   session.personalSteps = session.personalSteps ?? {};
   session.personalSteps[userId] = 10;
-  const step10Report = await generateStep10Report(session, userId);
+  const step10Report = sanitizeStudentFacingText(await generateStep10Report(session, userId));
   session.reports.step10[userId] = step10Report;
   session.messages.push(makeMessage({ role: "ai", userId, step: 10, text: step10Report }));
 }
@@ -639,7 +639,8 @@ export async function sendStudentMessage(
   session.messages.push(makeMessage({ role: "student", userId, step, text }));
 
   if (mode === "personal_interaction") {
-    session.messages.push(makeMessage({ role: "ai", userId, step, text: await generateAiTextForStep(session, step, text, userId) }));
+    const aiText = sanitizeStudentFacingText(await generateAiTextForStep(session, step, text, userId));
+    session.messages.push(makeMessage({ role: "ai", userId, step, text: aiText }));
     return session;
   }
 
@@ -651,8 +652,9 @@ export async function sendStudentMessage(
 
     const allResponded = session.participants.every((participant) => responders.has(participant));
     if (allResponded) {
+      const aiText = sanitizeStudentFacingText(await generateAiTextForStep(session, step, "all group members replied"));
       session.messages.push(
-        makeMessage({ role: "ai", step, text: await generateAiTextForStep(session, step, "all group members replied") })
+        makeMessage({ role: "ai", step, text: aiText })
       );
       session.groupGate[gateKey] = [];
     }

@@ -30,7 +30,7 @@ function extractFeedbackFromJsonish(raw: string): string | null {
   return extracted || null;
 }
 
-function sanitizeStudentFacingText(aiText: string): string {
+export function sanitizeStudentFacingText(aiText: string): string {
   const raw = stripJsonFence(aiText);
   const feedbackFromJsonish = extractFeedbackFromJsonish(raw);
   if (feedbackFromJsonish) return feedbackFromJsonish;
