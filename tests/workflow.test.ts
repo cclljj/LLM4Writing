@@ -166,6 +166,83 @@ test("stalled Step1/2 AI wait can be recovered on session polling", () => {
   assert.match(session.messages.at(-1)?.text ?? "", /子步驟 1-3-3：fallback/);
 });
 
+test("stalled Step1/2 recovery handles boundary subquestions", () => {
+  const step133 = baseSession({
+    currentStep: 1,
+    stepState: { step1Substep: 3, step2Substep: 1, step1Substep3Question: 3, step1Substep4Question: 1, step2Substep1Question: 1 },
+    groupGate: { "1-3-3": ["s1", "s2"] },
+    messages: [
+      { id: "m-133-s1", at: "2026-05-07T00:00:00.000Z", role: "student", userId: "s1", step: 1, text: "我回答 1-3-3" },
+      { id: "m-133-ai", at: "2026-05-07T00:00:20.000Z", role: "ai", step: 1, text: "AI 暫時處理中" }
+    ],
+    promptConfig: {
+      stepPrompts: {},
+      subStepPrompts: {},
+      subStepPromptsFallbacks: { "1-4-1": "fallback：請寫出你們的核心主張。" },
+      questionBanks: {},
+      step9Questions: {},
+      stepOpenings: {}
+    }
+  });
+
+  assert.equal(
+    recoverStalledStep1Or2AiWait(step133, makeMessage, { nowMs: new Date("2026-05-07T00:02:00.000Z").getTime() }),
+    true
+  );
+  assert.deepEqual(step133.groupGate["1-3-3"], []);
+  assert.equal(step133.stepState.step1Substep, 4);
+  assert.match(step133.messages.at(-1)?.text ?? "", /子步驟 1-4-1：fallback/);
+
+  const step143 = baseSession({
+    currentStep: 1,
+    stepState: { step1Substep: 4, step2Substep: 1, step1Substep3Question: 3, step1Substep4Question: 3, step2Substep1Question: 1 },
+    groupGate: { "1-4-3": ["s1", "s2"] },
+    messages: [{ id: "m-143", at: "2026-05-07T00:00:00.000Z", role: "system", step: 1, text: "仍在等待遠端 AI" }],
+    promptConfig: {
+      stepPrompts: {},
+      subStepPrompts: {},
+      subStepPromptsFallbacks: {},
+      questionBanks: { "1-5": ["題庫：請總結你們目前的共識。"] },
+      step9Questions: {},
+      stepOpenings: {}
+    }
+  });
+
+  assert.equal(
+    recoverStalledStep1Or2AiWait(step143, makeMessage, { nowMs: new Date("2026-05-07T00:02:00.000Z").getTime() }),
+    false
+  );
+  step143.messages.push({ id: "m-143-s2", at: "2026-05-07T00:00:10.000Z", role: "student", userId: "s2", step: 1, text: "我回答 1-4-3" });
+  assert.equal(
+    recoverStalledStep1Or2AiWait(step143, makeMessage, { nowMs: new Date("2026-05-07T00:02:00.000Z").getTime() }),
+    true
+  );
+  assert.equal(step143.stepState.step1Substep, 5);
+  assert.match(step143.messages.at(-1)?.text ?? "", /子步驟 1-5：題庫/);
+
+  const step213 = baseSession({
+    currentStep: 2,
+    stepState: { step1Substep: 5, step2Substep: 1, step1Substep3Question: 3, step1Substep4Question: 3, step2Substep1Question: 3 },
+    groupGate: { "2-1-3": ["s1", "s2"] },
+    messages: [{ id: "m-213", at: "2026-05-07T00:00:00.000Z", role: "student", userId: "s2", step: 2, text: "我回答 2-1-3" }],
+    promptConfig: {
+      stepPrompts: {},
+      subStepPrompts: {},
+      subStepPromptsFallbacks: { "2-2": "fallback：請把例子補充得更具體。" },
+      questionBanks: {},
+      step9Questions: {},
+      stepOpenings: {}
+    }
+  });
+
+  assert.equal(
+    recoverStalledStep1Or2AiWait(step213, makeMessage, { nowMs: new Date("2026-05-07T00:02:00.000Z").getTime() }),
+    true
+  );
+  assert.equal(step213.stepState.step2Substep, 2);
+  assert.match(step213.messages.at(-1)?.text ?? "", /子步驟 2-2：fallback/);
+});
+
 test("advanced stuck risk combines rejection, idle, Step3, and Step6 signals", () => {
   const session = {
     ...baseSession({

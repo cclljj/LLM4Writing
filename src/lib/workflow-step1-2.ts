@@ -176,15 +176,21 @@ export function recoverStalledStep1Or2AiWait(
   const allResponded = session.participants.length > 0 && session.participants.every((participant) => responders.includes(participant));
   if (!allResponded) return false;
 
-  const latestStepMessage = session.messages
+  const gateResponderMessages = session.messages
+    .filter((message) => message.step === step && message.role === "student" && message.userId && responders.includes(message.userId))
+    .slice()
+    .sort((a, b) => b.at.localeCompare(a.at));
+  const latestGateResponse = gateResponderMessages[0];
+  if (!latestGateResponse) return false;
+
+  const latestStepActivity = session.messages
     .filter((message) => message.step === step)
     .slice()
     .sort((a, b) => b.at.localeCompare(a.at))[0];
-  if (!latestStepMessage || latestStepMessage.role !== "student") return false;
 
-  const latestMs = new Date(latestStepMessage.at).getTime();
+  const latestMs = new Date((latestStepActivity ?? latestGateResponse).at).getTime();
   if (!Number.isFinite(latestMs)) return false;
-  const idleMs = options.idleMs ?? 120_000;
+  const idleMs = options.idleMs ?? 45_000;
   const nowMs = options.nowMs ?? Date.now();
   if (nowMs - latestMs < idleMs) return false;
 
