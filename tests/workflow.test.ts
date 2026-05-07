@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { ChatMessage, SessionState } from "../src/lib/types";
 import { validateStudentAnswer } from "../src/lib/answer-validation";
 import { buildAdvancedStuckRisk, recordRejectedAnswerSignal } from "../src/lib/learning-diagnostics";
+import { isTruncatedFinishReason, pickAssistantTextResult } from "../src/lib/llm-openai-response";
 import { isUsableNextQuestion, splitAiFeedbackAndQuestion } from "../src/lib/llm-response";
 import { buildStudentNextAction } from "../src/lib/student-next-action";
 import { buildStep1Question, buildStep2Question } from "../src/lib/workflow-questions";
@@ -68,6 +69,23 @@ test("LLM parser prefers structured JSON and still supports legacy marker parsin
   assert.equal(legacy.feedbackText, "這輪整理得不錯。");
   assert.equal(legacy.nextQuestion, "請補上一個例子。");
   assert.equal(isUsableNextQuestion("請依上一則 AI 提問作答（本題要延伸討論）。"), false);
+});
+
+test("OpenAI-compatible response parser detects truncated assistant output", () => {
+  const parsed = pickAssistantTextResult({
+    choices: [
+      {
+        finish_reason: "length",
+        message: {
+          content: "這是一段被長度限制截斷的回覆"
+        }
+      }
+    ]
+  });
+
+  assert.equal(parsed.text, "這是一段被長度限制截斷的回覆");
+  assert.equal(isTruncatedFinishReason(parsed.finishReason), true);
+  assert.equal(isTruncatedFinishReason("stop"), false);
 });
 
 test("question-bank steps are sourced from questionBanks and instruction-like prompts use fallbacks", () => {

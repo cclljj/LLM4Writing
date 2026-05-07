@@ -242,13 +242,20 @@ async function generateAiTextWithRetry(
   messages: LlmChatMessage[],
   temperature: number,
   maxTokens: number,
-  options: { attempts?: number; timeoutMs?: number } = {}
+  options: { attempts?: number; timeoutMs?: number; continueOnTruncation?: boolean; continuationMaxRounds?: number } = {}
 ): Promise<string> {
   let lastError: unknown;
   const attempts = options.attempts ?? 3;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
-      return await llmChatCompletionText({ messages, temperature, maxTokens, timeoutMs: options.timeoutMs });
+      return await llmChatCompletionText({
+        messages,
+        temperature,
+        maxTokens,
+        timeoutMs: options.timeoutMs,
+        continueOnTruncation: options.continueOnTruncation,
+        continuationMaxRounds: options.continuationMaxRounds
+      });
     } catch (error) {
       lastError = error;
       if (attempt < attempts) {
@@ -290,7 +297,7 @@ async function generateAiTextForStep(
   step: number,
   contextText: string,
   userId?: string,
-  retryOptions?: { attempts?: number; timeoutMs?: number }
+  retryOptions?: { attempts?: number; timeoutMs?: number; continueOnTruncation?: boolean; continuationMaxRounds?: number }
 ): Promise<string> {
   const stepName = getStepName(step);
   const fallback =
@@ -358,7 +365,11 @@ async function generateAiTextForStep(
   ];
 
   try {
-    return await generateAiTextWithRetry(messages, 0.6, 700, retryOptions);
+    return await generateAiTextWithRetry(messages, 0.6, step === 1 || step === 2 ? 700 : 1200, {
+      continueOnTruncation: step === 1 || step === 2 ? false : true,
+      continuationMaxRounds: step === 1 || step === 2 ? 0 : 1,
+      ...retryOptions
+    });
   } catch {
     return fallback;
   }

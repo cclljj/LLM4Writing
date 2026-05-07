@@ -60,6 +60,7 @@ npm run build
 - `LLM_MODEL` - model name
 
 若三者任一缺漏，系統會使用內建 fallback 回覆，保障流程可持續。
+若 OpenAI-compatible 供應商回傳長度截斷狀態，系統會對一般學生可讀回覆自動續寫一次；Step1/2 的 JSON 題目輸出則不自動續寫，以保護結構化解析穩定。
 
 ### Database
 

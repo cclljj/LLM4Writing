@@ -40,7 +40,7 @@ async function buildStep7Feedback(stepPrompt: string | undefined, essay: string)
   ];
 
   try {
-    return await llmChatCompletionText({ messages, temperature: 0.5, maxTokens: 800 });
+    return await llmChatCompletionText({ messages, temperature: 0.5, maxTokens: 1200, continuationMaxRounds: 1 });
   } catch {
     return fallback;
   }

@@ -49,7 +49,7 @@ async function suggestWithLlm(
   ];
 
   try {
-    return await llmChatCompletionText({ messages, temperature: 0.6, maxTokens: 700 });
+    return await llmChatCompletionText({ messages, temperature: 0.6, maxTokens: 1200, continuationMaxRounds: 1 });
   } catch {
     return fallback;
   }
@@ -89,10 +89,10 @@ export async function POST(request: NextRequest) {
   const timestamp = nowIso();
   const suggestion = sanitizeStudentFacingText(
     await suggestWithLlm(
-    session.promptConfig?.stepPrompts?.["6"],
-    draft,
-    session.activityTitle ?? "",
-    crossStepContext
+      session.promptConfig?.stepPrompts?.["6"],
+      draft,
+      session.activityTitle ?? "",
+      crossStepContext
     )
   );
   const logText = [
