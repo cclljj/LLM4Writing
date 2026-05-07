@@ -286,7 +286,7 @@ function buildOutlinePreview(mermaidText: string): OutlinePreview | null {
   return { nodes: normalized, width: Math.max(520, maxX + 20), height: Math.max(240, maxY + 20) };
 }
 
-function renderOutlineSvg(mermaidText: string, label: string): JSX.Element | null {
+function renderOutlineSvg(mermaidText: string, label: string) {
   const preview = buildOutlinePreview(mermaidText);
   if (!preview) return null;
   return (
