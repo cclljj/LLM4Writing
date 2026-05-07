@@ -12,7 +12,7 @@ export async function GET() {
 
   await hydrateDomainState();
   const profile = await getUserStore(user.username);
-  if (!profile || profile.role !== "student") {
+  if (!profile || (profile.role && profile.role !== "student")) {
     return NextResponse.json({ error: "student_profile_not_found" }, { status: 404 });
   }
 

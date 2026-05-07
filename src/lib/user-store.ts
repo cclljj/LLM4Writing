@@ -149,18 +149,35 @@ function stripPassword(user: StoredUser): UserAccount {
   return safe;
 }
 
-function normalizePayload(payload: unknown): UserAccount {
-  if (typeof payload === "string") {
+function normalizePayload(payload: unknown, fallbackUsername?: string): UserAccount {
+  let parsed: unknown = payload;
+  if (typeof parsed === "string") {
     try {
-      return JSON.parse(payload) as UserAccount;
+      parsed = JSON.parse(parsed) as unknown;
     } catch {
-      return {} as UserAccount;
+      parsed = {};
     }
   }
-  if (payload && typeof payload === "object") {
-    return payload as UserAccount;
+
+  if (!parsed || typeof parsed !== "object") {
+    return fallbackUsername ? ({ username: fallbackUsername } as UserAccount) : ({} as UserAccount);
   }
-  return {} as UserAccount;
+
+  const raw = parsed as Record<string, unknown>;
+  const wrapped = raw.payload && typeof raw.payload === "object" ? (raw.payload as Record<string, unknown>) : raw;
+  const candidate = wrapped.user && typeof wrapped.user === "object" ? (wrapped.user as Record<string, unknown>) : wrapped;
+  const username =
+    typeof candidate.username === "string" && candidate.username.trim()
+      ? candidate.username.trim()
+      : fallbackUsername ?? "";
+  const roleRaw = typeof candidate.role === "string" ? candidate.role.trim().toLowerCase() : "";
+  const role = roleRaw === "student" || roleRaw === "teacher" || roleRaw === "admin" ? roleRaw : undefined;
+
+  return {
+    ...((candidate as unknown) as Partial<UserAccount>),
+    username,
+    ...(role ? { role } : {})
+  } as UserAccount;
 }
 
 export async function listUsersStore(): Promise<UserAccount[]> {
@@ -185,16 +202,18 @@ export async function getUserStore(username: string): Promise<UserAccount | unde
     return row ? stripPassword(row) : undefined;
   }
 
-  await ensureUserTable();
-  const sql = getSqlClient();
-  const rows = await sql<{ payload: unknown }[]>`
-    SELECT payload
-    FROM llm4writing_users
-    WHERE username = ${username}
-    LIMIT 1
-  `;
+  const rows = await retryOnce(async () => {
+    await ensureUserTable();
+    const sql = getSqlClient();
+    return sql<{ payload: unknown }[]>`
+      SELECT payload
+      FROM llm4writing_users
+      WHERE username = ${username}
+      LIMIT 1
+    `;
+  });
 
-  return rows[0] ? normalizePayload(rows[0].payload) : undefined;
+  return rows[0] ? normalizePayload(rows[0].payload, username) : undefined;
 }
 
 export async function validateUserCredentialStore(username: string, password: string): Promise<UserAccount | undefined> {
@@ -217,7 +236,7 @@ export async function validateUserCredentialStore(username: string, password: st
 
   const row = rows[0];
   if (!row || row.password !== password) return undefined;
-  return normalizePayload(row.payload);
+  return normalizePayload(row.payload, username);
 }
 
 export async function resetUserPasswordStore(username: string, newPassword: string): Promise<boolean> {

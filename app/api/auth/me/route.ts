@@ -18,6 +18,18 @@ export async function GET() {
   }
 
   const profile = await getUserStore(user.username);
+  if (!profile || (profile.role && profile.role !== user.role)) {
+    return NextResponse.json(
+      { authenticated: false },
+      {
+        status: 401,
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+          Pragma: "no-cache"
+        }
+      }
+    );
+  }
   return NextResponse.json(
     {
       authenticated: true,

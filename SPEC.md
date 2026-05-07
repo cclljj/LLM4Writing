@@ -780,6 +780,7 @@ Error:
 
 - 已登入：`{ authenticated: true, user }`
 - 未登入：`401 { authenticated: false }`
+- 若 cookie 身份與使用者資料不一致（例如帳號已不存在或角色不匹配），也回傳：`401 { authenticated: false }`
 
 ### `POST /api/auth/logout`
 
