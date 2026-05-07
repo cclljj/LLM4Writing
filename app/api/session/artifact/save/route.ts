@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
   if (!session.participants.includes(user.username)) {
     return NextResponse.json({ error: "not_participant" }, { status: 403 });
   }
-  markUserOnline(session, user.username);
+  markUserOnline(session.id, user.username);
 
   if (body.type === "outline") {
     session.outlines[user.username] = body.content;

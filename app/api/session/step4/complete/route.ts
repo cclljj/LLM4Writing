@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
   if (!session.participants.includes(user.username)) {
     return NextResponse.json({ error: "not_participant" }, { status: 403 });
   }
-  markUserOnline(session, user.username);
+  markUserOnline(session.id, user.username);
   if (session.currentStep !== 4) {
     return NextResponse.json({ error: "invalid_step" }, { status: 400 });
   }

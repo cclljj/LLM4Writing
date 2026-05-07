@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
   if (!session.participants.includes(user.username)) {
     return NextResponse.json({ error: "not_participant" }, { status: 403 });
   }
-  markUserOnline(session, user.username);
+  markUserOnline(session.id, user.username);
   const userStep = session.personalSteps?.[user.username] ?? session.currentStep;
   if (userStep !== 5) {
     return NextResponse.json({ error: "invalid_step" }, { status: 400 });
