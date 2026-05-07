@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { resolvePendingOutlineAfterServerSync, shouldSyncOutlineFromSession } from "@/src/lib/outline-sync-guard";
 import { getStructureTreeNodePermissions } from "@/src/lib/structure-tree-permissions";
 import { buildStudentNextAction } from "@/src/lib/student-next-action";
 import GroupWaitingStatus from "./_components/GroupWaitingStatus";
@@ -401,6 +402,7 @@ export default function StudentPage() {
   const outlineCanvasRef = useRef<HTMLDivElement | null>(null);
   const lastOwnStepRef = useRef<number | null>(null);
   const autoSaveSeqRef = useRef(0);
+  const pendingOutlineSyncRef = useRef<string | null>(null);
   const longPressTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -514,8 +516,22 @@ export default function StudentPage() {
     if (!(ownStep === 3 || ownStep === 4) || !loginUser) return;
     const shouldSyncFromSession = ownStep === 3 || ownStep === 4;
     if (!shouldSyncFromSession) return;
-    if (outlineDirty || draggingNodeId || editingNodeId) return;
     const saved = session?.outlines[loginUser]?.trim() ?? "";
+    if (
+      !shouldSyncOutlineFromSession({
+        localPendingOutline: pendingOutlineSyncRef.current,
+        serverOutline: saved,
+        outlineDirty,
+        draggingNodeId,
+        editingNodeId
+      })
+    ) {
+      return;
+    }
+    pendingOutlineSyncRef.current = resolvePendingOutlineAfterServerSync({
+      localPendingOutline: pendingOutlineSyncRef.current,
+      serverOutline: saved
+    });
     setOutlineNodes(saved ? fromMermaid(saved) : makeDefaultOutlineNodes());
     setOutlineDirty(false);
     setEditingNodeId(null);
@@ -827,6 +843,7 @@ export default function StudentPage() {
     if (!session || !loginUser) return;
     const seq = ++autoSaveSeqRef.current;
     const mermaidText = toMermaid(nodes);
+    pendingOutlineSyncRef.current = mermaidText;
     setOutlineText(mermaidText);
     await saveArtifact("outline", mermaidText);
     if (seq === autoSaveSeqRef.current) {

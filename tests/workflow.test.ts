@@ -4,6 +4,7 @@ import { ChatMessage, SessionState } from "../src/lib/types";
 import { validateStudentAnswer } from "../src/lib/answer-validation";
 import { buildAdvancedStuckRisk, recordRejectedAnswerSignal } from "../src/lib/learning-diagnostics";
 import { isTruncatedFinishReason, pickAssistantTextResult } from "../src/lib/llm-openai-response";
+import { resolvePendingOutlineAfterServerSync, shouldSyncOutlineFromSession } from "../src/lib/outline-sync-guard";
 import { isUsableNextQuestion, splitAiFeedbackAndQuestion } from "../src/lib/llm-response";
 import { getStructureTreeNodePermissions } from "../src/lib/structure-tree-permissions";
 import { buildStudentNextAction } from "../src/lib/student-next-action";
@@ -110,6 +111,32 @@ test("structure tree node permissions lock first and second levels", () => {
     canDelete: true,
     canEditText: true
   });
+});
+
+test("outline sync guard blocks stale polling while autosave is catching up", () => {
+  assert.equal(
+    shouldSyncOutlineFromSession({
+      localPendingOutline: "graph TD\n  a[\"新內容\"]",
+      serverOutline: "graph TD\n  a[\"舊內容\"]",
+      outlineDirty: false
+    }),
+    false
+  );
+  assert.equal(
+    shouldSyncOutlineFromSession({
+      localPendingOutline: "graph TD\n  a[\"新內容\"]",
+      serverOutline: "graph TD\n  a[\"新內容\"]",
+      outlineDirty: false
+    }),
+    true
+  );
+  assert.equal(
+    resolvePendingOutlineAfterServerSync({
+      localPendingOutline: "graph TD\n  a[\"新內容\"]",
+      serverOutline: "graph TD\n  a[\"新內容\"]"
+    }),
+    null
+  );
 });
 
 test("question-bank steps are sourced from questionBanks and instruction-like prompts use fallbacks", () => {
