@@ -438,7 +438,7 @@ student 可儲存三種內容：
   - `outlineUpdatedAt[username]`
   - `draftStep6UpdatedAt[username]`
   - `draftStep8UpdatedAt[username]`
-- 教師端 monitor API 僅回傳衍生診斷（字數、更新時間），不需在儀表板直接暴露完整草稿內容。
+- 教師端 monitor API 同時回傳衍生診斷（字數、更新時間）與原始 `outlines`、`step3SubmittedOutlines`，供教師儀表板渲染 Step3/Step4 結構樹 SVG；初稿草稿（Step6/Step8）仍僅回傳字數診斷，不暴露完整內容。
 
 ---
 
@@ -685,6 +685,9 @@ student 可儲存三種內容：
   - 小組訊息檢視（1/2/4）
   - 個人進度與個人互動訊息（完整步驟紀錄，不限 3/6/8）
   - 小組對話紀錄與個人對話紀錄需用 HTML 排版渲染 Markdown 訊息（可顯示標題、粗體、段落、清單）
+  - 小組對話紀錄頂部需顯示各組員的 Step3 完成結構樹（`step3SubmittedOutlines`）與 Step4 對比修正後結構樹（`outlines`，若與 Step3 快照不同才顯示），以 SVG 視覺化節點圖呈現
+  - 個人對話紀錄頂部需顯示該學生的 Step3 完成結構樹與 Step4 對比修正後結構樹（同上邏輯），以 SVG 視覺化節點圖呈現
+  - 對話訊息中若含有 Mermaid 格式的結構樹，需於訊息下方同步渲染 SVG 視覺化節點圖
   - UX 要求：第一次點擊「查看狀態」即需完成載入並直接帶出該課程詳細資料（若有 session，預設選中該課程第一筆 session），不可要求再次點擊才顯示詳情
 - 「全班加入狀態」與「分組狀態總覽」的人數統計需依「實際已加入課程者」計算，不得以分組 participants 名單直接視為已加入
 - 學習管理操作（課程狀態切換、載入狀態、載入個人進度、切換步驟等）需顯示 processing 提示，完成或失敗後自動結束提示；處理期間相關按鈕 disabled
@@ -950,13 +953,14 @@ Request:
 - 回傳 `workflow === spec10` 的 session 列表與訊息
 - 支援分頁：`?limit=N&offset=N`（預設 limit=50, offset=0）
 - 回應格式：`{ sessions: [...], total: N, limit: N, offset: N }`
+- 每筆 session 包含 `outlines: Record<string, string>` 與 `step3SubmittedOutlines: Record<string, string>`，供教師端渲染各組員結構樹
 - 注意：目前為應用層分頁（先載入全部 sessions 再過濾）；DB 層分頁優化為後續工作
 
 ### `GET /api/teacher/personal-progress?sessionId=...&username=...`
 
 - 權限：teacher/admin
 - 回傳 participant 的個人進度統計
-- `username` 有值時回傳個人訊息串
+- `username` 有值時回傳個人訊息串，以及 `userOutline: string`（目前結構樹）與 `userStep3SubmittedOutline: string`（步驟三提交快照）
 
 ### `POST /api/teacher/course-control`
 
