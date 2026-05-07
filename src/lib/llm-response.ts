@@ -19,6 +19,32 @@ function stripJsonFence(text: string): string {
     .trim();
 }
 
+function unescapeJsonString(input: string): string {
+  return input.replace(/\\"/g, "\"").replace(/\\n/g, "\n").replace(/\\t/g, "\t").trim();
+}
+
+function extractFeedbackFromJsonish(raw: string): string | null {
+  const m = raw.match(/"feedback"\s*:\s*"([\s\S]*?)"\s*(?:,|\}|$)/i);
+  if (!m?.[1]) return null;
+  const extracted = unescapeJsonString(m[1]);
+  return extracted || null;
+}
+
+function sanitizeStudentFacingText(aiText: string): string {
+  const raw = stripJsonFence(aiText);
+  const feedbackFromJsonish = extractFeedbackFromJsonish(raw);
+  if (feedbackFromJsonish) return feedbackFromJsonish;
+
+  // Defensive cleanup for malformed JSON-like leftovers.
+  const cleaned = raw
+    .replace(/^\s*\{\s*"feedback"\s*:\s*/i, "")
+    .replace(/,\s*"nextQuestion"\s*:\s*[\s\S]*$/i, "")
+    .replace(/\}\s*$/g, "")
+    .replace(/^"+|"+$/g, "")
+    .trim();
+  return cleaned || aiText.trim();
+}
+
 export function parseStructuredStepAiResponse(aiText: string): StepAiResponse | null {
   const raw = stripJsonFence(aiText);
   if (!raw.startsWith("{") || !raw.endsWith("}")) return null;
@@ -46,13 +72,13 @@ export function splitAiFeedbackAndQuestion(aiText: string): StepAiResponse {
   const marker = /(###\s*\*\*請回答以下問題\*\*|請回答以下問題)\s*[:：]?/m;
   const match = marker.exec(aiText);
   if (!match || typeof match.index !== "number") {
-    return { feedbackText: aiText.trim() };
+    return { feedbackText: sanitizeStudentFacingText(aiText) };
   }
 
   const before = aiText.slice(0, match.index).trim();
   const after = aiText.slice(match.index + match[0].length).trim();
   if (!after) {
-    return { feedbackText: before || aiText.trim() };
+    return { feedbackText: sanitizeStudentFacingText(before || aiText.trim()) };
   }
 
   const normalizedQuestion = after
@@ -61,7 +87,7 @@ export function splitAiFeedbackAndQuestion(aiText: string): StepAiResponse {
     .trim();
 
   return {
-    feedbackText: before || "已收到大家的回覆。",
+    feedbackText: sanitizeStudentFacingText(before || "已收到大家的回覆。"),
     nextQuestion: normalizedQuestion
   };
 }
