@@ -87,6 +87,8 @@ export async function GET(request: NextRequest) {
         groupGate: s.groupGate,
         stepState: s.stepState,
         reflectionIndex: s.reflectionIndex,
+        outlines: s.outlines ?? {},
+        step3SubmittedOutlines: s.step3SubmittedOutlines ?? {},
         qualitySignals: s.qualitySignals ?? { rejectedAnswerCounts: {}, rejectedAnswerLastAt: {} },
         artifactDiagnostics: {
           step3OutlineChars: Object.fromEntries(Object.entries(s.outlines ?? {}).map(([userId, outline]) => [userId, outline.length])),

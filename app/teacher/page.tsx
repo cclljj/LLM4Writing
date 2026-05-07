@@ -60,6 +60,8 @@ type MonitorSession = {
     step2Substep1Question?: number;
   };
   reflectionIndex?: Record<string, number>;
+  outlines?: Record<string, string>;
+  step3SubmittedOutlines?: Record<string, string>;
   qualitySignals?: QualitySignals;
   artifactDiagnostics?: ArtifactDiagnostics;
   messages: Array<{ id: string; role: string; userId?: string; text: string; at: string; step: number }>;
@@ -284,6 +286,47 @@ function buildOutlinePreview(mermaidText: string): OutlinePreview | null {
   return { nodes: normalized, width: Math.max(520, maxX + 20), height: Math.max(240, maxY + 20) };
 }
 
+function renderOutlineSvg(mermaidText: string, label: string): JSX.Element | null {
+  const preview = buildOutlinePreview(mermaidText);
+  if (!preview) return null;
+  return (
+    <div style={{ marginTop: 8, overflow: "auto", border: "1px solid #e5e7eb", borderRadius: 8, padding: 8, background: "#f8fafc" }}>
+      {label ? <small style={{ display: "block", marginBottom: 4, color: "#475569" }}>{label}</small> : null}
+      <svg width={preview.width} height={preview.height} role="img" aria-label={label}>
+        {preview.nodes
+          .filter((node) => node.parentId)
+          .map((node) => {
+            const parent = preview.nodes.find((item) => item.id === node.parentId);
+            if (!parent) return null;
+            return (
+              <line
+                key={`${parent.id}-${node.id}`}
+                x1={parent.x + 65}
+                y1={parent.y + 40}
+                x2={node.x + 65}
+                y2={node.y}
+                stroke="#94a3b8"
+                strokeWidth="2"
+              />
+            );
+          })}
+        {preview.nodes.map((node) => (
+          <g key={node.id}>
+            <rect x={node.x} y={node.y} width="130" height="80" rx="12" fill="#fff" stroke="#64748b" />
+            <text x={node.x + 65} y={node.y + 28} textAnchor="middle" fontSize="12" fill="#0f172a">
+              {node.text.split("\n").map((line, idx) => (
+                <tspan key={`${node.id}-${idx}`} x={node.x + 65} dy={idx === 0 ? 0 : 16}>
+                  {line}
+                </tspan>
+              ))}
+            </text>
+          </g>
+        ))}
+      </svg>
+    </div>
+  );
+}
+
 export default function TeacherPage() {
   const router = useRouter();
   const pathname = usePathname();
@@ -373,6 +416,8 @@ export default function TeacherPage() {
   const [personalMessages, setPersonalMessages] = useState<
     Array<{ id: string; role: string; userId?: string; text: string; at: string; step: number }>
   >([]);
+  const [userOutline, setUserOutline] = useState("");
+  const [userStep3SubmittedOutline, setUserStep3SubmittedOutline] = useState("");
   const refreshTokenRef = useRef(0);
   const monitorPollingBusyRef = useRef(false);
 
@@ -841,6 +886,8 @@ export default function TeacherPage() {
     setPersonalMessages([]);
     setSelectedProgressUser("");
     setProgressSessionId("");
+    setUserOutline("");
+    setUserStep3SubmittedOutline("");
   }, [selectedLearningActivityId]);
 
   useEffect(() => {
@@ -1143,6 +1190,11 @@ export default function TeacherPage() {
       setPersonalMessages(data.personalMessages ?? []);
       if (username) {
         setSelectedProgressUser(username);
+        setUserOutline(data.userOutline ?? "");
+        setUserStep3SubmittedOutline(data.userStep3SubmittedOutline ?? "");
+      } else {
+        setUserOutline("");
+        setUserStep3SubmittedOutline("");
       }
     });
   }
@@ -2771,6 +2823,23 @@ export default function TeacherPage() {
                       </select>
                     </div>
                   </div>
+                  {monitorSelected.participants.length > 0 && (monitorSelected.outlines || monitorSelected.step3SubmittedOutlines) ? (
+                    <div style={{ marginBottom: 16 }}>
+                      <strong>步驟三／四 結構樹（各組員）</strong>
+                      {monitorSelected.participants.map((participant) => {
+                        const submitted = monitorSelected.step3SubmittedOutlines?.[participant];
+                        const current = monitorSelected.outlines?.[participant];
+                        if (!submitted && !current) return null;
+                        return (
+                          <div key={participant} style={{ marginTop: 12, paddingTop: 8, borderTop: "1px solid #e5e7eb" }}>
+                            <small style={{ fontWeight: 600 }}>{participant}</small>
+                            {submitted ? renderOutlineSvg(submitted, "步驟三完成結構樹") : null}
+                            {current && current !== submitted ? renderOutlineSvg(current, "步驟四對比修正後") : null}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : null}
                   {groupMessages.map((message) => (
                     <div key={message.id} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
                       <strong>
@@ -2778,45 +2847,9 @@ export default function TeacherPage() {
                         {message.userId ? `(${message.userId})` : ""}
                       </strong>
                       <div dangerouslySetInnerHTML={{ __html: renderMessageHtml(message.text) }} />
-                      {([3, 4].includes(message.step) && extractMermaidText(message.text)) ? (() => {
-                        const preview = buildOutlinePreview(extractMermaidText(message.text) ?? "");
-                        if (!preview) return null;
-                        return (
-                          <div style={{ marginTop: 8, overflow: "auto", border: "1px solid #e5e7eb", borderRadius: 8, padding: 8, background: "#f8fafc" }}>
-                            <svg width={preview.width} height={preview.height} role="img" aria-label={`S${message.step} 結構樹`}>
-                              {preview.nodes
-                                .filter((node) => node.parentId)
-                                .map((node) => {
-                                  const parent = preview.nodes.find((item) => item.id === node.parentId);
-                                  if (!parent) return null;
-                                  return (
-                                    <line
-                                      key={`${parent.id}-${node.id}`}
-                                      x1={parent.x + 65}
-                                      y1={parent.y + 40}
-                                      x2={node.x + 65}
-                                      y2={node.y}
-                                      stroke="#94a3b8"
-                                      strokeWidth="2"
-                                    />
-                                  );
-                                })}
-                              {preview.nodes.map((node) => (
-                                <g key={node.id}>
-                                  <rect x={node.x} y={node.y} width="130" height="80" rx="12" fill="#fff" stroke="#64748b" />
-                                  <text x={node.x + 65} y={node.y + 28} textAnchor="middle" fontSize="12" fill="#0f172a">
-                                    {node.text.split("\n").map((line, idx) => (
-                                      <tspan key={`${node.id}-${idx}`} x={node.x + 65} dy={idx === 0 ? 0 : 16}>
-                                        {line}
-                                      </tspan>
-                                    ))}
-                                  </text>
-                                </g>
-                              ))}
-                            </svg>
-                          </div>
-                        );
-                      })() : null}
+                      {([3, 4].includes(message.step) && extractMermaidText(message.text))
+                        ? renderOutlineSvg(extractMermaidText(message.text)!, `S${message.step} 結構樹`)
+                        : null}
                     </div>
                   ))}
                   {groupMessages.length === 0 ? <small>目前此篩選條件下沒有 1/2/4 步驟對話。</small> : null}
@@ -2826,6 +2859,13 @@ export default function TeacherPage() {
               {personalMessages.length > 0 ? (
                 <div className="card">
                   <h2>個人對話紀錄</h2>
+                  {(userStep3SubmittedOutline || userOutline) ? (
+                    <div style={{ marginBottom: 16 }}>
+                      <strong>步驟三／四 結構樹</strong>
+                      {userStep3SubmittedOutline ? renderOutlineSvg(userStep3SubmittedOutline, "步驟三完成結構樹") : null}
+                      {userOutline && userOutline !== userStep3SubmittedOutline ? renderOutlineSvg(userOutline, "步驟四對比修正後") : null}
+                    </div>
+                  ) : null}
                   {personalMessages.map((message) => (
                     <div key={message.id} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
                       <strong>
@@ -2833,45 +2873,9 @@ export default function TeacherPage() {
                         {message.userId ? `(${message.userId})` : ""}
                       </strong>
                       <div dangerouslySetInnerHTML={{ __html: renderMessageHtml(message.text) }} />
-                      {([3, 4].includes(message.step) && extractMermaidText(message.text)) ? (() => {
-                        const preview = buildOutlinePreview(extractMermaidText(message.text) ?? "");
-                        if (!preview) return null;
-                        return (
-                          <div style={{ marginTop: 8, overflow: "auto", border: "1px solid #e5e7eb", borderRadius: 8, padding: 8, background: "#f8fafc" }}>
-                            <svg width={preview.width} height={preview.height} role="img" aria-label={`S${message.step} 結構樹`}>
-                              {preview.nodes
-                                .filter((node) => node.parentId)
-                                .map((node) => {
-                                  const parent = preview.nodes.find((item) => item.id === node.parentId);
-                                  if (!parent) return null;
-                                  return (
-                                    <line
-                                      key={`${parent.id}-${node.id}`}
-                                      x1={parent.x + 65}
-                                      y1={parent.y + 40}
-                                      x2={node.x + 65}
-                                      y2={node.y}
-                                      stroke="#94a3b8"
-                                      strokeWidth="2"
-                                    />
-                                  );
-                                })}
-                              {preview.nodes.map((node) => (
-                                <g key={node.id}>
-                                  <rect x={node.x} y={node.y} width="130" height="80" rx="12" fill="#fff" stroke="#64748b" />
-                                  <text x={node.x + 65} y={node.y + 28} textAnchor="middle" fontSize="12" fill="#0f172a">
-                                    {node.text.split("\n").map((line, idx) => (
-                                      <tspan key={`${node.id}-${idx}`} x={node.x + 65} dy={idx === 0 ? 0 : 16}>
-                                        {line}
-                                      </tspan>
-                                    ))}
-                                  </text>
-                                </g>
-                              ))}
-                            </svg>
-                          </div>
-                        );
-                      })() : null}
+                      {([3, 4].includes(message.step) && extractMermaidText(message.text))
+                        ? renderOutlineSvg(extractMermaidText(message.text)!, `S${message.step} 結構樹`)
+                        : null}
                     </div>
                   ))}
                   {personalMessages.length === 0 ? <small>目前此學生沒有可顯示對話。</small> : null}
