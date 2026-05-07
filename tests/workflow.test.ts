@@ -6,7 +6,7 @@ import { buildAdvancedStuckRisk, recordRejectedAnswerSignal } from "../src/lib/l
 import { isUsableNextQuestion, splitAiFeedbackAndQuestion } from "../src/lib/llm-response";
 import { buildStudentNextAction } from "../src/lib/student-next-action";
 import { buildStep1Question, buildStep2Question } from "../src/lib/workflow-questions";
-import { advanceStep1Or2SubstepAfterAi, handleStep1Or2Group } from "../src/lib/workflow-step1-2";
+import { advanceStep1Or2SubstepAfterAi, handleStep1Or2Group, recoverStalledStep1Or2AiWait } from "../src/lib/workflow-step1-2";
 
 function makeMessage(input: Omit<ChatMessage, "id" | "at">): ChatMessage {
   return { id: `m-${Math.random()}`, at: "2026-05-06T00:00:00.000Z", ...input };
@@ -52,7 +52,7 @@ test("answer validation rejects low-quality answers before they become history",
   assert.match(validateStudentAnswer(session, "s1", 1, "不知道") ?? "", /敷衍/);
   assert.match(validateStudentAnswer(session, "s1", 1, "請提出三個關鍵字。") ?? "", /題目本身/);
   assert.match(validateStudentAnswer(session, "s1", 1, "勇氣，責任") ?? "", /至少 3 項/);
-  assert.equal(validateStudentAnswer(session, "s1", 1, "勇氣，責任，合作"), null);
+  assert.equal(validateStudentAnswer(session, "s1", 1, "我想到這個題目可以先用勇氣、責任、合作三個關鍵字來討論。"), null);
 });
 
 test("LLM parser prefers structured JSON and still supports legacy marker parsing", () => {
@@ -136,6 +136,34 @@ test("Step1/2 advancement preserves questionBanks and uses fallback when LLM nex
   advanceStep1Or2SubstepAfterAi(step2Session, 2, 1, undefined, makeMessage);
   assert.equal(step2Session.stepState.step2Substep1Question, 2);
   assert.match(step2Session.messages.at(-1)?.text ?? "", /fallback：請挑一個具體例子/);
+});
+
+test("stalled Step1/2 AI wait can be recovered on session polling", () => {
+  const session = baseSession({
+    currentStep: 1,
+    stepState: { step1Substep: 3, step2Substep: 1, step1Substep3Question: 2, step1Substep4Question: 1, step2Substep1Question: 1 },
+    groupGate: { "1-3-2": ["s1", "s2"] },
+    messages: [
+      { id: "m-old", at: "2026-05-07T00:00:00.000Z", role: "student", userId: "s2", step: 1, text: "我也回答完整想法" }
+    ],
+    promptConfig: {
+      stepPrompts: {},
+      subStepPrompts: {},
+      subStepPromptsFallbacks: { "1-3-3": "fallback：請再補上一個判斷理由。" },
+      questionBanks: {},
+      step9Questions: {},
+      stepOpenings: {}
+    }
+  });
+
+  const recovered = recoverStalledStep1Or2AiWait(session, makeMessage, {
+    nowMs: new Date("2026-05-07T00:03:00.000Z").getTime()
+  });
+
+  assert.equal(recovered, true);
+  assert.deepEqual(session.groupGate["1-3-2"], []);
+  assert.equal(session.stepState.step1Substep3Question, 3);
+  assert.match(session.messages.at(-1)?.text ?? "", /子步驟 1-3-3：fallback/);
 });
 
 test("advanced stuck risk combines rejection, idle, Step3, and Step6 signals", () => {

@@ -238,14 +238,20 @@ function ensureParticipants(session: SessionState, fallbackUserId: string): stri
   return session.participants;
 }
 
-async function generateAiTextWithRetry(messages: LlmChatMessage[], temperature: number, maxTokens: number): Promise<string> {
+async function generateAiTextWithRetry(
+  messages: LlmChatMessage[],
+  temperature: number,
+  maxTokens: number,
+  options: { attempts?: number; timeoutMs?: number } = {}
+): Promise<string> {
   let lastError: unknown;
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
+  const attempts = options.attempts ?? 3;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
-      return await llmChatCompletionText({ messages, temperature, maxTokens });
+      return await llmChatCompletionText({ messages, temperature, maxTokens, timeoutMs: options.timeoutMs });
     } catch (error) {
       lastError = error;
-      if (attempt < 3) {
+      if (attempt < attempts) {
         await new Promise((resolve) => setTimeout(resolve, attempt * 250));
       }
     }
@@ -265,7 +271,7 @@ async function generateStep1Or2AiWithQuestionRetry(
   };
 
   for (let attempt = 1; attempt <= 3; attempt += 1) {
-    const aiRaw = await generateAiTextForStep(session, step, contextText, userId);
+    const aiRaw = await generateAiTextForStep(session, step, contextText, userId, { attempts: 1, timeoutMs: 10_000 });
     const parsed = splitAiFeedbackAndQuestion(aiRaw);
     lastParsed = parsed;
     if (parsed.nextQuestion?.trim()) {
@@ -279,7 +285,13 @@ async function generateStep1Or2AiWithQuestionRetry(
   return lastParsed;
 }
 
-async function generateAiTextForStep(session: SessionState, step: number, contextText: string, userId?: string): Promise<string> {
+async function generateAiTextForStep(
+  session: SessionState,
+  step: number,
+  contextText: string,
+  userId?: string,
+  retryOptions?: { attempts?: number; timeoutMs?: number }
+): Promise<string> {
   const stepName = getStepName(step);
   const fallback =
     step === 3
@@ -346,7 +358,7 @@ async function generateAiTextForStep(session: SessionState, step: number, contex
   ];
 
   try {
-    return await generateAiTextWithRetry(messages, 0.6, 700);
+    return await generateAiTextWithRetry(messages, 0.6, 700, retryOptions);
   } catch {
     return fallback;
   }
@@ -563,6 +575,12 @@ export function advanceLegacyPhase(session: SessionState): SessionState {
 
 type SendMessageHooks = {
   onBeforeGroupAi?: (session: SessionState) => Promise<void> | void;
+  generateStep1Or2Ai?: (
+    session: SessionState,
+    step: 1 | 2,
+    contextText: string,
+    userId: string
+  ) => Promise<{ feedbackText: string; nextQuestion?: string }>;
 };
 
 export async function sendStudentMessage(
@@ -604,12 +622,18 @@ export async function sendStudentMessage(
       if (hooks?.onBeforeGroupAi) {
         await hooks.onBeforeGroupAi(result.session);
       }
-      const parsed = await generateStep1Or2AiWithQuestionRetry(
-        result.session,
-        step as 1 | 2,
-        `all members answered step ${step} substep ${result.substep}`,
-        userId
-      );
+      let parsed: { feedbackText: string; nextQuestion?: string };
+      try {
+        const contextText = `all members answered step ${step} substep ${result.substep}`;
+        parsed = hooks?.generateStep1Or2Ai
+          ? await hooks.generateStep1Or2Ai(result.session, step as 1 | 2, contextText, userId)
+          : await generateStep1Or2AiWithQuestionRetry(result.session, step as 1 | 2, contextText, userId);
+      } catch {
+        parsed = {
+          feedbackText: "已收到大家的回覆。遠端 AI 暫時無法完成回覆，系統先使用備用問題讓討論繼續。",
+          nextQuestion: undefined
+        };
+      }
       const shouldEmitAiFeedback = !isNextQuestionSubStepPromptDriven(result.session, step as 1 | 2, result.substep);
       if (shouldEmitAiFeedback) {
         result.session.messages.push(

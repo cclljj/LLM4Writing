@@ -1,9 +1,20 @@
 import { NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
 import { getSession, saveSession } from "@/src/lib/store";
 import { reconcileCompletedStep9Users } from "@/src/lib/engine";
+import { recoverStalledStep1Or2AiWait } from "@/src/lib/workflow-step1-2";
+import { ChatMessage } from "@/src/lib/types";
 import { findActivity, hydrateDomainState, resolvePromptConfigForActivity, resolveStructureTreeTemplate } from "@/src/lib/mock-data";
 import { getCurrentUser } from "@/src/lib/auth-server";
 import { markUserOnline } from "@/src/lib/session-presence";
+
+function makeMessage(input: Omit<ChatMessage, "id" | "at">): ChatMessage {
+  return {
+    id: randomUUID(),
+    at: new Date().toISOString(),
+    ...input
+  };
+}
 
 function isSingleNodeOutline(outline: string): boolean {
   const raw = outline.trim();
@@ -103,6 +114,9 @@ export async function GET(_: Request, context: { params: Promise<{ sessionId: st
   }
   const reconciled = await reconcileCompletedStep9Users(session);
   if (reconciled) {
+    changed = true;
+  }
+  if (recoverStalledStep1Or2AiWait(session, makeMessage)) {
     changed = true;
   }
   if (changed) {

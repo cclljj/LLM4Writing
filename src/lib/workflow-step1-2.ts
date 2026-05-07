@@ -162,3 +162,33 @@ export function advanceStep1Or2SubstepAfterAi(
   }
   session.messages.push(makeMessage({ role: "system", step, text: "步驟 2 子步驟已完成，等待教師切換下一步。" }));
 }
+
+export function recoverStalledStep1Or2AiWait(
+  session: SessionState,
+  makeMessage: MessageFactory,
+  options: { idleMs?: number; nowMs?: number } = {}
+): boolean {
+  if (session.currentStep !== 1 && session.currentStep !== 2) return false;
+  const step = session.currentStep as 1 | 2;
+  const completedSubstep = step === 1 ? session.stepState.step1Substep : session.stepState.step2Substep;
+  const gateKey = getCurrentGroupGateKey(session, step);
+  const responders = session.groupGate[gateKey] ?? [];
+  const allResponded = session.participants.length > 0 && session.participants.every((participant) => responders.includes(participant));
+  if (!allResponded) return false;
+
+  const latestStepMessage = session.messages
+    .filter((message) => message.step === step)
+    .slice()
+    .sort((a, b) => b.at.localeCompare(a.at))[0];
+  if (!latestStepMessage || latestStepMessage.role !== "student") return false;
+
+  const latestMs = new Date(latestStepMessage.at).getTime();
+  if (!Number.isFinite(latestMs)) return false;
+  const idleMs = options.idleMs ?? 120_000;
+  const nowMs = options.nowMs ?? Date.now();
+  if (nowMs - latestMs < idleMs) return false;
+
+  session.groupGate[gateKey] = [];
+  advanceStep1Or2SubstepAfterAi(session, step, completedSubstep, undefined, makeMessage);
+  return true;
+}
