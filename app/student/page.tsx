@@ -1113,7 +1113,9 @@ export default function StudentPage() {
 
       const data = await response.json();
       if (!response.ok) {
-        setError(data.error ?? "send_failed");
+        const errorText = typeof data.error === "string" ? data.error : "send_failed";
+        const hintText = typeof data.hint === "string" && data.hint.trim() ? data.hint.trim() : "";
+        setError(hintText ? `${errorText}｜建議修改：${hintText}` : errorText);
         return;
       }
 
@@ -1139,7 +1141,9 @@ export default function StudentPage() {
 
       const data = await response.json();
       if (!response.ok) {
-        setError(data.error ?? "send_failed");
+        const errorText = typeof data.error === "string" ? data.error : "send_failed";
+        const hintText = typeof data.hint === "string" && data.hint.trim() ? data.hint.trim() : "";
+        setError(hintText ? `${errorText}｜建議修改：${hintText}` : errorText);
         return;
       }
 

@@ -297,10 +297,11 @@ API 輸出給學習/分組流程使用：
   - 題目要求多項目時（如三個關鍵字），答案項目數不足
 - 驗證失敗時：
   - 直接拒絕本次送出（HTTP 400）
+  - 回傳 `error`（拒收原因）與 `hint`（如何修改後再送出）
   - 流程不前進，不會記錄為有效 student 回覆
   - 不保存被拒絕的學生原文，也不會把被拒絕內容放入後續 LLM 歷史背景
   - 僅於 `qualitySignals.rejectedAnswerCounts` / `qualitySignals.rejectedAnswerLastAt` 記錄該學生在該 gate/step 的拒絕次數與最近時間，供教師端卡關偵測使用
-  - 前端顯示友善錯誤訊息，要求重答
+  - 前端需同時顯示拒收原因與修改提示（hint），引導學生重答
 
 ## 5.3 Step1/2 子步驟可見性與等待狀態
 
@@ -876,6 +877,14 @@ Error（400）：
 
 - `unknown_participant`
 - `step_non_interactive`
+- 學生回答品質檢查失敗時，回傳格式包含：
+
+```json
+{
+  "error": "拒收原因訊息",
+  "hint": "建議修改方向"
+}
+```
 
 ### `POST /api/session/artifact/save`
 

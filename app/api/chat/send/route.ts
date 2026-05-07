@@ -4,6 +4,9 @@ import { getSession, saveSession } from "@/src/lib/store";
 import { SendMessagePayload } from "@/src/lib/types";
 import { getCurrentUser } from "@/src/lib/auth-server";
 import { markUserOnline } from "@/src/lib/session-presence";
+import { buildStudentInputHint } from "@/src/lib/student-input-hint";
+
+const NON_HINT_ERRORS = new Set(["forbidden", "session_not_found", "unknown_participant", "step_non_interactive", "send_failed"]);
 
 export async function POST(request: NextRequest) {
   const payload = (await request.json()) as SendMessagePayload;
@@ -33,8 +36,13 @@ export async function POST(request: NextRequest) {
     if (JSON.stringify(session.qualitySignals ?? {}) !== qualitySignalsBeforeSend) {
       await saveSession(session).catch(() => undefined);
     }
+    const message = error instanceof Error ? error.message : "send_failed";
+    const shouldAttachHint = typeof message === "string" && message.trim() && !NON_HINT_ERRORS.has(message);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "send_failed" },
+      {
+        error: message,
+        ...(shouldAttachHint ? { hint: buildStudentInputHint(message) } : {})
+      },
       { status: 400 }
     );
   }
