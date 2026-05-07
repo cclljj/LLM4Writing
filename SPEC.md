@@ -780,6 +780,7 @@ Response:
 Error:
 
 - `401 { error: "invalid_credentials" }`
+- `429 { error: "rate_limit_exceeded", retryAfterSeconds: N }` — 同一 IP 超過 10 次/60 秒
 - `503 { error: "auth_service_unavailable", detail: string, hint: string }`
 - 實作要求：資料表初始化若首次失敗，不可將失敗狀態永久快取；後續請求必須可重試初始化
 - 實作要求：若使用者資料表已存在，登入流程不得強依賴 `CREATE TABLE` 權限
@@ -810,6 +811,8 @@ Error:
 
 - 權限：student
 - 回傳自己可參與 activities
+- 支援分頁：`?limit=N&offset=N`（預設 limit=50, offset=0）
+- 回應格式：`{ activities: [...], total: N, limit: N, offset: N }`
 
 ### `GET /api/student/overview`
 
@@ -870,6 +873,10 @@ Error:
 ### `GET /api/session/:sessionId`
 
 - 讀 session payload
+- 支援 HTTP 條件式請求（Conditional GET）：
+  - 回應包含 `ETag: "updated_at"` header
+  - 若請求帶 `If-None-Match` 且與 ETag 相符，回傳 **304 Not Modified**（無 body），節省序列化與傳輸成本
+- 線上狀態（presence）追蹤為 in-process 側記，不寫入 session payload，確保 `updated_at` 只在實質內容變更時更新
 
 ### `POST /api/chat/send`
 
@@ -940,6 +947,9 @@ Request:
 ### `GET /api/teacher/monitor`
 
 - 回傳 `workflow === spec10` 的 session 列表與訊息
+- 支援分頁：`?limit=N&offset=N`（預設 limit=50, offset=0）
+- 回應格式：`{ sessions: [...], total: N, limit: N, offset: N }`
+- 注意：目前為應用層分頁（先載入全部 sessions 再過濾）；DB 層分頁優化為後續工作
 
 ### `GET /api/teacher/personal-progress?sessionId=...&username=...`
 
@@ -1105,15 +1115,57 @@ Behavior:
 
 ---
 
-## 11. 已知限制（現況）
+## 11. 安全設定
+
+### 11.1 API Rate Limiting
+
+所有 `/api/*` 路由在 `middleware.ts` 中以 in-process sliding window 演算法做速率限制。限制依路徑而異：
+
+| 路徑前綴 | 上限 | 視窗 |
+|----------|------|------|
+| `/api/auth/login` | 10 次 | 每 IP / 60 秒 |
+| `/api/chat/send` | 30 次 | 每 IP / 60 秒 |
+| 其他 `/api/*` | 120 次 | 每 IP / 60 秒 |
+
+超過限制時回傳：
+```
+HTTP 429
+Retry-After: <秒數>
+{ "error": "rate_limit_exceeded", "retryAfterSeconds": N }
+```
+
+實作注意：
+- 狀態儲存於 process 記憶體（`Map`），不跨 Edge 副本共享。對學校規模部署已足夠；若需跨副本限制，需改接 Redis/KV store。
+- IP 從 `x-forwarded-for`（第一個值）或 `x-real-ip` header 取得。
+
+### 11.2 Session Cookie 屬性
+
+登入成功後設定的 HTTP-only cookie 屬性：
+
+| 屬性 | 值 |
+|------|----|
+| `httpOnly` | `true` |
+| `sameSite` | `"strict"` |
+| `secure` | `true`（僅限 production） |
+| `path` | `/` |
+| `maxAge` | 43200 秒（12 小時） |
+
+`sameSite: "strict"` 確保 cookie 不隨任何跨站請求（包括頂層導航）傳送，防止 CSRF 攻擊。
+
+---
+
+## 13. 已知限制（現況）
 
 1. 無 DB 環境下，domain 依賴本機檔案 `.data/domain-state.json`；若檔案不可寫或被清空，會回預設
 2. 群組隨機分配採前端簡單亂數，不含種子與可重現性
 3. Prompt 變更需改檔案並重新部署，不支援線上即時編輯
+4. Rate limiting 為 in-process，不跨 Edge 副本共享（見 §11.1）
+5. `/api/teacher/monitor` 的分頁為應用層分頁（先載入所有 sessions）；大規模部署需改為 DB 層 WHERE activityId IN (...)
+6. Presence（線上狀態）為 in-process Map，不持久化也不跨副本共享，重啟後重置
 
 ---
 
-## 12. 資料庫遷移與維運
+## 14. 資料庫遷移與維運
 
 1. Postgres 遷移到 Supabase 的標準流程文件：`SUPABASE_MIGRATION.md`
 2. 標準腳本：
@@ -1124,7 +1176,7 @@ Behavior:
 
 ---
 
-## 13. 重建指引（給未來 AI）
+## 15. 重建指引（給未來 AI）
 
 若要生成相同行為系統，請至少完整實作：
 

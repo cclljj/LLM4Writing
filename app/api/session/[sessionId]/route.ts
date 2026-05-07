@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
-import { getSession, saveSession } from "@/src/lib/store";
+import { getSessionWithMeta, saveSession } from "@/src/lib/store";
 import { reconcileCompletedStep9Users } from "@/src/lib/engine";
 import { recoverStalledStep1Or2AiWait } from "@/src/lib/workflow-step1-2";
 import { ChatMessage } from "@/src/lib/types";
@@ -48,19 +48,33 @@ function isSingleNodeOutline(outline: string): boolean {
   return nodeIds.size <= 1;
 }
 
-export async function GET(_: Request, context: { params: Promise<{ sessionId: string }> }) {
+export async function GET(request: Request, context: { params: Promise<{ sessionId: string }> }) {
   const { sessionId } = await context.params;
-  const session = await getSession(sessionId);
+  const meta = await getSessionWithMeta(sessionId);
 
-  if (!session) {
+  if (!meta) {
     return NextResponse.json({ error: "session_not_found" }, { status: 404 });
   }
-  let changed = false;
+
+  const { session, updatedAt } = meta;
+  const etag = `"${updatedAt}"`;
+
+  // Mark presence in the in-process map (does NOT touch session payload or updated_at)
   const user = await getCurrentUser();
   if (user?.role === "student" && session.participants.includes(user.username)) {
-    markUserOnline(session, user.username);
-    changed = true;
+    markUserOnline(session.id, user.username);
   }
+
+  // ETag check — only after presence is recorded (presence is side-effect only)
+  const ifNoneMatch = request.headers.get("if-none-match");
+  if (ifNoneMatch === etag) {
+    return new NextResponse(null, {
+      status: 304,
+      headers: { ETag: etag }
+    });
+  }
+
+  let changed = false;
   await hydrateDomainState();
   if (session.activityId) {
     const activity = findActivity(session.activityId);
@@ -84,12 +98,10 @@ export async function GET(_: Request, context: { params: Promise<{ sessionId: st
     }
     if (activity) {
       const structureTreeTemplate = resolveStructureTreeTemplate(activity.genre, activity.title);
-      let outlineBackfilled = false;
       if (structureTreeTemplate) {
         session.participants.forEach((participant) => {
           if (isSingleNodeOutline(session.outlines?.[participant] ?? "")) {
             session.outlines[participant] = structureTreeTemplate;
-            outlineBackfilled = true;
             changed = true;
           }
         });
@@ -123,5 +135,7 @@ export async function GET(_: Request, context: { params: Promise<{ sessionId: st
     await saveSession(session);
   }
 
-  return NextResponse.json(session);
+  const response = NextResponse.json(session);
+  response.headers.set("ETag", changed ? `"${new Date().toISOString()}"` : etag);
+  return response;
 }

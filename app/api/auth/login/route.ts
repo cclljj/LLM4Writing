@@ -30,14 +30,14 @@ export async function POST(request: NextRequest) {
     });
     response.cookies.set(AUTH_COOKIE_USER, user.username, {
       httpOnly: true,
-      sameSite: "lax",
+      sameSite: "strict",
       secure: process.env.NODE_ENV == "production",
       path: "/",
       maxAge: 60 * 60 * 12
     });
     response.cookies.set(AUTH_COOKIE_ROLE, user.role, {
       httpOnly: true,
-      sameSite: "lax",
+      sameSite: "strict",
       secure: process.env.NODE_ENV == "production",
       path: "/",
       maxAge: 60 * 60 * 12

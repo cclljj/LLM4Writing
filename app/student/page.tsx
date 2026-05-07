@@ -404,6 +404,7 @@ export default function StudentPage() {
   const autoSaveSeqRef = useRef(0);
   const pendingOutlineSyncRef = useRef<string | null>(null);
   const longPressTimerRef = useRef<number | null>(null);
+  const sessionEtagRef = useRef<string>("");
 
   useEffect(() => {
     fetch("/api/auth/me", { cache: "no-store" })
@@ -444,8 +445,15 @@ export default function StudentPage() {
   useEffect(() => {
     if (!session) return;
     const timer = window.setInterval(() => {
-      fetch(`/api/session/${session.id}`)
-        .then((res) => res.json())
+      const headers: Record<string, string> = {};
+      if (sessionEtagRef.current) headers["If-None-Match"] = sessionEtagRef.current;
+      fetch(`/api/session/${session.id}`, { headers })
+        .then((res) => {
+          const newEtag = res.headers.get("ETag");
+          if (newEtag) sessionEtagRef.current = newEtag;
+          if (res.status === 304) return null;
+          return res.json();
+        })
         .then((data) => {
           if (data?.id) setSession(data);
         })

@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/src/lib/auth-server";
 import { getAllActivities, hydrateDomainState } from "@/src/lib/mock-data";
 import { listSessions } from "@/src/lib/store";
@@ -9,11 +9,20 @@ function normalizeText(text: string): string {
   return text.replace(/\r\n/g, "\n").trim();
 }
 
-export async function GET() {
+function parsePaginationParam(raw: string | null, defaultValue: number): number {
+  const n = parseInt(raw ?? "", 10);
+  return Number.isFinite(n) && n >= 0 ? n : defaultValue;
+}
+
+export async function GET(request: NextRequest) {
   const user = await getCurrentUser();
   if (!user || (user.role !== "teacher" && user.role !== "admin")) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
+
+  const url = new URL(request.url);
+  const limit = parsePaginationParam(url.searchParams.get("limit"), 50);
+  const offset = parsePaginationParam(url.searchParams.get("offset"), 0);
 
   await hydrateDomainState();
   const baseActivities = getAllActivities();
@@ -71,7 +80,7 @@ export async function GET() {
         groupName: s.groupName,
         participants: s.participants,
         joinedUsers: s.joinedUsers ?? [],
-        onlineUsers: getOnlineUsers(s),
+        onlineUsers: getOnlineUsers(s.id),
         currentStep: s.currentStep,
         personalSteps: s.personalSteps ?? {},
         messages: withOpenings,
@@ -88,5 +97,8 @@ export async function GET() {
       };
     });
 
-  return NextResponse.json({ sessions: activeSessions });
+  const total = activeSessions.length;
+  const paginated = activeSessions.slice(offset, offset + limit);
+
+  return NextResponse.json({ sessions: paginated, total, limit, offset });
 }

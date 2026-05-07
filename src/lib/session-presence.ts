@@ -1,4 +1,8 @@
-import { SessionState } from "@/src/lib/types";
+// In-process presence tracking: sessionId → username → ISO timestamp.
+// Deliberately ephemeral (not persisted) — presence is best-effort and
+// resets on server restart. This keeps session updated_at stable so ETag
+// can suppress redundant session polls.
+const presenceMap = new Map<string, Map<string, string>>();
 
 const DEFAULT_ONLINE_WINDOW_MS = 45_000;
 
@@ -8,22 +12,24 @@ function onlineWindowMs(): number {
   return DEFAULT_ONLINE_WINDOW_MS;
 }
 
-export function markUserOnline(session: SessionState, username: string, atIso?: string): void {
-  if (!username) return;
-  if (!session.onlineUsersLastSeen || typeof session.onlineUsersLastSeen !== "object") {
-    session.onlineUsersLastSeen = {};
+export function markUserOnline(sessionId: string, username: string, atIso?: string): void {
+  if (!sessionId || !username) return;
+  let bySession = presenceMap.get(sessionId);
+  if (!bySession) {
+    bySession = new Map();
+    presenceMap.set(sessionId, bySession);
   }
-  session.onlineUsersLastSeen[username] = atIso ?? new Date().toISOString();
+  bySession.set(username, atIso ?? new Date().toISOString());
 }
 
-export function getOnlineUsers(session: SessionState, nowMs = Date.now()): string[] {
-  const map = session.onlineUsersLastSeen ?? {};
+export function getOnlineUsers(sessionId: string, nowMs = Date.now()): string[] {
+  const bySession = presenceMap.get(sessionId);
+  if (!bySession) return [];
   const threshold = nowMs - onlineWindowMs();
-  return Object.entries(map)
-    .filter(([, iso]) => {
-      const ts = Date.parse(iso);
-      return Number.isFinite(ts) && ts >= threshold;
-    })
-    .map(([username]) => username);
+  const result: string[] = [];
+  for (const [username, iso] of bySession) {
+    const ts = Date.parse(iso);
+    if (Number.isFinite(ts) && ts >= threshold) result.push(username);
+  }
+  return result;
 }
-

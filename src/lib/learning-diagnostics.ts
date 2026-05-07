@@ -1,14 +1,13 @@
+import { QualitySignals } from "@/src/lib/types";
+
+export type { QualitySignals };
+
 export type DiagnosticMessage = {
   role: string;
   userId?: string;
   text: string;
   at: string;
   step: number;
-};
-
-export type QualitySignals = {
-  rejectedAnswerCounts?: Record<string, number>;
-  rejectedAnswerLastAt?: Record<string, string>;
 };
 
 export type ArtifactDiagnostics = {
