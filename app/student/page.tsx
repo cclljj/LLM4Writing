@@ -431,23 +431,19 @@ export default function StudentPage() {
 
   useEffect(() => {
     if (!authReady || !loginUser) return;
-    // Avoid overloading backend while class is in progress: when session exists, use lightweight status polling only.
-    const timer = window.setInterval(() => {
-      if (session?.id) {
-        refreshActivityStatuses().catch(() => undefined);
-      } else {
+    if (!session?.id) {
+      const timer = window.setInterval(() => {
         refreshOverview().catch(() => undefined);
-      }
-    }, session?.id ? 5000 : 15000);
-    return () => window.clearInterval(timer);
-  }, [authReady, loginUser, session?.id]);
-
-  useEffect(() => {
-    if (!session) return;
+      }, 15000);
+      return () => window.clearInterval(timer);
+    }
+    // Session active: single 5s loop — session (ETag every tick) + activity statuses (every 3rd tick ≈15s)
+    const sessionId = session.id;
+    let tick = 0;
     const timer = window.setInterval(() => {
       const headers: Record<string, string> = {};
       if (sessionEtagRef.current) headers["If-None-Match"] = sessionEtagRef.current;
-      fetch(`/api/session/${session.id}`, { headers })
+      fetch(`/api/session/${sessionId}`, { headers })
         .then((res) => {
           const newEtag = res.headers.get("ETag");
           if (newEtag) sessionEtagRef.current = newEtag;
@@ -458,9 +454,11 @@ export default function StudentPage() {
           if (data?.id) setSession(data);
         })
         .catch(() => undefined);
+      if (tick % 3 === 0) refreshActivityStatuses().catch(() => undefined);
+      tick++;
     }, 5000);
     return () => window.clearInterval(timer);
-  }, [session?.id]);
+  }, [authReady, loginUser, session?.id]);
 
   useEffect(() => {
     if (!session || !loginUser) return;
