@@ -19,6 +19,7 @@ type Step68PanelProps = {
   step6RefUser: string;
   onStep6RefUserChange: (user: string) => void;
   step6StreamingText?: string;
+  step7StreamingText?: string;
 };
 
 export default function Step68Panel({
@@ -38,6 +39,7 @@ export default function Step68Panel({
   step6RefUser,
   onStep6RefUserChange,
   step6StreamingText,
+  step7StreamingText,
 }: Step68PanelProps) {
   return (
     <div className="card">
@@ -118,6 +120,25 @@ export default function Step68Panel({
         <small style={{ display: "block", marginTop: 6, color: "#94a3b8" }}>
           AI 正在產生步驟 7 分析回饋，請稍候...
         </small>
+      ) : null}
+      {currentStep === 6 && step7StreamingText ? (
+        <div
+          style={{
+            marginTop: 10,
+            padding: "10px 12px",
+            border: "1px solid #cbd5e1",
+            borderRadius: 8,
+            background: "#f8fafc",
+            whiteSpace: "pre-wrap",
+            fontSize: 14,
+            lineHeight: 1.6
+          }}
+        >
+          <small style={{ display: "block", marginBottom: 6, color: "#64748b", fontWeight: 600 }}>
+            步驟 7 分析回饋（產生中{isCompletingStep6 ? "…" : ""}）
+          </small>
+          {step7StreamingText}
+        </div>
       ) : null}
       <small style={{ display: "block", marginTop: 8, color: "#94a3b8" }}>
         未儲存字數：{unsavedChars}
