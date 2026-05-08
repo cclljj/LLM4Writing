@@ -62,6 +62,8 @@ export default function LearningMonitorTab({
   const monitorPollingBusyRef = useRef(false);
   // Anchor for "查看對話" jump-to-section behavior (#246).
   const groupLogRef = useRef<HTMLDivElement | null>(null);
+  // Anchor for "查看" (per-student) jump-to-section behavior (#249).
+  const personalLogRef = useRef<HTMLDivElement | null>(null);
   // Exponential-backoff state for monitor polling (#239).
   // We hash the sessions payload to detect quiescent periods and stretch the interval.
   const monitorPayloadHashRef = useRef<string>("");
@@ -135,6 +137,30 @@ export default function LearningMonitorTab({
       const label = members ? `小組 ${groupLabel}: ${members}` : `小組 ${groupLabel}`;
       return { sessionId: session.sessionId, label, session };
     });
+  }, [filteredMonitorSessions, users]);
+
+  /**
+   * Student selector options for "個人對話紀錄" card (#249).
+   * Format: `小組 N: 姓名 (帳號)` for every participant across all sessions of the
+   * current activity. Each entry carries `sessionId` so the 查看 click can call
+   * loadProgress(sessionId, username) directly.
+   */
+  const personalLogOptions = useMemo(() => {
+    const userMap = new Map(users.map((u) => [u.username, u]));
+    const options: Array<{ sessionId: string; username: string; label: string }> = [];
+    for (const session of filteredMonitorSessions) {
+      const groupLabel = session.groupName ?? session.groupId ?? "未命名組";
+      for (const username of session.participants ?? []) {
+        const u = userMap.get(username);
+        const displayName = u?.name?.trim() || username;
+        options.push({
+          sessionId: session.sessionId,
+          username,
+          label: `小組 ${groupLabel}: ${displayName} (${username})`
+        });
+      }
+    }
+    return options;
   }, [filteredMonitorSessions, users]);
 
   /**
@@ -347,6 +373,18 @@ export default function LearningMonitorTab({
     setUserOutline("");
     setUserStep3SubmittedOutline("");
   }, [selectedLearningActivityId]);
+
+  // Auto-load the first student when the personal log card is first expanded with
+  // no current selection (#249).
+  useEffect(() => {
+    if (!personalLogExpanded) return;
+    if (selectedProgressUser) return;
+    if (personalLogOptions.length === 0) return;
+    const first = personalLogOptions[0]!;
+    setProgressSessionId(first.sessionId);
+    loadProgress(first.sessionId, first.username).catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [personalLogExpanded, selectedProgressUser, personalLogOptions]);
 
   useEffect(() => {
     if (!showCourseStatusView || !selectedLearningActivityId) return;
@@ -1037,6 +1075,11 @@ export default function LearningMonitorTab({
                             if (!row.sessionId) return;
                             setProgressSessionId(row.sessionId);
                             loadProgress(row.sessionId, row.username);
+                            // Auto-expand personal log section and scroll into view (#249).
+                            setPersonalLogExpanded(true);
+                            window.setTimeout(() => {
+                              personalLogRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                            }, 0);
                           }}
                         >
                           查看
@@ -1194,8 +1237,8 @@ export default function LearningMonitorTab({
             </div>
           ) : null}
 
-          {personalMessages.length > 0 ? (
-            <div className="card">
+          {filteredMonitorSessions.length > 0 ? (
+            <div className="card" ref={personalLogRef}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: personalLogExpanded ? 12 : 0 }}>
                 <h2 style={{ margin: 0 }}>個人對話紀錄</h2>
                 <button
@@ -1205,7 +1248,37 @@ export default function LearningMonitorTab({
                   {personalLogExpanded ? "關閉" : "展開"}
                 </button>
               </div>
-              {personalLogExpanded && (() => {
+              {personalLogExpanded ? (
+                <div style={{ marginBottom: 12 }}>
+                  <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 4 }}>選擇學生</label>
+                  <select
+                    value={selectedProgressUser}
+                    onChange={(e) => {
+                      const username = e.target.value;
+                      if (!username) {
+                        setSelectedProgressUser("");
+                        setPersonalMessages([]);
+                        setUserOutline("");
+                        setUserStep3SubmittedOutline("");
+                        return;
+                      }
+                      const opt = personalLogOptions.find((o) => o.username === username);
+                      if (opt) {
+                        setProgressSessionId(opt.sessionId);
+                        loadProgress(opt.sessionId, opt.username);
+                      }
+                    }}
+                  >
+                    <option value="">請選擇學生...</option>
+                    {personalLogOptions.map((opt) => (
+                      <option key={opt.username} value={opt.username}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : null}
+              {personalLogExpanded && personalMessages.length > 0 ? (() => {
                 const personalSteps = [...new Set(personalMessages.map((m) => m.step))].sort((a, b) => a - b);
                 const hasStep4Revised = Boolean(userOutline && userOutline !== userStep3SubmittedOutline);
 
@@ -1274,7 +1347,11 @@ export default function LearningMonitorTab({
                     })}
                   </>
                 );
-              })()}
+              })() : personalLogExpanded && selectedProgressUser ? (
+                <small style={{ color: "#64748b" }}>正在載入該學生的對話紀錄…</small>
+              ) : personalLogExpanded ? (
+                <small style={{ color: "#64748b" }}>請從上方下拉選單選擇要查看的學生。</small>
+              ) : null}
             </div>
           ) : null}
         </>
