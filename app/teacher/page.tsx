@@ -3,6 +3,7 @@
 import { DragEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { ArtifactDiagnostics, buildAdvancedStuckRisk, QualitySignals } from "@/src/lib/learning-diagnostics";
+import { ChatMessage } from "@/src/lib/types";
 import AdminPromptDiagnostics from "./_components/AdminPromptDiagnostics";
 import TeacherDashboard, { TeacherDashboardData } from "./_components/TeacherDashboard";
 
@@ -64,7 +65,7 @@ type MonitorSession = {
   step3SubmittedOutlines?: Record<string, string>;
   qualitySignals?: QualitySignals;
   artifactDiagnostics?: ArtifactDiagnostics;
-  messages: Array<{ id: string; role: string; userId?: string; text: string; at: string; step: number }>;
+  messages: ChatMessage[];
 };
 
 type PersonalProgressRow = {
@@ -413,9 +414,7 @@ export default function TeacherPage() {
   const [learningWarning, setLearningWarning] = useState("");
   const [progressRows, setProgressRows] = useState<PersonalProgressRow[]>([]);
   const [selectedProgressUser, setSelectedProgressUser] = useState("");
-  const [personalMessages, setPersonalMessages] = useState<
-    Array<{ id: string; role: string; userId?: string; text: string; at: string; step: number }>
-  >([]);
+  const [personalMessages, setPersonalMessages] = useState<ChatMessage[]>([]);
   const [userOutline, setUserOutline] = useState("");
   const [userStep3SubmittedOutline, setUserStep3SubmittedOutline] = useState("");
   const refreshTokenRef = useRef(0);

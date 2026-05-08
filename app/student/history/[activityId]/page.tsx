@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { ChatMessage } from "@/src/lib/types";
 
 type HistorySummary = {
   sessionCount: number;
@@ -22,21 +23,12 @@ type HistoryActivity = {
   supplemental: string;
 };
 
-type SessionMessage = {
-  id: string;
-  role: string;
-  userId?: string;
-  text: string;
-  at: string;
-  step: number;
-};
-
 type LatestSession = {
   sessionId: string;
   personalStep: number;
   groupName: string;
   participants: string[];
-  messages: SessionMessage[];
+  messages: ChatMessage[];
 };
 
 type LatestWork = {
