@@ -35,8 +35,10 @@ export default function LearningMonitorTab({
   const [monitorSessions, setMonitorSessions] = useState<MonitorSession[]>([]);
   const [monitorSelected, setMonitorSelected] = useState<MonitorSession | null>(null);
   const [groupViewStep, setGroupViewStep] = useState<string>("all");
-  const [groupLogExpanded, setGroupLogExpanded] = useState(true);
-  const [personalLogExpanded, setPersonalLogExpanded] = useState(true);
+  // Default to collapsed (#245): teachers usually scan the dashboard first; logs are
+  // opt-in details. Section-level and per-step cards both default to closed.
+  const [groupLogExpanded, setGroupLogExpanded] = useState(false);
+  const [personalLogExpanded, setPersonalLogExpanded] = useState(false);
   const [groupLogStepExpanded, setGroupLogStepExpanded] = useState<Record<number, boolean>>({});
   const [personalLogStepExpanded, setPersonalLogStepExpanded] = useState<Record<number, boolean>>({});
   const [selectedLearningActivityId, setSelectedLearningActivityId] = useState("");
@@ -1107,10 +1109,10 @@ export default function LearningMonitorTab({
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: groupLogExpanded ? 12 : 0 }}>
                 <h2 style={{ margin: 0 }}>小組對話紀錄</h2>
                 <button
-                  style={{ padding: "4px 14px", fontSize: 13, cursor: "pointer", borderRadius: 6, border: "1px solid #cbd5e1", background: "#f8fafc" }}
+                  style={{ width: "3em", padding: "4px 0", fontSize: 13, cursor: "pointer", borderRadius: 6, border: "1px solid #cbd5e1", background: "#f8fafc", textAlign: "center" }}
                   onClick={() => setGroupLogExpanded((v) => !v)}
                 >
-                  {groupLogExpanded ? "▲ 收起" : "▼ 展開"}
+                  {groupLogExpanded ? "關閉" : "展開"}
                 </button>
               </div>
               {groupLogExpanded && (() => {
@@ -1163,7 +1165,8 @@ export default function LearningMonitorTab({
                     {groupSteps.map((step) => {
                       const stepMsgs = allGroupMsgs.filter((m) => m.step === step);
                       if (stepMsgs.length === 0) return null;
-                      const isExpanded = groupLogStepExpanded[step] ?? true;
+                      // Per-step cards default to closed (#245).
+                      const isExpanded = groupLogStepExpanded[step] ?? false;
                       return (
                         <div key={step} style={{ border: "1px solid #e2e8f0", borderRadius: 8, marginBottom: 8, overflow: "hidden" }}>
                           <div
@@ -1171,7 +1174,20 @@ export default function LearningMonitorTab({
                             onClick={() => setGroupLogStepExpanded((prev) => ({ ...prev, [step]: !isExpanded }))}
                           >
                             <strong style={{ fontSize: 14 }}>步驟 {step}</strong>
-                            <span style={{ fontSize: 12, color: "#64748b" }}>{isExpanded ? "▲ 收起" : "▼ 展開"}</span>
+                            <span
+                              style={{
+                                width: "3em",
+                                padding: "2px 0",
+                                fontSize: 12,
+                                color: "#475569",
+                                background: "#fff",
+                                border: "1px solid #cbd5e1",
+                                borderRadius: 6,
+                                textAlign: "center"
+                              }}
+                            >
+                              {isExpanded ? "關閉" : "展開"}
+                            </span>
                           </div>
                           {isExpanded && (
                             <div style={{ padding: "4px 12px 12px" }}>
@@ -1206,10 +1222,10 @@ export default function LearningMonitorTab({
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: personalLogExpanded ? 12 : 0 }}>
                 <h2 style={{ margin: 0 }}>個人對話紀錄</h2>
                 <button
-                  style={{ padding: "4px 14px", fontSize: 13, cursor: "pointer", borderRadius: 6, border: "1px solid #cbd5e1", background: "#f8fafc" }}
+                  style={{ width: "3em", padding: "4px 0", fontSize: 13, cursor: "pointer", borderRadius: 6, border: "1px solid #cbd5e1", background: "#f8fafc", textAlign: "center" }}
                   onClick={() => setPersonalLogExpanded((v) => !v)}
                 >
-                  {personalLogExpanded ? "▲ 收起" : "▼ 展開"}
+                  {personalLogExpanded ? "關閉" : "展開"}
                 </button>
               </div>
               {personalLogExpanded && (() => {
@@ -1234,7 +1250,8 @@ export default function LearningMonitorTab({
                   <>
                     {personalSteps.map((step) => {
                       const stepMsgs = personalMessages.filter((m) => m.step === step);
-                      const isExpanded = personalLogStepExpanded[step] ?? true;
+                      // Per-step cards default to closed (#245).
+                      const isExpanded = personalLogStepExpanded[step] ?? false;
                       return (
                         <div key={step} style={{ border: "1px solid #e2e8f0", borderRadius: 8, marginBottom: 8, overflow: "hidden" }}>
                           <div
@@ -1242,7 +1259,20 @@ export default function LearningMonitorTab({
                             onClick={() => setPersonalLogStepExpanded((prev) => ({ ...prev, [step]: !isExpanded }))}
                           >
                             <strong style={{ fontSize: 14 }}>步驟 {step}</strong>
-                            <span style={{ fontSize: 12, color: "#64748b" }}>{isExpanded ? "▲ 收起" : "▼ 展開"}</span>
+                            <span
+                              style={{
+                                width: "3em",
+                                padding: "2px 0",
+                                fontSize: 12,
+                                color: "#475569",
+                                background: "#fff",
+                                border: "1px solid #cbd5e1",
+                                borderRadius: 6,
+                                textAlign: "center"
+                              }}
+                            >
+                              {isExpanded ? "關閉" : "展開"}
+                            </span>
                           </div>
                           {isExpanded && (
                             <div style={{ padding: "4px 12px 12px" }}>
