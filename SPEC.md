@@ -474,16 +474,23 @@ student 可儲存三種內容：
 
 - 大型頁面仍保留資料讀取、流程控制與 API 呼叫協調。
 - 可重用或可獨立閱讀的純 UI 區塊需放在同層 `_components` 目錄。
-- 學生端已拆出：
+- 學生端已拆出（#234）：
+  - `app/student/_components/renderMessageHtml.ts`：Markdown → HTML 轉換純工具函式（無 React 依賴）
+  - `app/student/_components/OutlineEditor.tsx`：SVG 拖拉結構樹編輯器，自管 outlineNodes / editingNodeId / dragging 等所有 outline 狀態與 sync guard；Props: `serverMermaid`, `locked`, `lockedLabel?`, `onSave`, `onComplete?`, `completeLabel?`, `completeDisabled?`, `completedMessage?`；父層以 `outlineMermaidRef` 追蹤最新 mermaid 供 completeStep4 使用
+  - `app/student/_components/StudentLobby.tsx`：無 session 時的課程選單頁（進行中/未開始/暫停/已參與課程）
+  - `app/student/_components/HistoryReview.tsx`：可折疊的前序步驟回顧，自管 expanded state；含 step 3/4 結構樹快照
+  - `app/student/_components/InteractionPanel.tsx`：通用互動面板（步驟 1/2/4/6/7/9），含訊息列表、傳訊表單、step9 批次回答、step4 確認完成、step6 完成文章撰寫
+  - `app/student/_components/Step68Panel.tsx`：步驟 6/8 草稿編輯器，含結構樹參考選擇（step6）、儲存/AI建議/完成按鈕
   - `app/student/_components/StudentProgressRail.tsx`
   - `app/student/_components/GroupWaitingStatus.tsx`
   - `app/student/_components/Step3ToolHint.tsx`
   - `app/student/_components/StudentTopHeader.tsx`
   - `app/student/_components/NextActionCard.tsx`
+- `app/student/page.tsx` 從 2192 行縮減至 ~1135 行（−48%）；所有 outline 相關 state/refs/effects 移入 OutlineEditor，historyReviewExpanded 移入 HistoryReview，renderMessageHtml 改為 import
 - 教師端已拆出：
   - `app/teacher/_components/TeacherDashboard.tsx`
   - `app/teacher/_components/AdminPromptDiagnostics.tsx`
-- 第一階段元件拆分以 presentational components 為主，不改變既有 session polling、API 呼叫、流程推進與資料儲存行為。
+- 元件拆分不改變既有 session polling、API 呼叫、流程推進與資料儲存行為。
 
 ## 6.0.1 前端 E2E 測試
 

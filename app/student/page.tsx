@@ -2,16 +2,17 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { resolvePendingOutlineAfterServerSync, shouldSyncOutlineFromSession } from "@/src/lib/outline-sync-guard";
-import { getStructureTreeNodePermissions } from "@/src/lib/structure-tree-permissions";
 import { buildStudentNextAction } from "@/src/lib/student-next-action";
-import { fromMermaid as parseMermaid, buildOutlinePreview as parseOutlinePreview } from "@/src/lib/outline-utils";
-import type { OutlineNode, OutlinePreview } from "@/src/lib/outline-utils";
 import OutlineSvg from "@/app/_components/OutlineSvg";
 import GroupWaitingStatus from "./_components/GroupWaitingStatus";
 import NextActionCard from "./_components/NextActionCard";
-import Step3ToolHint from "./_components/Step3ToolHint";
 import StudentProgressRail from "./_components/StudentProgressRail";
+import { renderMessageHtml } from "./_components/renderMessageHtml";
+import OutlineEditor from "./_components/OutlineEditor";
+import StudentLobby from "./_components/StudentLobby";
+import HistoryReview from "./_components/HistoryReview";
+import InteractionPanel from "./_components/InteractionPanel";
+import Step68Panel from "./_components/Step68Panel";
 
 type InteractionMode = "group_interaction" | "personal_interaction" | "non_interactive" | "personal_reflection";
 
@@ -123,136 +124,11 @@ function getActiveGroupGateKey(session: SessionState | null, step: number): stri
   return null;
 }
 
-function escapeHtml(input: string): string {
-  return input
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-}
-
-function applyInlineMarkdown(input: string): string {
-  return input
-    .replace(/`([^`]+)`/g, "<code>$1</code>")
-    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-    .replace(/\*(.+?)\*/g, "<em>$1</em>")
-    .replace(/__(.+?)__/g, "<strong>$1</strong>")
-    .replace(/_(.+?)_/g, "<em>$1</em>");
-}
-
-function renderMessageHtml(text: string): string {
-  const lines = text.split(/\r?\n/);
-  const htmlParts: string[] = [];
-  let unorderedListBuffer: string[] = [];
-  let orderedListBuffer: string[] = [];
-
-  const flushLists = () => {
-    if (unorderedListBuffer.length > 0) {
-      htmlParts.push(`<ul>${unorderedListBuffer.join("")}</ul>`);
-      unorderedListBuffer = [];
-    }
-    if (orderedListBuffer.length > 0) {
-      htmlParts.push(`<ol>${orderedListBuffer.join("")}</ol>`);
-      orderedListBuffer = [];
-    }
-  };
-
-  for (const rawLine of lines) {
-    const line = rawLine.trim();
-    if (!line) {
-      flushLists();
-      continue;
-    }
-
-    const escaped = applyInlineMarkdown(escapeHtml(line));
-    if (escaped.startsWith("- ") || escaped.startsWith("* ")) {
-      orderedListBuffer = [];
-      unorderedListBuffer.push(`<li>${escaped.slice(2)}</li>`);
-      continue;
-    }
-    const ordered = escaped.match(/^\d+\.\s+(.+)$/);
-    if (ordered) {
-      unorderedListBuffer = [];
-      orderedListBuffer.push(`<li>${ordered[1]}</li>`);
-      continue;
-    }
-
-    flushLists();
-
-    const h1 = escaped.match(/^#\s+(.+)$/);
-    if (h1) {
-      htmlParts.push(`<h2 style="margin:10px 0 6px;">${h1[1]}</h2>`);
-      continue;
-    }
-    const h2 = escaped.match(/^##\s+(.+)$/);
-    if (h2) {
-      htmlParts.push(`<h3 style="margin:9px 0 5px;">${h2[1]}</h3>`);
-      continue;
-    }
-
-    const h3 = escaped.match(/^###\s+(.+)$/);
-    if (h3) {
-      htmlParts.push(`<h4 style="margin:8px 0 4px;">${h3[1]}</h4>`);
-      continue;
-    }
-    const h4 = escaped.match(/^####\s+(.+)$/);
-    if (h4) {
-      htmlParts.push(`<h5 style="margin:8px 0 4px;">${h4[1]}</h5>`);
-      continue;
-    }
-    const quote = escaped.match(/^>\s?(.+)$/);
-    if (quote) {
-      htmlParts.push(`<blockquote style="margin:6px 0; padding-left:10px; border-left:3px solid #cbd5e1;">${quote[1]}</blockquote>`);
-      continue;
-    }
-
-    htmlParts.push(`<p style="margin:6px 0;">${escaped}</p>`);
-  }
-
-  flushLists();
-  return htmlParts.join("");
-}
-
 function looksLikeInstructionPromptText(text: string): boolean {
   if (text.includes("【") || text.includes("提問規則") || text.includes("批判性思考")) return true;
   if (text.includes("請回答以下問題")) return true;
   const lines = text.split(/\r?\n/).filter((line) => line.trim().length > 0);
   return lines.length >= 4 || text.length >= 160;
-}
-
-function newNodeId(): string {
-  return `n-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
-}
-
-function makeDefaultOutlineNodes(): OutlineNode[] {
-  return [{ id: "root", parentId: null, text: "主題", x: 380, y: 40 }];
-}
-
-function escapeMermaidLabel(text: string): string {
-  return text.replaceAll('"', '\\"').replace(/\r?\n/g, "<br/>");
-}
-
-function toMermaid(nodes: OutlineNode[]): string {
-  const lines: string[] = ["graph TD"];
-  nodes.forEach((node) => {
-    lines.push(`  ${node.id}["${escapeMermaidLabel(node.text || "未命名節點")}"]`);
-  });
-  nodes
-    .filter((node) => node.parentId)
-    .forEach((node) => {
-      lines.push(`  ${node.parentId} --> ${node.id}`);
-    });
-  return lines.join("\n");
-}
-
-function fromMermaid(text: string): OutlineNode[] {
-  const nodes = parseMermaid(text);
-  return nodes.length > 0 ? nodes : makeDefaultOutlineNodes();
-}
-
-function buildOutlinePreview(outline: string): OutlinePreview {
-  return parseOutlinePreview(outline) ?? { nodes: makeDefaultOutlineNodes(), width: 520, height: 240 };
 }
 
 export default function StudentPage() {
@@ -272,19 +148,9 @@ export default function StudentPage() {
   const [session, setSession] = useState<SessionState | null>(null);
   const [text, setText] = useState("");
   const [error, setError] = useState("");
-
-  const [outlineText, setOutlineText] = useState("");
-  const [outlineNodes, setOutlineNodes] = useState<OutlineNode[]>(makeDefaultOutlineNodes);
-  const [outlineDirty, setOutlineDirty] = useState(false);
-  const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
-  const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null);
-  const [dropTargetNodeId, setDropTargetNodeId] = useState<string | null>(null);
-  const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [draftText, setDraftText] = useState("");
   const [step9Answers, setStep9Answers] = useState(["", "", "", ""]);
   const [refUser, setRefUser] = useState("");
-  const [showDraftEditor, setShowDraftEditor] = useState(false);
-  const [showStep6OutlineRef, setShowStep6OutlineRef] = useState(false);
   const [isSendingMessage, setIsSendingMessage] = useState(false);
   const [isLoadingOverview, setIsLoadingOverview] = useState(false);
   const [isAutoAdvancingStep5, setIsAutoAdvancingStep5] = useState(false);
@@ -294,13 +160,9 @@ export default function StudentPage() {
   const [isCompletingStep8, setIsCompletingStep8] = useState(false);
   const [savedDraft8Text, setSavedDraft8Text] = useState("");
   const [step6RefUser, setStep6RefUser] = useState("");
-  const [historyReviewExpanded, setHistoryReviewExpanded] = useState<Record<number, boolean>>({});
-  const outlineCanvasRef = useRef<HTMLDivElement | null>(null);
   const lastOwnStepRef = useRef<number | null>(null);
-  const autoSaveSeqRef = useRef(0);
-  const pendingOutlineSyncRef = useRef<string | null>(null);
-  const longPressTimerRef = useRef<number | null>(null);
   const sessionEtagRef = useRef<string>("");
+  const outlineMermaidRef = useRef<string>("");
 
   useEffect(() => {
     fetch("/api/auth/me", { cache: "no-store" })
@@ -333,7 +195,6 @@ export default function StudentPage() {
       }, 15000);
       return () => window.clearInterval(timer);
     }
-    // Session active: single 5s loop — session (ETag every tick) + activity statuses (every 3rd tick ≈15s)
     const sessionId = session.id;
     let tick = 0;
     const timer = window.setInterval(() => {
@@ -360,20 +221,16 @@ export default function StudentPage() {
     if (!session || !loginUser) return;
     const ownStep = session.personalSteps?.[loginUser] ?? session.currentStep;
     const justEnteredStep6 = lastOwnStepRef.current !== 6 && ownStep === 6;
-    setOutlineText(session.outlines[loginUser] ?? "");
     if (ownStep === 6 && (justEnteredStep6 || !draftText)) {
       const latestDraft = session.draftStep6[loginUser] ?? "";
       setDraftText(latestDraft);
       setSavedDraft6Text(latestDraft);
-      setShowDraftEditor(true);
-      setShowStep6OutlineRef(false);
       setStep6RefUser((prev) => (prev ? prev : loginUser));
     }
     if (ownStep === 8) {
       const latestDraft = session.draftStep8[loginUser] ?? session.draftStep6[loginUser] ?? "";
       setDraftText(latestDraft);
       setSavedDraft8Text(latestDraft);
-      setShowDraftEditor(false);
     }
     if (!refUser && session.participants.length > 0) {
       setRefUser((session.participants.find((user) => user !== loginUser) ?? session.participants[0])!);
@@ -414,102 +271,28 @@ export default function StudentPage() {
   }, [loginUser, session, step6RefUser]);
 
   useEffect(() => {
-    const ownStep = session && loginUser ? session.personalSteps?.[loginUser] ?? session.currentStep : 1;
-    if (!(ownStep === 3 || ownStep === 4) || !loginUser) return;
-    const shouldSyncFromSession = ownStep === 3 || ownStep === 4;
-    if (!shouldSyncFromSession) return;
-    const saved = session?.outlines[loginUser]?.trim() ?? "";
-    if (
-      !shouldSyncOutlineFromSession({
-        localPendingOutline: pendingOutlineSyncRef.current,
-        serverOutline: saved,
-        outlineDirty,
-        draggingNodeId,
-        editingNodeId
-      })
-    ) {
-      return;
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      setShowDebugLog(params.get("debug") === "yes");
     }
-    pendingOutlineSyncRef.current = resolvePendingOutlineAfterServerSync({
-      localPendingOutline: pendingOutlineSyncRef.current,
-      serverOutline: saved
-    });
-    setOutlineNodes(saved ? fromMermaid(saved) : makeDefaultOutlineNodes());
-    setOutlineDirty(false);
-    setEditingNodeId(null);
-  }, [
-    session?.id,
-    session?.currentStep,
-    session?.personalSteps,
-    loginUser,
-    session?.outlines,
-    outlineDirty,
-    draggingNodeId,
-    editingNodeId
-  ]);
+  }, []);
+
+  const currentStep = session && loginUser
+    ? session.personalSteps?.[loginUser] ?? session.currentStep
+    : session?.currentStep ?? 1;
 
   useEffect(() => {
-    if (!draggingNodeId) return;
-
-    function onMouseMove(event: MouseEvent) {
-      const canvas = outlineCanvasRef.current;
-      if (!canvas) return;
-      const rect = canvas.getBoundingClientRect();
-      const x = event.clientX - rect.left - dragOffset.x;
-      const y = event.clientY - rect.top - dragOffset.y;
-      const limitX = Math.max(980, canvas.scrollWidth - 130);
-      const limitY = Math.max(520, canvas.scrollHeight - 80);
-      setOutlineDirty(true);
-      setOutlineNodes((prev) =>
-        prev.map((node) =>
-          node.id === draggingNodeId
-            ? {
-                ...node,
-                x: Math.max(10, Math.min(limitX, x)),
-                y: Math.max(10, Math.min(limitY, y))
-              }
-            : node
-        )
-      );
-    }
-
-    function onMouseUp() {
-      setOutlineNodes((prev) => {
-        if (!draggingNodeId || !dropTargetNodeId || draggingNodeId === dropTargetNodeId) return prev;
-        const dragging = prev.find((node) => node.id === draggingNodeId);
-        const target = prev.find((node) => node.id === dropTargetNodeId);
-        if (!dragging || !target) return prev;
-        const ancestorSet = new Set<string>();
-        let cursor: OutlineNode | undefined = target;
-        while (cursor?.parentId) {
-          ancestorSet.add(cursor.parentId);
-          cursor = prev.find((node) => node.id === cursor?.parentId);
-        }
-        if (ancestorSet.has(dragging.id)) return prev;
-        setOutlineDirty(true);
-        return prev.map((node) =>
-          node.id === draggingNodeId ? { ...node, parentId: target.id, y: target.y + 120 } : node
-        );
-      });
-      setDraggingNodeId(null);
-      setDropTargetNodeId(null);
-    }
-
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", onMouseUp);
-    return () => {
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup", onMouseUp);
-    };
-  }, [dragOffset.x, dragOffset.y, draggingNodeId, dropTargetNodeId]);
+    if (currentStep !== 9) return;
+    setStep9Answers(["", "", "", ""]);
+  }, [currentStep, session?.id]);
 
   const sortedMessages = useMemo(
     () => [...(session?.messages ?? [])].sort((a, b) => a.at.localeCompare(b.at)),
     [session]
   );
+
   const interactiveMessages = useMemo(() => {
     if (!session) return [] as InteractiveItem[];
-    const currentStep = loginUser ? session.personalSteps?.[loginUser] ?? session.currentStep : session.currentStep;
     const currentMode = getMode(currentStep);
     const activeGateKey = getActiveGroupGateKey(session, currentStep);
     const responders = activeGateKey ? session.groupGate?.[activeGateKey] ?? [] : [];
@@ -535,73 +318,51 @@ export default function StudentPage() {
       }
     }
 
-    const toQuestionText = (text: string): string | null => {
-      if (text.includes("子步驟 ")) {
-        const idx = text.indexOf("子步驟 ");
-        const extracted = text.slice(idx).trim();
+    const toQuestionText = (t: string): string | null => {
+      if (t.includes("子步驟 ")) {
+        const idx = t.indexOf("子步驟 ");
+        const extracted = t.slice(idx).trim();
         const m = extracted.match(/^子步驟\s+(\d-\d(?:-\d)?)：([\s\S]*)$/);
         if (!m) return extracted;
         const substep = m[1];
         const content = m[2]?.trim() ?? "";
-        // Do not leak prompt instructions in student-facing interaction stream.
         if (content.startsWith("請討論：") || looksLikeInstructionPromptText(content)) {
           return `子步驟 ${substep}：請依上一則 AI 提問進行回答。`;
         }
         return `子步驟 ${substep}：${content}`;
       }
-      if (text.startsWith("下一題：")) {
-        return text.replace("下一題：", "").trim();
-      }
-      if (text.startsWith("步驟 9 開始：")) {
-        return text.replace("步驟 9 開始：", "").trim();
-      }
-      if (text.startsWith("步驟 3 開頭詞：")) {
-        return text.replace("步驟 3 開頭詞：", "").trim();
-      }
+      if (t.startsWith("下一題：")) return t.replace("下一題：", "").trim();
+      if (t.startsWith("步驟 9 開始：")) return t.replace("步驟 9 開始：", "").trim();
+      if (t.startsWith("步驟 3 開頭詞：")) return t.replace("步驟 3 開頭詞：", "").trim();
       return null;
     };
 
     const result: InteractiveItem[] = [];
     stepMessages.forEach((m, idx) => {
-        if (m.role === "student") {
-          if (currentStep >= 5 && m.userId && m.userId !== loginUser) {
-            return;
-          }
-          if (currentStep === 3 && m.userId && m.userId !== loginUser) {
-            return;
-          }
-          const isCurrentTurnMessage = currentTurnStartIndex >= 0 ? idx > currentTurnStartIndex : false;
-          if (hidePeerAnswersBeforeOwn && isCurrentTurnMessage && m.userId && m.userId !== loginUser) {
-            return;
-          }
-          result.push({ id: m.id, kind: "student", text: m.text, at: m.at, userId: m.userId });
-          return;
-        }
-        if (m.role === "ai") {
-          if (currentStep >= 5 && m.userId && m.userId !== loginUser) {
-            return;
-          }
-          if (currentStep === 3 && m.userId !== loginUser) {
-            return;
-          }
-          result.push({ id: m.id, kind: "ai", text: m.text, at: m.at });
-          return;
-        }
-        if (m.role === "system") {
-          if (currentStep >= 5 && m.userId && m.userId !== loginUser) {
-            return;
-          }
-          if (currentStep === 3) {
-            return;
-          }
-          const q = toQuestionText(m.text);
-          if (q) {
-            result.push({ id: m.id, kind: "question", text: q, at: m.at });
-          }
-        }
-      });
+      if (m.role === "student") {
+        if (currentStep >= 5 && m.userId && m.userId !== loginUser) return;
+        if (currentStep === 3 && m.userId && m.userId !== loginUser) return;
+        const isCurrentTurnMessage = currentTurnStartIndex >= 0 ? idx > currentTurnStartIndex : false;
+        if (hidePeerAnswersBeforeOwn && isCurrentTurnMessage && m.userId && m.userId !== loginUser) return;
+        result.push({ id: m.id, kind: "student", text: m.text, at: m.at, userId: m.userId });
+        return;
+      }
+      if (m.role === "ai") {
+        if (currentStep >= 5 && m.userId && m.userId !== loginUser) return;
+        if (currentStep === 3 && m.userId !== loginUser) return;
+        result.push({ id: m.id, kind: "ai", text: m.text, at: m.at });
+        return;
+      }
+      if (m.role === "system") {
+        if (currentStep >= 5 && m.userId && m.userId !== loginUser) return;
+        if (currentStep === 3) return;
+        const q = toQuestionText(m.text);
+        if (q) result.push({ id: m.id, kind: "question", text: q, at: m.at });
+      }
+    });
     return result;
-  }, [session, sortedMessages, loginUser]);
+  }, [session, sortedMessages, loginUser, currentStep]);
+
   const historyReviewSteps = useMemo(() => {
     const ownStep = session && loginUser ? session.personalSteps?.[loginUser] ?? session.currentStep : 1;
     if (!session || !loginUser || ownStep <= 1) return [] as StepReview[];
@@ -621,48 +382,23 @@ export default function StudentPage() {
           }
           return [];
         });
-      reviews.push({
-        step,
-        title: stepNameMap[step] ?? `步驟 ${step}`,
-        messages
-      });
+      reviews.push({ step, title: stepNameMap[step] ?? `步驟 ${step}`, messages });
     }
     return reviews;
   }, [loginUser, session, sortedMessages]);
-  const step3SubmittedOutlinePreview = useMemo(() => {
-    const ownStep = session && loginUser ? session.personalSteps?.[loginUser] ?? session.currentStep : 1;
-    if (!session || !loginUser || ownStep < 4) return null;
-    const submitted = session.step3SubmittedOutlines?.[loginUser]?.trim() ?? "";
-    if (!submitted) return null;
-    return buildOutlinePreview(submitted);
-  }, [loginUser, session]);
-  const step4OutlinePreview = useMemo(() => {
-    const ownStep = session && loginUser ? session.personalSteps?.[loginUser] ?? session.currentStep : 1;
-    if (!session || !loginUser || ownStep < 5) return null;
-    const step4Outline = session.outlines?.[loginUser]?.trim() ?? "";
-    if (!step4Outline) return null;
-    return buildOutlinePreview(step4Outline);
-  }, [loginUser, session]);
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      setShowDebugLog(params.get("debug") === "yes");
-    }
-  }, []);
 
-  useEffect(() => {
-    if (historyReviewSteps.length === 0) {
-      setHistoryReviewExpanded({});
-      return;
-    }
-    setHistoryReviewExpanded((prev) => {
-      const next: Record<number, boolean> = {};
-      historyReviewSteps.forEach((review) => {
-        next[review.step] = prev[review.step] ?? false;
-      });
-      return next;
-    });
-  }, [historyReviewSteps]);
+  const step3SubmittedOutlineMermaid = useMemo(() => {
+    const ownStep = session && loginUser ? session.personalSteps?.[loginUser] ?? session.currentStep : 1;
+    if (!session || !loginUser || ownStep < 4) return "";
+    return session.step3SubmittedOutlines?.[loginUser]?.trim() ?? "";
+  }, [loginUser, session]);
+
+  const step4OutlineMermaid = useMemo(() => {
+    const ownStep = session && loginUser ? session.personalSteps?.[loginUser] ?? session.currentStep : 1;
+    if (!session || !loginUser || ownStep < 5) return "";
+    return session.outlines?.[loginUser]?.trim() ?? "";
+  }, [loginUser, session]);
+
   const currentActivity = useMemo(
     () => {
       const all = [...classCourses];
@@ -675,236 +411,7 @@ export default function StudentPage() {
     if (!session) return [];
     return session.participants.filter((user) => user !== loginUser);
   }, [session, loginUser]);
-  const childrenMap = useMemo(() => {
-    const map = new Map<string, OutlineNode[]>();
-    outlineNodes.forEach((node) => {
-      if (!node.parentId) return;
-      const list = map.get(node.parentId) ?? [];
-      list.push(node);
-      map.set(node.parentId, list);
-    });
-    return map;
-  }, [outlineNodes]);
-  const outlineCanvasSize = useMemo(() => {
-    const defaultWidth = 1100;
-    const defaultHeight = 640;
-    if (outlineNodes.length === 0) return { width: defaultWidth, height: defaultHeight };
-    const maxX = Math.max(...outlineNodes.map((node) => node.x + 170));
-    const maxY = Math.max(...outlineNodes.map((node) => node.y + 130));
-    return {
-      width: Math.max(defaultWidth, maxX),
-      height: Math.max(defaultHeight, maxY)
-    };
-  }, [outlineNodes]);
 
-  function getDepth(nodeId: string): number {
-    let depth = 1;
-    let cursor = outlineNodes.find((node) => node.id === nodeId);
-    while (cursor?.parentId) {
-      depth += 1;
-      cursor = outlineNodes.find((node) => node.id === cursor?.parentId);
-    }
-    return depth;
-  }
-
-  function addChildNode(parentId: string) {
-    const parent = outlineNodes.find((node) => node.id === parentId);
-    if (!parent) return;
-    const siblings = outlineNodes.filter((node) => node.parentId === parentId);
-    const permissions = getStructureTreeNodePermissions(getDepth(parentId), siblings.length);
-    if (!permissions.canAddChild) return;
-    const next: OutlineNode = {
-      id: newNodeId(),
-      parentId,
-      text: `新節點 ${siblings.length + 1}`,
-      x: parent.x + siblings.length * 140,
-      y: parent.y + 120
-    };
-    setOutlineDirty(true);
-    setOutlineNodes((prev) => {
-      const nextNodes = [...prev, next];
-      autoSaveOutlineNodes(nextNodes).catch(() => undefined);
-      return nextNodes;
-    });
-  }
-
-  function removeLeafNode(nodeId: string) {
-    const hasChildren = outlineNodes.some((node) => node.parentId === nodeId);
-    const permissions = getStructureTreeNodePermissions(getDepth(nodeId), hasChildren ? 1 : 0);
-    if (!permissions.canDelete) return;
-    setOutlineDirty(true);
-    setOutlineNodes((prev) => {
-      const nextNodes = prev.filter((node) => node.id !== nodeId);
-      autoSaveOutlineNodes(nextNodes).catch(() => undefined);
-      return nextNodes;
-    });
-    if (editingNodeId === nodeId) setEditingNodeId(null);
-  }
-
-  async function autoSaveOutlineNodes(nodes: OutlineNode[]) {
-    if (!session || !loginUser) return;
-    const seq = ++autoSaveSeqRef.current;
-    const mermaidText = toMermaid(nodes);
-    pendingOutlineSyncRef.current = mermaidText;
-    setOutlineText(mermaidText);
-    await saveArtifact("outline", mermaidText);
-    if (seq === autoSaveSeqRef.current) {
-      setOutlineDirty(false);
-    }
-  }
-
-  function finishNodeEditing(nodeId: string, nextText?: string) {
-    setEditingNodeId(null);
-    if (!getStructureTreeNodePermissions(getDepth(nodeId), childrenMap.get(nodeId)?.length ?? 0).canEditText) return;
-    setOutlineDirty(true);
-    setOutlineNodes((prev) => {
-      const nextNodes =
-        nextText === undefined
-          ? prev
-          : prev.map((item) => (item.id === nodeId ? { ...item, text: nextText } : item));
-      autoSaveOutlineNodes(nextNodes).catch(() => undefined);
-      return nextNodes;
-    });
-  }
-
-  function scheduleLongPressEdit(nodeId: string) {
-    if (!getStructureTreeNodePermissions(getDepth(nodeId), childrenMap.get(nodeId)?.length ?? 0).canEditText) return;
-    if (longPressTimerRef.current) {
-      window.clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
-    longPressTimerRef.current = window.setTimeout(() => {
-      setDraggingNodeId(null);
-      setDropTargetNodeId(null);
-      setEditingNodeId(nodeId);
-      longPressTimerRef.current = null;
-    }, 500);
-  }
-
-  function clearLongPressEdit() {
-    if (!longPressTimerRef.current) return;
-    window.clearTimeout(longPressTimerRef.current);
-    longPressTimerRef.current = null;
-  }
-
-  async function completeOutlineTree() {
-    if (!session) return;
-    const courseStatus = activityStatusMap[session.activityId ?? ""];
-    if (courseStatus && courseStatus !== "in_progress") {
-      setError(courseStatus === "paused" ? "課程目前暫停中，請等待老師繼續上課。" : "課程目前不可提交，請等待老師指示。");
-      return;
-    }
-    const mermaidText = toMermaid(outlineNodes);
-    setOutlineText(mermaidText);
-    const response = await fetch("/api/session/step3/complete", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionId: session.id, outline: mermaidText })
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      setError(data.error ?? "complete_step3_failed");
-      return;
-    }
-    setOutlineDirty(false);
-    setSession(data);
-  }
-
-  async function completeStep4() {
-    if (!session) return;
-    const courseStatus = activityStatusMap[session.activityId ?? ""];
-    if (courseStatus && courseStatus !== "in_progress") {
-      setError(courseStatus === "paused" ? "課程目前暫停中，請等待老師繼續上課。" : "課程目前不可提交，請等待老師指示。");
-      return;
-    }
-    setError("");
-    const outlineToSave = currentStep === 3 || currentStep === 4 ? toMermaid(outlineNodes) : session.outlines[loginUser] ?? "";
-    setOutlineText(outlineToSave);
-    const response = await fetch("/api/session/step4/complete", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionId: session.id, outline: outlineToSave })
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      setError(data.error ?? "complete_step4_failed");
-      return;
-    }
-    setOutlineDirty(false);
-    setSession(data);
-  }
-
-  async function requestStep6Suggestion() {
-    if (!session || currentStep !== 6) return;
-    const courseStatus = activityStatusMap[session.activityId ?? ""];
-    if (courseStatus && courseStatus !== "in_progress") {
-      setError(courseStatus === "paused" ? "課程目前暫停中，請等待老師繼續上課。" : "課程目前不可操作，請等待老師指示。");
-      return;
-    }
-    setError("");
-    setIsSuggestingStep6(true);
-    try {
-      const response = await fetch("/api/session/step6/suggest", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId: session.id, draft: draftText })
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        setError(data.error ?? "step6_suggest_failed");
-        return;
-      }
-      setSession(data);
-    } finally {
-      setIsSuggestingStep6(false);
-    }
-  }
-
-  async function completeStep6ToStep8() {
-    if (!session || currentStep !== 6) return;
-    setError("");
-    setIsCompletingStep6(true);
-    try {
-      const response = await fetch("/api/session/step6/complete", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId: session.id, draft: draftText })
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        setError(data.error ?? "step6_complete_failed");
-        return;
-      }
-      setSavedDraft6Text(draftText);
-      setSession(data);
-    } finally {
-      setIsCompletingStep6(false);
-    }
-  }
-
-  async function completeStep8ToStep9() {
-    if (!session || currentStep !== 8) return;
-    setError("");
-    setIsCompletingStep8(true);
-    try {
-      const response = await fetch("/api/session/step8/complete", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId: session.id, draft: draftText })
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        setError(data.error ?? "step8_complete_failed");
-        return;
-      }
-      setSavedDraft8Text(draftText);
-      setSession(data);
-    } finally {
-      setIsCompletingStep8(false);
-    }
-  }
-
-  const currentStep = session && loginUser ? session.personalSteps?.[loginUser] ?? session.currentStep : session?.currentStep ?? 1;
   const currentActivityStatus = session?.activityId ? activityStatusMap[session.activityId] : undefined;
   const courseStatusBlockedMessage =
     currentActivityStatus === "paused"
@@ -925,16 +432,134 @@ export default function StudentPage() {
           : "個人反思";
   const isInputEnabled = currentMode !== "non_interactive" && (!currentActivityStatus || currentActivityStatus === "in_progress");
 
+  const stepSubstepText =
+    currentStep === 1
+      ? `目前子步驟：${
+          (session?.stepState.step1Substep ?? 1) === 3
+            ? `1-3-${session?.stepState.step1Substep3Question ?? 1}`
+            : (session?.stepState.step1Substep ?? 1) === 4
+              ? `1-4-${session?.stepState.step1Substep4Question ?? 1}`
+              : `1-${session?.stepState.step1Substep ?? 1}`
+        }`
+      : currentStep === 2
+        ? `目前子步驟：${
+            (session?.stepState.step2Substep ?? 1) === 1
+              ? `2-1-${session?.stepState.step2Substep1Question ?? 1}`
+              : `2-${session?.stepState.step2Substep ?? 1}`
+          }`
+        : null;
+  const stepModeLine = `${stepSubstepText ?? "目前子步驟：—"} ｜ 模式：${currentModeLabel}`;
+  const lastInteractive = interactiveMessages[interactiveMessages.length - 1];
+  const lastIsQuestion = lastInteractive?.kind === "question";
+  const activeGateKey = getActiveGroupGateKey(session, currentStep);
+  const responders = activeGateKey ? session?.groupGate?.[activeGateKey] ?? [] : [];
+  const step3CompletedUsers = session?.groupGate?.["3-complete"] ?? [];
+  const step4CompletedUsers = session?.groupGate?.["4-complete"] ?? [];
+  const step3CompletedByMe = Boolean(loginUser && step3CompletedUsers.includes(loginUser));
+  const step4CompletedByMe = Boolean(loginUser && step4CompletedUsers.includes(loginUser));
+  const step4CompletedPeers = useMemo(
+    () => (session?.participants ?? []).filter((p) => p !== loginUser && step4CompletedUsers.includes(p)),
+    [loginUser, session?.participants, step4CompletedUsers]
+  );
+  const allStep4Completed =
+    currentStep === 4 &&
+    !!session &&
+    session.participants.length > 0 &&
+    session.participants.every((p) => step4CompletedUsers.includes(p));
+  const hasSubmittedThisTurn = Boolean(loginUser && responders.includes(loginUser));
+  const allRespondedThisTurn =
+    currentMode === "group_interaction" && !!session && session.participants.every((p) => responders.includes(p));
+  const canReplyToQuestion =
+    currentStep === 4
+      ? !step4CompletedByMe
+      : currentMode === "group_interaction"
+        ? !hasSubmittedThisTurn && !allRespondedThisTurn
+        : currentStep === 3
+          ? !step3CompletedByMe
+          : Boolean(lastIsQuestion);
+  const waitingGroupMembers =
+    currentStep === 4
+      ? !!session && step4CompletedByMe && !allStep4Completed
+      : currentMode === "group_interaction" &&
+        !!session &&
+        Array.isArray(responders) &&
+        hasSubmittedThisTurn &&
+        !session.participants.every((p) => responders.includes(p));
+  const latestStepMessage = session?.messages.filter((m) => m.step === currentStep).at(-1) ?? null;
+  const waitingAiForGroup =
+    currentStep === 4
+      ? false
+      : currentMode === "group_interaction" &&
+        !!session &&
+        session.participants.length > 0 &&
+        session.participants.every((p) => responders.includes(p)) &&
+        latestStepMessage?.role !== "ai";
+  const step1CompletedWaitingTeacher =
+    currentStep === 1 &&
+    latestStepMessage?.role === "system" &&
+    latestStepMessage.text.includes("步驟 1 子步驟已完成，等待教師切換下一步");
+  const step2CompletedWaitingTeacher =
+    currentStep === 2 &&
+    latestStepMessage?.role === "system" &&
+    latestStepMessage.text.includes("步驟 2 子步驟已完成，等待教師切換下一步");
+  const waitingStep3Members =
+    currentStep === 3 &&
+    !!session &&
+    step3CompletedByMe &&
+    !session.participants.every((p) => step3CompletedUsers.includes(p));
+  const groupStatusResponders = currentStep === 4 ? step4CompletedUsers : responders;
+  const groupPendingMembers = session?.participants.filter((p) => !groupStatusResponders.includes(p)) ?? [];
+  const groupSubmittedCount = Math.min(groupStatusResponders.length, session?.participants.length ?? 0);
+  const groupTotalCount = session?.participants.length ?? 0;
+  const groupStatusAllDone = currentStep === 4 ? allStep4Completed : allRespondedThisTurn;
+  const groupStatusSubmittedByMe = currentStep === 4 ? step4CompletedByMe : hasSubmittedThisTurn;
+  const showGroupStatusCard = Boolean(session && currentMode === "group_interaction" && [1, 2, 4].includes(currentStep));
+  const groupStatusTitle = groupStatusAllDone
+    ? currentStep === 4
+      ? "全組已確認完成，等待老師切換下一步"
+      : "全組已完成本題，AI 正在整理下一步"
+    : groupStatusSubmittedByMe
+      ? "你的部分已完成，正在等待同組同學"
+      : "輪到你完成目前任務";
+  const groupStatusTone = groupStatusAllDone ? "success" : groupStatusSubmittedByMe ? "warning" : "";
+  const ownStep7Report = session && loginUser ? session.reports.step7[loginUser] : undefined;
+  const ownStep10Report = session && loginUser ? session.reports.step10[loginUser] : undefined;
+  const unsavedDraft6Chars = currentStep === 6 && draftText !== savedDraft6Text ? draftText.length : 0;
+  const unsavedDraft8Chars = currentStep === 8 && draftText !== savedDraft8Text ? draftText.length : 0;
+  const nextAction = buildStudentNextAction({
+    currentStep,
+    currentMode,
+    canReplyToQuestion,
+    isSendingMessage,
+    waitingAiForGroup,
+    waitingGroupMembers,
+    waitingGroupMemberNames: groupPendingMembers,
+    step1CompletedWaitingTeacher,
+    step2CompletedWaitingTeacher,
+    step3CompletedByMe,
+    waitingStep3Members,
+    step4CompletedByMe,
+    allStep4Completed,
+    draftTextLength: draftText.trim().length,
+    unsavedDraftChars: currentStep === 8 ? unsavedDraft8Chars : unsavedDraft6Chars,
+    step9AnsweredCount: step9Answers.filter((a) => a.trim().length > 0).length
+  });
+  const stepOpeningText = session?.promptConfig?.stepOpenings?.[String(currentStep)]?.trim() ?? "";
+  const step9QuestionTexts = useMemo(() => {
+    if (currentStep !== 9) return [] as string[];
+    const latestSystem = [...(session?.messages ?? [])]
+      .filter((m) => m.step === 9 && m.role === "system")
+      .at(-1)?.text;
+    if (!latestSystem) return [] as string[];
+    return Array.from(latestSystem.matchAll(/\n?[1-4]\.\s*(.+)/g)).map((m) => (m[1] ?? "").trim()).slice(0, 4);
+  }, [currentStep, session?.messages]);
+
   async function refreshOverview() {
     setIsLoadingOverview(true);
     try {
       const response = await fetch("/api/student/overview", { cache: "no-store" });
       const data = await response.json();
-      if (!response.ok) {
-        setError(data.error ?? "overview_failed");
-        return;
-      }
-
+      if (!response.ok) { setError(data.error ?? "overview_failed"); return; }
       setProfile(data.profile ?? null);
       setMissingFields(data.missingFields ?? []);
       setClassCourses(data.classCourses ?? []);
@@ -972,43 +597,23 @@ export default function StudentPage() {
   }
 
   async function joinActivity(activityId: string) {
-    if (!loginUser) {
-      setError("auth_not_ready");
-      return;
-    }
+    if (!loginUser) { setError("auth_not_ready"); return; }
     setError("");
     const response = await fetch("/api/student/join", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ activityId })
     });
-
     const raw = await response.text();
     let data: Record<string, unknown> = {};
     if (raw) {
-      try {
-        data = JSON.parse(raw) as Record<string, unknown>;
-      } catch {
-        data = {};
-      }
+      try { data = JSON.parse(raw) as Record<string, unknown>; } catch { data = {}; }
     }
     if (!response.ok) {
-      if (data.error === "course_not_started") {
-        setError("課程尚未開始，請等待老師開始上課後再進入討論。");
-        return;
-      }
-      if (data.error === "course_ended") {
-        setError("課程已結束，無法再進入討論。");
-        return;
-      }
-      if (data.error === "course_paused") {
-        setError("課程目前暫停中，請等待老師繼續上課後再進入討論。");
-        return;
-      }
-      if (data.error === "not_group_member") {
-        setError("你尚未被分配到該課程小組，請向老師確認分組設定。");
-        return;
-      }
+      if (data.error === "course_not_started") { setError("課程尚未開始，請等待老師開始上課後再進入討論。"); return; }
+      if (data.error === "course_ended") { setError("課程已結束，無法再進入討論。"); return; }
+      if (data.error === "course_paused") { setError("課程目前暫停中，請等待老師繼續上課後再進入討論。"); return; }
+      if (data.error === "not_group_member") { setError("你尚未被分配到該課程小組，請向老師確認分組設定。"); return; }
       if (data.error === "student_join_failed") {
         const detail = typeof data.detail === "string" ? data.detail : "unknown";
         setError(`進入課程失敗：${detail}`);
@@ -1017,7 +622,6 @@ export default function StudentPage() {
       setError(typeof data.error === "string" ? data.error : "join_failed");
       return;
     }
-
     setSession(data as SessionState);
     setPreparingCourse(null);
     await refreshOverview();
@@ -1028,14 +632,12 @@ export default function StudentPage() {
     if (!session || !text.trim() || !isInputEnabled) return;
     setError("");
     setIsSendingMessage(true);
-
     try {
       const response = await fetch("/api/chat/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sessionId: session.id, userId: loginUser, text })
       });
-
       const data = await response.json();
       if (!response.ok) {
         const errorText = typeof data.error === "string" ? data.error : "send_failed";
@@ -1043,7 +645,6 @@ export default function StudentPage() {
         setError(hintText ? `${errorText}｜建議修改：${hintText}` : errorText);
         return;
       }
-
       setSession(data);
       setText("");
     } finally {
@@ -1063,7 +664,6 @@ export default function StudentPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sessionId: session.id, userId: loginUser, text: payload })
       });
-
       const data = await response.json();
       if (!response.ok) {
         const errorText = typeof data.error === "string" ? data.error : "send_failed";
@@ -1071,7 +671,6 @@ export default function StudentPage() {
         setError(hintText ? `${errorText}｜建議修改：${hintText}` : errorText);
         return;
       }
-
       setSession(data);
       setStep9Answers(["", "", "", ""]);
     } finally {
@@ -1086,171 +685,115 @@ export default function StudentPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ sessionId: session.id, type, content })
     });
-
     const data = await response.json();
-    if (!response.ok) {
-      setError(data.error ?? "save_failed");
-      return;
-    }
-    if (type === "draft6") {
-      setSavedDraft6Text(content);
-    }
-    if (type === "draft8") {
-      setSavedDraft8Text(content);
-    }
+    if (!response.ok) { setError(data.error ?? "save_failed"); return; }
+    if (type === "draft6") setSavedDraft6Text(content);
+    if (type === "draft8") setSavedDraft8Text(content);
     setSession(data);
   }
 
-  const stepSubstepText =
-    currentStep === 1
-      ? `目前子步驟：${
-          (session?.stepState.step1Substep ?? 1) === 3
-            ? `1-3-${session?.stepState.step1Substep3Question ?? 1}`
-            : (session?.stepState.step1Substep ?? 1) === 4
-              ? `1-4-${session?.stepState.step1Substep4Question ?? 1}`
-              : `1-${session?.stepState.step1Substep ?? 1}`
-        }`
-      : currentStep === 2
-        ? `目前子步驟：${
-            (session?.stepState.step2Substep ?? 1) === 1
-              ? `2-1-${session?.stepState.step2Substep1Question ?? 1}`
-              : `2-${session?.stepState.step2Substep ?? 1}`
-          }`
-        : null;
-  const stepModeLine = `${stepSubstepText ?? "目前子步驟：—"} ｜ 模式：${currentModeLabel}`;
-  const lastInteractive = interactiveMessages[interactiveMessages.length - 1];
-  const lastIsQuestion = lastInteractive?.kind === "question";
-  const activeGateKey = getActiveGroupGateKey(session, currentStep);
-  const responders = activeGateKey ? session?.groupGate?.[activeGateKey] ?? [] : [];
-  const step3CompletedUsers = session?.groupGate?.["3-complete"] ?? [];
-  const step4CompletedUsers = session?.groupGate?.["4-complete"] ?? [];
-  const step3CompletedByMe = Boolean(loginUser && step3CompletedUsers.includes(loginUser));
-  const step4CompletedByMe = Boolean(loginUser && step4CompletedUsers.includes(loginUser));
-  const step4CompletedPeers = useMemo(
-    () => (session?.participants ?? []).filter((participant) => participant !== loginUser && step4CompletedUsers.includes(participant)),
-    [loginUser, session?.participants, step4CompletedUsers]
-  );
-  const allStep4Completed =
-    currentStep === 4 &&
-    !!session &&
-    session.participants.length > 0 &&
-    session.participants.every((participant) => step4CompletedUsers.includes(participant));
-  const hasSubmittedThisTurn = Boolean(loginUser && responders.includes(loginUser));
-  const allRespondedThisTurn =
-    currentMode === "group_interaction" && !!session && session.participants.every((p) => responders.includes(p));
-  const canReplyToQuestion =
-    currentStep === 4
-      ? !step4CompletedByMe
-      :
-    currentMode === "group_interaction"
-      ? !hasSubmittedThisTurn && !allRespondedThisTurn
-      : currentStep === 3
-        ? !step3CompletedByMe
-        : Boolean(lastIsQuestion);
-  const waitingGroupMembers =
-    currentStep === 4
-      ? !!session && step4CompletedByMe && !allStep4Completed
-      :
-    currentMode === "group_interaction" &&
-    !!session &&
-    Array.isArray(responders) &&
-    hasSubmittedThisTurn &&
-    !session.participants.every((p) => responders.includes(p));
-  const latestStepMessage =
-    session?.messages
-      .filter((message) => message.step === currentStep)
-      .at(-1) ?? null;
-  const waitingAiForGroup =
-    currentStep === 4
-      ? false
-      :
-    currentMode === "group_interaction" &&
-    !!session &&
-    session.participants.length > 0 &&
-    session.participants.every((p) => responders.includes(p)) &&
-    latestStepMessage?.role !== "ai";
-  const step1CompletedWaitingTeacher =
-    currentStep === 1 &&
-    latestStepMessage?.role === "system" &&
-    latestStepMessage.text.includes("步驟 1 子步驟已完成，等待教師切換下一步");
-  const step2CompletedWaitingTeacher =
-    currentStep === 2 &&
-    latestStepMessage?.role === "system" &&
-    latestStepMessage.text.includes("步驟 2 子步驟已完成，等待教師切換下一步");
-  const waitingStep3Members =
-    currentStep === 3 &&
-    !!session &&
-    step3CompletedByMe &&
-    !session.participants.every((participant) => step3CompletedUsers.includes(participant));
-  const groupStatusResponders = currentStep === 4 ? step4CompletedUsers : responders;
-  const groupPendingMembers = session?.participants.filter((participant) => !groupStatusResponders.includes(participant)) ?? [];
-  const groupSubmittedCount = Math.min(groupStatusResponders.length, session?.participants.length ?? 0);
-  const groupTotalCount = session?.participants.length ?? 0;
-  const groupStatusAllDone = currentStep === 4 ? allStep4Completed : allRespondedThisTurn;
-  const groupStatusSubmittedByMe = currentStep === 4 ? step4CompletedByMe : hasSubmittedThisTurn;
-  const showGroupStatusCard = Boolean(session && currentMode === "group_interaction" && [1, 2, 4].includes(currentStep));
-  const groupStatusTitle = groupStatusAllDone
-    ? currentStep === 4
-      ? "全組已確認完成，等待老師切換下一步"
-      : "全組已完成本題，AI 正在整理下一步"
-    : groupStatusSubmittedByMe
-      ? "你的部分已完成，正在等待同組同學"
-      : "輪到你完成目前任務";
-  const groupStatusTone = groupStatusAllDone ? "success" : groupStatusSubmittedByMe ? "warning" : "";
-  const outlineSaveLabel =
-    currentStep === 4
-      ? step4CompletedByMe
-        ? "已確認完成，編修已鎖定"
-        : outlineDirty
-          ? "有未儲存變更，完成編輯後會自動儲存"
-          : editingNodeId
-            ? "正在編輯節點，按 Enter 可完成並儲存"
-            : "結構樹已同步"
-      : step3CompletedByMe
-        ? "已完成送出"
-        : outlineDirty
-          ? "有未儲存變更，完成編輯後會自動儲存"
-          : editingNodeId
-            ? "正在編輯節點，按 Enter 可完成並儲存"
-            : "結構樹已同步";
+  async function handleOutlineSave(mermaid: string) {
+    outlineMermaidRef.current = mermaid;
+    await saveArtifact("outline", mermaid);
+  }
 
-  const ownStep7Report = session && loginUser ? session.reports.step7[loginUser] : undefined;
-  const ownStep10Report = session && loginUser ? session.reports.step10[loginUser] : undefined;
-  const unsavedDraft6Chars = currentStep === 6 && draftText !== savedDraft6Text ? draftText.length : 0;
-  const unsavedDraft8Chars = currentStep === 8 && draftText !== savedDraft8Text ? draftText.length : 0;
-  const nextAction = buildStudentNextAction({
-    currentStep,
-    currentMode,
-    canReplyToQuestion,
-    isSendingMessage,
-    waitingAiForGroup,
-    waitingGroupMembers,
-    waitingGroupMemberNames: groupPendingMembers,
-    step1CompletedWaitingTeacher,
-    step2CompletedWaitingTeacher,
-    step3CompletedByMe,
-    waitingStep3Members,
-    step4CompletedByMe,
-    allStep4Completed,
-    draftTextLength: draftText.trim().length,
-    unsavedDraftChars: currentStep === 8 ? unsavedDraft8Chars : unsavedDraft6Chars,
-    step9AnsweredCount: step9Answers.filter((answer) => answer.trim().length > 0).length
-  });
-  const stepOpeningText = session?.promptConfig?.stepOpenings?.[String(currentStep)]?.trim() ?? "";
-  const step9QuestionTexts = useMemo(() => {
-    if (currentStep !== 9) return [] as string[];
-    const latestSystem = [...(session?.messages ?? [])]
-      .filter((message) => message.step === 9 && message.role === "system")
-      .at(-1)?.text;
-    if (!latestSystem) return [] as string[];
-    const extracted = Array.from(latestSystem.matchAll(/\n?[1-4]\.\s*(.+)/g)).map((m) => (m[1] ?? "").trim());
-    return extracted.slice(0, 4);
-  }, [currentStep, session?.messages]);
+  async function completeOutlineTree(mermaid: string) {
+    if (!session) return;
+    const courseStatus = activityStatusMap[session.activityId ?? ""];
+    if (courseStatus && courseStatus !== "in_progress") {
+      setError(courseStatus === "paused" ? "課程目前暫停中，請等待老師繼續上課。" : "課程目前不可提交，請等待老師指示。");
+      return;
+    }
+    const response = await fetch("/api/session/step3/complete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId: session.id, outline: mermaid })
+    });
+    const data = await response.json();
+    if (!response.ok) { setError(data.error ?? "complete_step3_failed"); return; }
+    setSession(data);
+  }
 
-  useEffect(() => {
-    if (currentStep !== 9) return;
-    setStep9Answers(["", "", "", ""]);
-  }, [currentStep, session?.id]);
+  async function completeStep4() {
+    if (!session) return;
+    const courseStatus = activityStatusMap[session.activityId ?? ""];
+    if (courseStatus && courseStatus !== "in_progress") {
+      setError(courseStatus === "paused" ? "課程目前暫停中，請等待老師繼續上課。" : "課程目前不可提交，請等待老師指示。");
+      return;
+    }
+    setError("");
+    const outlineToSave = outlineMermaidRef.current || (session.outlines[loginUser] ?? "");
+    const response = await fetch("/api/session/step4/complete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId: session.id, outline: outlineToSave })
+    });
+    const data = await response.json();
+    if (!response.ok) { setError(data.error ?? "complete_step4_failed"); return; }
+    setSession(data);
+  }
+
+  async function requestStep6Suggestion() {
+    if (!session || currentStep !== 6) return;
+    const courseStatus = activityStatusMap[session.activityId ?? ""];
+    if (courseStatus && courseStatus !== "in_progress") {
+      setError(courseStatus === "paused" ? "課程目前暫停中，請等待老師繼續上課。" : "課程目前不可操作，請等待老師指示。");
+      return;
+    }
+    setError("");
+    setIsSuggestingStep6(true);
+    try {
+      const response = await fetch("/api/session/step6/suggest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: session.id, draft: draftText })
+      });
+      const data = await response.json();
+      if (!response.ok) { setError(data.error ?? "step6_suggest_failed"); return; }
+      setSession(data);
+    } finally {
+      setIsSuggestingStep6(false);
+    }
+  }
+
+  async function completeStep6ToStep8() {
+    if (!session || currentStep !== 6) return;
+    setError("");
+    setIsCompletingStep6(true);
+    try {
+      const response = await fetch("/api/session/step6/complete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: session.id, draft: draftText })
+      });
+      const data = await response.json();
+      if (!response.ok) { setError(data.error ?? "step6_complete_failed"); return; }
+      setSavedDraft6Text(draftText);
+      setSession(data);
+    } finally {
+      setIsCompletingStep6(false);
+    }
+  }
+
+  async function completeStep8ToStep9() {
+    if (!session || currentStep !== 8) return;
+    setError("");
+    setIsCompletingStep8(true);
+    try {
+      const response = await fetch("/api/session/step8/complete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: session.id, draft: draftText })
+      });
+      const data = await response.json();
+      if (!response.ok) { setError(data.error ?? "step8_complete_failed"); return; }
+      setSavedDraft8Text(draftText);
+      setSession(data);
+    } finally {
+      setIsCompletingStep8(false);
+    }
+  }
+
   return (
     <main>
       {error ? (
@@ -1262,148 +805,39 @@ export default function StudentPage() {
       {missingFields.length > 0 ? (
         <div className="card" style={{ borderColor: "#fecaca", background: "#fff1f2" }}>
           <h2>資料警告</h2>
-          <small>
-            你的帳號資料不完整（{missingFields.join(", ")}），請向老師反映。
-          </small>
+          <small>你的帳號資料不完整（{missingFields.join(", ")}），請向老師反映。</small>
         </div>
       ) : null}
 
       {!session ? (
-      <>
-      {isLoadingOverview ? (
-        <div className="card" style={{ borderColor: "#2563eb", background: "#dbeafe", padding: "14px 16px" }}>
-          <p style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#1d4ed8" }}>系統正在載入資料中，請稍候...</p>
-          <small style={{ display: "block", marginTop: 6, color: "#1e3a8a" }}>載入完成後會自動顯示課程清單。</small>
-        </div>
-      ) : null}
-      <div className="card">
-        <h2>進行中課程（本班）</h2>
-        {activeCourses.length === 0 ? <small>目前沒有進行中的課程。</small> : null}
-        {activeCourses.map((course) => (
-          <div key={course.id} style={{ borderTop: "1px solid #e5e7eb", padding: "10px 0" }}>
-            <strong>{course.title}</strong>（班級 {course.classNumber} / {course.genre} / {course.durationMinutes} 分鐘）
-            <div>
-              <small>分組狀態：{course.groupStatus ?? "尚未分組"}</small>
-            </div>
-            <div className="row" style={{ marginTop: 8 }}>
-              <div style={{ width: 180 }}>
-                <button
-                  type="button"
-                  onClick={() => joinActivity(course.id)}
-                >
-                  進入課程
-                </button>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="card">
-        <h2>尚未開始課程（本班）</h2>
-        <small>
-          班級：{profile?.classNumber ?? "—"} / 學校：{profile?.school ?? "—"}
-        </small>
-        {upcomingCourses.length === 0 ? <small style={{ display: "block", marginTop: 8 }}>目前沒有尚未開始課程。</small> : null}
-        {upcomingCourses.map((course) => (
-          <div key={course.id} style={{ borderTop: "1px solid #e5e7eb", padding: "10px 0" }}>
-            <strong>{course.title}</strong>（班級 {course.classNumber} / {course.genre} / {course.durationMinutes} 分鐘）
-            <div>
-              <small>分組狀態：{course.groupStatus ?? "尚未分組"}</small>
-            </div>
-            <div className="row" style={{ marginTop: 8 }}>
-              <div style={{ width: 180 }}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPreparingCourse(course);
-                  }}
-                >
-                  進入課程
-                </button>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="card">
-        <h2>暫停中課程（本班）</h2>
-        {pausedCourses.length === 0 ? <small>目前沒有暫停中的課程。</small> : null}
-        {pausedCourses.map((course) => (
-          <div key={course.id} style={{ borderTop: "1px solid #e5e7eb", padding: "10px 0" }}>
-            <strong>{course.title}</strong>（班級 {course.classNumber} / {course.genre}）
-            <div>
-              <small>課程目前暫停中，請等待老師繼續上課。</small>
-            </div>
-            <div>
-              <small>分組狀態：{course.groupStatus ?? "尚未分組"}</small>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="card">
-        <h2>自己參與過的課程清單</h2>
-        {participatedCourses.length === 0 ? <small>目前沒有已參與課程紀錄。</small> : null}
-        {participatedCourses.map((course) => (
-          <div key={course.activityId} style={{ borderTop: "1px solid #e5e7eb", padding: "10px 0" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-              <div>
-                <strong>{course.title}</strong>（班級 {course.classNumber}）
-                <div>
-                  <small>
-                    最近參與：{new Date(course.lastParticipatedAt).toLocaleString("zh-TW")} / 最近步驟 Step {course.lastStep} / 參與次數 {course.sessionCount}
-                  </small>
-                </div>
-              </div>
-              <button
-                type="button"
-                className="secondary"
-                style={{ width: "fit-content", padding: "4px 10px", whiteSpace: "nowrap", flex: "0 0 auto" }}
-                onClick={() => router.push(`/student/history/${course.activityId}`)}
-              >
-                查詢紀錄
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {classCourses.length === 0 ? (
-        <div className="card" style={{ borderColor: "#bfdbfe", background: "#eff6ff" }}>
-          <h2>目前沒有可顯示課程</h2>
-          <small>請確認老師已建立寫作任務，且你的學校與班級資料設定正確。</small>
-        </div>
-      ) : null}
-      </>
+        <StudentLobby
+          isLoadingOverview={isLoadingOverview}
+          profile={profile}
+          classCourses={classCourses}
+          activeCourses={activeCourses}
+          upcomingCourses={upcomingCourses}
+          pausedCourses={pausedCourses}
+          participatedCourses={participatedCourses}
+          onJoinActivity={joinActivity}
+          onPrepareCourse={setPreparingCourse}
+        />
       ) : null}
 
       {preparingCourse ? (
         <div className="card" style={{ borderColor: "#93c5fd", background: "#eff6ff" }}>
           <h2>準備開始上課</h2>
-          <p>
-            <strong>{preparingCourse.title}</strong>
-          </p>
-          <p>
-            班級：{preparingCourse.classNumber} / 文體：{preparingCourse.genre} / 討論時長：{preparingCourse.durationMinutes} 分鐘
-          </p>
+          <p><strong>{preparingCourse.title}</strong></p>
+          <p>班級：{preparingCourse.classNumber} / 文體：{preparingCourse.genre} / 討論時長：{preparingCourse.durationMinutes} 分鐘</p>
           <small>你已進入準備階段，請等待老師點選「開始上課」。</small>
           <div className="row" style={{ marginTop: 10 }}>
             <div style={{ width: 220 }}>
-              <button type="button" onClick={() => joinActivity(preparingCourse.id)}>
-                檢查並進入討論
-              </button>
+              <button type="button" onClick={() => joinActivity(preparingCourse.id)}>檢查並進入討論</button>
             </div>
             <div style={{ width: 180 }}>
-              <button type="button" className="secondary" onClick={() => refreshOverview()}>
-                重新整理狀態
-              </button>
+              <button type="button" className="secondary" onClick={() => refreshOverview()}>重新整理狀態</button>
             </div>
             <div style={{ width: 180 }}>
-              <button type="button" className="secondary" onClick={() => setPreparingCourse(null)}>
-                離開準備
-              </button>
+              <button type="button" className="secondary" onClick={() => setPreparingCourse(null)}>離開準備</button>
             </div>
           </div>
         </div>
@@ -1446,101 +880,26 @@ export default function StudentPage() {
             </p>
             <div style={{ marginTop: 10 }}>
               <p style={{ margin: 0 }}><strong>引導說明</strong></p>
-              <div
-                style={{ marginTop: 4 }}
-                dangerouslySetInnerHTML={{ __html: renderMessageHtml(currentActivity?.essayDescription || "—") }}
-              />
+              <div style={{ marginTop: 4 }} dangerouslySetInnerHTML={{ __html: renderMessageHtml(currentActivity?.essayDescription || "—") }} />
             </div>
             <div style={{ marginTop: 10, borderTop: "1px solid #dbeafe", paddingTop: 8 }}>
               <p style={{ margin: 0 }}><strong>補充資料</strong></p>
-              <div
-                style={{ marginTop: 4 }}
-                dangerouslySetInnerHTML={{ __html: renderMessageHtml(currentActivity?.supplemental || "—") }}
-              />
+              <div style={{ marginTop: 4 }} dangerouslySetInnerHTML={{ __html: renderMessageHtml(currentActivity?.supplemental || "—") }} />
             </div>
           </div>
 
           <StudentProgressRail currentStep={currentStep} />
           <NextActionCard action={nextAction} />
 
-          {historyReviewSteps.length > 0 ? (
-            <>
-              <div className="card">
-                <h2>前序步驟回顧</h2>
-                <small>以下僅顯示你在先前步驟與 AI 的互動紀錄。</small>
-              </div>
-              {historyReviewSteps.map((review) => (
-                <div key={`review-step-wrap-${review.step}`}>
-                  <div className="card">
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-                      <h2 style={{ margin: 0 }}>
-                        Step {review.step} - {review.title}
-                      </h2>
-                      <button
-                        type="button"
-                        className="secondary"
-                        aria-expanded={historyReviewExpanded[review.step] ?? false}
-                        onClick={() =>
-                          setHistoryReviewExpanded((prev) => ({ ...prev, [review.step]: !(prev[review.step] ?? false) }))
-                        }
-                        style={{
-                          fontSize: 12,
-                          lineHeight: 1.1,
-                          padding: "3px 6px",
-                          minHeight: "unset",
-                          width: "fit-content",
-                          whiteSpace: "nowrap",
-                          flex: "0 0 auto"
-                        }}
-                      >
-                        {historyReviewExpanded[review.step] ? "▾ 閉合" : "▸ 展開"}
-                      </button>
-                    </div>
-                  {historyReviewExpanded[review.step] ? (
-                  <>
-                    <p>
-                      <small>此為歷史步驟回顧（僅本人與 AI 互動）。</small>
-                    </p>
-                    <hr style={{ border: 0, borderTop: "1px solid #e5e7eb", margin: "10px 0" }} />
-                    <h3 style={{ margin: "0 0 8px" }}>互動內容</h3>
-                    {review.messages.length > 0 ? (
-                      review.messages.map((message) => (
-                        <div key={`review-msg-${message.id}`} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
-                          <strong>{message.kind === "student" ? "你" : "AI 回覆"}</strong>
-                          <div
-                            style={{ marginTop: 4 }}
-                            dangerouslySetInnerHTML={{ __html: renderMessageHtml(message.text) }}
-                          />
-                          <small>{message.at}</small>
-                        </div>
-                      ))
-                    ) : (
-                      <small>此步驟目前沒有可顯示的個人互動紀錄。</small>
-                    )}
-                    {review.step === 3 && step3SubmittedOutlinePreview ? (
-                      <div style={{ marginTop: 14, borderTop: "1px solid #e5e7eb", paddingTop: 10 }}>
-                        <strong>步驟三完成時繳交的結構樹</strong>
-                        <OutlineSvg compact mermaidText={session.step3SubmittedOutlines?.[loginUser] ?? ""} />
-                      </div>
-                    ) : null}
-                    {review.step === 4 && step4OutlinePreview ? (
-                      <div style={{ marginTop: 14, borderTop: "1px solid #e5e7eb", paddingTop: 10 }}>
-                        <strong>步驟四修正後結構樹</strong>
-                        <OutlineSvg compact mermaidText={session.outlines?.[loginUser] ?? ""} />
-                      </div>
-                    ) : null}
-                  </>
-                  ) : null}
-                  </div>
-                </div>
-              ))}
-            </>
-          ) : null}
+          <HistoryReview
+            steps={historyReviewSteps}
+            loginUser={loginUser}
+            step3SubmittedOutlineMermaid={step3SubmittedOutlineMermaid}
+            step4OutlineMermaid={step4OutlineMermaid}
+          />
 
           <div className="card">
-            <h2>
-              Step {currentStep} - {stepNameMap[currentStep] ?? "未知步驟"}
-            </h2>
+            <h2>Step {currentStep} - {stepNameMap[currentStep] ?? "未知步驟"}</h2>
             <div style={{ marginTop: 8 }}>
               <span className="badge">{stepModeLine}</span>
             </div>
@@ -1562,10 +921,7 @@ export default function StudentPage() {
               <>
                 <hr style={{ border: 0, borderTop: "1px solid #e5e7eb", margin: "10px 0" }} />
                 <h3 style={{ margin: "0 0 8px" }}>總結報告</h3>
-                <div
-                  style={{ marginTop: 4 }}
-                  dangerouslySetInnerHTML={{ __html: renderMessageHtml(ownStep10Report ?? "系統尚未產生總結。") }}
-                />
+                <div style={{ marginTop: 4 }} dangerouslySetInnerHTML={{ __html: renderMessageHtml(ownStep10Report ?? "系統尚未產生總結。") }} />
               </>
             ) : null}
           </div>
@@ -1594,36 +950,26 @@ export default function StudentPage() {
                         ? `學生${message.userId ? `(${message.userId})` : ""}`
                         : "AI 回覆"}
                   </strong>
-                  <div
-                    style={{ marginTop: 4 }}
-                    dangerouslySetInnerHTML={{ __html: renderMessageHtml(message.text) }}
-                  />
+                  <div style={{ marginTop: 4 }} dangerouslySetInnerHTML={{ __html: renderMessageHtml(message.text) }} />
                   <small>{message.at}</small>
                 </div>
               ))}
-
               {interactiveMessages.length === 0 ? (
                 <small>請先描述你目前想建構的文章主軸，或直接提出你在結構樹規劃上遇到的問題。</small>
               ) : null}
               {isSendingMessage ? (
-                <p style={{ marginTop: 10 }}>
-                  <small>AI 正在整理回覆中，請稍候...</small>
-                </p>
+                <p style={{ marginTop: 10 }}><small>AI 正在整理回覆中，請稍候...</small></p>
               ) : null}
               {step3CompletedByMe ? (
                 <p style={{ marginTop: 10 }}>
-                  <small>
-                    {waitingStep3Members ? "你已完成結構樹，等待其他同學完成..." : "你已完成結構樹，可等待老師切換下一步。"}
-                  </small>
+                  <small>{waitingStep3Members ? "你已完成結構樹，等待其他同學完成..." : "你已完成結構樹，可等待老師切換下一步。"}</small>
                 </p>
               ) : null}
               {!step3CompletedByMe && isInputEnabled && canReplyToQuestion && !isSendingMessage ? (
                 <form onSubmit={sendMessage}>
                   <label>你的回答</label>
                   <textarea value={text} onChange={(e) => setText(e.target.value)} />
-                  <button type="submit" style={{ marginTop: 10 }}>
-                    發送訊息
-                  </button>
+                  <button type="submit" style={{ marginTop: 10 }}>發送訊息</button>
                 </form>
               ) : null}
             </div>
@@ -1632,166 +978,20 @@ export default function StudentPage() {
           {currentStep === 3 && loginUser ? (
             <div className="card">
               <h2>文章結構樹</h2>
-              <>
-                <Step3ToolHint statusLabel={outlineSaveLabel} />
-                <div
-                  style={{
-                    width: "100%",
-                    maxHeight: 560,
-                    border: "1px solid #e5e7eb",
-                    borderRadius: 10,
-                    marginTop: 10,
-                    overflow: "auto",
-                    background: "linear-gradient(180deg, #f8fafc 0%, #ffffff 100%)"
-                  }}
-                >
-                  <div
-                    ref={outlineCanvasRef}
-                    style={{
-                      position: "relative",
-                      width: outlineCanvasSize.width,
-                      height: outlineCanvasSize.height,
-                      minWidth: "100%",
-                      minHeight: 560
-                    }}
-                  >
-                    <svg style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}>
-                      {outlineNodes
-                        .filter((node) => node.parentId)
-                        .map((node) => {
-                          const parent = outlineNodes.find((item) => item.id === node.parentId);
-                          if (!parent) return null;
-                          return (
-                            <line
-                              key={`edge-${parent.id}-${node.id}`}
-                              x1={parent.x + 60}
-                              y1={parent.y + 34}
-                              x2={node.x + 60}
-                              y2={node.y}
-                              stroke="#64748b"
-                              strokeWidth={2}
-                            />
-                          );
-                        })}
-                    </svg>
-
-                    {outlineNodes.map((node) => {
-                      const children = childrenMap.get(node.id) ?? [];
-                      const depth = getDepth(node.id);
-                      const permissions = getStructureTreeNodePermissions(depth, children.length);
-                      return (
-                        <div
-                          key={node.id}
-                          onMouseEnter={() => draggingNodeId && setDropTargetNodeId(node.id)}
-                          onMouseDown={(event) => {
-                            const target = event.target as HTMLElement;
-                            if (target.closest("button") || target.closest("input")) return;
-                            if (!permissions.canEditText) return;
-                            const box = event.currentTarget.getBoundingClientRect();
-                            setDragOffset({ x: event.clientX - box.left, y: event.clientY - box.top });
-                            setDraggingNodeId(node.id);
-                            scheduleLongPressEdit(node.id);
-                          }}
-                          onMouseUp={clearLongPressEdit}
-                          onMouseLeave={() => {
-                            clearLongPressEdit();
-                          }}
-                          onTouchStart={(event) => {
-                            const target = event.target as HTMLElement;
-                            if (target.closest("button") || target.closest("input")) return;
-                            if (!permissions.canEditText) return;
-                            scheduleLongPressEdit(node.id);
-                          }}
-                          onTouchEnd={clearLongPressEdit}
-                          onTouchMove={clearLongPressEdit}
-                          onDoubleClick={(event) => {
-                            event.stopPropagation();
-                            if (!permissions.canEditText) return;
-                            setDraggingNodeId(null);
-                            setDropTargetNodeId(null);
-                            setEditingNodeId(node.id);
-                          }}
-                          style={{
-                            position: "absolute",
-                            left: node.x,
-                            top: node.y,
-                            width: 120,
-                            minHeight: 68,
-                            borderRadius: 10,
-                            border: node.id === dropTargetNodeId ? "2px solid #0ea5e9" : "1px solid #94a3b8",
-                            background: "#ffffff",
-                            boxShadow: "0 4px 14px rgba(15, 23, 42, 0.08)",
-                            padding: "8px 10px 6px",
-                            cursor: permissions.canEditText ? "move" : "default",
-                            userSelect: "none"
-                          }}
-                        >
-                          <div style={{ display: "flex", justifyContent: "flex-end", gap: 4, marginBottom: 4 }}>
-                            {permissions.canAddChild ? (
-                              <button
-                                type="button"
-                                className="secondary"
-                                style={{ width: 24, height: 24, padding: 0, lineHeight: 1 }}
-                                onMouseDown={(e) => e.stopPropagation()}
-                                onClick={() => addChildNode(node.id)}
-                              >
-                                ➕
-                              </button>
-                            ) : null}
-                            {permissions.canDelete ? (
-                              <button
-                                type="button"
-                                className="secondary"
-                                style={{ width: 24, height: 24, padding: 0, lineHeight: 1 }}
-                                onMouseDown={(e) => e.stopPropagation()}
-                                onClick={() => removeLeafNode(node.id)}
-                              >
-                                ➖
-                              </button>
-                            ) : null}
-                          </div>
-                          {permissions.canEditText && editingNodeId === node.id ? (
-                            <input
-                              autoFocus
-                              value={node.text}
-                              onChange={(e) => {
-                                setOutlineDirty(true);
-                                setOutlineNodes((prev) =>
-                                  prev.map((item) => (item.id === node.id ? { ...item, text: e.target.value } : item))
-                                );
-                              }}
-                              onBlur={(e) => finishNodeEditing(node.id, e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") {
-                                  e.preventDefault();
-                                  finishNodeEditing(node.id, (e.target as HTMLInputElement).value);
-                                }
-                              }}
-                              onMouseDown={(e) => e.stopPropagation()}
-                            />
-                          ) : (
-                            <div style={{ fontSize: 13, fontWeight: 600, color: "#0f172a", whiteSpace: "pre-wrap" }}>
-                              {node.text}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-                <div className="row" style={{ marginTop: 10, gap: 10 }}>
-                  <div style={{ width: 180 }}>
-                    <button type="button" className="secondary" onClick={completeOutlineTree} disabled={step3CompletedByMe}>
-                      完成結構樹
-                    </button>
-                  </div>
-                </div>
-                {step3CompletedByMe ? (
-                  <small style={{ display: "block", marginTop: 8 }}>
-                    {waitingStep3Members ? "你已完成結構樹，等待其他同學完成..." : "你已完成結構樹，可等待老師切換下一步。"}
-                  </small>
-                ) : null}
-              </>
+              <OutlineEditor
+                serverMermaid={session.outlines[loginUser] ?? ""}
+                locked={step3CompletedByMe}
+                lockedLabel="已完成送出"
+                onSave={handleOutlineSave}
+                onComplete={completeOutlineTree}
+                completeLabel="完成結構樹"
+                completeDisabled={step3CompletedByMe}
+                completedMessage={
+                  step3CompletedByMe
+                    ? (waitingStep3Members ? "你已完成結構樹，等待其他同學完成..." : "你已完成結構樹，可等待老師切換下一步。")
+                    : undefined
+                }
+              />
             </div>
           ) : null}
 
@@ -1802,9 +1002,7 @@ export default function StudentPage() {
                 <label style={{ marginTop: 10 }}>選擇同學</label>
                 <select value={refUser} onChange={(e) => setRefUser(e.target.value)}>
                   {(teammateUsers.length > 0 ? teammateUsers : session.participants).map((user) => (
-                    <option key={user} value={user}>
-                      {user}
-                    </option>
+                    <option key={user} value={user}>{user}</option>
                   ))}
                 </select>
                 <OutlineSvg compact mermaidText={session.outlines[refUser] ?? ""} />
@@ -1820,121 +1018,12 @@ export default function StudentPage() {
                 ) : (
                   <>
                     <small style={{ display: "block", marginBottom: 8 }}>此步驟建議先與同學討論，再修改自己的結構樹。</small>
-                    <Step3ToolHint statusLabel={outlineSaveLabel} title="Step4 工具提示" />
-                    <div
-                      style={{
-                        width: "100%",
-                        maxHeight: 560,
-                        border: "1px solid #e5e7eb",
-                        borderRadius: 10,
-                        marginTop: 10,
-                        overflow: "auto",
-                        background: "linear-gradient(180deg, #f8fafc 0%, #ffffff 100%)"
-                      }}
-                    >
-                      <div
-                        ref={outlineCanvasRef}
-                        style={{ position: "relative", width: outlineCanvasSize.width, height: outlineCanvasSize.height, minWidth: "100%", minHeight: 560 }}
-                      >
-                        <svg style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}>
-                          {outlineNodes
-                            .filter((node) => node.parentId)
-                            .map((node) => {
-                              const parent = outlineNodes.find((item) => item.id === node.parentId);
-                              if (!parent) return null;
-                              return (
-                                <line key={`s4-edge-${parent.id}-${node.id}`} x1={parent.x + 60} y1={parent.y + 34} x2={node.x + 60} y2={node.y} stroke="#64748b" strokeWidth={2} />
-                              );
-                            })}
-                        </svg>
-                        {outlineNodes.map((node) => {
-                          const children = childrenMap.get(node.id) ?? [];
-                          const depth = getDepth(node.id);
-                          const permissions = getStructureTreeNodePermissions(depth, children.length);
-                          return (
-                            <div
-                              key={`s4-node-${node.id}`}
-                              onMouseEnter={() => draggingNodeId && setDropTargetNodeId(node.id)}
-                              onMouseDown={(event) => {
-                                const target = event.target as HTMLElement;
-                                if (target.closest("button") || target.closest("input")) return;
-                                if (!permissions.canEditText) return;
-                                const box = event.currentTarget.getBoundingClientRect();
-                                setDragOffset({ x: event.clientX - box.left, y: event.clientY - box.top });
-                                setDraggingNodeId(node.id);
-                                scheduleLongPressEdit(node.id);
-                              }}
-                              onMouseUp={clearLongPressEdit}
-                              onMouseLeave={() => {
-                                clearLongPressEdit();
-                              }}
-                              onTouchStart={(event) => {
-                                const target = event.target as HTMLElement;
-                                if (target.closest("button") || target.closest("input")) return;
-                                if (!permissions.canEditText) return;
-                                scheduleLongPressEdit(node.id);
-                              }}
-                              onTouchEnd={clearLongPressEdit}
-                              onTouchMove={clearLongPressEdit}
-                              onDoubleClick={(event) => {
-                                event.stopPropagation();
-                                if (!permissions.canEditText) return;
-                                setDraggingNodeId(null);
-                                setDropTargetNodeId(null);
-                                setEditingNodeId(node.id);
-                              }}
-                              style={{
-                                position: "absolute",
-                                left: node.x,
-                                top: node.y,
-                                width: 120,
-                                minHeight: 68,
-                                borderRadius: 10,
-                                border: node.id === dropTargetNodeId ? "2px solid #0ea5e9" : "1px solid #94a3b8",
-                                background: "#ffffff",
-                                boxShadow: "0 4px 14px rgba(15, 23, 42, 0.08)",
-                                padding: "8px 10px 6px",
-                                cursor: permissions.canEditText ? "move" : "default",
-                                userSelect: "none"
-                              }}
-                            >
-                              <div style={{ display: "flex", justifyContent: "flex-end", gap: 4, marginBottom: 4 }}>
-                                {permissions.canAddChild ? (
-                                  <button type="button" className="secondary" style={{ width: 24, height: 24, padding: 0, lineHeight: 1 }} onMouseDown={(e) => e.stopPropagation()} onClick={() => addChildNode(node.id)}>
-                                    ➕
-                                  </button>
-                                ) : null}
-                                {permissions.canDelete ? (
-                                  <button type="button" className="secondary" style={{ width: 24, height: 24, padding: 0, lineHeight: 1 }} onMouseDown={(e) => e.stopPropagation()} onClick={() => removeLeafNode(node.id)}>
-                                    ➖
-                                  </button>
-                                ) : null}
-                              </div>
-                              {permissions.canEditText && editingNodeId === node.id ? (
-                                <input
-                                  autoFocus
-                                  value={node.text}
-                                  onChange={(e) => {
-                                    setOutlineDirty(true);
-                                    setOutlineNodes((prev) => prev.map((item) => (item.id === node.id ? { ...item, text: e.target.value } : item)));
-                                  }}
-                                  onBlur={(e) => finishNodeEditing(node.id, e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter") {
-                                      e.preventDefault();
-                                      finishNodeEditing(node.id, (e.target as HTMLInputElement).value);
-                                    }
-                                  }}
-                                  onMouseDown={(e) => e.stopPropagation()}
-                                />
-                              ) : (
-                                <div style={{ fontSize: 13, fontWeight: 600, color: "#0f172a", whiteSpace: "pre-wrap" }}>{node.text}</div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
+                    <OutlineEditor
+                      serverMermaid={session.outlines[loginUser] ?? ""}
+                      locked={false}
+                      lockedLabel="已確認完成，編修已鎖定"
+                      onSave={handleOutlineSave}
+                    />
                   </>
                 )}
               </div>
@@ -1942,57 +1031,23 @@ export default function StudentPage() {
           ) : null}
 
           {(currentStep === 6 || currentStep === 8) && loginUser ? (
-            <div className="card">
-              <h2>{currentStep === 6 ? "撰寫初稿" : "修改潤飾"}</h2>
-              {currentStep === 6 ? (
-                <>
-                  <label style={{ marginTop: 10 }}>同組結構樹（唯讀）</label>
-                  <select value={step6RefUser || loginUser} onChange={(e) => setStep6RefUser(e.target.value)}>
-                    {session.participants.map((user) => (
-                      <option key={user} value={user}>
-                        {user}
-                      </option>
-                    ))}
-                  </select>
-                  <OutlineSvg compact mermaidText={session.outlines[step6RefUser || loginUser] ?? ""} />
-                </>
-              ) : null}
-              {currentStep === 8 ? <small style={{ display: "block", marginTop: 8 }}>已預載步驟 6 初稿內容，可直接修改後儲存。</small> : null}
-              <textarea value={draftText} onChange={(e) => setDraftText(e.target.value)} rows={10} style={{ minHeight: 220 }} />
-              <div className="row" style={{ marginTop: 10, gap: 10 }}>
-                <div style={{ width: 180 }}>
-                  <button type="button" onClick={() => saveArtifact(currentStep === 6 ? "draft6" : "draft8", draftText)}>
-                    儲存文章
-                  </button>
-                </div>
-                {currentStep === 6 ? (
-                  <div style={{ width: 180 }}>
-                    <button type="button" className="secondary" onClick={requestStep6Suggestion} disabled={isSuggestingStep6 || isCompletingStep6}>
-                      AI 修改建議
-                    </button>
-                  </div>
-                ) : null}
-                {currentStep === 8 ? (
-                  <div style={{ width: 180 }}>
-                    <button type="button" className="secondary" onClick={completeStep8ToStep9} disabled={isCompletingStep8}>
-                      完成潤飾步驟
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-              {currentStep === 6 && isSuggestingStep6 ? (
-                <small style={{ display: "block", marginTop: 6, color: "#94a3b8" }}>AI 正在分析你的文章並產生修改建議，請稍候...</small>
-              ) : null}
-              {currentStep === 6 && isCompletingStep6 ? (
-                <small style={{ display: "block", marginTop: 6, color: "#94a3b8" }}>AI 正在產生步驟 7 分析回饋，請稍候...</small>
-              ) : null}
-              {currentStep === 6 ? (
-                <small style={{ display: "block", marginTop: 8, color: "#94a3b8" }}>未儲存字數：{unsavedDraft6Chars}</small>
-              ) : null}
-              {currentStep === 8 ? (
-                <small style={{ display: "block", marginTop: 8, color: "#94a3b8" }}>未儲存字數：{unsavedDraft8Chars}</small>
-              ) : null}
-            </div>
+            <Step68Panel
+              currentStep={currentStep as 6 | 8}
+              participants={session.participants}
+              outlines={session.outlines}
+              draftText={draftText}
+              onDraftChange={setDraftText}
+              onSaveDraft={() => saveArtifact(currentStep === 6 ? "draft6" : "draft8", draftText)}
+              onSuggest={requestStep6Suggestion}
+              onCompleteStep6={completeStep6ToStep8}
+              onCompleteStep8={completeStep8ToStep9}
+              isSuggestingStep6={isSuggestingStep6}
+              isCompletingStep6={isCompletingStep6}
+              isCompletingStep8={isCompletingStep8}
+              unsavedChars={currentStep === 6 ? unsavedDraft6Chars : unsavedDraft8Chars}
+              step6RefUser={step6RefUser || loginUser}
+              onStep6RefUserChange={setStep6RefUser}
+            />
           ) : null}
 
           {currentStep === 5 ? (
@@ -2021,147 +1076,38 @@ export default function StudentPage() {
           ) : null}
 
           {currentStep !== 3 && currentStep !== 5 && currentStep !== 8 && currentStep !== 10 ? (
-          <div className="card">
-            <h2>{currentStep === 4 ? "小組討論區" : "互動內容"}</h2>
-            {currentMode === "non_interactive" ? (
-              <small>本步驟為無互動模式，請閱讀系統/AI 產出內容。</small>
-            ) : null}
-            {currentMode === "personal_reflection" ? (
-              <small>個人反思模式：系統發問，AI 不回覆。</small>
-            ) : null}
-
-            {interactiveMessages.map((message) => (
-              currentStep === 6 && message.kind === "student" ? null : (
-              <div key={message.id} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
-                {currentStep === 4 && message.kind === "student" ? (
-                  <p style={{ margin: 0 }}>
-                    <strong>{message.userId || "學生"}：</strong>
-                    <span style={{ marginLeft: 4, whiteSpace: "pre-wrap" }}>{message.text}</span>
-                    <small style={{ marginLeft: 6 }}>({message.at})</small>
-                  </p>
-                ) : (
-                  <>
-                    <strong>
-                      {message.kind === "question"
-                        ? "系統提問"
-                        : message.kind === "student"
-                          ? `學生${message.userId ? `(${message.userId})` : ""}`
-                          : "AI 回覆"}
-                    </strong>
-                    <div
-                      style={{ marginTop: 4 }}
-                      dangerouslySetInnerHTML={{ __html: renderMessageHtml(message.text) }}
-                    />
-                    <small>{message.at}</small>
-                  </>
-                )}
-              </div>
-            )))}
-
-            {interactiveMessages.length === 0 ? <small>目前此步驟尚無互動內容。</small> : null}
-            {currentStep === 4 && step4CompletedPeers.length > 0 ? (
-              <div style={{ marginTop: 8 }}>
-                {step4CompletedPeers.map((user) => (
-                  <p key={`step4-done-${user}`} style={{ margin: "4px 0" }}>
-                    <small>{user} 已確認完成此步驟。</small>
-                  </p>
-                ))}
-              </div>
-            ) : null}
-
-            {isSendingMessage || waitingAiForGroup ? (
-              <p style={{ marginTop: 10 }}>
-                <small>等待遠端 AI 回答中...</small>
-              </p>
-            ) : null}
-            {waitingGroupMembers ? (
-              <p style={{ marginTop: 10 }}>
-                <small>{currentStep === 4 ? "你已確認完成此步驟，等待同組其他同學完成..." : "等待同組其他同學完成本題回覆..."}</small>
-              </p>
-            ) : null}
-            {currentStep === 4 && allStep4Completed ? (
-              <p style={{ marginTop: 10 }}>
-                <small>全組皆已確認完成此步驟，請等待老師切換至步驟 5。</small>
-              </p>
-            ) : null}
-            {step1CompletedWaitingTeacher ? (
-              <p style={{ marginTop: 10 }}>
-                <small>步驟 1 已完成，請等待老師切換到步驟 2。</small>
-              </p>
-            ) : null}
-            {step2CompletedWaitingTeacher ? (
-              <p style={{ marginTop: 10 }}>
-                <small>步驟 2 子步驟已完成，請等待老師切換下一步。</small>
-              </p>
-            ) : null}
-            {courseStatusBlockedMessage ? (
-              <p style={{ marginTop: 10 }}>
-                <small>{courseStatusBlockedMessage}</small>
-              </p>
-            ) : null}
-
-            {isInputEnabled &&
-            canReplyToQuestion &&
-            currentStep !== 9 &&
-            !waitingGroupMembers &&
-            !isSendingMessage &&
-            !step1CompletedWaitingTeacher &&
-            !step2CompletedWaitingTeacher ? (
-              <form onSubmit={sendMessage}>
-                <label>{currentStep === 4 ? "我的發言" : "你的回答"}</label>
-                <textarea value={text} onChange={(e) => setText(e.target.value)} />
-                <button type="submit" style={{ marginTop: 10 }}>
-                  發送訊息
-                </button>
-                {currentStep === 4 ? (
-                  <button type="button" className="secondary" style={{ marginTop: 10 }} onClick={completeStep4}>
-                    確認完成此步驟
-                  </button>
-                ) : null}
-              </form>
-            ) : null}
-            {currentStep === 9 ? (
-              <form onSubmit={submitStep9Batch}>
-                {([0, 1, 2, 3] as const).map((idx) => (
-                  <div key={`step9-q-${idx}`} style={{ marginTop: 10 }}>
-                    <label>{step9QuestionTexts[idx] ? `第 ${idx + 1} 題：${step9QuestionTexts[idx]}` : `第 ${idx + 1} 題`}</label>
-                    <textarea
-                      value={step9Answers[idx]}
-                      onChange={(e) => {
-                        const next = [...step9Answers];
-                        next[idx] = e.target.value;
-                        setStep9Answers(next);
-                      }}
-                    />
-                  </div>
-                ))}
-                <button type="submit" style={{ marginTop: 10 }} disabled={isSendingMessage}>
-                  一次送出四題答案
-                </button>
-              </form>
-            ) : null}
-            {currentStep === 6 ? (
-              <div style={{ marginTop: 10 }}>
-                <button type="button" className="secondary" onClick={completeStep6ToStep8} disabled={isCompletingStep6 || isSuggestingStep6}>
-                  完成文章撰寫，進入下一步驟
-                </button>
-                {isCompletingStep6 ? (
-                  <small style={{ display: "block", marginTop: 6, color: "#94a3b8" }}>AI 正在處理中，請稍候...</small>
-                ) : null}
-              </div>
-            ) : null}
-            {currentStep === 4 && step4CompletedByMe && !allStep4Completed ? (
-              <button type="button" className="secondary" style={{ marginTop: 10 }} disabled>
-                已確認完成此步驟
-              </button>
-            ) : null}
-
-            {error ? (
-              <p>
-                <small>{error}</small>
-              </p>
-            ) : null}
-          </div>
+            <InteractionPanel
+              currentStep={currentStep}
+              currentMode={currentMode}
+              interactiveMessages={interactiveMessages}
+              text={text}
+              onTextChange={setText}
+              onSendMessage={sendMessage}
+              onSubmitStep9={submitStep9Batch}
+              onCompleteStep4={completeStep4}
+              onCompleteStep6={completeStep6ToStep8}
+              isSendingMessage={isSendingMessage}
+              waitingAiForGroup={waitingAiForGroup}
+              waitingGroupMembers={waitingGroupMembers}
+              step1CompletedWaitingTeacher={step1CompletedWaitingTeacher}
+              step2CompletedWaitingTeacher={step2CompletedWaitingTeacher}
+              step4CompletedByMe={step4CompletedByMe}
+              allStep4Completed={allStep4Completed}
+              step4CompletedPeers={step4CompletedPeers}
+              isCompletingStep6={isCompletingStep6}
+              isSuggestingStep6={isSuggestingStep6}
+              isInputEnabled={isInputEnabled}
+              canReplyToQuestion={canReplyToQuestion}
+              courseStatusBlockedMessage={courseStatusBlockedMessage}
+              step9Answers={step9Answers}
+              onStep9AnswerChange={(idx, val) => {
+                const next = [...step9Answers];
+                next[idx] = val;
+                setStep9Answers(next);
+              }}
+              step9QuestionTexts={step9QuestionTexts}
+              error={error}
+            />
           ) : null}
 
           {showDebugLog ? (
@@ -2171,14 +1117,8 @@ export default function StudentPage() {
                 <h2>完整對話紀錄（除錯）</h2>
                 {sortedMessages.map((message) => (
                   <div key={message.id} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
-                    <strong>
-                      [S{message.step}] {message.role}
-                      {message.userId ? `(${message.userId})` : ""}
-                    </strong>
-                    <div
-                      style={{ marginTop: 4 }}
-                      dangerouslySetInnerHTML={{ __html: renderMessageHtml(message.text) }}
-                    />
+                    <strong>[S{message.step}] {message.role}{message.userId ? `(${message.userId})` : ""}</strong>
+                    <div style={{ marginTop: 4 }} dangerouslySetInnerHTML={{ __html: renderMessageHtml(message.text) }} />
                     <small>{message.at}</small>
                   </div>
                 ))}

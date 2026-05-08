@@ -1,0 +1,231 @@
+"use client";
+
+import { FormEvent } from "react";
+import { renderMessageHtml } from "./renderMessageHtml";
+
+type InteractiveItem = {
+  id: string;
+  kind: "question" | "student" | "ai";
+  text: string;
+  at: string;
+  userId?: string;
+};
+
+type InteractionPanelProps = {
+  currentStep: number;
+  currentMode: string;
+  interactiveMessages: InteractiveItem[];
+  text: string;
+  onTextChange: (value: string) => void;
+  onSendMessage: (e: FormEvent) => void;
+  onSubmitStep9: (e: FormEvent) => void;
+  onCompleteStep4?: () => void;
+  onCompleteStep6?: () => void;
+  isSendingMessage: boolean;
+  waitingAiForGroup: boolean;
+  waitingGroupMembers: boolean;
+  step1CompletedWaitingTeacher: boolean;
+  step2CompletedWaitingTeacher: boolean;
+  step4CompletedByMe: boolean;
+  allStep4Completed: boolean;
+  step4CompletedPeers: string[];
+  isCompletingStep6: boolean;
+  isSuggestingStep6: boolean;
+  isInputEnabled: boolean;
+  canReplyToQuestion: boolean;
+  courseStatusBlockedMessage: string;
+  step9Answers: string[];
+  onStep9AnswerChange: (idx: number, value: string) => void;
+  step9QuestionTexts: string[];
+  error: string;
+};
+
+export default function InteractionPanel({
+  currentStep,
+  currentMode,
+  interactiveMessages,
+  text,
+  onTextChange,
+  onSendMessage,
+  onSubmitStep9,
+  onCompleteStep4,
+  onCompleteStep6,
+  isSendingMessage,
+  waitingAiForGroup,
+  waitingGroupMembers,
+  step1CompletedWaitingTeacher,
+  step2CompletedWaitingTeacher,
+  step4CompletedByMe,
+  allStep4Completed,
+  step4CompletedPeers,
+  isCompletingStep6,
+  isSuggestingStep6,
+  isInputEnabled,
+  canReplyToQuestion,
+  courseStatusBlockedMessage,
+  step9Answers,
+  onStep9AnswerChange,
+  step9QuestionTexts,
+  error,
+}: InteractionPanelProps) {
+  return (
+    <div className="card">
+      <h2>{currentStep === 4 ? "小組討論區" : "互動內容"}</h2>
+      {currentMode === "non_interactive" ? (
+        <small>本步驟為無互動模式，請閱讀系統/AI 產出內容。</small>
+      ) : null}
+      {currentMode === "personal_reflection" ? (
+        <small>個人反思模式：系統發問，AI 不回覆。</small>
+      ) : null}
+
+      {interactiveMessages.map((message) =>
+        currentStep === 6 && message.kind === "student" ? null : (
+          <div key={message.id} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
+            {currentStep === 4 && message.kind === "student" ? (
+              <p style={{ margin: 0 }}>
+                <strong>{message.userId || "學生"}：</strong>
+                <span style={{ marginLeft: 4, whiteSpace: "pre-wrap" }}>{message.text}</span>
+                <small style={{ marginLeft: 6 }}>({message.at})</small>
+              </p>
+            ) : (
+              <>
+                <strong>
+                  {message.kind === "question"
+                    ? "系統提問"
+                    : message.kind === "student"
+                      ? `學生${message.userId ? `(${message.userId})` : ""}`
+                      : "AI 回覆"}
+                </strong>
+                <div
+                  style={{ marginTop: 4 }}
+                  dangerouslySetInnerHTML={{ __html: renderMessageHtml(message.text) }}
+                />
+                <small>{message.at}</small>
+              </>
+            )}
+          </div>
+        )
+      )}
+
+      {interactiveMessages.length === 0 ? <small>目前此步驟尚無互動內容。</small> : null}
+
+      {currentStep === 4 && step4CompletedPeers.length > 0 ? (
+        <div style={{ marginTop: 8 }}>
+          {step4CompletedPeers.map((user) => (
+            <p key={`step4-done-${user}`} style={{ margin: "4px 0" }}>
+              <small>{user} 已確認完成此步驟。</small>
+            </p>
+          ))}
+        </div>
+      ) : null}
+
+      {isSendingMessage || waitingAiForGroup ? (
+        <p style={{ marginTop: 10 }}>
+          <small>等待遠端 AI 回答中...</small>
+        </p>
+      ) : null}
+      {waitingGroupMembers ? (
+        <p style={{ marginTop: 10 }}>
+          <small>
+            {currentStep === 4
+              ? "你已確認完成此步驟，等待同組其他同學完成..."
+              : "等待同組其他同學完成本題回覆..."}
+          </small>
+        </p>
+      ) : null}
+      {currentStep === 4 && allStep4Completed ? (
+        <p style={{ marginTop: 10 }}>
+          <small>全組皆已確認完成此步驟，請等待老師切換至步驟 5。</small>
+        </p>
+      ) : null}
+      {step1CompletedWaitingTeacher ? (
+        <p style={{ marginTop: 10 }}>
+          <small>步驟 1 已完成，請等待老師切換到步驟 2。</small>
+        </p>
+      ) : null}
+      {step2CompletedWaitingTeacher ? (
+        <p style={{ marginTop: 10 }}>
+          <small>步驟 2 子步驟已完成，請等待老師切換下一步。</small>
+        </p>
+      ) : null}
+      {courseStatusBlockedMessage ? (
+        <p style={{ marginTop: 10 }}>
+          <small>{courseStatusBlockedMessage}</small>
+        </p>
+      ) : null}
+
+      {isInputEnabled &&
+      canReplyToQuestion &&
+      currentStep !== 9 &&
+      !waitingGroupMembers &&
+      !isSendingMessage &&
+      !step1CompletedWaitingTeacher &&
+      !step2CompletedWaitingTeacher ? (
+        <form onSubmit={onSendMessage}>
+          <label>{currentStep === 4 ? "我的發言" : "你的回答"}</label>
+          <textarea value={text} onChange={(e) => onTextChange(e.target.value)} />
+          <button type="submit" style={{ marginTop: 10 }}>
+            發送訊息
+          </button>
+          {currentStep === 4 ? (
+            <button
+              type="button"
+              className="secondary"
+              style={{ marginTop: 10 }}
+              onClick={onCompleteStep4}
+            >
+              確認完成此步驟
+            </button>
+          ) : null}
+        </form>
+      ) : null}
+
+      {currentStep === 9 ? (
+        <form onSubmit={onSubmitStep9}>
+          {([0, 1, 2, 3] as const).map((idx) => (
+            <div key={`step9-q-${idx}`} style={{ marginTop: 10 }}>
+              <label>
+                {step9QuestionTexts[idx] ? `第 ${idx + 1} 題：${step9QuestionTexts[idx]}` : `第 ${idx + 1} 題`}
+              </label>
+              <textarea
+                value={step9Answers[idx]}
+                onChange={(e) => onStep9AnswerChange(idx, e.target.value)}
+              />
+            </div>
+          ))}
+          <button type="submit" style={{ marginTop: 10 }} disabled={isSendingMessage}>
+            一次送出四題答案
+          </button>
+        </form>
+      ) : null}
+
+      {currentStep === 6 ? (
+        <div style={{ marginTop: 10 }}>
+          <button
+            type="button"
+            className="secondary"
+            onClick={onCompleteStep6}
+            disabled={isCompletingStep6 || isSuggestingStep6}
+          >
+            完成文章撰寫，進入下一步驟
+          </button>
+          {isCompletingStep6 ? (
+            <small style={{ display: "block", marginTop: 6, color: "#94a3b8" }}>AI 正在處理中，請稍候...</small>
+          ) : null}
+        </div>
+      ) : null}
+
+      {currentStep === 4 && step4CompletedByMe && !allStep4Completed ? (
+        <button type="button" className="secondary" style={{ marginTop: 10 }} disabled>
+          已確認完成此步驟
+        </button>
+      ) : null}
+
+      {error ? (
+        <p>
+          <small>{error}</small>
+        </p>
+      ) : null}
+    </div>
+  );
+}
