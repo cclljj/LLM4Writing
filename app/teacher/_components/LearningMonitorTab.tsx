@@ -28,6 +28,7 @@ export default function LearningMonitorTab({
   loginRole,
   isAdminConsole,
   activities,
+  users,
   error,
   setError,
   onRefreshData,
@@ -59,6 +60,8 @@ export default function LearningMonitorTab({
   const [learningPage, setLearningPage] = useState(1);
   const [learningJumpPage, setLearningJumpPage] = useState("1");
   const monitorPollingBusyRef = useRef(false);
+  // Anchor for "查看對話" jump-to-section behavior (#246).
+  const groupLogRef = useRef<HTMLDivElement | null>(null);
   // Exponential-backoff state for monitor polling (#239).
   // We hash the sessions payload to detect quiescent periods and stretch the interval.
   const monitorPayloadHashRef = useRef<string>("");
@@ -111,6 +114,28 @@ export default function LearningMonitorTab({
         : [],
     [monitorSessions, selectedLearningActivityId]
   );
+
+  /**
+   * Group selector options for "小組對話紀錄" card (#246).
+   * Format: `小組 N: 姓名1 (帳號1), 姓名2 (帳號2), ...`
+   * Built from filteredMonitorSessions; member names are looked up from `users` prop
+   * with fallback to the username when the user record is missing.
+   */
+  const groupLogOptions = useMemo(() => {
+    const userMap = new Map(users.map((u) => [u.username, u]));
+    return filteredMonitorSessions.map((session) => {
+      const groupLabel = session.groupName ?? session.groupId ?? "未命名組";
+      const members = (session.participants ?? [])
+        .map((username) => {
+          const u = userMap.get(username);
+          const displayName = u?.name?.trim() || username;
+          return `${displayName} (${username})`;
+        })
+        .join(", ");
+      const label = members ? `小組 ${groupLabel}: ${members}` : `小組 ${groupLabel}`;
+      return { sessionId: session.sessionId, label, session };
+    });
+  }, [filteredMonitorSessions, users]);
 
   /**
    * Returns the current step for a group based on the slowest member's personal step (#244).
@@ -980,6 +1005,11 @@ export default function LearningMonitorTab({
               setMonitorSelected(session);
               setGroupViewStep("all");
               setProgressSessionId(session.sessionId);
+              // Auto-expand section and scroll into view (#246).
+              setGroupLogExpanded(true);
+              window.setTimeout(() => {
+                groupLogRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+              }, 0);
             }}
             onLoadProgress={(sessionId) => {
               setProgressSessionId(sessionId);
@@ -1104,18 +1134,46 @@ export default function LearningMonitorTab({
             {selectedProgressUser ? <small>目前檢視：{selectedProgressUser}</small> : null}
           </div>
 
-          {monitorSelected ? (
-            <div className="card">
+          {filteredMonitorSessions.length > 0 ? (
+            <div className="card" ref={groupLogRef}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: groupLogExpanded ? 12 : 0 }}>
                 <h2 style={{ margin: 0 }}>小組對話紀錄</h2>
                 <button
-                  style={{ width: "3em", padding: "4px 0", fontSize: 13, cursor: "pointer", borderRadius: 6, border: "1px solid #cbd5e1", background: "#f8fafc", textAlign: "center" }}
+                  style={{ width: "3em", padding: "4px 0", fontSize: 13, color: "#1e293b", cursor: "pointer", borderRadius: 6, border: "1px solid #cbd5e1", background: "#f8fafc", textAlign: "center" }}
                   onClick={() => setGroupLogExpanded((v) => !v)}
                 >
                   {groupLogExpanded ? "關閉" : "展開"}
                 </button>
               </div>
-              {groupLogExpanded && (() => {
+              {groupLogExpanded ? (
+                <div style={{ marginBottom: 12 }}>
+                  <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 4 }}>選擇小組</label>
+                  <select
+                    value={monitorSelected?.sessionId ?? ""}
+                    onChange={(e) => {
+                      const sid = e.target.value;
+                      if (!sid) {
+                        setMonitorSelected(null);
+                        return;
+                      }
+                      const next = groupLogOptions.find((opt) => opt.sessionId === sid);
+                      if (next) {
+                        setMonitorSelected(next.session);
+                        setGroupViewStep("all");
+                        setProgressSessionId(next.sessionId);
+                      }
+                    }}
+                  >
+                    <option value="">請選擇小組...</option>
+                    {groupLogOptions.map((opt) => (
+                      <option key={opt.sessionId} value={opt.sessionId}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : null}
+              {groupLogExpanded && monitorSelected ? (() => {
                 const allGroupMsgs = monitorSelected.messages.filter((m) => groupInteractionSteps.includes(m.step));
                 const groupSteps = [1, 2, 4];
 
@@ -1213,7 +1271,9 @@ export default function LearningMonitorTab({
                     {!anyMsgs && <small>目前沒有 1/2/4 步驟對話。</small>}
                   </>
                 );
-              })()}
+              })() : groupLogExpanded ? (
+                <small style={{ color: "#64748b" }}>請從上方下拉選單選擇要查看的小組。</small>
+              ) : null}
             </div>
           ) : null}
 
@@ -1222,7 +1282,7 @@ export default function LearningMonitorTab({
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: personalLogExpanded ? 12 : 0 }}>
                 <h2 style={{ margin: 0 }}>個人對話紀錄</h2>
                 <button
-                  style={{ width: "3em", padding: "4px 0", fontSize: 13, cursor: "pointer", borderRadius: 6, border: "1px solid #cbd5e1", background: "#f8fafc", textAlign: "center" }}
+                  style={{ width: "3em", padding: "4px 0", fontSize: 13, color: "#1e293b", cursor: "pointer", borderRadius: 6, border: "1px solid #cbd5e1", background: "#f8fafc", textAlign: "center" }}
                   onClick={() => setPersonalLogExpanded((v) => !v)}
                 >
                   {personalLogExpanded ? "關閉" : "展開"}
