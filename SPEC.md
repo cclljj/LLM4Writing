@@ -487,9 +487,14 @@ student 可儲存三種內容：
   - `app/student/_components/StudentTopHeader.tsx`
   - `app/student/_components/NextActionCard.tsx`
 - `app/student/page.tsx` 從 2192 行縮減至 ~1135 行（−48%）；所有 outline 相關 state/refs/effects 移入 OutlineEditor，historyReviewExpanded 移入 HistoryReview，renderMessageHtml 改為 import
-- 教師端已拆出：
-  - `app/teacher/_components/TeacherDashboard.tsx`
-  - `app/teacher/_components/AdminPromptDiagnostics.tsx`
+- 教師端已拆出（#237）：
+  - `app/teacher/_components/types.ts`：共享型別（UserRow、EssayRow、OpenClassRow、ActivityGroup、ActivityRow、MonitorSession、PersonalProgressRow）與常數（genreOptions、groupInteractionSteps）
+  - `app/teacher/_components/StudentAccountTab.tsx`（976 行）：帳號管理分頁，自管帳號 CRUD、CSV 批次建帳、搜尋/篩選/排序/分頁等所有 state 與邏輯
+  - `app/teacher/_components/LearningMonitorTab.tsx`（1213 行）：學習管理分頁，含監控輪詢、儀表板（TeacherDashboard）、小組/個人對話紀錄分步驟卡片、結構樹渲染、進度載入
+  - `app/teacher/_components/CourseManagementTab.tsx`（724 行）：課程管理分頁，含寫作主題（admin）、寫作任務、組別管理（拖拉分組、隨機分組）
+  - `app/teacher/_components/TeacherDashboard.tsx`：課堂儀表板元件（已存在）
+  - `app/teacher/_components/AdminPromptDiagnostics.tsx`：診斷面板元件（已存在）
+  - `app/teacher/page.tsx` 從 3207 行縮減至 221 行（−93%）；僅保留 auth/共享資料 state、refreshAll()、登出、tab 導覽與各分頁元件掛載
 - 元件拆分不改變既有 session polling、API 呼叫、流程推進與資料儲存行為。
 
 ## 6.0.1 前端 E2E 測試
