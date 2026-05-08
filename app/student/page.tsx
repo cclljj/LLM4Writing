@@ -156,6 +156,7 @@ export default function StudentPage() {
   const [isLoadingOverview, setIsLoadingOverview] = useState(false);
   const [isAutoAdvancingStep5, setIsAutoAdvancingStep5] = useState(false);
   const [isSuggestingStep6, setIsSuggestingStep6] = useState(false);
+  const [step6StreamingText, setStep6StreamingText] = useState("");
   const [isCompletingStep6, setIsCompletingStep6] = useState(false);
   const [savedDraft6Text, setSavedDraft6Text] = useState("");
   const [isCompletingStep8, setIsCompletingStep8] = useState(false);
@@ -742,6 +743,7 @@ export default function StudentPage() {
       return;
     }
     setError("");
+    setStep6StreamingText("");
     setIsSuggestingStep6(true);
     try {
       const response = await fetch("/api/session/step6/suggest", {
@@ -749,11 +751,63 @@ export default function StudentPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sessionId: session.id, draft: draftText })
       });
-      const data = await response.json();
-      if (!response.ok) { setError(data.error ?? "step6_suggest_failed"); return; }
-      setSession(data);
+      if (!response.ok || !response.body) {
+        // Fallback: try to parse JSON error body for legacy error responses.
+        try {
+          const data = await response.json();
+          setError(data.error ?? "step6_suggest_failed");
+        } catch {
+          setError("step6_suggest_failed");
+        }
+        return;
+      }
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let liveText = "";
+      let finalSession: typeof session | null = null;
+      let streamError = "";
+      outer: while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() ?? "";
+        for (const part of parts) {
+          const line = part.trim();
+          if (!line.startsWith("data:")) continue;
+          const payload = line.slice(5).trim();
+          if (!payload) continue;
+          try {
+            const event = JSON.parse(payload) as
+              | { type: "chunk"; text: string }
+              | { type: "done"; session: typeof session }
+              | { type: "error"; error?: string };
+            if (event.type === "chunk") {
+              liveText += event.text;
+              setStep6StreamingText(liveText);
+            } else if (event.type === "done") {
+              finalSession = event.session;
+              break outer;
+            } else if (event.type === "error") {
+              streamError = event.error ?? "step6_suggest_failed";
+              break outer;
+            }
+          } catch {
+            // Ignore malformed event lines.
+          }
+        }
+      }
+      if (streamError) {
+        setError(streamError);
+      } else if (finalSession) {
+        setSession(finalSession);
+      }
+    } catch {
+      setError("step6_suggest_failed");
     } finally {
       setIsSuggestingStep6(false);
+      setStep6StreamingText("");
     }
   }
 
@@ -1050,6 +1104,7 @@ export default function StudentPage() {
               unsavedChars={currentStep === 6 ? unsavedDraft6Chars : unsavedDraft8Chars}
               step6RefUser={step6RefUser || loginUser}
               onStep6RefUserChange={setStep6RefUser}
+              step6StreamingText={currentStep === 6 ? step6StreamingText : undefined}
             />
           ) : null}
 

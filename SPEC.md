@@ -646,6 +646,7 @@ student 可儲存三種內容：
 40. Step6 需顯示未儲存字數提示（淡色小字）以提醒學生儲存。
 41. 點擊 Step6「AI 修改建議」時，需以 `stepPrompts[\"6\"]` 作為主提示呼叫 LLM，並將「時間、文章內容、AI 建議」按序追加到互動內容卡最下方（可多次累積）。
 41.1 Step6 送出 AI 修改建議請求後，回應返回前需顯示「AI 處理中」提示，完成或失敗後自動隱藏。
+41.2 Step6 AI 修改建議使用 SSE streaming 即時顯示（#238）：API `/api/session/step6/suggest` 以 `text/event-stream` 回應，事件格式為 `data: {"type":"chunk","text":"..."}`（每段 token）、`data: {"type":"done","session":{...}}`（完成）、`data: {"type":"error","error":"..."}`（錯誤）；前端在 \`Step68Panel\` 即時累加顯示 AI 文字（不等候完整回應），降低感受延遲。LLM 未設定時 fallback 文字仍以同樣 SSE 格式回傳。共用 streaming 函式：`llmChatCompletionStream()` 於 `src/lib/llm-client.ts`。
 42. Step6 互動內容卡底部需提供「完成文章撰寫，進入下一步驟」按鈕；按下後需自動連續推進到 Step8（6 -> 7 -> 8），不等待同學或教師手動切換。
 43. Step6 互動內容卡僅顯示 AI 回覆，不顯示學生發話列。
 44. 學生端首頁在課程清單資料載入中時，需顯示「系統正在載入資料中」提示，避免誤判資料遺失。

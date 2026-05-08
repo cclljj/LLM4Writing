@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { recordArtifactUpdateSignal } from "@/src/lib/learning-diagnostics";
 import { saveSession } from "@/src/lib/store";
-import { isLlmConfigured, llmChatCompletionText, type LlmChatMessage } from "@/src/lib/llm-client";
+import {
+  isLlmConfigured,
+  llmChatCompletionStream,
+  type LlmChatMessage
+} from "@/src/lib/llm-client";
 import { buildStudentCourseContext } from "@/src/lib/llm-context";
 import { sanitizeStudentFacingText } from "@/src/lib/llm-response";
 import { requireStudentInSession } from "@/src/lib/api-helpers";
@@ -22,16 +26,13 @@ function makeMessage(role: "student" | "ai", step: number, text: string, userId?
   };
 }
 
-async function suggestWithLlm(
+function buildSuggestMessages(
   stepPrompt: string | undefined,
   essay: string,
   activityTitle: string,
   crossStepContext: string
-): Promise<string> {
-  const fallback = "AI 建議：已收到你的草稿。建議先強化主論點句，並讓每段都對應一個清楚子論點，再補上具體例子與結語收束。";
-  if (!isLlmConfigured()) return fallback;
-
-  const messages: LlmChatMessage[] = [
+): LlmChatMessage[] {
+  return [
     {
       role: "system",
       content:
@@ -46,13 +47,10 @@ async function suggestWithLlm(
         `以下是學生目前文章：\n${essay}`
     }
   ];
-
-  try {
-    return await llmChatCompletionText({ messages, temperature: 0.6, maxTokens: 1200, continuationMaxRounds: 1 });
-  } catch {
-    return fallback;
-  }
 }
+
+const FALLBACK_SUGGESTION =
+  "AI 建議：已收到你的草稿。建議先強化主論點句，並讓每段都對應一個清楚子論點，再補上具體例子與結語收束。";
 
 export async function POST(request: NextRequest) {
   const body = (await request.json()) as { sessionId?: string; draft?: string };
@@ -78,26 +76,73 @@ export async function POST(request: NextRequest) {
   });
 
   const timestamp = nowIso();
-  const suggestion = sanitizeStudentFacingText(
-    await suggestWithLlm(
-      session.promptConfig?.stepPrompts?.["6"],
-      draft,
-      session.activityTitle ?? "",
-      crossStepContext
-    )
-  );
-  const logText = [
-    "### Step6 AI 修改建議",
-    `- 時間：${timestamp}`,
-    "- 文章內容：",
-    draft || "（目前無內容）",
-    "- AI 建議：",
-    suggestion
-  ].join("\n");
+  const encoder = new TextEncoder();
 
-  session.messages.push(makeMessage("student", 6, `我想請 AI 提供修改建議。`, user.username));
-  session.messages.push(makeMessage("ai", 6, logText, user.username));
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const send = (event: Record<string, unknown>) => {
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+      };
 
-  await saveSession(session);
-  return NextResponse.json(session);
+      const collected: string[] = [];
+      try {
+        if (!isLlmConfigured()) {
+          send({ type: "chunk", text: FALLBACK_SUGGESTION });
+          collected.push(FALLBACK_SUGGESTION);
+        } else {
+          const messages = buildSuggestMessages(
+            session.promptConfig?.stepPrompts?.["6"],
+            draft,
+            session.activityTitle ?? "",
+            crossStepContext
+          );
+          try {
+            for await (const delta of llmChatCompletionStream({
+              messages,
+              temperature: 0.6,
+              maxTokens: 1200
+            })) {
+              collected.push(delta);
+              send({ type: "chunk", text: delta });
+            }
+          } catch {
+            // Streaming failed mid-flight; fall back to a single-chunk fallback.
+            if (collected.length === 0) {
+              collected.push(FALLBACK_SUGGESTION);
+              send({ type: "chunk", text: FALLBACK_SUGGESTION });
+            }
+          }
+        }
+
+        const suggestion = sanitizeStudentFacingText(collected.join(""));
+        const logText = [
+          "### Step6 AI 修改建議",
+          `- 時間：${timestamp}`,
+          "- 文章內容：",
+          draft || "（目前無內容）",
+          "- AI 建議：",
+          suggestion
+        ].join("\n");
+
+        session.messages.push(makeMessage("student", 6, "我想請 AI 提供修改建議。", user.username));
+        session.messages.push(makeMessage("ai", 6, logText, user.username));
+
+        await saveSession(session);
+        send({ type: "done", session });
+      } catch (err) {
+        send({ type: "error", error: err instanceof Error ? err.message : "step6_suggest_failed" });
+      } finally {
+        controller.close();
+      }
+    }
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no"
+    }
+  });
 }

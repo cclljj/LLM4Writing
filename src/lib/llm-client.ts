@@ -111,3 +111,85 @@ export async function llmChatCompletionText(input: {
     clearTimeout(timeout);
   }
 }
+
+/**
+ * Streams chat completion deltas from the configured LLM provider.
+ * Yields incremental text chunks as they arrive (OpenAI-compatible SSE format).
+ *
+ * Notes:
+ * - Caller is responsible for accumulating the full text if needed.
+ * - Throws if LLM is not configured or the HTTP request fails.
+ * - Malformed SSE lines are skipped silently to be robust against provider quirks.
+ */
+export async function* llmChatCompletionStream(input: {
+  messages: LlmChatMessage[];
+  temperature?: number;
+  maxTokens?: number;
+  timeoutMs?: number;
+}): AsyncGenerator<string, void, unknown> {
+  const cfg = getLlmConfig();
+  if (!cfg) {
+    throw new Error("llm_not_configured_missing_LLM_URL_LLM_KEY_LLM_MODEL");
+  }
+
+  const controller = new AbortController();
+  const timeoutMs = input.timeoutMs ?? 60_000;
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const res = await fetch(cfg.url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${cfg.key}`,
+        Accept: "text/event-stream",
+        "X-Title": "llm4writing",
+        "HTTP-Referer": "https://vercel.app"
+      },
+      body: JSON.stringify({
+        model: cfg.model,
+        messages: input.messages,
+        temperature: input.temperature ?? 0.7,
+        max_tokens: input.maxTokens ?? 900,
+        stream: true
+      }),
+      signal: controller.signal
+    });
+
+    if (!res.ok || !res.body) {
+      const raw = await res.text().catch(() => "");
+      throw new Error(`llm_http_${res.status}:${raw.slice(0, 300)}`);
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith("data:")) continue;
+        const payload = trimmed.slice(5).trim();
+        if (payload === "[DONE]") return;
+        try {
+          const parsed = JSON.parse(payload) as {
+            choices?: Array<{ delta?: { content?: string } }>;
+          };
+          const delta = parsed.choices?.[0]?.delta?.content;
+          if (typeof delta === "string" && delta.length > 0) {
+            yield delta;
+          }
+        } catch {
+          // Skip malformed SSE lines; some providers emit keep-alives or comments.
+        }
+      }
+    }
+  } finally {
+    clearTimeout(timeout);
+  }
+}
