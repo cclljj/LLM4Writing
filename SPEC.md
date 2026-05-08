@@ -818,6 +818,10 @@ student 可儲存三種內容：
   - LLM 設定狀態（僅顯示 URL/key/model 是否存在，不顯示 secret）
   - prompt config key counts（stepPrompts、subStepPrompts、fallbacks、questionBanks、writingTasks、step9Questions、stepOpenings）
   - 近期 spec10 session 摘要（課程、組別、step、成員數、訊息數、最後事件）
+  - **Streaming 端點呼叫統計**（#250）：對 `step6_suggest`、`step6_complete`、`step10_stream` 三個 SSE 端點顯示總呼叫、錯誤數、錯誤率、平均/中位數/P95 耗時、樣本數。In-memory ring buffer（每端點 200 筆），process 重啟後重置。共用模組：`src/lib/llm-stats.ts`。
+  - **LLM 回應時間（依步驟）**（#250）：從 session.messages 中找 `student → 接續 ai`（同 step）的時間差，依步驟聚合中位數、平均、樣本數；&gt; 5 分鐘的差距視為閒置間隔已濾除。
+  - **LLM Fallback 觸發率**（#250）：掃描 ai 訊息中 fallback 標誌字串（如 `AI（${stepName}）回覆：已收到本輪回覆`、`AI 建議：已收到你的草稿` 等）依步驟分桶；整體與每步驟比例。&gt; 5% 紅燈、1-5% 黃燈、&lt; 1% 綠燈。
+  - **作品 Artifact 健康度**（#250）：對所有 spec10 sessions 學生統計 step3 結構樹、step6 初稿、step8 潤飾稿、step10 報告的已提交/未提交/過短（outline &lt; 20 字，draft6 &lt; 100 字）數量、完成率與平均字元數。
 - 課程管理中可使用「寫作主題管理」、「寫作任務管理」、「組別管理」全部模組。
 - 組別管理：
   - 先選任務（顯示為「班級 + 任務 + id」）

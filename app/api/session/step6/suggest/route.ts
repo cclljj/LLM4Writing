@@ -10,6 +10,7 @@ import {
 import { buildStudentCourseContext } from "@/src/lib/llm-context";
 import { sanitizeStudentFacingText } from "@/src/lib/llm-response";
 import { requireStudentInSession } from "@/src/lib/api-helpers";
+import { recordStreamingCall } from "@/src/lib/llm-stats";
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -84,6 +85,8 @@ export async function POST(request: NextRequest) {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
       };
 
+      const startedAt = Date.now();
+      let errored = false;
       const collected: string[] = [];
       try {
         if (!isLlmConfigured()) {
@@ -130,8 +133,10 @@ export async function POST(request: NextRequest) {
         await saveSession(session);
         send({ type: "done", session });
       } catch (err) {
+        errored = true;
         send({ type: "error", error: err instanceof Error ? err.message : "step6_suggest_failed" });
       } finally {
+        recordStreamingCall("step6_suggest", Date.now() - startedAt, errored);
         controller.close();
       }
     }

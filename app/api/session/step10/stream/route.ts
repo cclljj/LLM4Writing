@@ -7,6 +7,7 @@ import {
 import { sanitizeStudentFacingText } from "@/src/lib/llm-response";
 import { requireStudentInSession } from "@/src/lib/api-helpers";
 import { buildStep10LlmInput, recordStep10Report } from "@/src/lib/engine";
+import { recordStreamingCall } from "@/src/lib/llm-stats";
 
 /**
  * SSE-streamed endpoint for the Step 10 final report (#241).
@@ -44,6 +45,8 @@ export async function POST(request: NextRequest) {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
       };
 
+      const startedAt = Date.now();
+      let errored = false;
       try {
         if (existing) {
           // Idempotent: client retried after report already saved.
@@ -81,8 +84,10 @@ export async function POST(request: NextRequest) {
         await saveSession(session);
         send({ type: "done", session });
       } catch (err) {
+        errored = true;
         send({ type: "error", error: err instanceof Error ? err.message : "step10_stream_failed" });
       } finally {
+        recordStreamingCall("step10_stream", Date.now() - startedAt, errored);
         controller.close();
       }
     }
