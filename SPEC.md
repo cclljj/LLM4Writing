@@ -647,6 +647,13 @@ student 可儲存三種內容：
 41. 點擊 Step6「AI 修改建議」時，需以 `stepPrompts[\"6\"]` 作為主提示呼叫 LLM，並將「時間、文章內容、AI 建議」按序追加到互動內容卡最下方（可多次累積）。
 41.1 Step6 送出 AI 修改建議請求後，回應返回前需顯示「AI 處理中」提示，完成或失敗後自動隱藏。
 41.2 Step6 AI 修改建議使用 SSE streaming 即時顯示（#238）：API `/api/session/step6/suggest` 以 `text/event-stream` 回應，事件格式為 `data: {"type":"chunk","text":"..."}`（每段 token）、`data: {"type":"done","session":{...}}`（完成）、`data: {"type":"error","error":"..."}`（錯誤）；前端在 \`Step68Panel\` 即時累加顯示 AI 文字（不等候完整回應），降低感受延遲。LLM 未設定時 fallback 文字仍以同樣 SSE 格式回傳。共用 streaming 函式：`llmChatCompletionStream()` 於 `src/lib/llm-client.ts`。
+46.1 Step7 分析回饋同樣使用 SSE streaming（#240）：`/api/session/step6/complete` 改為 `text/event-stream`，事件格式與 #238 一致；前端 \`completeStep6ToStep8\` 讀 stream 並在 \`Step68Panel\` 顯示 streaming preview。
+47.5 Step10 總結報告使用 SSE streaming（#241）：
+  - 學生提交 Step9 反思時（`/api/chat/send`），`finalizeStep9ForUser` 以 `generateReport: false` 標記 `personalSteps[user]=10` 但不立即產生報告
+  - 學生端偵測到 `currentStep===10` 且 `reports.step10[user]` 為空時自動 POST 至 `/api/session/step10/stream`
+  - 該端點以 SSE 串流總結報告，完成後寫入 `session.reports.step10[user]` 與 AI 訊息
+  - `reconcileCompletedStep9Users` 仍以非 streaming 路徑作為復原 fallback（學生離線時可由後台補生成）
+  - 共用 helper：`buildStep10LlmInput()`、`recordStep10Report()` 於 `src/lib/engine.ts`
 42. Step6 互動內容卡底部需提供「完成文章撰寫，進入下一步驟」按鈕；按下後需自動連續推進到 Step8（6 -> 7 -> 8），不等待同學或教師手動切換。
 43. Step6 互動內容卡僅顯示 AI 回覆，不顯示學生發話列。
 44. 學生端首頁在課程清單資料載入中時，需顯示「系統正在載入資料中」提示，避免誤判資料遺失。
@@ -1142,8 +1149,14 @@ Behavior:
 |---|---|---|
 | 1, 2 | 500 | 群組對話回饋（短 JSON），`continueOnTruncation: false` |
 | 3 | 600 | 結構樹輔導回覆（典型短句） |
-| 4 | 800 | 群組討論引導 |
+| 4 | 800 | 群組討論引導，`continueOnTruncation: false`（#243） |
 | 5–10 | 1200 | 長文輸出（摘要、文章建議、分析報告、總結） |
+
+`continuationMaxRounds` 預設策略（#243）：Step 1/2/4 設為 `0`（短回應步驟，截斷再續寫不划算），Step 3/6/7/8/10 設為 `1`（長文輸出值得續寫）。
+
+### 8.2 System Prompt 預先快取
+
+`session.systemPromptCache: Record<string, string>`（#243）快取已組裝好的 system message 字串，key 為 `${step}` 或 `${step}:${substepKey}`。第一次呼叫 `generateAiTextForStep` 組裝後寫入快取，後續呼叫直接讀取，跳過 `systemPrompt + stepPrompts + subStepPrompts + questionBanks` 重複拼接。Cache 隨 session 一同持久化（`promptConfig` 為 session 建立時固定，無需失效）。
 
 Step 6 AI 修改建議（`/api/session/step6/suggest`）與 Step 7 分析回饋（`/api/session/step6/complete`）皆使用 1200 tokens，因需產生長文回應。`llmChatCompletionStream()` 預設亦為 900 tokens（與 `llmChatCompletionText()` 同），呼叫端可覆寫。
 

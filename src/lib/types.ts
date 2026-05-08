@@ -70,6 +70,12 @@ export interface SessionState {
   groupId?: string;
   groupName?: string;
   promptConfig: PromptConfig;
+  /**
+   * Cache of assembled system prompt strings, keyed by `${step}` or `${step}:${substepKey}` (#243).
+   * Safe to persist because `promptConfig` is fixed for a session's lifetime — if a session is
+   * created with new config, the cache starts fresh.
+   */
+  systemPromptCache?: Record<string, string>;
   stepState: {
     step1Substep: number;
     step2Substep: number;

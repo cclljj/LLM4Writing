@@ -308,27 +308,37 @@ async function generateAiTextForStep(
     return fallback;
   }
 
-  const systemParts: string[] = [];
-  if (session.promptConfig.systemPrompt) systemParts.push(session.promptConfig.systemPrompt);
-  const stepPrompt = session.promptConfig.stepPrompts[String(step)];
-  if (stepPrompt) systemParts.push(stepPrompt);
   const substepKey = getCurrentSubstepKey(session, step);
-  if (substepKey) {
-    const substepPrompt = session.promptConfig.subStepPrompts[substepKey];
-    const questionBank = session.promptConfig.questionBanks[substepKey];
-    systemParts.push(`目前子步驟：${substepKey}`);
-    if (substepPrompt) {
-      systemParts.push(`子步驟 Prompt（${substepKey}）：\n${substepPrompt}`);
+  // Cached system prompt assembly (#243): the assembled system message is fully
+  // determined by promptConfig (immutable per session) + step + substepKey, so we
+  // memoize on session.systemPromptCache to avoid rebuilding on every LLM call.
+  const cacheKey = substepKey ? `${step}:${substepKey}` : String(step);
+  session.systemPromptCache = session.systemPromptCache ?? {};
+  let systemMessageContent = session.systemPromptCache[cacheKey];
+  if (!systemMessageContent) {
+    const systemParts: string[] = [];
+    if (session.promptConfig.systemPrompt) systemParts.push(session.promptConfig.systemPrompt);
+    const stepPrompt = session.promptConfig.stepPrompts[String(step)];
+    if (stepPrompt) systemParts.push(stepPrompt);
+    if (substepKey) {
+      const substepPrompt = session.promptConfig.subStepPrompts[substepKey];
+      const questionBank = session.promptConfig.questionBanks[substepKey];
+      systemParts.push(`目前子步驟：${substepKey}`);
+      if (substepPrompt) {
+        systemParts.push(`子步驟 Prompt（${substepKey}）：\n${substepPrompt}`);
+      }
+      if (questionBank && questionBank.length > 0) {
+        systemParts.push(`子步驟問題庫（${substepKey}）：\n${questionBank.map((q, i) => `${i + 1}. ${q}`).join("\n")}`);
+      }
     }
-    if (questionBank && questionBank.length > 0) {
-      systemParts.push(`子步驟問題庫（${substepKey}）：\n${questionBank.map((q, i) => `${i + 1}. ${q}`).join("\n")}`);
+    systemParts.push(`目前步驟：${step}（${stepName}）。請嚴格遵守步驟與輸出格式要求。`);
+    if (step === 1 || step === 2) {
+      systemParts.push(
+        `Step1/2 請只輸出 JSON，不要加 Markdown code fence 或額外說明。格式：{"feedback":"給全組的簡短回饋","nextQuestion":"下一題要問學生的一句完整問題"}。feedback 與 nextQuestion 都必須是繁體中文；nextQuestion 不可空白、不可照抄 prompt、不可寫「請依上一則 AI 提問作答」。`
+      );
     }
-  }
-  systemParts.push(`目前步驟：${step}（${stepName}）。請嚴格遵守步驟與輸出格式要求。`);
-  if (step === 1 || step === 2) {
-    systemParts.push(
-      `Step1/2 請只輸出 JSON，不要加 Markdown code fence 或額外說明。格式：{"feedback":"給全組的簡短回饋","nextQuestion":"下一題要問學生的一句完整問題"}。feedback 與 nextQuestion 都必須是繁體中文；nextQuestion 不可空白、不可照抄 prompt、不可寫「請依上一則 AI 提問作答」。`
-    );
+    systemMessageContent = systemParts.join("\n\n");
+    session.systemPromptCache[cacheKey] = systemMessageContent;
   }
   const scopedSteps = new Set([1, 2, 3, 4, 6, 8, 9]);
   const scopedUserId = userId && scopedSteps.has(step) ? userId : undefined;
@@ -346,7 +356,7 @@ async function generateAiTextForStep(
     .join("\n");
   const essayTitle = session.activityTitle?.trim() || "未命名題目";
   const messages: LlmChatMessage[] = [
-    { role: "system", content: systemParts.join("\n\n") },
+    { role: "system", content: systemMessageContent },
     {
       role: "user",
       content:
@@ -375,9 +385,12 @@ async function generateAiTextForStep(
           : step === 4
             ? 800 // group discussion guidance
             : 1200; // long-form steps (6/7/8/9/10)
+    // Step 1/2 (short JSON) and Step 4 (group discussion guidance) skip continuation
+    // since truncation is rare and an extra round adds 30-45s tail latency (#243).
+    const shortStep = step === 1 || step === 2 || step === 4;
     return await generateAiTextWithRetry(messages, 0.6, maxTokensByStep, {
-      continueOnTruncation: step === 1 || step === 2 ? false : true,
-      continuationMaxRounds: step === 1 || step === 2 ? 0 : 1,
+      continueOnTruncation: !shortStep,
+      continuationMaxRounds: shortStep ? 0 : 1,
       ...retryOptions
     });
   } catch {
