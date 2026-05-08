@@ -163,7 +163,22 @@
 }
 ```
 
-## 3.4 Activity
+## 3.4 ChatMessage（`src/lib/types.ts`）
+
+所有訊息物件使用統一型別，前端（`teacher/page.tsx`、`student/history/page.tsx`）直接 import `ChatMessage` 而非自訂 inline 型別：
+
+```ts
+interface ChatMessage {
+  id: string;
+  role: "student" | "teacher" | "system" | "ai";
+  userId?: string;
+  text: string;
+  at: string;
+  step: number;
+}
+```
+
+## 3.5 Activity
 
 API 輸出給學習/分組流程使用：
 
@@ -183,7 +198,7 @@ API 輸出給學習/分組流程使用：
 }
 ```
 
-## 3.5 SessionState
+## 3.6 SessionState
 
 ```ts
 {
