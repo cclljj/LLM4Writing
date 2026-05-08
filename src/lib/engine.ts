@@ -442,12 +442,15 @@ function buildFullCourseContextForUser(session: SessionState, userId: string): s
     .join("\n");
 }
 
-async function generateStep10Report(session: SessionState, userId: string): Promise<string> {
+/**
+ * Builds the LLM input + fallback text for the Step 10 final report.
+ * Exported so the streaming endpoint (#241) can reuse the same prompt structure.
+ */
+export function buildStep10LlmInput(
+  session: SessionState,
+  userId: string
+): { messages: LlmChatMessage[]; fallback: string } {
   const fallback = buildStep10Report(session, userId);
-  if (!isLlmConfigured()) {
-    return fallback;
-  }
-
   const systemParts: string[] = [];
   if (session.promptConfig.systemPrompt) systemParts.push(session.promptConfig.systemPrompt);
   const step10Prompt = session.promptConfig.stepPrompts["10"];
@@ -467,7 +470,14 @@ async function generateStep10Report(session: SessionState, userId: string): Prom
         "請輸出步驟 10 的總結報告，並在最後一段明確寫出：「整個課程操作結束，請等待老師的下一步指示」。"
     }
   ];
+  return { messages, fallback };
+}
 
+async function generateStep10Report(session: SessionState, userId: string): Promise<string> {
+  const { messages, fallback } = buildStep10LlmInput(session, userId);
+  if (!isLlmConfigured()) {
+    return fallback;
+  }
   try {
     return await generateAiTextWithRetry(messages, 0.6, 900);
   } catch {
@@ -475,9 +485,34 @@ async function generateStep10Report(session: SessionState, userId: string): Prom
   }
 }
 
-async function finalizeStep9ForUser(session: SessionState, userId: string): Promise<void> {
+/**
+ * Records a Step 10 report onto the session: stores the AI text and pushes the AI
+ * message into the messages stream. Used by the streaming endpoint (#241) after
+ * collecting all SSE chunks.
+ */
+export function recordStep10Report(session: SessionState, userId: string, report: string): void {
+  session.reports.step10[userId] = report;
+  session.messages.push(makeMessage({ role: "ai", userId, step: 10, text: report }));
+}
+
+/**
+ * Marks a user as having completed Step 9 and bumps their personal step to 10.
+ *
+ * Behavior controlled by `options.generateReport`:
+ * - `true` (default, used by reconcile/recovery path): synchronously generates the
+ *   Step 10 report via a non-streaming LLM call and pushes the AI message.
+ * - `false` (used by the chat/send fast path #241): leaves report generation to a
+ *   subsequent streaming call to `/api/session/step10/stream`.
+ */
+async function finalizeStep9ForUser(
+  session: SessionState,
+  userId: string,
+  options: { generateReport?: boolean } = {}
+): Promise<void> {
   session.personalSteps = session.personalSteps ?? {};
   session.personalSteps[userId] = 10;
+  const generateReport = options.generateReport ?? true;
+  if (!generateReport) return;
   const step10Report = sanitizeStudentFacingText(await generateStep10Report(session, userId));
   session.reports.step10[userId] = step10Report;
   session.messages.push(makeMessage({ role: "ai", userId, step: 10, text: step10Report }));
@@ -740,7 +775,10 @@ export async function sendStudentMessage(
 
     session.reflectionIndex[userId] = step9Questions.length;
     session.messages.push(makeMessage({ role: "system", userId, step, text: "個人反思完成。" }));
-    await finalizeStep9ForUser(session, userId);
+    // Defer Step 10 report generation to the streaming endpoint (#241).
+    // The frontend will detect personalSteps[user] === 10 with no report and call
+    // /api/session/step10/stream to get an SSE-streamed report.
+    await finalizeStep9ForUser(session, userId, { generateReport: false });
     return session;
   }
 

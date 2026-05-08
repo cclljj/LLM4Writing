@@ -158,6 +158,8 @@ export default function StudentPage() {
   const [isSuggestingStep6, setIsSuggestingStep6] = useState(false);
   const [step6StreamingText, setStep6StreamingText] = useState("");
   const [step7StreamingText, setStep7StreamingText] = useState("");
+  const [step10StreamingText, setStep10StreamingText] = useState("");
+  const step10StreamRequestedRef = useRef<string>("");
   const [isCompletingStep6, setIsCompletingStep6] = useState(false);
   const [savedDraft6Text, setSavedDraft6Text] = useState("");
   const [isCompletingStep8, setIsCompletingStep8] = useState(false);
@@ -812,6 +814,69 @@ export default function StudentPage() {
     }
   }
 
+  async function streamStep10Report(sessionId: string) {
+    setStep10StreamingText("");
+    try {
+      const response = await fetch("/api/session/step10/stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId })
+      });
+      if (!response.ok || !response.body) return;
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let liveText = "";
+      let finalSession: typeof session | null = null;
+      outer: while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() ?? "";
+        for (const part of parts) {
+          const line = part.trim();
+          if (!line.startsWith("data:")) continue;
+          const payload = line.slice(5).trim();
+          if (!payload) continue;
+          try {
+            const event = JSON.parse(payload) as
+              | { type: "chunk"; text: string }
+              | { type: "done"; session: typeof session }
+              | { type: "error"; error?: string };
+            if (event.type === "chunk") {
+              liveText += event.text;
+              setStep10StreamingText(liveText);
+            } else if (event.type === "done") {
+              finalSession = event.session;
+              break outer;
+            } else if (event.type === "error") {
+              break outer;
+            }
+          } catch {
+            // ignore
+          }
+        }
+      }
+      if (finalSession) setSession(finalSession);
+    } catch {
+      // best-effort; reconcile path will eventually generate the report
+    } finally {
+      setStep10StreamingText("");
+    }
+  }
+
+  // Auto-trigger Step 10 streaming when student personal step reaches 10
+  // without a stored report yet (#241).
+  useEffect(() => {
+    if (!session || !loginUser) return;
+    if (currentStep !== 10) return;
+    if (ownStep10Report && ownStep10Report.trim()) return;
+    if (step10StreamRequestedRef.current === session.id) return;
+    step10StreamRequestedRef.current = session.id;
+    streamStep10Report(session.id).catch(() => undefined);
+  }, [session?.id, currentStep, ownStep10Report, loginUser]);
+
   async function completeStep6ToStep8() {
     if (!session || currentStep !== 6) return;
     const draftError = validateDraftContent(draftText);
@@ -1032,7 +1097,29 @@ export default function StudentPage() {
               <>
                 <hr style={{ border: 0, borderTop: "1px solid #e5e7eb", margin: "10px 0" }} />
                 <h3 style={{ margin: "0 0 8px" }}>總結報告</h3>
-                <div style={{ marginTop: 4 }} dangerouslySetInnerHTML={{ __html: renderMessageHtml(ownStep10Report ?? "系統尚未產生總結。") }} />
+                {ownStep10Report && ownStep10Report.trim() ? (
+                  <div style={{ marginTop: 4 }} dangerouslySetInnerHTML={{ __html: renderMessageHtml(ownStep10Report) }} />
+                ) : step10StreamingText ? (
+                  <div
+                    style={{
+                      marginTop: 4,
+                      padding: "10px 12px",
+                      border: "1px solid #cbd5e1",
+                      borderRadius: 8,
+                      background: "#f8fafc",
+                      whiteSpace: "pre-wrap",
+                      fontSize: 14,
+                      lineHeight: 1.6
+                    }}
+                  >
+                    <small style={{ display: "block", marginBottom: 6, color: "#64748b", fontWeight: 600 }}>
+                      AI 正在產生總結報告…
+                    </small>
+                    {step10StreamingText}
+                  </div>
+                ) : (
+                  <small style={{ color: "#94a3b8" }}>AI 正在產生總結，請稍候...</small>
+                )}
               </>
             ) : null}
           </div>
