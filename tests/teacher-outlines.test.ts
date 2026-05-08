@@ -40,14 +40,17 @@ test("#225: personal-progress route source includes userOutline and userStep3Sub
 // teacher page uses renderOutlineSvg helper and new outline state
 // ---------------------------------------------------------------------------
 
-test("#225: teacher page defines renderOutlineSvg helper function", async () => {
+test("#225: teacher page uses OutlineSvg component (extracted to shared module in #229)", async () => {
   const { readFileSync } = await import("node:fs");
   const { resolve, dirname } = await import("node:path");
   const { fileURLToPath } = await import("node:url");
   const thisDir = dirname(fileURLToPath(import.meta.url));
 
   const src = readFileSync(resolve(thisDir, "../app/teacher/page.tsx"), "utf8");
-  assert.ok(src.includes("function renderOutlineSvg("), "teacher page must define renderOutlineSvg helper");
+  assert.ok(
+    src.includes("OutlineSvg") || src.includes("function renderOutlineSvg("),
+    "teacher page must use OutlineSvg component or define renderOutlineSvg helper"
+  );
 });
 
 test("#225: teacher page tracks userOutline and userStep3SubmittedOutline state", async () => {

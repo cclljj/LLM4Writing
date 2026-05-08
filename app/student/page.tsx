@@ -5,6 +5,9 @@ import { useRouter } from "next/navigation";
 import { resolvePendingOutlineAfterServerSync, shouldSyncOutlineFromSession } from "@/src/lib/outline-sync-guard";
 import { getStructureTreeNodePermissions } from "@/src/lib/structure-tree-permissions";
 import { buildStudentNextAction } from "@/src/lib/student-next-action";
+import { fromMermaid as parseMermaid, buildOutlinePreview as parseOutlinePreview } from "@/src/lib/outline-utils";
+import type { OutlineNode, OutlinePreview } from "@/src/lib/outline-utils";
+import OutlineSvg from "@/app/_components/OutlineSvg";
 import GroupWaitingStatus from "./_components/GroupWaitingStatus";
 import NextActionCard from "./_components/NextActionCard";
 import Step3ToolHint from "./_components/Step3ToolHint";
@@ -82,20 +85,6 @@ type StepReview = {
   step: number;
   title: string;
   messages: InteractiveItem[];
-};
-
-type OutlinePreview = {
-  nodes: OutlineNode[];
-  width: number;
-  height: number;
-};
-
-type OutlineNode = {
-  id: string;
-  parentId: string | null;
-  text: string;
-  x: number;
-  y: number;
 };
 
 const stepNameMap: Record<number, string> = {
@@ -258,105 +247,12 @@ function toMermaid(nodes: OutlineNode[]): string {
 }
 
 function fromMermaid(text: string): OutlineNode[] {
-  const raw = text.trim();
-  if (!raw) return makeDefaultOutlineNodes();
-  const lines = raw
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .filter((line) => !line.startsWith("graph "))
-    .filter((line) => !line.startsWith("flowchart "))
-    .filter((line) => !line.startsWith("```"));
-
-  const nodeTextMap = new Map<string, string>();
-  const parentMap = new Map<string, string | null>();
-
-  for (const line of lines) {
-    const nodeMatch = line.match(/^([A-Za-z0-9_-]+)\s*\["([\s\S]*)"\]$/);
-    if (nodeMatch) {
-      const [, id, label] = nodeMatch;
-      nodeTextMap.set(id, label.replaceAll('\\"', '"').replace(/<br\s*\/?>/gi, "\n"));
-      if (!parentMap.has(id)) parentMap.set(id, null);
-      continue;
-    }
-    const edgeWithLabelMatch = line.match(/^([A-Za-z0-9_-]+)\s*-->\s*([A-Za-z0-9_-]+)\s*\["([\s\S]*)"\]$/);
-    if (edgeWithLabelMatch) {
-      const [, parentId, childId, childLabel] = edgeWithLabelMatch;
-      parentMap.set(childId, parentId);
-      if (!parentMap.has(parentId)) parentMap.set(parentId, null);
-      if (!nodeTextMap.has(parentId)) nodeTextMap.set(parentId, parentId);
-      nodeTextMap.set(childId, childLabel.replaceAll('\\"', '"').replace(/<br\s*\/?>/gi, "\n"));
-      continue;
-    }
-    const edgeMatch = line.match(/^([A-Za-z0-9_-]+)\s*-->\s*([A-Za-z0-9_-]+)$/);
-    if (edgeMatch) {
-      const [, parentId, childId] = edgeMatch;
-      parentMap.set(childId, parentId);
-      if (!parentMap.has(parentId)) parentMap.set(parentId, null);
-      if (!nodeTextMap.has(parentId)) nodeTextMap.set(parentId, parentId);
-      if (!nodeTextMap.has(childId)) nodeTextMap.set(childId, childId);
-    }
-  }
-
-  if (nodeTextMap.size === 0) return makeDefaultOutlineNodes();
-
-  const depthMap = new Map<string, number>();
-  const getDepth = (id: string): number => {
-    const cached = depthMap.get(id);
-    if (cached) return cached;
-    const parent = parentMap.get(id);
-    const depth = parent ? getDepth(parent) + 1 : 1;
-    depthMap.set(id, depth);
-    return depth;
-  };
-
-  const ids = Array.from(nodeTextMap.keys());
-  ids.forEach((id) => getDepth(id));
-  const groups = new Map<number, string[]>();
-  ids.forEach((id) => {
-    const depth = depthMap.get(id) ?? 1;
-    const arr = groups.get(depth) ?? [];
-    arr.push(id);
-    groups.set(depth, arr);
-  });
-
-  const sortedDepths = Array.from(groups.keys()).sort((a, b) => a - b);
-  const nodes: OutlineNode[] = [];
-  sortedDepths.forEach((depth) => {
-    const idsAtDepth = groups.get(depth) ?? [];
-    idsAtDepth.forEach((id, idx) => {
-      nodes.push({
-        id,
-        parentId: parentMap.get(id) ?? null,
-        text: nodeTextMap.get(id) ?? id,
-        x: 120 + idx * 180,
-        y: 40 + (depth - 1) * 120
-      });
-    });
-  });
-
+  const nodes = parseMermaid(text);
   return nodes.length > 0 ? nodes : makeDefaultOutlineNodes();
 }
 
 function buildOutlinePreview(outline: string): OutlinePreview {
-  const nodes = fromMermaid(outline || "").map((node) => ({ ...node }));
-  if (nodes.length === 0) {
-    return { nodes: makeDefaultOutlineNodes(), width: 520, height: 240 };
-  }
-  const minX = Math.min(...nodes.map((node) => node.x));
-  const minY = Math.min(...nodes.map((node) => node.y));
-  const normalized = nodes.map((node) => ({
-    ...node,
-    x: node.x - minX + 20,
-    y: node.y - minY + 20
-  }));
-  const maxX = Math.max(...normalized.map((node) => node.x + 130));
-  const maxY = Math.max(...normalized.map((node) => node.y + 80));
-  return {
-    nodes: normalized,
-    width: Math.max(520, maxX + 20),
-    height: Math.max(240, maxY + 20)
-  };
+  return parseOutlinePreview(outline) ?? { nodes: makeDefaultOutlineNodes(), width: 520, height: 240 };
 }
 
 export default function StudentPage() {
@@ -1624,95 +1520,13 @@ export default function StudentPage() {
                     {review.step === 3 && step3SubmittedOutlinePreview ? (
                       <div style={{ marginTop: 14, borderTop: "1px solid #e5e7eb", paddingTop: 10 }}>
                         <strong>步驟三完成時繳交的結構樹</strong>
-                        <div style={{ marginTop: 8, overflow: "auto", border: "1px solid #e5e7eb", borderRadius: 8 }}>
-                          <svg
-                            width={step3SubmittedOutlinePreview.width}
-                            height={step3SubmittedOutlinePreview.height}
-                            style={{ display: "block", background: "#ffffff" }}
-                          >
-                            {step3SubmittedOutlinePreview.nodes
-                              .filter((node) => node.parentId)
-                              .map((node) => {
-                                const parent = step3SubmittedOutlinePreview.nodes.find((item) => item.id === node.parentId);
-                                if (!parent) return null;
-                                return (
-                                  <line
-                                    key={`review-edge-${parent.id}-${node.id}`}
-                                    x1={parent.x + 55}
-                                    y1={parent.y + 30}
-                                    x2={node.x + 55}
-                                    y2={node.y}
-                                    stroke="#64748b"
-                                    strokeWidth={2}
-                                  />
-                                );
-                              })}
-                            {step3SubmittedOutlinePreview.nodes.map((node) => (
-                              <g key={`review-node-${node.id}`}>
-                                <rect
-                                  x={node.x}
-                                  y={node.y}
-                                  width={110}
-                                  height={64}
-                                  rx={10}
-                                  ry={10}
-                                  fill="#f8fafc"
-                                  stroke="#94a3b8"
-                                />
-                                <text x={node.x + 55} y={node.y + 36} textAnchor="middle" fontSize="12" fill="#0f172a">
-                                  {node.text.length > 20 ? `${node.text.slice(0, 20)}...` : node.text}
-                                </text>
-                              </g>
-                            ))}
-                          </svg>
-                        </div>
+                        <OutlineSvg compact mermaidText={session.step3SubmittedOutlines?.[loginUser] ?? ""} />
                       </div>
                     ) : null}
                     {review.step === 4 && step4OutlinePreview ? (
                       <div style={{ marginTop: 14, borderTop: "1px solid #e5e7eb", paddingTop: 10 }}>
                         <strong>步驟四修正後結構樹</strong>
-                        <div style={{ marginTop: 8, overflow: "auto", border: "1px solid #e5e7eb", borderRadius: 8 }}>
-                          <svg
-                            width={step4OutlinePreview.width}
-                            height={step4OutlinePreview.height}
-                            style={{ display: "block", background: "#ffffff" }}
-                          >
-                            {step4OutlinePreview.nodes
-                              .filter((node) => node.parentId)
-                              .map((node) => {
-                                const parent = step4OutlinePreview.nodes.find((item) => item.id === node.parentId);
-                                if (!parent) return null;
-                                return (
-                                  <line
-                                    key={`review-s4-edge-${parent.id}-${node.id}`}
-                                    x1={parent.x + 55}
-                                    y1={parent.y + 30}
-                                    x2={node.x + 55}
-                                    y2={node.y}
-                                    stroke="#64748b"
-                                    strokeWidth={2}
-                                  />
-                                );
-                              })}
-                            {step4OutlinePreview.nodes.map((node) => (
-                              <g key={`review-s4-node-${node.id}`}>
-                                <rect
-                                  x={node.x}
-                                  y={node.y}
-                                  width={110}
-                                  height={64}
-                                  rx={10}
-                                  ry={10}
-                                  fill="#f8fafc"
-                                  stroke="#94a3b8"
-                                />
-                                <text x={node.x + 55} y={node.y + 36} textAnchor="middle" fontSize="12" fill="#0f172a">
-                                  {node.text.length > 20 ? `${node.text.slice(0, 20)}...` : node.text}
-                                </text>
-                              </g>
-                            ))}
-                          </svg>
-                        </div>
+                        <OutlineSvg compact mermaidText={session.outlines?.[loginUser] ?? ""} />
                       </div>
                     ) : null}
                   </>
@@ -1993,40 +1807,7 @@ export default function StudentPage() {
                     </option>
                   ))}
                 </select>
-                {(() => {
-                  const preview = buildOutlinePreview(session.outlines[refUser] ?? "");
-                  return (
-                    <div style={{ marginTop: 10, overflow: "auto", border: "1px solid #e5e7eb", borderRadius: 8 }}>
-                      <svg width={preview.width} height={preview.height} style={{ display: "block", background: "#ffffff" }}>
-                        {preview.nodes
-                          .filter((node) => node.parentId)
-                          .map((node) => {
-                            const parent = preview.nodes.find((item) => item.id === node.parentId);
-                            if (!parent) return null;
-                            return (
-                              <line
-                                key={`peer-edge-${parent.id}-${node.id}`}
-                                x1={parent.x + 55}
-                                y1={parent.y + 30}
-                                x2={node.x + 55}
-                                y2={node.y}
-                                stroke="#64748b"
-                                strokeWidth={2}
-                              />
-                            );
-                          })}
-                        {preview.nodes.map((node) => (
-                          <g key={`peer-node-${node.id}`}>
-                            <rect x={node.x} y={node.y} width={110} height={64} rx={10} ry={10} fill="#f8fafc" stroke="#94a3b8" />
-                            <text x={node.x + 55} y={node.y + 36} textAnchor="middle" fontSize="12" fill="#0f172a">
-                              {node.text.length > 20 ? `${node.text.slice(0, 20)}...` : node.text}
-                            </text>
-                          </g>
-                        ))}
-                      </svg>
-                    </div>
-                  );
-                })()}
+                <OutlineSvg compact mermaidText={session.outlines[refUser] ?? ""} />
               </div>
 
               <div className="card">
@@ -2034,40 +1815,7 @@ export default function StudentPage() {
                 {step4CompletedByMe ? (
                   <>
                     <small>你已確認完成此步驟，已鎖定編修；你的變更已自動儲存。</small>
-                    {(() => {
-                      const preview = buildOutlinePreview(session.outlines[loginUser] ?? "");
-                      return (
-                        <div style={{ marginTop: 8, overflow: "auto", border: "1px solid #e5e7eb", borderRadius: 8 }}>
-                          <svg width={preview.width} height={preview.height} style={{ display: "block", background: "#ffffff" }}>
-                            {preview.nodes
-                              .filter((node) => node.parentId)
-                              .map((node) => {
-                                const parent = preview.nodes.find((item) => item.id === node.parentId);
-                                if (!parent) return null;
-                                return (
-                                  <line
-                                    key={`s4-done-edge-${parent.id}-${node.id}`}
-                                    x1={parent.x + 55}
-                                    y1={parent.y + 30}
-                                    x2={node.x + 55}
-                                    y2={node.y}
-                                    stroke="#64748b"
-                                    strokeWidth={2}
-                                  />
-                                );
-                              })}
-                            {preview.nodes.map((node) => (
-                              <g key={`s4-done-node-${node.id}`}>
-                                <rect x={node.x} y={node.y} width={110} height={64} rx={10} ry={10} fill="#f8fafc" stroke="#94a3b8" />
-                                <text x={node.x + 55} y={node.y + 36} textAnchor="middle" fontSize="12" fill="#0f172a">
-                                  {node.text.length > 20 ? `${node.text.slice(0, 20)}...` : node.text}
-                                </text>
-                              </g>
-                            ))}
-                          </svg>
-                        </div>
-                      );
-                    })()}
+                    <OutlineSvg compact mermaidText={session.outlines[loginUser] ?? ""} />
                   </>
                 ) : (
                   <>
@@ -2206,40 +1954,7 @@ export default function StudentPage() {
                       </option>
                     ))}
                   </select>
-                  {(() => {
-                    const preview = buildOutlinePreview(session.outlines[step6RefUser || loginUser] ?? "");
-                    return (
-                      <div style={{ marginTop: 10, overflow: "auto", border: "1px solid #e5e7eb", borderRadius: 8 }}>
-                        <svg width={preview.width} height={preview.height} style={{ display: "block", background: "#ffffff" }}>
-                          {preview.nodes
-                            .filter((node) => node.parentId)
-                            .map((node) => {
-                              const parent = preview.nodes.find((item) => item.id === node.parentId);
-                              if (!parent) return null;
-                              return (
-                                <line
-                                  key={`step6-outline-edge-${parent.id}-${node.id}`}
-                                  x1={parent.x + 55}
-                                  y1={parent.y + 30}
-                                  x2={node.x + 55}
-                                  y2={node.y}
-                                  stroke="#64748b"
-                                  strokeWidth={2}
-                                />
-                              );
-                            })}
-                          {preview.nodes.map((node) => (
-                            <g key={`step6-outline-node-${node.id}`}>
-                              <rect x={node.x} y={node.y} width={110} height={64} rx={10} ry={10} fill="#f8fafc" stroke="#94a3b8" />
-                              <text x={node.x + 55} y={node.y + 36} textAnchor="middle" fontSize="12" fill="#0f172a">
-                                {node.text.length > 20 ? `${node.text.slice(0, 20)}...` : node.text}
-                              </text>
-                            </g>
-                          ))}
-                        </svg>
-                      </div>
-                    );
-                  })()}
+                  <OutlineSvg compact mermaidText={session.outlines[step6RefUser || loginUser] ?? ""} />
                 </>
               ) : null}
               {currentStep === 8 ? <small style={{ display: "block", marginTop: 8 }}>已預載步驟 6 初稿內容，可直接修改後儲存。</small> : null}
