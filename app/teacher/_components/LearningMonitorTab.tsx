@@ -171,37 +171,102 @@ export default function LearningMonitorTab({
     });
   }, [selectedLearningActivity, filteredMonitorSessions]);
 
-  const teacherDashboard = useMemo<TeacherDashboardData<MonitorSession>>(() => {
-    const sessions = filteredMonitorSessions;
-    const readySessions = sessions.filter((session) => getStepAdvanceHint(session).ready);
-    const riskRows = sessions
-      .map((session) => ({ session, risk: getStuckRisk(session), hint: getStepAdvanceHint(session) }))
+  // Per-session analytics cache (#242): each session's hint+risk only depend on its
+  // own content; cache keyed by a cheap content signature so unchanged sessions skip
+  // recomputation across polls. Bounded by number of active sessions.
+  type SessionAnalytics = {
+    session: MonitorSession;
+    hint: ReturnType<typeof getStepAdvanceHint>;
+    risk: ReturnType<typeof getStuckRisk>;
+  };
+  const sessionAnalyticsCacheRef = useRef<Map<string, { signature: string; value: SessionAnalytics }>>(
+    new Map()
+  );
+
+  const sessionsWithAnalytics = useMemo<SessionAnalytics[]>(() => {
+    const cache = sessionAnalyticsCacheRef.current;
+    const seen = new Set<string>();
+    const result = filteredMonitorSessions.map((session) => {
+      const last = session.messages[session.messages.length - 1];
+      const signature = `${session.currentStep}:${session.messages.length}:${last?.at ?? ""}:${session.groupGate ? Object.keys(session.groupGate).length : 0}`;
+      seen.add(session.sessionId);
+      const cached = cache.get(session.sessionId);
+      if (cached && cached.signature === signature && cached.value.session === session) {
+        return cached.value;
+      }
+      const value: SessionAnalytics = {
+        session,
+        hint: getStepAdvanceHint(session),
+        risk: getStuckRisk(session)
+      };
+      cache.set(session.sessionId, { signature, value });
+      return value;
+    });
+    // Drop entries for sessions no longer present.
+    if (cache.size > seen.size) {
+      for (const key of cache.keys()) {
+        if (!seen.has(key)) cache.delete(key);
+      }
+    }
+    return result;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredMonitorSessions]);
+
+  const joinedUsersCount = useMemo(() => {
+    const set = new Set<string>();
+    for (const session of filteredMonitorSessions) {
+      const joined = session.joinedUsers ?? [];
+      for (const u of joined) set.add(u);
+      // Include any student message author as joined (legacy fallback for sessions
+      // that don't populate joinedUsers).
+      if (joined.length === 0) {
+        for (const m of session.messages) {
+          if (m.role === "student" && m.userId) set.add(m.userId);
+        }
+      }
+    }
+    return set.size;
+  }, [filteredMonitorSessions]);
+
+  const onlineUsersCount = useMemo(() => {
+    const set = new Set<string>();
+    for (const session of filteredMonitorSessions) {
+      for (const u of session.onlineUsers ?? []) set.add(u);
+    }
+    return set.size;
+  }, [filteredMonitorSessions]);
+
+  const riskRows = useMemo(() => {
+    return sessionsWithAnalytics
       .filter((row) => row.risk.level !== "ok" || row.hint.ready)
+      .slice()
       .sort((a, b) => {
         const rank = { stuck: 0, watch: 1, ok: 2 } as const;
         return rank[a.risk.level] - rank[b.risk.level];
       });
-    const joinedUsers = new Set(
-      sessions.flatMap((session) => {
-        const joined = session.joinedUsers && session.joinedUsers.length > 0 ? session.joinedUsers : [];
-        const active = session.messages
-          .filter((message) => message.role === "student" && Boolean(message.userId))
-          .map((message) => message.userId as string);
-        return [...joined, ...active];
-      })
+  }, [sessionsWithAnalytics]);
+
+  const teacherDashboard = useMemo<TeacherDashboardData<MonitorSession>>(() => {
+    const readyCount = sessionsWithAnalytics.reduce(
+      (acc, row) => acc + (row.hint.ready ? 1 : 0),
+      0
     );
-    const onlineUsers = new Set(sessions.flatMap((session) => session.onlineUsers ?? []));
+    let stuckCount = 0;
+    let watchCount = 0;
+    for (const row of riskRows) {
+      if (row.risk.level === "stuck") stuckCount += 1;
+      else if (row.risk.level === "watch") watchCount += 1;
+    }
     return {
-      sessionCount: sessions.length,
-      joinedCount: joinedUsers.size,
-      onlineCount: onlineUsers.size,
-      readyCount: readySessions.length,
-      stuckCount: riskRows.filter((row) => row.risk.level === "stuck").length,
-      watchCount: riskRows.filter((row) => row.risk.level === "watch").length,
+      sessionCount: filteredMonitorSessions.length,
+      joinedCount: joinedUsersCount,
+      onlineCount: onlineUsersCount,
+      readyCount,
+      stuckCount,
+      watchCount,
       riskRows
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filteredMonitorSessions]);
+  }, [filteredMonitorSessions.length, sessionsWithAnalytics, riskRows, joinedUsersCount, onlineUsersCount]);
 
   useEffect(() => {
     if (!monitorSelected) return;
