@@ -57,7 +57,6 @@ type TeacherDashboardProps<TSession extends DashboardSession> = {
   isProcessing: boolean;
   onAdvanceStep: (sessionId: string, step: number) => void;
   onInspectDialogue: (session: TSession) => void;
-  onLoadProgress: (sessionId: string) => void;
 };
 
 function statusLabel(row: TeacherDashboardRow): string {
@@ -78,8 +77,7 @@ export default function TeacherDashboard<TSession extends DashboardSession>({
   dashboard,
   isProcessing,
   onAdvanceStep,
-  onInspectDialogue,
-  onLoadProgress
+  onInspectDialogue
 }: TeacherDashboardProps<TSession>) {
   return (
     <div className="card">
@@ -206,9 +204,6 @@ export default function TeacherDashboard<TSession extends DashboardSession>({
                     ) : null}
                     <button type="button" className="secondary" style={{ width: "auto" }} disabled={isProcessing} onClick={() => onInspectDialogue(row.session)}>
                       查看對話
-                    </button>
-                    <button type="button" className="secondary" style={{ width: "auto" }} disabled={isProcessing} onClick={() => onLoadProgress(row.session.sessionId)}>
-                      個人進度
                     </button>
                   </div>
                 </td>

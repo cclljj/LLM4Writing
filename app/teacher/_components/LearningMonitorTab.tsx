@@ -169,6 +169,7 @@ export default function LearningMonitorTab({
           .map((message) => message.userId as string);
       })
     );
+    const userMap = new Map(users.map((u) => [u.username, u]));
     return students.map((username) => {
       const joinedSessions = filteredMonitorSessions.filter((session) => {
         const joinedUsers = session.joinedUsers ?? [];
@@ -179,14 +180,32 @@ export default function LearningMonitorTab({
       const latestPersonalStep = joinedSessions
         .map((s) => s.personalSteps?.[username] ?? null)
         .find((step) => typeof step === "number");
+      // Aggregate this student's messages across all joined sessions (#247).
+      let messageCount = 0;
+      let lastMessageAt: string | null = null;
+      for (const s of joinedSessions) {
+        for (const m of s.messages) {
+          if (m.role === "student" && m.userId === username) {
+            messageCount += 1;
+            if (!lastMessageAt || (m.at && m.at > lastMessageAt)) {
+              lastMessageAt = m.at ?? lastMessageAt;
+            }
+          }
+        }
+      }
+      const userRecord = userMap.get(username);
       return {
         username,
+        displayName: userRecord?.name?.trim() || username,
         joined: onlineUserSet.has(username),
         step: latestPersonalStep ?? latestSession?.currentStep ?? null,
-        groupName: latestSession?.groupName ?? null
+        groupName: latestSession?.groupName ?? null,
+        sessionId: latestSession?.sessionId ?? null,
+        messageCount,
+        lastMessageAt
       };
     });
-  }, [selectedLearningActivity, filteredMonitorSessions]);
+  }, [selectedLearningActivity, filteredMonitorSessions, users]);
 
   const groupStatusRows = useMemo(() => {
     if (!selectedLearningActivity) return [];
@@ -1011,10 +1030,6 @@ export default function LearningMonitorTab({
                 groupLogRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
               }, 0);
             }}
-            onLoadProgress={(sessionId) => {
-              setProgressSessionId(sessionId);
-              loadProgress(sessionId);
-            }}
           />
 
           <div className="card">
@@ -1024,26 +1039,47 @@ export default function LearningMonitorTab({
                 <thead>
                   <tr>
                     <th>序號</th>
-                    <th>學生帳號</th>
+                    <th>姓名 (帳號)</th>
                     <th>加入狀態</th>
                     <th>所在組別</th>
                     <th>目前進度</th>
+                    <th>發言數</th>
+                    <th>最後發言時間</th>
+                    <th>動作</th>
                   </tr>
                 </thead>
                 <tbody>
                   {classJoinRows.map((row, idx) => (
                     <tr key={row.username}>
                       <td>{idx + 1}</td>
-                      <td>{row.username}</td>
+                      <td>{row.displayName} ({row.username})</td>
                       <td>{row.joined ? "已加入" : "未加入"}</td>
                       <td>{row.groupName ?? "—"}</td>
                       <td>{row.step ? `Step ${row.step}` : "—"}</td>
+                      <td>{row.messageCount}</td>
+                      <td>{row.lastMessageAt ? new Date(row.lastMessageAt).toLocaleString("zh-TW") : "—"}</td>
+                      <td>
+                        <button
+                          type="button"
+                          className="secondary"
+                          style={{ width: "auto" }}
+                          disabled={isLearningProcessing || !row.sessionId}
+                          onClick={() => {
+                            if (!row.sessionId) return;
+                            setProgressSessionId(row.sessionId);
+                            loadProgress(row.sessionId, row.username);
+                          }}
+                        >
+                          查看
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
             {classJoinRows.length === 0 ? <small>此課程目前沒有可見學生名單。</small> : null}
+            {selectedProgressUser ? <small style={{ display: "block", marginTop: 8 }}>目前檢視個人對話：{selectedProgressUser}</small> : null}
           </div>
 
           <div className="card">
@@ -1073,65 +1109,6 @@ export default function LearningMonitorTab({
               </table>
             </div>
             {groupStatusRows.length === 0 ? <small>此課程目前沒有分組資料。</small> : null}
-          </div>
-
-          <div className="card">
-            <h2>個人進度表</h2>
-            <div className="row">
-              <div className="col">
-                <label>個人進度對象</label>
-                <select value={progressSessionId} onChange={(e) => setProgressSessionId(e.target.value)}>
-                  <option value="">請選擇課程/班級/組別</option>
-                  {filteredMonitorSessions.map((session) => (
-                    <option key={session.sessionId} value={session.sessionId}>
-                      {formatSessionLabel(session)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="col" style={{ alignSelf: "end" }}>
-                <button type="button" className="secondary" disabled={isLearningProcessing} onClick={() => loadProgress()}>
-                  載入個人進度
-                </button>
-              </div>
-            </div>
-            <div style={{ overflowX: "auto", marginTop: 10 }}>
-              <table className="pro-table">
-                <thead>
-                  <tr>
-                    <th>序號</th>
-                    <th>姓名</th>
-                    <th>個人進度</th>
-                    <th>發言數</th>
-                    <th>最後發言時間</th>
-                    <th>動作</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {progressRows.map((row, idx) => (
-                    <tr key={row.username}>
-                      <td>{idx + 1}</td>
-                      <td>{row.username}</td>
-                      <td>Step {row.currentStep}</td>
-                      <td>{row.messageCount}</td>
-                      <td>{row.lastMessageAt ? new Date(row.lastMessageAt).toLocaleString("zh-TW") : "—"}</td>
-                      <td>
-                        <button
-                          type="button"
-                          className="secondary"
-                          style={{ width: "auto" }}
-                          disabled={isLearningProcessing}
-                          onClick={() => loadProgress(progressSessionId, row.username)}
-                        >
-                          查看
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {selectedProgressUser ? <small>目前檢視：{selectedProgressUser}</small> : null}
           </div>
 
           {filteredMonitorSessions.length > 0 ? (
