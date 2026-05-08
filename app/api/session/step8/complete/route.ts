@@ -1,29 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
-import { getCurrentUser } from "@/src/lib/auth-server";
-import { getSession, saveSession } from "@/src/lib/store";
+import { saveSession } from "@/src/lib/store";
 import { getStep9QuestionsFromConfig } from "@/src/lib/spec";
-import { markUserOnline } from "@/src/lib/session-presence";
+import { requireStudentInSession } from "@/src/lib/api-helpers";
 
 export async function POST(request: NextRequest) {
-  const user = await getCurrentUser();
-  if (!user || user.role !== "student") {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
-
   const body = (await request.json()) as { sessionId?: string; draft?: string };
-  if (!body.sessionId || typeof body.draft !== "string") {
+  if (typeof body.draft !== "string") {
     return NextResponse.json({ error: "missing_required_fields" }, { status: 400 });
   }
+  const result = await requireStudentInSession(body.sessionId);
+  if (result instanceof NextResponse) return result;
+  const { user, session } = result;
 
-  const session = await getSession(body.sessionId);
-  if (!session) {
-    return NextResponse.json({ error: "session_not_found" }, { status: 404 });
-  }
-  if (!session.participants.includes(user.username)) {
-    return NextResponse.json({ error: "not_participant" }, { status: 403 });
-  }
-  markUserOnline(session.id, user.username);
   const userStep = session.personalSteps?.[user.username] ?? session.currentStep;
   if (userStep !== 8) {
     return NextResponse.json({ error: "invalid_step" }, { status: 400 });

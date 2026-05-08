@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
-import { getCurrentUser } from "@/src/lib/auth-server";
 import { recordArtifactUpdateSignal } from "@/src/lib/learning-diagnostics";
-import { getSession, saveSession } from "@/src/lib/store";
+import { saveSession } from "@/src/lib/store";
 import { isLlmConfigured, llmChatCompletionText, type LlmChatMessage } from "@/src/lib/llm-client";
 import { sanitizeStudentFacingText } from "@/src/lib/llm-response";
-import { markUserOnline } from "@/src/lib/session-presence";
+import { requireStudentInSession } from "@/src/lib/api-helpers";
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -47,24 +46,14 @@ async function buildStep7Feedback(stepPrompt: string | undefined, essay: string)
 }
 
 export async function POST(request: NextRequest) {
-  const user = await getCurrentUser();
-  if (!user || user.role !== "student") {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
-
   const body = (await request.json()) as { sessionId?: string; draft?: string };
-  if (!body.sessionId || typeof body.draft !== "string") {
+  if (typeof body.draft !== "string") {
     return NextResponse.json({ error: "missing_required_fields" }, { status: 400 });
   }
+  const result = await requireStudentInSession(body.sessionId);
+  if (result instanceof NextResponse) return result;
+  const { user, session } = result;
 
-  const session = await getSession(body.sessionId);
-  if (!session) {
-    return NextResponse.json({ error: "session_not_found" }, { status: 404 });
-  }
-  if (!session.participants.includes(user.username)) {
-    return NextResponse.json({ error: "not_participant" }, { status: 403 });
-  }
-  markUserOnline(session.id, user.username);
   const userStep = session.personalSteps?.[user.username] ?? session.currentStep;
   if (userStep !== 6) {
     return NextResponse.json({ error: "invalid_step" }, { status: 400 });
