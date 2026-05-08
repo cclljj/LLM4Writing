@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/src/lib/auth-server";
-import { flushDomainState, getEssays, hydrateDomainState, upsertEssay } from "@/src/lib/mock-data";
+import { flushDomainState, getEssays, hydrateDomainState, upsertEssay } from "@/src/lib/activity-store";
 
 export async function GET() {
   const user = await getCurrentUser();

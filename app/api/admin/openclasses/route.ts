@@ -5,7 +5,7 @@ import {
   getOpenClasses,
   hydrateDomainState,
   upsertOpenClass
-} from "@/src/lib/mock-data";
+} from "@/src/lib/activity-store";
 import { getUserStore, getUsersVisibleToTeacherStore } from "@/src/lib/user-store";
 
 export async function GET() {

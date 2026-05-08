@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/src/lib/auth-server";
-import { getActivitiesForStudent, hydrateDomainState } from "@/src/lib/mock-data";
+import { getActivitiesForStudent, hydrateDomainState } from "@/src/lib/activity-store";
 
 function parsePaginationParam(raw: string | null, defaultValue: number): number {
   const n = parseInt(raw ?? "", 10);

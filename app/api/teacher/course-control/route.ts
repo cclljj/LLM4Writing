@@ -7,7 +7,7 @@ import {
   hydrateDomainState,
   startCourse,
   togglePauseOrResumeCourse
-} from "@/src/lib/mock-data";
+} from "@/src/lib/activity-store";
 import { getUsersVisibleToTeacherStore, listUsersStore } from "@/src/lib/user-store";
 
 export async function POST(request: NextRequest) {

@@ -1,3 +1,4 @@
+import { cache } from "react";
 import postgres, { Sql } from "postgres";
 import { SessionState } from "@/src/lib/types";
 import { getDatabaseUrl, getPostgresClientOptions, isDatabaseEnabled } from "@/src/lib/db-config";
@@ -104,8 +105,10 @@ export type SessionWithMeta = {
   updatedAt: string;
 };
 
-/** Like getSession but also returns the DB-level updatedAt for ETag computation. */
-export async function getSessionWithMeta(sessionId: string): Promise<SessionWithMeta | undefined> {
+/** Like getSession but also returns the DB-level updatedAt for ETag computation.
+ *  Wrapped with React cache() for request-level memoization — same sessionId
+ *  only hits the DB once per request even if called from multiple code paths. */
+export const getSessionWithMeta = cache(async (sessionId: string): Promise<SessionWithMeta | undefined> => {
   if (!isDatabaseEnabled()) {
     const session = getMemoryStore().get(sessionId);
     if (!session) return undefined;
@@ -126,11 +129,10 @@ export async function getSessionWithMeta(sessionId: string): Promise<SessionWith
   const session = normalizeSessionPayload(rows[0].payload);
   if (!session) return undefined;
   return { session, updatedAt: rows[0].updated_at.toISOString() };
-}
+});
 
 export async function getSession(sessionId: string): Promise<SessionState | undefined> {
-  const meta = await getSessionWithMeta(sessionId);
-  return meta?.session;
+  return (await getSessionWithMeta(sessionId))?.session;
 }
 
 export async function listSessions(opts?: { limit?: number; offset?: number }): Promise<SessionState[]> {

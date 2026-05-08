@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/src/lib/auth-server";
 import { createSession } from "@/src/lib/engine";
-import { findActivity, hydrateDomainState, resolvePromptConfigForActivity, resolveStructureTreeTemplate } from "@/src/lib/mock-data";
+import { hydrateDomainState } from "@/src/lib/activity-store";
+import { loadActivityWithConfig } from "@/src/lib/prompt-config";
+import { resolveStructureTreeTemplate } from "@/src/lib/genre-resolver";
 import { listSessions, saveSession } from "@/src/lib/store";
 import { markUserOnline } from "@/src/lib/session-presence";
 
@@ -47,10 +49,11 @@ export async function POST(request: NextRequest) {
     await hydrateDomainState();
     const body = (await request.json()) as { activityId?: string };
     const activityId = body.activityId ?? "";
-    const activity = findActivity(activityId);
-    if (!activity) {
+    const loaded = loadActivityWithConfig(activityId);
+    if (!loaded) {
       return NextResponse.json({ error: "activity_not_found" }, { status: 404 });
     }
+    const { activity, promptConfig: resolvedConfig } = loaded;
 
     if (activity.courseStatus === "not_started") {
       return NextResponse.json({ error: "course_not_started" }, { status: 400 });
@@ -82,7 +85,6 @@ export async function POST(request: NextRequest) {
         existing.outlines = {};
       }
       const structureTreeTemplate = resolveStructureTreeTemplate(activity.genre, activity.title);
-      const resolvedConfig = resolvePromptConfigForActivity(activity.id);
       const nextStepOpenings = {
         ...(resolvedConfig.stepOpenings ?? {}),
         ...(existing.promptConfig?.stepOpenings ?? {})
@@ -141,7 +143,7 @@ export async function POST(request: NextRequest) {
       activitySupplemental: activity.supplemental ?? "",
       groupId: group?.groupId ?? "g-auto",
       groupName: group?.groupName ?? "未分組",
-      promptConfig: resolvePromptConfigForActivity(activity.id)
+      promptConfig: resolvedConfig
     });
     const structureTreeTemplate = resolveStructureTreeTemplate(activity.genre, activity.title);
     if (structureTreeTemplate) {

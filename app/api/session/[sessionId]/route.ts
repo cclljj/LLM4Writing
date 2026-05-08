@@ -4,7 +4,9 @@ import { getSessionWithMeta, saveSession } from "@/src/lib/store";
 import { reconcileCompletedStep9Users } from "@/src/lib/engine";
 import { recoverStalledStep1Or2AiWait } from "@/src/lib/workflow-step1-2";
 import { ChatMessage } from "@/src/lib/types";
-import { findActivity, hydrateDomainState, resolvePromptConfigForActivity, resolveStructureTreeTemplate } from "@/src/lib/mock-data";
+import { hydrateDomainState } from "@/src/lib/activity-store";
+import { loadActivityWithConfig } from "@/src/lib/prompt-config";
+import { resolveStructureTreeTemplate } from "@/src/lib/genre-resolver";
 import { getCurrentUser } from "@/src/lib/auth-server";
 import { markUserOnline } from "@/src/lib/session-presence";
 
@@ -77,14 +79,14 @@ export async function GET(request: Request, context: { params: Promise<{ session
   let changed = false;
   await hydrateDomainState();
   if (session.activityId) {
-    const activity = findActivity(session.activityId);
-    const resolvedConfig = resolvePromptConfigForActivity(session.activityId);
+    const loaded = loadActivityWithConfig(session.activityId);
+    const resolvedConfig = loaded?.promptConfig;
     const nextStepOpenings = {
-      ...(resolvedConfig.stepOpenings ?? {}),
+      ...(resolvedConfig?.stepOpenings ?? {}),
       ...(session.promptConfig?.stepOpenings ?? {})
     };
     const hadStepOpenings = Boolean(session.promptConfig?.stepOpenings && Object.keys(session.promptConfig.stepOpenings).length > 0);
-    if (!hadStepOpenings) {
+    if (!hadStepOpenings && resolvedConfig) {
       session.promptConfig = {
         ...resolvedConfig,
         ...session.promptConfig,
@@ -96,7 +98,8 @@ export async function GET(request: Request, context: { params: Promise<{ session
       session.outlines = {};
       changed = true;
     }
-    if (activity) {
+    if (loaded?.activity) {
+      const { activity } = loaded;
       const structureTreeTemplate = resolveStructureTreeTemplate(activity.genre, activity.title);
       if (structureTreeTemplate) {
         session.participants.forEach((participant) => {

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/src/lib/auth-server";
-import { getAllActivities, hydrateDomainState } from "@/src/lib/mock-data";
+import { getAllActivities, hydrateDomainState } from "@/src/lib/activity-store";
 import { listSessions } from "@/src/lib/store";
 
 export async function GET(_: Request, context: { params: Promise<{ activityId: string }> }) {

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/src/lib/auth-server";
-import { deleteOpenClassTask, flushDomainState, getAllActivities, hydrateDomainState } from "@/src/lib/mock-data";
+import { deleteOpenClassTask, flushDomainState, getAllActivities, hydrateDomainState } from "@/src/lib/activity-store";
 import { getUsersVisibleToTeacherStore, listUsersStore } from "@/src/lib/user-store";
 import { deleteSessionsByActivityId } from "@/src/lib/store";
 

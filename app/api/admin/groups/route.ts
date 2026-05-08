@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/src/lib/auth-server";
-import { findActivity, flushDomainState, hydrateDomainState, updateActivityGroups } from "@/src/lib/mock-data";
+import { findActivity, flushDomainState, hydrateDomainState, updateActivityGroups } from "@/src/lib/activity-store";
 import { ActivityGroup } from "@/src/lib/types";
 import { getUsersVisibleToTeacherStore, listUsersStore } from "@/src/lib/user-store";
 
