@@ -761,7 +761,7 @@ student 可儲存三種內容：
   - `查看對話`：選取該 session 並開啟小組對話紀錄。
   - `個人進度`：載入該 session 的個人進度表。
 - 在「步驟切換提示」按下套用下一步且切換成功後，對應 session 的套用按鈕需立即消失（以前端最新 step 狀態即時更新為準）
-- 在「課程狀態內容（即時 / 歷史）」觀察狀態中，需自動輪詢 monitor 資料（例如每 3 秒）以即時反映小組是否達到可切換步驟條件，避免教師需手動反覆重新整理。
+- 在「課程狀態內容（即時 / 歷史）」觀察狀態中，需自動輪詢 monitor 資料以即時反映小組是否達到可切換步驟條件，避免教師需手動反覆重新整理。輪詢採指數退避（#239）：起始 3 秒，每次 monitor payload 無變化時延遲翻倍（上限 30 秒），偵測到變化（用 sessionId/currentStep/訊息數/最後訊息時間的雜湊比對）立即重置回 3 秒。閒置課堂網路流量降低 50-70%，活躍課堂仍維持即時反應。
 
 ### 課程管理
 
@@ -1133,6 +1133,19 @@ Behavior:
 4. 開發團隊透過修改該 JSON 並經 CI/CD 部署到 production
 
 實作函式：`resolvePromptConfigForActivity(activityId)`
+
+### 8.1 LLM Token 預算（per-step）
+
+`engine.ts` 依步驟性質分層設定 `maxTokens`（#239），避免短回覆步驟過度配額：
+
+| 步驟 | maxTokens | 備註 |
+|---|---|---|
+| 1, 2 | 500 | 群組對話回饋（短 JSON），`continueOnTruncation: false` |
+| 3 | 600 | 結構樹輔導回覆（典型短句） |
+| 4 | 800 | 群組討論引導 |
+| 5–10 | 1200 | 長文輸出（摘要、文章建議、分析報告、總結） |
+
+Step 6 AI 修改建議（`/api/session/step6/suggest`）與 Step 7 分析回饋（`/api/session/step6/complete`）皆使用 1200 tokens，因需產生長文回應。`llmChatCompletionStream()` 預設亦為 900 tokens（與 `llmChatCompletionText()` 同），呼叫端可覆寫。
 
 ---
 

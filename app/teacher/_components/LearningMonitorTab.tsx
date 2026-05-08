@@ -57,6 +57,10 @@ export default function LearningMonitorTab({
   const [learningPage, setLearningPage] = useState(1);
   const [learningJumpPage, setLearningJumpPage] = useState("1");
   const monitorPollingBusyRef = useRef(false);
+  // Exponential-backoff state for monitor polling (#239).
+  // We hash the sessions payload to detect quiescent periods and stretch the interval.
+  const monitorPayloadHashRef = useRef<string>("");
+  const monitorPollDelayRef = useRef<number>(3000);
 
   const learningSchoolOptions = useMemo(
     () => Array.from(new Set(activities.map((item) => item.school).filter(Boolean))).sort((a, b) => a.localeCompare(b, "zh-Hant")),
@@ -224,25 +228,44 @@ export default function LearningMonitorTab({
   useEffect(() => {
     if (!showCourseStatusView || !selectedLearningActivityId) return;
     let cancelled = false;
+    let timerId: number | null = null;
+    // Reset backoff on (re)entering the polling effect.
+    monitorPollDelayRef.current = 3000;
+    monitorPayloadHashRef.current = "";
 
-    const pollMonitor = async () => {
-      if (cancelled || monitorPollingBusyRef.current || isLearningProcessing) return;
+    const MIN_DELAY = 3000;
+    const MAX_DELAY = 30000;
+
+    const tick = async () => {
+      if (cancelled) return;
+      if (monitorPollingBusyRef.current || isLearningProcessing) {
+        // Try again soon without changing backoff.
+        timerId = window.setTimeout(tick, MIN_DELAY);
+        return;
+      }
       monitorPollingBusyRef.current = true;
+      const beforeHash = monitorPayloadHashRef.current;
       try {
         await refreshMonitor();
       } finally {
         monitorPollingBusyRef.current = false;
       }
+      // If refreshMonitor saw no change it leaves the hash untouched; double the delay.
+      // If it saw change it already reset the delay to MIN_DELAY.
+      if (!cancelled) {
+        if (monitorPayloadHashRef.current === beforeHash) {
+          monitorPollDelayRef.current = Math.min(MAX_DELAY, monitorPollDelayRef.current * 2);
+        }
+        timerId = window.setTimeout(tick, monitorPollDelayRef.current);
+      }
     };
 
-    pollMonitor().catch(() => undefined);
-    const timer = window.setInterval(() => {
-      pollMonitor().catch(() => undefined);
-    }, 3000);
+    // Kick off immediately, then schedule subsequent ticks.
+    tick().catch(() => undefined);
 
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      if (timerId !== null) window.clearTimeout(timerId);
     };
   }, [showCourseStatusView, selectedLearningActivityId, isLearningProcessing]);
 
@@ -268,6 +291,16 @@ export default function LearningMonitorTab({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  function computeMonitorPayloadHash(sessions: MonitorSession[]): string {
+    // Cheap signature: per-session id + currentStep + last message timestamp + message count.
+    return sessions
+      .map((s) => {
+        const last = s.messages[s.messages.length - 1];
+        return `${s.sessionId}:${s.currentStep}:${s.messages.length}:${last?.at ?? ""}`;
+      })
+      .join("|");
+  }
+
   async function refreshMonitor(): Promise<MonitorSession[]> {
     const fetchOpts: RequestInit = { cache: "no-store" };
     let response: Response | null = null;
@@ -284,9 +317,16 @@ export default function LearningMonitorTab({
       return [];
     }
     const data = await response.json();
-    const sessions = data.sessions ?? [];
+    const sessions: MonitorSession[] = data.sessions ?? [];
     setMonitorSessions(sessions);
     setLearningWarning("");
+
+    // Track payload changes for exponential-backoff polling (#239).
+    const nextHash = computeMonitorPayloadHash(sessions);
+    if (nextHash !== monitorPayloadHashRef.current) {
+      monitorPayloadHashRef.current = nextHash;
+      monitorPollDelayRef.current = 3000; // reset on activity
+    }
     return sessions;
   }
 

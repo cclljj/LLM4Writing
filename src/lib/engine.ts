@@ -365,7 +365,17 @@ async function generateAiTextForStep(
   ];
 
   try {
-    return await generateAiTextWithRetry(messages, 0.6, step === 1 || step === 2 ? 700 : 1200, {
+    // Token budgets by step (#239): tighter limits for short conversational steps,
+    // generous budget only for long-form content (article suggestions, analyses).
+    const maxTokensByStep =
+      step === 1 || step === 2
+        ? 500 // group dialog feedback (short JSON)
+        : step === 3
+          ? 600 // tutor reply (typically short)
+          : step === 4
+            ? 800 // group discussion guidance
+            : 1200; // long-form steps (6/7/8/9/10)
+    return await generateAiTextWithRetry(messages, 0.6, maxTokensByStep, {
       continueOnTruncation: step === 1 || step === 2 ? false : true,
       continuationMaxRounds: step === 1 || step === 2 ? 0 : 1,
       ...retryOptions
