@@ -207,37 +207,6 @@ export default function LearningMonitorTab({
     });
   }, [selectedLearningActivity, filteredMonitorSessions, users]);
 
-  const groupStatusRows = useMemo(() => {
-    if (!selectedLearningActivity) return [];
-    const groups = selectedLearningActivity.groups.length
-      ? selectedLearningActivity.groups
-      : [{ groupId: "g-auto", groupName: "未分組", members: selectedLearningActivity.studentCandidates ?? [] }];
-    const onlineUserSet = new Set(
-      filteredMonitorSessions.flatMap((session) => {
-        if (session.onlineUsers && session.onlineUsers.length > 0) return session.onlineUsers;
-        return session.messages
-          .filter((message) => message.role === "student" && Boolean(message.userId))
-          .map((message) => message.userId as string);
-      })
-    );
-    return groups.map((group) => {
-      const joinedMembers = group.members.filter((member) => onlineUserSet.has(member));
-      const groupSession = filteredMonitorSessions.find(
-        (session) =>
-          (session.groupId && session.groupId === group.groupId) ||
-          (session.groupName && session.groupName === group.groupName)
-      );
-      return {
-        groupId: group.groupId,
-        groupName: group.groupName,
-        totalMembers: group.members.length,
-        joinedCount: joinedMembers.length,
-        pendingCount: group.members.length - joinedMembers.length,
-        currentStep: groupSession ? getGroupCurrentStep(groupSession) : null
-      };
-    });
-  }, [selectedLearningActivity, filteredMonitorSessions]);
-
   // Per-session analytics cache (#242): each session's hint+risk only depend on its
   // own content; cache keyed by a cheap content signature so unchanged sessions skip
   // recomputation across polls. Bounded by number of active sessions.
@@ -1080,35 +1049,6 @@ export default function LearningMonitorTab({
             </div>
             {classJoinRows.length === 0 ? <small>此課程目前沒有可見學生名單。</small> : null}
             {selectedProgressUser ? <small style={{ display: "block", marginTop: 8 }}>目前檢視個人對話：{selectedProgressUser}</small> : null}
-          </div>
-
-          <div className="card">
-            <h2>分組狀態總覽</h2>
-            <div style={{ overflowX: "auto" }}>
-              <table className="pro-table">
-                <thead>
-                  <tr>
-                    <th>組別</th>
-                    <th>組員總數</th>
-                    <th>已加入人數</th>
-                    <th>未加入人數</th>
-                    <th>小組目前進度</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {groupStatusRows.map((row) => (
-                    <tr key={row.groupId}>
-                      <td>{row.groupName}</td>
-                      <td>{row.totalMembers}</td>
-                      <td>{row.joinedCount}</td>
-                      <td>{row.pendingCount}</td>
-                      <td>{row.currentStep ? `Step ${row.currentStep}` : "尚未建立 session"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {groupStatusRows.length === 0 ? <small>此課程目前沒有分組資料。</small> : null}
           </div>
 
           {filteredMonitorSessions.length > 0 ? (
