@@ -110,6 +110,27 @@ export default function LearningMonitorTab({
     [monitorSessions, selectedLearningActivityId]
   );
 
+  /**
+   * Returns the current step for a group based on the slowest member's personal step (#244).
+   * Falls back to `session.currentStep` only when no personal step data is available.
+   * This is needed because `session.currentStep` stops advancing past the last
+   * teacher-set step (often Step 5) once Step 5-10 personal pacing kicks in.
+   */
+  function getGroupCurrentStep(session: MonitorSession): number {
+    const participants = session.participants ?? [];
+    if (participants.length === 0 || !session.personalSteps) {
+      return session.currentStep;
+    }
+    let minStep: number | null = null;
+    for (const p of participants) {
+      const step = session.personalSteps[p];
+      if (typeof step === "number") {
+        minStep = minStep === null ? step : Math.min(minStep, step);
+      }
+    }
+    return minStep ?? session.currentStep;
+  }
+
   const classJoinRows = useMemo(() => {
     if (!selectedLearningActivity) return [];
     const students = selectedLearningActivity.studentCandidates ?? [];
@@ -166,7 +187,7 @@ export default function LearningMonitorTab({
         totalMembers: group.members.length,
         joinedCount: joinedMembers.length,
         pendingCount: group.members.length - joinedMembers.length,
-        currentStep: groupSession?.currentStep ?? null
+        currentStep: groupSession ? getGroupCurrentStep(groupSession) : null
       };
     });
   }, [selectedLearningActivity, filteredMonitorSessions]);
@@ -178,6 +199,11 @@ export default function LearningMonitorTab({
     session: MonitorSession;
     hint: ReturnType<typeof getStepAdvanceHint>;
     risk: ReturnType<typeof getStuckRisk>;
+    /** Slowest member's personal step (#244). */
+    groupCurrentStep: number;
+    /** "S5:1 / S6:2 / ..." text or empty if no personal-step data. */
+    step5To10Text: string;
+    membersText: string;
   };
   const sessionAnalyticsCacheRef = useRef<Map<string, { signature: string; value: SessionAnalytics }>>(
     new Map()
@@ -188,16 +214,25 @@ export default function LearningMonitorTab({
     const seen = new Set<string>();
     const result = filteredMonitorSessions.map((session) => {
       const last = session.messages[session.messages.length - 1];
-      const signature = `${session.currentStep}:${session.messages.length}:${last?.at ?? ""}:${session.groupGate ? Object.keys(session.groupGate).length : 0}`;
+      const personalStepsKey = session.personalSteps
+        ? Object.entries(session.personalSteps).sort().map(([k, v]) => `${k}=${v}`).join(",")
+        : "";
+      const signature = `${session.currentStep}:${session.messages.length}:${last?.at ?? ""}:${session.groupGate ? Object.keys(session.groupGate).length : 0}:${personalStepsKey}`;
       seen.add(session.sessionId);
       const cached = cache.get(session.sessionId);
       if (cached && cached.signature === signature && cached.value.session === session) {
         return cached.value;
       }
+      const groupCurrentStep = getGroupCurrentStep(session);
+      const step5To10Text =
+        groupCurrentStep >= 5 ? getPersonalStepCountText(session) : "";
       const value: SessionAnalytics = {
         session,
         hint: getStepAdvanceHint(session),
-        risk: getStuckRisk(session)
+        risk: getStuckRisk(session),
+        groupCurrentStep,
+        step5To10Text,
+        membersText: (session.participants ?? []).join(", ")
       };
       cache.set(session.sessionId, { signature, value });
       return value;
@@ -236,24 +271,29 @@ export default function LearningMonitorTab({
     return set.size;
   }, [filteredMonitorSessions]);
 
+  /**
+   * All sessions presented in dashboard row format (#244).
+   * Sorted: stuck → watch → ready (ok with hint.ready) → ok (others), so teachers
+   * see most urgent rows first while still having access to every session in one view.
+   */
   const riskRows = useMemo(() => {
-    return sessionsWithAnalytics
-      .filter((row) => row.risk.level !== "ok" || row.hint.ready)
-      .slice()
-      .sort((a, b) => {
-        const rank = { stuck: 0, watch: 1, ok: 2 } as const;
-        return rank[a.risk.level] - rank[b.risk.level];
-      });
+    return sessionsWithAnalytics.slice().sort((a, b) => {
+      const rankFor = (row: SessionAnalytics): number => {
+        if (row.risk.level === "stuck") return 0;
+        if (row.risk.level === "watch") return 1;
+        if (row.hint.ready) return 2;
+        return 3;
+      };
+      return rankFor(a) - rankFor(b);
+    });
   }, [sessionsWithAnalytics]);
 
   const teacherDashboard = useMemo<TeacherDashboardData<MonitorSession>>(() => {
-    const readyCount = sessionsWithAnalytics.reduce(
-      (acc, row) => acc + (row.hint.ready ? 1 : 0),
-      0
-    );
+    let readyCount = 0;
     let stuckCount = 0;
     let watchCount = 0;
-    for (const row of riskRows) {
+    for (const row of sessionsWithAnalytics) {
+      if (row.hint.ready) readyCount += 1;
       if (row.risk.level === "stuck") stuckCount += 1;
       else if (row.risk.level === "watch") watchCount += 1;
     }
@@ -264,7 +304,15 @@ export default function LearningMonitorTab({
       readyCount,
       stuckCount,
       watchCount,
-      riskRows
+      riskRows: riskRows.map((row) => ({
+        session: row.session,
+        risk: row.risk,
+        hint: row.hint,
+        groupCurrentStep: row.groupCurrentStep,
+        step5To10Text: row.step5To10Text,
+        membersText: row.membersText,
+        activityLabel: row.session.activityTitle ?? row.session.activityId
+      }))
     };
   }, [filteredMonitorSessions.length, sessionsWithAnalytics, riskRows, joinedUsersCount, onlineUsersCount]);
 
@@ -993,95 +1041,6 @@ export default function LearningMonitorTab({
               </table>
             </div>
             {groupStatusRows.length === 0 ? <small>此課程目前沒有分組資料。</small> : null}
-          </div>
-
-          <div className="card">
-            <h2>課程狀態內容（即時 / 歷史）</h2>
-            <div style={{ overflowX: "auto" }}>
-              <table className="pro-table">
-                <thead>
-                  <tr>
-                    <th>序號</th>
-                    <th>寫作任務</th>
-                    <th>小組名稱</th>
-                    <th>成員名單</th>
-                    <th>小組進度</th>
-                    <th>Step5-10 人數</th>
-                    <th>步驟切換提示</th>
-                    <th>動作</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredMonitorSessions.map((session, idx) => (
-                    <tr key={session.sessionId}>
-                      <td>{idx + 1}</td>
-                      <td>{session.activityTitle ?? session.activityId}</td>
-                      <td>{session.groupName ?? session.groupId ?? "未命名組"}</td>
-                      <td>{session.participants.join(", ")}</td>
-                      <td>Step {session.currentStep}</td>
-                      <td>
-                        <small>{getPersonalStepCountText(session)}</small>
-                      </td>
-                      <td>
-                        {(() => {
-                          const hint = getStepAdvanceHint(session);
-                          return (
-                            <>
-                              <small style={{ color: hint.ready ? "#166534" : "#6b7280" }}>{hint.text}</small>
-                              {hint.ready && hint.nextStep ? (
-                                <div style={{ marginTop: 6 }}>
-                                  <button
-                                    type="button"
-                                    className="secondary"
-                                    style={{ width: "auto" }}
-                                    disabled={isLearningProcessing}
-                                    onClick={() => applyStepSwitch(session.sessionId, hint.nextStep!)}
-                                  >
-                                    套用 Step {hint.nextStep}
-                                  </button>
-                                </div>
-                              ) : null}
-                            </>
-                          );
-                        })()}
-                      </td>
-                      <td>
-                        <div className="row" style={{ gap: 8 }}>
-                          <button
-                            type="button"
-                            className="secondary"
-                            style={{ width: "auto" }}
-                            disabled={isLearningProcessing}
-                            onClick={() => {
-                              setMonitorSelected(session);
-                              setGroupViewStep("all");
-                              setProgressSessionId(session.sessionId);
-                            }}
-                          >
-                            查看小組對話
-                          </button>
-                          <button
-                            type="button"
-                            className="secondary"
-                            style={{ width: "auto" }}
-                            disabled={isLearningProcessing}
-                            onClick={() => {
-                              setProgressSessionId(session.sessionId);
-                              loadProgress(session.sessionId);
-                            }}
-                          >
-                            查看個人進度
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {filteredMonitorSessions.length === 0 ? (
-              <small>此課程目前沒有 session。開始上課後，學生加入討論即會出現即時或歷史內容。</small>
-            ) : null}
           </div>
 
           <div className="card">

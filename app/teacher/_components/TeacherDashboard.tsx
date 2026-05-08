@@ -1,3 +1,5 @@
+import type { CSSProperties } from "react";
+
 export type DashboardSession = {
   sessionId: string;
   groupId?: string;
@@ -24,6 +26,19 @@ export type TeacherDashboardRow<TSession extends DashboardSession = DashboardSes
   session: TSession;
   risk: DashboardRisk;
   hint: DashboardHint;
+  /**
+   * Slowest member's personal step within this group (#244). Falls back to
+   * `session.currentStep` when personal steps are unavailable. This replaces
+   * `session.currentStep` for group progress display, since the latter caps
+   * at the last teacher-set step (often 5) once personal pacing kicks in.
+   */
+  groupCurrentStep: number;
+  /** "S5:1 / S6:2 / ..." distribution text; empty/undefined when not yet personal-paced. */
+  step5To10Text?: string;
+  /** Joined participant usernames for at-a-glance display. */
+  membersText: string;
+  /** Activity label (title or id) for multi-activity admin views. */
+  activityLabel?: string;
 };
 
 export type TeacherDashboardData<TSession extends DashboardSession = DashboardSession> = {
@@ -33,6 +48,7 @@ export type TeacherDashboardData<TSession extends DashboardSession = DashboardSe
   readyCount: number;
   stuckCount: number;
   watchCount: number;
+  /** All session rows, sorted by risk priority: stuck → watch → ready → ok (#244). */
   riskRows: Array<TeacherDashboardRow<TSession>>;
 };
 
@@ -49,6 +65,13 @@ function statusLabel(row: TeacherDashboardRow): string {
   if (row.risk.level === "stuck") return "高風險";
   if (row.risk.level === "watch") return "留意";
   return "正常";
+}
+
+function statusBadgeStyle(row: TeacherDashboardRow): CSSProperties {
+  if (row.hint.ready) return { background: "#dcfce7", color: "#166534", borderColor: "#86efac" };
+  if (row.risk.level === "stuck") return { background: "#fee2e2", color: "#991b1b", borderColor: "#fca5a5" };
+  if (row.risk.level === "watch") return { background: "#fef3c7", color: "#92400e", borderColor: "#fcd34d" };
+  return { background: "#f1f5f9", color: "#475569", borderColor: "#cbd5e1" };
 }
 
 export default function TeacherDashboard<TSession extends DashboardSession>({
@@ -93,19 +116,46 @@ export default function TeacherDashboard<TSession extends DashboardSession>({
             <tr>
               <th>狀態</th>
               <th>小組</th>
+              <th>成員</th>
               <th>目前進度</th>
-              <th>提醒</th>
-              <th>一鍵管理</th>
+              <th>Step 5–10 分布</th>
+              <th>提醒 / 步驟切換</th>
+              <th>動作</th>
             </tr>
           </thead>
           <tbody>
             {dashboard.riskRows.map((row) => (
               <tr key={`dashboard-${row.session.sessionId}`}>
                 <td>
-                  <span className="badge">{statusLabel(row)}</span>
+                  <span
+                    className="badge"
+                    style={{
+                      ...statusBadgeStyle(row),
+                      border: "1px solid",
+                      padding: "2px 8px",
+                      borderRadius: 999,
+                      fontSize: 12,
+                      fontWeight: 600
+                    }}
+                  >
+                    {statusLabel(row)}
+                  </span>
                 </td>
-                <td>{row.session.groupName ?? row.session.groupId ?? "未命名組"}</td>
-                <td>Step {row.session.currentStep}</td>
+                <td>
+                  <div style={{ fontWeight: 600 }}>{row.session.groupName ?? row.session.groupId ?? "未命名組"}</div>
+                  {row.activityLabel ? (
+                    <small style={{ color: "#64748b", display: "block" }}>{row.activityLabel}</small>
+                  ) : null}
+                </td>
+                <td>
+                  <small title={row.membersText} style={{ display: "inline-block", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", verticalAlign: "middle" }}>
+                    {row.membersText || "—"}
+                  </small>
+                </td>
+                <td>Step {row.groupCurrentStep}</td>
+                <td>
+                  <small>{row.step5To10Text || "—"}</small>
+                </td>
                 <td>
                   <small>{row.hint.ready ? row.hint.text : row.risk.text}</small>
                   {!row.hint.ready && row.risk.reasons && row.risk.reasons.length > 1 ? (
@@ -128,11 +178,29 @@ export default function TeacherDashboard<TSession extends DashboardSession>({
                       建議：{row.risk.suggestions[0]}
                     </small>
                   ) : null}
+                  {row.hint.ready && row.hint.nextStep ? (
+                    <div style={{ marginTop: 6 }}>
+                      <button
+                        type="button"
+                        className="secondary"
+                        style={{ width: "auto" }}
+                        disabled={isProcessing}
+                        onClick={() => onAdvanceStep(row.session.sessionId, row.hint.nextStep!)}
+                      >
+                        套用 Step {row.hint.nextStep}
+                      </button>
+                    </div>
+                  ) : null}
                 </td>
                 <td>
-                  <div className="row" style={{ gap: 8 }}>
+                  <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
                     {row.hint.ready && row.hint.nextStep ? (
-                      <button type="button" style={{ width: "auto" }} disabled={isProcessing} onClick={() => onAdvanceStep(row.session.sessionId, row.hint.nextStep!)}>
+                      <button
+                        type="button"
+                        style={{ width: "auto" }}
+                        disabled={isProcessing}
+                        onClick={() => onAdvanceStep(row.session.sessionId, row.hint.nextStep!)}
+                      >
                         推進 Step {row.hint.nextStep}
                       </button>
                     ) : null}
@@ -150,7 +218,7 @@ export default function TeacherDashboard<TSession extends DashboardSession>({
         </table>
       </div>
       {dashboard.riskRows.length === 0 ? (
-        <small style={{ display: "block", marginTop: 8 }}>目前沒有卡關或可推進提示。若剛開始上課，請等待學生加入後重新整理。</small>
+        <small style={{ display: "block", marginTop: 8 }}>此課程目前沒有 session。開始上課後，學生加入討論即會出現在此。</small>
       ) : null}
     </div>
   );
