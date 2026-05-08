@@ -102,3 +102,40 @@ export function validateStudentAnswer(session: SessionState, userId: string, ste
 
   return null;
 }
+
+/**
+ * Validates a step-6 essay draft before allowing the student to advance to step 7.
+ * Returns a human-readable error string when the draft is insufficient, or null when valid.
+ *
+ * Thresholds (intentionally lenient — guards against blanks / fillers, not quality):
+ *   - Total trimmed length >= 100 characters
+ *   - CJK (Chinese) character count >= 50
+ *   - Not composed of repetitive filler (deduplicated length >= 40% of original)
+ *   - Not a single low-effort phrase
+ */
+export function validateDraftContent(draft: string): string | null {
+  const trimmed = draft.trim();
+
+  if (trimmed.length < 100) {
+    return `文章初稿字數不足（目前約 ${trimmed.length} 字，需至少 100 字）。請繼續撰寫，完成具有基本結構的文章初稿後再送出。`;
+  }
+
+  const cjkCount = (trimmed.match(/[㐀-鿿]/gu) ?? []).length;
+  if (cjkCount < 50) {
+    return `文章初稿中文字數不足（目前約 ${cjkCount} 個中文字，需至少 50 個）。請以繁體中文撰寫文章內容後再送出。`;
+  }
+
+  // Detect heavy repetition (e.g. "啊啊啊啊啊" or "測試測試測試測試").
+  const deduped = trimmed.replace(/(.{1,6})\1{3,}/gu, "$1");
+  if (deduped.length < trimmed.length * 0.4) {
+    return "文章內容看起來包含大量重複字元或填充文字，請完成真實的文章初稿後再送出。";
+  }
+
+  // Single low-effort phrase.
+  const compact = trimmed.replace(/\s/g, "");
+  if (/^(不知道|不知|不會|隨便|沒意見|無|沒有|測試|test|asdf|qwerty){1,3}$/i.test(compact)) {
+    return "文章初稿不能只有敷衍文字，請根據寫作任務撰寫有內容的文章初稿。";
+  }
+
+  return null;
+}

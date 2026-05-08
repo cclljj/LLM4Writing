@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { buildStudentNextAction } from "@/src/lib/student-next-action";
+import { validateDraftContent } from "@/src/lib/answer-validation";
 import OutlineSvg from "@/app/_components/OutlineSvg";
 import GroupWaitingStatus from "./_components/GroupWaitingStatus";
 import NextActionCard from "./_components/NextActionCard";
@@ -758,6 +759,8 @@ export default function StudentPage() {
 
   async function completeStep6ToStep8() {
     if (!session || currentStep !== 6) return;
+    const draftError = validateDraftContent(draftText);
+    if (draftError) { setError(draftError); return; }
     setError("");
     setIsCompletingStep6(true);
     try {

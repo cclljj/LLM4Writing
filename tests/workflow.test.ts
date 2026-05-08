@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { ChatMessage, SessionState } from "../src/lib/types";
-import { validateStudentAnswer } from "../src/lib/answer-validation";
+import { validateStudentAnswer, validateDraftContent } from "../src/lib/answer-validation";
 import { buildAdvancedStuckRisk, recordRejectedAnswerSignal } from "../src/lib/learning-diagnostics";
 import { isTruncatedFinishReason, pickAssistantTextResult } from "../src/lib/llm-openai-response";
 import { resolvePendingOutlineAfterServerSync, shouldSyncOutlineFromSession } from "../src/lib/outline-sync-guard";
@@ -413,4 +413,33 @@ test("student next-action card gives concrete action instead of generic status",
     }).body,
     /至少完成開頭/
   );
+});
+
+test("step6 draft validation rejects insufficient content and accepts a real essay draft", () => {
+  // Reject: empty
+  assert.match(validateDraftContent("") ?? "", /字數不足/);
+
+  // Reject: too short (< 100 chars total)
+  assert.match(validateDraftContent("這是一篇文章。") ?? "", /字數不足/);
+
+  // Reject: enough total chars but too few CJK chars (mostly spaces/English)
+  const latinPadded = "a ".repeat(60); // 120 chars but 0 CJK
+  assert.match(validateDraftContent(latinPadded) ?? "", /中文字數不足/);
+
+  // Reject: repetitive filler ("啊" × 200)
+  assert.match(validateDraftContent("啊".repeat(200)) ?? "", /重複字元/);
+
+  // Reject: repeating short phrase
+  assert.match(validateDraftContent("測試測試測試測試測試測試測試測試測試".repeat(10)) ?? "", /重複字元/);
+
+  // Reject: low-effort single phrase
+  assert.match(validateDraftContent("不知道") ?? "", /字數不足|敷衍/);
+
+  // Accept: a real short essay draft with >= 100 chars and >= 50 CJK
+  const validDraft =
+    "根據題目要求，本文將從三個角度探討台灣的環境保護問題。" +
+    "首先，空氣污染已成為都市居民的主要健康隱患，需要政府與企業共同正視。" +
+    "其次，海洋廢棄物的問題日益嚴重，民眾應減少一次性塑膠的使用。" +
+    "最後，森林濫伐破壞了生態平衡，必須透過立法與教育並行加以遏止。";
+  assert.equal(validateDraftContent(validDraft), null);
 });

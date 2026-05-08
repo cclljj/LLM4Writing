@@ -5,6 +5,7 @@ import { saveSession } from "@/src/lib/store";
 import { isLlmConfigured, llmChatCompletionText, type LlmChatMessage } from "@/src/lib/llm-client";
 import { sanitizeStudentFacingText } from "@/src/lib/llm-response";
 import { requireStudentInSession } from "@/src/lib/api-helpers";
+import { validateDraftContent } from "@/src/lib/answer-validation";
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -60,6 +61,11 @@ export async function POST(request: NextRequest) {
   }
 
   const finalDraft = body.draft;
+  const draftError = validateDraftContent(finalDraft);
+  if (draftError) {
+    return NextResponse.json({ error: "draft_insufficient", hint: draftError }, { status: 400 });
+  }
+
   session.draftStep6[user.username] = finalDraft;
   recordArtifactUpdateSignal(session, "draft6", user.username);
   const feedback = sanitizeStudentFacingText(
