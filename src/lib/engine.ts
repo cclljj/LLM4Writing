@@ -451,7 +451,7 @@ function buildStep7Report(session: SessionState, userId: string): string {
 
 function buildStep10Report(session: SessionState, userId: string): string {
   const essay = session.draftStep8[userId] ?? session.draftStep6[userId] ?? "(尚未提交作文)";
-  return `步驟 10 總結報告（${userId}）\n最終稿：${essay}\n總評：結構已改善，建議再精煉結語。\n\n整個課程操作結束，請等待老師的下一步指示。`;
+  return `步驟 10 總結報告（${userId}）\n最終稿：${essay}\n總評：結構已改善，建議再精煉結語。`;
 }
 
 function buildFullCourseContextForUser(session: SessionState, userId: string): string {
@@ -560,7 +560,7 @@ export function buildStep10LlmInput(
         `學生帳號：${userId}\n` +
         `最終作文內容：\n${finalEssay}\n\n` +
         `學生完整歷程紀錄（含前序步驟）：\n${fullContext || "(無)"}\n\n` +
-        "請輸出步驟 10 的總結報告，並在最後一段明確寫出：「整個課程操作結束，請等待老師的下一步指示」。"
+        "請輸出步驟 10 的總結報告。"
     }
   ];
   return { messages, fallback };
@@ -696,7 +696,7 @@ export async function switchStep(session: SessionState, step: number): Promise<S
       session.participants.forEach((participant) => {
         session.reports.step10[participant] = buildStep10Report(session, participant);
       });
-      session.messages.push(makeMessage({ role: "ai", step, text: "步驟 10 總結報告已生成，整個課程操作結束，請等待老師的下一步指示。" }));
+      session.messages.push(makeMessage({ role: "ai", step, text: "步驟 10 總結報告已生成。" }));
     }
   }
 
