@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { saveSession } from "@/src/lib/store";
 import { getStep9QuestionsFromConfig } from "@/src/lib/spec";
 import { requireStudentInSession } from "@/src/lib/api-helpers";
+import { validateDraftContent } from "@/src/lib/answer-validation";
 
 export async function POST(request: NextRequest) {
   const body = (await request.json()) as { sessionId?: string; draft?: string };
@@ -18,7 +19,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "invalid_step" }, { status: 400 });
   }
 
-  session.draftStep8[user.username] = body.draft;
+  const finalDraft = body.draft;
+  const draftError = validateDraftContent(session, finalDraft, "最終稿");
+  if (draftError) {
+    return NextResponse.json({ error: "draft_insufficient", hint: draftError }, { status: 400 });
+  }
+
+  session.draftStep8[user.username] = finalDraft;
   session.personalSteps = session.personalSteps ?? {};
   session.personalSteps[user.username] = 9;
   if ((session.reflectionIndex?.[user.username] ?? 0) === 0) {

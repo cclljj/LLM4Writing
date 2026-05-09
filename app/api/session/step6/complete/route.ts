@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
   }
 
   const finalDraft = body.draft;
-  const draftError = validateDraftContent(finalDraft);
+  const draftError = validateDraftContent(session, finalDraft, "初稿");
   if (draftError) {
     return NextResponse.json({ error: "draft_insufficient", hint: draftError }, { status: 400 });
   }

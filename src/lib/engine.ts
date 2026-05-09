@@ -3,7 +3,7 @@ import { ChatMessage, SessionState, StartSessionPayload } from "@/src/lib/types"
 import { STEP_DEFINITIONS, getModeByStep, getStepName } from "@/src/lib/spec";
 import { isLlmConfigured, llmChatCompletionText, LlmChatMessage } from "@/src/lib/llm-client";
 import { buildStudentCourseContext } from "@/src/lib/llm-context";
-import { normalizeForCompare, validateStudentAnswer } from "@/src/lib/answer-validation";
+import { normalizeForCompare, validateStudentAnswer, validateStudentAnswerSimple } from "@/src/lib/answer-validation";
 import { recordRejectedAnswerSignal } from "@/src/lib/learning-diagnostics";
 import { sanitizeStudentFacingText, splitAiFeedbackAndQuestion } from "@/src/lib/llm-response";
 import { buildStep1Question, buildStep2Question, buildStep9BatchPrompt, getCurrentGroupGateKey, getCurrentSubstepKey, getStep9Questions } from "@/src/lib/workflow-questions";
@@ -678,7 +678,10 @@ export async function sendStudentMessage(
     throw new Error("step_non_interactive");
   }
 
-  const validationError = validateStudentAnswer(session, userId, step, text);
+  const validationError =
+    step === 1 || step === 2
+      ? validateStudentAnswerSimple(session, userId, step, text)
+      : validateStudentAnswer(session, userId, step, text);
   if (validationError) {
     const rejectionScope = step === 1 || step === 2 ? getCurrentGroupGateKey(session, step as 1 | 2) : `step-${step}`;
     recordRejectedAnswerSignal(session, userId, rejectionScope, now());
