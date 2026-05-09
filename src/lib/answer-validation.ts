@@ -125,8 +125,8 @@ function hasQuestionOverlap(question: string, answer: string): boolean {
   return questionTerms.some((term) => answer.includes(term));
 }
 
-const SIMPLE_RELEVANCE_MIN_LEN = 12;
-const SIMPLE_HINT_MIN_LEN = 16;
+const SIMPLE_RELEVANCE_MIN_LEN = 8;
+const SIMPLE_HINT_MIN_LEN = 12;
 const SIMPLE_EXPLANATION_MARKERS = ["因為", "所以", "例如", "像是", "代表", "因此", "顯示", "說明", "比較", "影響"];
 const CJK_STOP_CHARS = new Set(["的", "了", "是", "在", "有", "和", "與", "及", "或", "你", "我", "他", "她", "它", "們", "請", "這", "那", "把", "就", "都", "很", "再", "更", "嗎", "呢", "吧", "啊"]);
 const SIMPLE_GENERIC_RELEVANCE_TERMS = ["題目", "重點", "關鍵", "想法", "觀點", "理由", "例子", "經驗", "情況", "情境", "條件", "標準", "定義", "範圍"];
@@ -177,11 +177,16 @@ function hasExampleOrContextStructure(answer: string): boolean {
   return /(例如|像是|比如|像|情況|情境|平常|生活中|在.*時候)/u.test(answer);
 }
 
+function hasStanceStructure(answer: string): boolean {
+  return /(主張|應該|需要|必須|要|建議|支持|反對|不該|少.+多|多.+少)/u.test(answer);
+}
+
 function hasGeneralSemanticAnswerStructure(answer: string): boolean {
   return (
     hasConditionStructure(answer) ||
     hasBoundaryOrClassificationStructure(answer) ||
     hasComparisonOrTradeoffStructure(answer) ||
+    hasStanceStructure(answer) ||
     hasExplanationSignal(answer) ||
     hasExampleOrContextStructure(answer)
   );

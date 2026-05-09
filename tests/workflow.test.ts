@@ -73,6 +73,7 @@ test("step1/2 simple validation accepts earnest 3C-related answer and still bloc
     validateStudentAnswerSimple(session, "s1", 1, "如果使用手機上網就算數，如果只是接電話就不算數。"),
     null
   );
+  assert.equal(validateStudentAnswerSimple(session, "s1", 1, "國中生少用3C多唸書"), null);
 
   assert.match(
     validateStudentAnswerSimple(session, "s1", 1, "今天中午我吃了炒飯和蛋花湯，味道不錯，吃完準備去打球流汗。") ?? "",
