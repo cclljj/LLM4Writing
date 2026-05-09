@@ -1140,7 +1140,7 @@ Request:
 - 權限：student 且需為 session participant。
 - 僅允許個人 Step6。
 - 以 `stepPrompts["6"]` 與學生草稿呼叫 LLM。
-- 以 SSE streaming 回傳修改建議。
+- 先以截斷續寫模式取得完整建議，再以 SSE 分段回傳修改建議。
 - 完成後將 AI 建議追加到 session messages。
 
 #### `POST /api/session/step6/complete`

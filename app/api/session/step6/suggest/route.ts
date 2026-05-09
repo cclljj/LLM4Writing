@@ -4,7 +4,7 @@ import { recordArtifactUpdateSignal } from "@/src/lib/learning-diagnostics";
 import { saveSession } from "@/src/lib/store";
 import {
   isLlmConfigured,
-  llmChatCompletionStream,
+  llmChatCompletionText,
   type LlmChatMessage
 } from "@/src/lib/llm-client";
 import { buildStudentCourseContext } from "@/src/lib/llm-context";
@@ -100,16 +100,25 @@ export async function POST(request: NextRequest) {
             crossStepContext
           );
           try {
-            for await (const delta of llmChatCompletionStream({
+            // Step6 suggestions favor complete output over token-by-token latency,
+            // so we use truncation-aware non-stream completion and then emit SSE chunks.
+            const fullText = await llmChatCompletionText({
               messages,
               temperature: 0.6,
-              maxTokens: 1200
-            })) {
-              collected.push(delta);
-              send({ type: "chunk", text: delta });
+              maxTokens: 1400,
+              timeoutMs: 60_000,
+              continueOnTruncation: true,
+              continuationMaxRounds: 4
+            });
+            if (fullText.trim()) {
+              const normalized = fullText.trim();
+              collected.push(normalized);
+              const chunkSize = 120;
+              for (let i = 0; i < normalized.length; i += chunkSize) {
+                send({ type: "chunk", text: normalized.slice(i, i + chunkSize) });
+              }
             }
           } catch {
-            // Streaming failed mid-flight; fall back to a single-chunk fallback.
             if (collected.length === 0) {
               collected.push(FALLBACK_SUGGESTION);
               send({ type: "chunk", text: FALLBACK_SUGGESTION });
