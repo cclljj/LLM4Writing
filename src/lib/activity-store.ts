@@ -19,6 +19,12 @@ export type OpenClassTask = {
   essayId: string;
   durationMinutes: number;
   supplemental: string;
+  /**
+   * The teacher who owns/executes this task (#254). For admin-created tasks this is
+   * derived from the class students' ownerTeacherUsername. For teacher-created tasks
+   * it's auto-set to the creating teacher.
+   */
+  ownerTeacherUsername?: string;
 };
 
 export type OpenClassView = OpenClassTask & {
@@ -638,6 +644,7 @@ export function upsertOpenClass(input: {
   essayId: string;
   durationMinutes: number;
   supplemental: string;
+  ownerTeacherUsername?: string;
 }) {
   const essay = findEssay(input.essayId);
   if (!essay) {
@@ -668,6 +675,10 @@ export function upsertOpenClass(input: {
       existing.essayId = input.essayId;
       existing.durationMinutes = input.durationMinutes;
       existing.supplemental = input.supplemental;
+      // Only overwrite ownerTeacherUsername when explicitly provided (#254).
+      if (typeof input.ownerTeacherUsername === "string" && input.ownerTeacherUsername.trim()) {
+        existing.ownerTeacherUsername = input.ownerTeacherUsername.trim();
+      }
       return { ok: true as const, saved: toOpenClassView(existing) };
     }
   }
@@ -678,7 +689,11 @@ export function upsertOpenClass(input: {
     classNumber: input.classNumber,
     essayId: input.essayId,
     durationMinutes: input.durationMinutes,
-    supplemental: input.supplemental
+    supplemental: input.supplemental,
+    ownerTeacherUsername:
+      typeof input.ownerTeacherUsername === "string" && input.ownerTeacherUsername.trim()
+        ? input.ownerTeacherUsername.trim()
+        : undefined
   };
   openClasses.push(created);
   activityGroupMap[created.id] = activityGroupMap[created.id] ?? [];

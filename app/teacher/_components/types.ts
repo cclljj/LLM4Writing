@@ -17,6 +17,10 @@ export type OpenClassRow = {
   essayTitle: string;
   durationMinutes: number;
   supplemental: string;
+  /** Bound teacher (executor) for this task (#254). */
+  ownerTeacherUsername?: string;
+  /** Whether any student has activity recorded in any session of this task (#254). */
+  hasStudentActivity?: boolean;
 };
 export type ActivityGroup = { groupId: string; groupName: string; members: string[] };
 export type ActivityRow = {

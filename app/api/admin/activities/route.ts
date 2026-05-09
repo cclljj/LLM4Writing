@@ -1,8 +1,14 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/src/lib/auth-server";
-import { deleteOpenClassTask, flushDomainState, getAllActivities, hydrateDomainState } from "@/src/lib/activity-store";
+import {
+  deleteOpenClassTask,
+  flushDomainState,
+  getAllActivities,
+  getOpenClasses,
+  hydrateDomainState
+} from "@/src/lib/activity-store";
 import { getUsersVisibleToTeacherStore, listUsersStore } from "@/src/lib/user-store";
-import { deleteSessionsByActivityId } from "@/src/lib/store";
+import { deleteSessionsByActivityId, listSessions } from "@/src/lib/store";
 
 export async function GET() {
   const user = await getCurrentUser();
@@ -36,7 +42,7 @@ export async function GET() {
 
 export async function DELETE(request: Request) {
   const user = await getCurrentUser();
-  if (!user || user.role !== "admin") {
+  if (!user || (user.role !== "admin" && user.role !== "teacher")) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
@@ -47,6 +53,26 @@ export async function DELETE(request: Request) {
   }
 
   await hydrateDomainState();
+
+  // Teacher delete (#254): only allowed for tasks they own AND no student activity exists.
+  // admin retains unrestricted delete (used by both 課程管理 + 學習管理 flows).
+  if (user.role === "teacher") {
+    const target = getOpenClasses().find((oc) => oc.id === activityId);
+    if (!target) {
+      return NextResponse.json({ error: "activity_not_found" }, { status: 404 });
+    }
+    if (target.ownerTeacherUsername !== user.username) {
+      return NextResponse.json({ error: "not_owner" }, { status: 403 });
+    }
+    const sessions = await listSessions().catch(() => []);
+    const hasActivity = sessions.some(
+      (s) => s.activityId === activityId && s.messages.some((m) => m.role === "student")
+    );
+    if (hasActivity) {
+      return NextResponse.json({ error: "task_has_student_activity" }, { status: 409 });
+    }
+  }
+
   const deleted = deleteOpenClassTask(activityId);
   if (!deleted.ok) {
     return NextResponse.json({ error: deleted.error }, { status: 404 });

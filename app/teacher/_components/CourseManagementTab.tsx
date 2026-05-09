@@ -104,6 +104,32 @@ export default function CourseManagementTab({
     ).sort();
   }, [users, currentFormSchool]);
 
+  // Derive bound teacher (姓名 + 帳號) for the currently selected school+class (#254).
+  // Counts ownerTeacherUsername among that class's students; picks the most common.
+  const formOwnerTeacher = useMemo<{ username: string; name: string } | null>(() => {
+    if (!currentFormSchool || !taskForm.classNumber) return null;
+    const classStudents = users.filter(
+      (u) => u.role === "student" && u.school === currentFormSchool && u.classNumber === taskForm.classNumber
+    );
+    const counts = new Map<string, number>();
+    for (const s of classStudents) {
+      const t = s.ownerTeacherUsername;
+      if (!t) continue;
+      counts.set(t, (counts.get(t) ?? 0) + 1);
+    }
+    let best: string | undefined;
+    let bestCount = 0;
+    for (const [t, c] of counts) {
+      if (c > bestCount) {
+        best = t;
+        bestCount = c;
+      }
+    }
+    if (!best) return null;
+    const teacherUser = users.find((u) => u.username === best);
+    return { username: best, name: teacherUser?.name ?? best };
+  }, [users, currentFormSchool, taskForm.classNumber]);
+
   // 列表篩選用：admin 學校選單 = 已有任務的學校
   const listSchoolOptions = useMemo(() => {
     return Array.from(new Set(openClasses.map((o) => o.school))).sort((a, b) => a.localeCompare(b, "zh-Hant"));
@@ -230,6 +256,32 @@ export default function CourseManagementTab({
     return users
       .filter((u) => u.role === "student" && u.school === school && u.classNumber === classNumber)
       .map((u) => u.username);
+  }
+
+  // Delete task entirely (#254). Only callable when no student activity exists yet.
+  // Reuses the existing /api/admin/activities DELETE endpoint, which removes
+  // the openClass, its groups, and any related sessions.
+  async function deleteTask(openClass: OpenClassRow) {
+    setError("");
+    const confirmed = window.confirm(
+      `確定刪除寫作任務「${openClass.essayTitle} / ${openClass.school} ${openClass.classNumber}」嗎？\n此操作無法復原。`
+    );
+    if (!confirmed) return;
+    const response = await fetch("/api/admin/activities", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ activityId: openClass.id })
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      setError(data.error ?? "delete_task_failed");
+      return;
+    }
+    // Reset form if we were editing this task
+    if (taskForm.id === openClass.id) {
+      resetTaskForm();
+    }
+    await onRefresh();
   }
 
   function startEditTask(openClass: OpenClassRow) {
@@ -389,6 +441,9 @@ export default function CourseManagementTab({
       };
       if (loginRole === "admin") {
         ocPayload.school = taskForm.school;
+        if (formOwnerTeacher?.username) {
+          ocPayload.ownerTeacherUsername = formOwnerTeacher.username;
+        }
       }
       const ocResponse = await fetch("/api/admin/openclasses", {
         method: "POST",
@@ -686,6 +741,14 @@ export default function CourseManagementTab({
                 </option>
               ))}
             </select>
+            {/* Bound teacher display (#254) — shown for admin once class is selected. */}
+            {loginRole === "admin" && taskForm.classNumber ? (
+              <small style={{ display: "block", marginTop: 4, color: formOwnerTeacher ? "#475569" : "#b91c1c" }}>
+                {formOwnerTeacher
+                  ? `綁定教師：${formOwnerTeacher.name} (${formOwnerTeacher.username})`
+                  : "綁定教師：找不到此班學生的綁定教師，請先在帳號管理為學生指派教師。"}
+              </small>
+            ) : null}
           </div>
           <div className="col">
             <label>主題（含 ID）</label>
@@ -888,9 +951,23 @@ export default function CourseManagementTab({
                   <td>{openClass.durationMinutes}</td>
                   <td>{openClass.supplemental || "—"}</td>
                   <td>
-                    <button type="button" className="secondary" style={{ width: "auto" }} onClick={() => startEditTask(openClass)}>
-                      編輯
-                    </button>
+                    <div className="row" style={{ gap: 8 }}>
+                      <button type="button" className="secondary" style={{ width: "auto" }} onClick={() => startEditTask(openClass)}>
+                        編輯
+                      </button>
+                      {/* 刪除按鈕（#254）：僅在尚無學生操作紀錄時顯示。
+                           顏色與「帳號管理」的「刪除」按鈕一致。 */}
+                      {!openClass.hasStudentActivity ? (
+                        <button
+                          type="button"
+                          className="secondary"
+                          style={{ width: "auto", color: "#b91c1c", borderColor: "#fecaca", background: "#fef2f2" }}
+                          onClick={() => deleteTask(openClass)}
+                        >
+                          刪除
+                        </button>
+                      ) : null}
+                    </div>
                   </td>
                 </tr>
               ))}
