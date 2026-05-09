@@ -78,6 +78,8 @@ export default function CourseManagementTab({
   const [isSavingTask, setIsSavingTask] = useState(false);
   const [savingMessage, setSavingMessage] = useState<string>("");
   const [savedSuccessMessage, setSavedSuccessMessage] = useState<string>("");
+  // 刪除任務 UX 狀態（#257）：追蹤目前正在刪除的 activityId，提供按鈕 disabled 與提示
+  const [deletingTaskId, setDeletingTaskId] = useState<string>("");
 
   const taskFormRef = useRef<HTMLDivElement | null>(null);
 
@@ -268,34 +270,47 @@ export default function CourseManagementTab({
   // the openClass, its groups, and any related sessions.
   async function deleteTask(openClass: OpenClassRow) {
     setError("");
+    setSavedSuccessMessage("");
     const confirmed = window.confirm(
       `確定刪除寫作任務「${openClass.essayTitle} / ${openClass.school} ${openClass.classNumber}」嗎？\n此操作無法復原。`
     );
     if (!confirmed) return;
-    const response = await fetch("/api/admin/activities", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ activityId: openClass.id })
-    });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      const code = data?.error;
-      const friendly =
-        code === "not_owner"
-          ? "你不是這份任務的綁定教師，無法刪除。"
-          : code === "task_has_student_activity"
-            ? "此任務已有學生操作紀錄，無法刪除。"
-            : code === "activity_not_found"
-              ? "找不到此任務（可能已被其他人刪除）。"
-              : (code ?? "delete_task_failed");
-      setError(friendly);
-      return;
+    setDeletingTaskId(openClass.id);
+    setSavingMessage(`正在刪除任務 ${openClass.id}，請稍候...`);
+    setIsSavingTask(true); // 重用既有 banner 樣式 (#255)
+    try {
+      const response = await fetch("/api/admin/activities", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ activityId: openClass.id })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const code = data?.error;
+        const friendly =
+          code === "not_owner"
+            ? "你不是這份任務的綁定教師，無法刪除。"
+            : code === "task_has_student_activity"
+              ? "此任務已有學生操作紀錄，無法刪除。"
+              : code === "activity_not_found"
+                ? "找不到此任務（可能已被其他人刪除）。"
+                : (code ?? "delete_task_failed");
+        setError(friendly);
+        return;
+      }
+      // Reset form if we were editing this task
+      if (taskForm.id === openClass.id) {
+        resetTaskForm();
+      }
+      setSavingMessage("正在重新整理列表，請稍候...");
+      await onRefresh();
+      setSavedSuccessMessage(`已成功刪除任務 ${openClass.id}。`);
+      window.setTimeout(() => setSavedSuccessMessage(""), 5000);
+    } finally {
+      setDeletingTaskId("");
+      setIsSavingTask(false);
+      setSavingMessage("");
     }
-    // Reset form if we were editing this task
-    if (taskForm.id === openClass.id) {
-      resetTaskForm();
-    }
-    await onRefresh();
   }
 
   function startEditTask(openClass: OpenClassRow) {
@@ -1031,15 +1046,24 @@ export default function CourseManagementTab({
                         編輯
                       </button>
                       {/* 刪除按鈕（#254）：僅在尚無學生操作紀錄時顯示。
-                           顏色與「帳號管理」的「刪除」按鈕一致。 */}
+                           顏色與「帳號管理」的「刪除」按鈕一致。
+                           處理中時 disabled 並顯示「處理中...」(#257) */}
                       {!openClass.hasStudentActivity ? (
                         <button
                           type="button"
                           className="secondary"
-                          style={{ width: "auto", color: "#b91c1c", borderColor: "#fecaca", background: "#fef2f2" }}
+                          style={{
+                            width: "auto",
+                            color: "#b91c1c",
+                            borderColor: "#fecaca",
+                            background: "#fef2f2",
+                            opacity: deletingTaskId === openClass.id ? 0.6 : 1,
+                            cursor: deletingTaskId === openClass.id ? "wait" : undefined
+                          }}
                           onClick={() => deleteTask(openClass)}
+                          disabled={Boolean(deletingTaskId) || isSavingTask}
                         >
-                          刪除
+                          {deletingTaskId === openClass.id ? "處理中..." : "刪除"}
                         </button>
                       ) : null}
                     </div>

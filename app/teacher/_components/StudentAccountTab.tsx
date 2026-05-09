@@ -32,6 +32,8 @@ export default function StudentAccountTab({
   const [userPage, setUserPage] = useState(1);
   const [accountError, setAccountError] = useState("");
   const [accountSuccess, setAccountSuccess] = useState("");
+  // 刪除帳號 UX 狀態（#257）
+  const [deletingUsername, setDeletingUsername] = useState<string>("");
   const [editingUser, setEditingUser] = useState<{
     username: string;
     name: string;
@@ -421,18 +423,24 @@ export default function StudentAccountTab({
     if (!confirmed) return;
     setAccountError("");
     setAccountSuccess("");
-    const response = await fetch("/api/admin/users", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username })
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      setAccountError(data.error ?? "delete_user_failed");
-      return;
+    setDeletingUsername(username);
+    try {
+      const response = await fetch("/api/admin/users", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setAccountError(data.error ?? "delete_user_failed");
+        return;
+      }
+      await onRefresh();
+      setAccountSuccess(`已成功刪除帳號 ${username}。`);
+      window.setTimeout(() => setAccountSuccess(""), 5000);
+    } finally {
+      setDeletingUsername("");
     }
-    setAccountSuccess(`已刪除 ${username}。`);
-    await onRefresh();
   }
 
   async function importUsersFromCsv() {
@@ -712,8 +720,38 @@ export default function StudentAccountTab({
           </div>
         ) : null}
 
+        {/* 刪除中提示 (#257) — 顯眼藍底 banner，告知系統處理中 */}
+        {deletingUsername ? (
+          <div
+            style={{
+              marginBottom: 8,
+              padding: "10px 14px",
+              borderRadius: 8,
+              border: "1px solid #bfdbfe",
+              background: "#eff6ff",
+              color: "#1e40af",
+              fontWeight: 600
+            }}
+          >
+            正在刪除帳號 {deletingUsername}，請稍候...
+          </div>
+        ) : null}
         {accountError ? <small style={{ color: "#b91c1c", display: "block", marginBottom: 8 }}>{accountError}</small> : null}
-        {accountSuccess ? <small style={{ color: "#166534", display: "block", marginBottom: 8 }}>{accountSuccess}</small> : null}
+        {!deletingUsername && accountSuccess ? (
+          <div
+            style={{
+              marginBottom: 8,
+              padding: "10px 14px",
+              borderRadius: 8,
+              border: "1px solid #bbf7d0",
+              background: "#f0fdf4",
+              color: "#166534",
+              fontWeight: 600
+            }}
+          >
+            {accountSuccess}
+          </div>
+        ) : null}
 
         <div className="row" style={{ marginBottom: 10 }}>
           <div className="col">
@@ -934,10 +972,18 @@ export default function StudentAccountTab({
                             <button
                               type="button"
                               className="secondary"
-                              style={{ width: "auto", color: "#b91c1c", borderColor: "#fecaca", background: "#fef2f2" }}
+                              style={{
+                                width: "auto",
+                                color: "#b91c1c",
+                                borderColor: "#fecaca",
+                                background: "#fef2f2",
+                                opacity: deletingUsername === user.username ? 0.6 : 1,
+                                cursor: deletingUsername === user.username ? "wait" : undefined
+                              }}
+                              disabled={Boolean(deletingUsername)}
                               onClick={() => deleteUser(user.username)}
                             >
-                              刪除
+                              {deletingUsername === user.username ? "處理中..." : "刪除"}
                             </button>
                           </div>
                         )}

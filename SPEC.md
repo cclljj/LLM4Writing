@@ -691,6 +691,7 @@ student 可儲存三種內容：
 ### 帳號管理
 
 - 帳號 CRUD（teacher/admin 依權限限制）
+- 刪除帳號 UX（#257）：點擊「刪除」並確認後，該列按鈕變灰顯示「處理中...」、頁面上方顯示藍底處理中 banner；完成後綠底成功提示 5 秒後自動消失
 - reset password
 - CSV 批次建帳
 - student 帳號必填 `classNumber`
@@ -841,7 +842,8 @@ student 可儲存三種內容：
   - 列表欄位：ID / 學校 / 班級 / 主題 / 時長 (分鐘) / 補充資料 / 操作（編輯、條件性刪除）
   - 「編輯」按鈕：載入該任務（含分組）回填到「增修寫作任務」並 scrollIntoView 到該卡片
   - 「刪除」按鈕（#254）：僅在該任務 `hasStudentActivity === false`（尚無任何學生訊息）時顯示；按鈕配色與「帳號管理」刪除按鈕一致（紅字 `#b91c1c`）；點擊確認後呼叫 `/api/admin/activities` DELETE，徹底移除任務、分組、相關 sessions
-  - DELETE 權限：admin 不限制；teacher 僅能刪除自己擁有（`ownerTeacherUsername === user.username`）且尚無學生訊息的任務
+  - DELETE 權限：admin 不限制；teacher 僅能刪除自己擁有（`ownerTeacherUsername === user.username`）且尚無學生訊息的任務；legacy 任務（無 ownerTeacherUsername）退回 class-scope 檢查（#256）
+  - 刪除 UX（#257）：點擊確認後按鈕變灰並顯示「處理中...」、頁面上方顯示藍底處理中 banner；完成後綠底成功提示 5 秒後自動消失
 
 ## 6.4 `/admin`
 
