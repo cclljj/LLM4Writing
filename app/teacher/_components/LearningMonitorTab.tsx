@@ -109,6 +109,13 @@ export default function LearningMonitorTab({
     [activities, selectedLearningActivityId]
   );
 
+  // 各區塊 header 的上下文後綴 (#258)：「學校 / 班級 / 文章題目」
+  const contextLabel = useMemo(() => {
+    if (!selectedLearningActivity) return "";
+    const { school, classNumber, title } = selectedLearningActivity;
+    return `${school} / ${classNumber} / ${title}`;
+  }, [selectedLearningActivity]);
+
   const filteredMonitorSessions = useMemo(
     () =>
       selectedLearningActivityId
@@ -1026,6 +1033,7 @@ export default function LearningMonitorTab({
           <TeacherDashboard
             dashboard={teacherDashboard}
             isProcessing={isLearningProcessing}
+            headerSuffix={contextLabel}
             onAdvanceStep={(sessionId, step) => applyStepSwitch(sessionId, step)}
             onInspectDialogue={(session) => {
               setMonitorSelected(session);
@@ -1040,7 +1048,10 @@ export default function LearningMonitorTab({
           />
 
           <div className="card">
-            <h2>全班加入狀態</h2>
+            <h2>
+              全班加入狀態
+              {contextLabel ? <span style={{ fontSize: 14, color: "#64748b", fontWeight: 400, marginLeft: 8 }}>— {contextLabel}</span> : null}
+            </h2>
             <div style={{ overflowX: "auto" }}>
               <table className="pro-table">
                 <thead>
@@ -1097,7 +1108,10 @@ export default function LearningMonitorTab({
           {filteredMonitorSessions.length > 0 ? (
             <div className="card" ref={groupLogRef}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: groupLogExpanded ? 12 : 0 }}>
-                <h2 style={{ margin: 0 }}>小組對話紀錄</h2>
+                <h2 style={{ margin: 0 }}>
+                  小組對話紀錄
+                  {contextLabel ? <span style={{ fontSize: 14, color: "#64748b", fontWeight: 400, marginLeft: 8 }}>— {contextLabel}</span> : null}
+                </h2>
                 <button
                   style={{ width: "3em", padding: "4px 0", fontSize: 13, color: "#1e293b", cursor: "pointer", borderRadius: 6, border: "1px solid #cbd5e1", background: "#f8fafc", textAlign: "center" }}
                   onClick={() => setGroupLogExpanded((v) => !v)}
@@ -1240,7 +1254,10 @@ export default function LearningMonitorTab({
           {filteredMonitorSessions.length > 0 ? (
             <div className="card" ref={personalLogRef}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: personalLogExpanded ? 12 : 0 }}>
-                <h2 style={{ margin: 0 }}>個人對話紀錄</h2>
+                <h2 style={{ margin: 0 }}>
+                  個人對話紀錄
+                  {contextLabel ? <span style={{ fontSize: 14, color: "#64748b", fontWeight: 400, marginLeft: 8 }}>— {contextLabel}</span> : null}
+                </h2>
                 <button
                   style={{ width: "3em", padding: "4px 0", fontSize: 13, color: "#1e293b", cursor: "pointer", borderRadius: 6, border: "1px solid #cbd5e1", background: "#f8fafc", textAlign: "center" }}
                   onClick={() => setPersonalLogExpanded((v) => !v)}

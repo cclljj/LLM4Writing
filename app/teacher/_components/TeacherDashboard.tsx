@@ -57,6 +57,8 @@ type TeacherDashboardProps<TSession extends DashboardSession> = {
   isProcessing: boolean;
   onAdvanceStep: (sessionId: string, step: number) => void;
   onInspectDialogue: (session: TSession) => void;
+  /** Optional context appended to the card header, e.g. "school / class / essay" (#258). */
+  headerSuffix?: string;
 };
 
 function statusLabel(row: TeacherDashboardRow): string {
@@ -77,11 +79,15 @@ export default function TeacherDashboard<TSession extends DashboardSession>({
   dashboard,
   isProcessing,
   onAdvanceStep,
-  onInspectDialogue
+  onInspectDialogue,
+  headerSuffix
 }: TeacherDashboardProps<TSession>) {
   return (
     <div className="card">
-      <h2>課堂儀表板</h2>
+      <h2>
+        課堂儀表板
+        {headerSuffix ? <span style={{ fontSize: 14, color: "#64748b", fontWeight: 400, marginLeft: 8 }}>— {headerSuffix}</span> : null}
+      </h2>
       <div className="metric-grid">
         <div className="metric-card">
           <span className="metric-value">{dashboard.sessionCount}</span>
