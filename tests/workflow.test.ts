@@ -5,7 +5,7 @@ import { validateStudentAnswer, validateDraftContent, validateStudentAnswerSimpl
 import { buildAdvancedStuckRisk, recordRejectedAnswerSignal } from "../src/lib/learning-diagnostics";
 import { isTruncatedFinishReason, pickAssistantTextResult } from "../src/lib/llm-openai-response";
 import { resolvePendingOutlineAfterServerSync, shouldSyncOutlineFromSession } from "../src/lib/outline-sync-guard";
-import { isUsableNextQuestion, sanitizeStudentFacingText, splitAiFeedbackAndQuestion } from "../src/lib/llm-response";
+import { isUsableNextQuestion, normalizeStep5Summary, sanitizeStudentFacingText, splitAiFeedbackAndQuestion } from "../src/lib/llm-response";
 import { getStructureTreeNodePermissions } from "../src/lib/structure-tree-permissions";
 import { buildStudentNextAction } from "../src/lib/student-next-action";
 import { buildStep1Question, buildStep2Question } from "../src/lib/workflow-questions";
@@ -104,6 +104,25 @@ test("sanitizeStudentFacingText keeps text intact and extracts feedback from JSO
     "你們已經找到原因鏈，接下來請再補一個生活例子"
   );
   assert.equal(sanitizeStudentFacingText('{"feedback":"'), "已收到大家的回覆。");
+});
+
+test("normalizeStep5Summary deduplicates repeated section blocks and keeps the fullest content", () => {
+  const raw = `
+### **讚美與鼓勵**
+clj01同學，你非常棒！在前面的步驟中，你很認真地思考了作文題目，也勇敢地分享了自己的真實經驗
+
+### **讚美與鼓勵**
+clj01同學，你非常棒！在前面的步驟中，你很認真地思考了作文題目，也勇敢地分享了自己的
+
+### **讚美與鼓勵**
+clj01同學，你非常棒！在前面的步驟中，你很認真地思考了作文題目，也勇敢地分享了自己的真實經驗和想法。
+
+### **我們討論了什麼**
+作文題目分析：我們確認了「我們與3C的距離」這篇作文是議論文。
+`;
+  const normalized = normalizeStep5Summary(raw);
+  assert.equal((normalized.match(/### \*\*讚美與鼓勵\*\*/g) ?? []).length, 1);
+  assert.match(normalized, /真實經驗和想法/);
 });
 
 test("OpenAI-compatible response parser detects truncated assistant output", () => {

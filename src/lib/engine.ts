@@ -5,7 +5,7 @@ import { isLlmConfigured, llmChatCompletionText, LlmChatMessage } from "@/src/li
 import { buildStudentCourseContext } from "@/src/lib/llm-context";
 import { normalizeForCompare, validateStudentAnswer, validateStudentAnswerSimple } from "@/src/lib/answer-validation";
 import { recordRejectedAnswerSignal } from "@/src/lib/learning-diagnostics";
-import { sanitizeStudentFacingText, splitAiFeedbackAndQuestion } from "@/src/lib/llm-response";
+import { normalizeStep5Summary, sanitizeStudentFacingText, splitAiFeedbackAndQuestion } from "@/src/lib/llm-response";
 import { buildStep1Question, buildStep2Question, buildStep9BatchPrompt, getCurrentGroupGateKey, getCurrentSubstepKey, getStep9Questions } from "@/src/lib/workflow-questions";
 import { advanceStep1Or2SubstepAfterAi, handleStep1Or2Group, isNextQuestionSubStepPromptDriven } from "@/src/lib/workflow-step1-2";
 
@@ -528,7 +528,8 @@ async function generateStep5SummaryForUser(session: SessionState, userId: string
   const { messages, fallback } = buildStep5LlmInput(session, userId);
   if (!isLlmConfigured()) return fallback;
   try {
-    return sanitizeStudentFacingText(await generateAiTextWithRetry(messages, 0.6, 1000, { continuationMaxRounds: 2 }));
+    const raw = await generateAiTextWithRetry(messages, 0.6, 1200, { continuationMaxRounds: 4 });
+    return normalizeStep5Summary(sanitizeStudentFacingText(raw));
   } catch {
     return fallback;
   }

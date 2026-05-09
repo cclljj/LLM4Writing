@@ -3,6 +3,8 @@ export type StepAiResponse = {
   nextQuestion?: string;
 };
 
+const STEP5_SECTION_TITLES = ["讚美與鼓勵", "我們討論了什麼", "我們學到了什麼"] as const;
+
 function readString(record: Record<string, unknown>, keys: string[]): string | undefined {
   for (const key of keys) {
     const value = record[key];
@@ -53,6 +55,50 @@ function looksLikeJsonShell(text: string): boolean {
   const trimmed = text.trim();
   if (!trimmed) return false;
   return /"feedback"\s*:|^\s*\{[\s\S]*\}\s*$|^\s*\{[\s\S]*$/i.test(trimmed);
+}
+
+function normalizeStep5SectionHeading(line: string): string | null {
+  const compact = line.replace(/[＊*#\s]/g, "");
+  for (const title of STEP5_SECTION_TITLES) {
+    if (compact === title) return title;
+  }
+  return null;
+}
+
+export function normalizeStep5Summary(raw: string): string {
+  const text = raw.trim();
+  if (!text) return raw;
+  const lines = text.split(/\r?\n/);
+  const sections = new Map<string, string>();
+  let currentTitle: string | null = null;
+  let buffer: string[] = [];
+
+  const flush = () => {
+    if (!currentTitle) return;
+    const content = buffer.join("\n").trim();
+    if (!content) return;
+    const prev = sections.get(currentTitle) ?? "";
+    if (content.length >= prev.length) sections.set(currentTitle, content);
+  };
+
+  for (const line of lines) {
+    const maybeTitle = normalizeStep5SectionHeading(line.trim());
+    if (maybeTitle) {
+      flush();
+      currentTitle = maybeTitle;
+      buffer = [];
+      continue;
+    }
+    if (currentTitle) buffer.push(line);
+  }
+  flush();
+
+  if (sections.size === 0) return text;
+  return STEP5_SECTION_TITLES
+    .filter((title) => sections.has(title))
+    .map((title) => `### **${title}**\n${sections.get(title)}`)
+    .join("\n\n")
+    .trim();
 }
 
 export function sanitizeStudentFacingText(aiText: string): string {
