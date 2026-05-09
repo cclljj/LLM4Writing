@@ -74,6 +74,11 @@ export default function CourseManagementTab({
   const [listClassFilter, setListClassFilter] = useState<string>("all");
   const [listPage, setListPage] = useState(1);
 
+  // 儲存任務 UX 狀態（#255）
+  const [isSavingTask, setIsSavingTask] = useState(false);
+  const [savingMessage, setSavingMessage] = useState<string>("");
+  const [savedSuccessMessage, setSavedSuccessMessage] = useState<string>("");
+
   const taskFormRef = useRef<HTMLDivElement | null>(null);
 
   // 教師自己的學校（從 users 中查）
@@ -405,6 +410,7 @@ export default function CourseManagementTab({
   async function saveTaskWithGroups(e: FormEvent) {
     e.preventDefault();
     setError("");
+    setSavedSuccessMessage("");
 
     if (loginRole === "admin" && !taskForm.school) {
       setError("請選擇學校。");
@@ -431,6 +437,9 @@ export default function CourseManagementTab({
       return;
     }
 
+    const isEditing = Boolean(taskForm.id);
+    setIsSavingTask(true);
+    setSavingMessage(isEditing ? "正在儲存任務變更，請稍候..." : "正在新增寫作任務並寫入資料庫，請稍候...");
     try {
       const ocPayload: Record<string, unknown> = {
         id: taskForm.id || undefined,
@@ -467,6 +476,7 @@ export default function CourseManagementTab({
         return;
       }
       // 存分組
+      setSavingMessage("正在儲存小組分配，請稍候...");
       const grpResponse = await fetch("/api/admin/groups", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -487,10 +497,21 @@ export default function CourseManagementTab({
         }
         return [...prev, updatedActivity];
       });
+      setSavingMessage("正在重新整理列表，請稍候...");
       resetTaskForm();
       await onRefresh();
+      setSavedSuccessMessage(
+        isEditing
+          ? `已成功更新任務 ${savedActivityId}。`
+          : `已成功新增任務 ${savedActivityId}，下方列表已更新。`
+      );
+      // 5 秒後自動清除成功提示
+      window.setTimeout(() => setSavedSuccessMessage(""), 5000);
     } catch {
       setError("save_failed");
+    } finally {
+      setIsSavingTask(false);
+      setSavingMessage("");
     }
   }
 
@@ -876,15 +897,60 @@ export default function CourseManagementTab({
 
         <div className="row" style={{ marginTop: 12, gap: 10 }}>
           <div style={{ width: 200 }}>
-            <button type="button" onClick={saveTaskWithGroups}>
-              {taskForm.id ? "儲存班級任務" : "新增班級任務"}
+            <button
+              type="button"
+              onClick={saveTaskWithGroups}
+              disabled={isSavingTask}
+              style={
+                isSavingTask
+                  ? { background: "#f3f4f6", color: "#9ca3af", borderColor: "#e5e7eb", cursor: "wait" }
+                  : undefined
+              }
+            >
+              {isSavingTask ? "處理中..." : taskForm.id ? "儲存班級任務" : "新增班級任務"}
             </button>
           </div>
           {taskForm.id ? (
             <div style={{ width: 140 }}>
-              <button type="button" className="secondary" onClick={cancelEditTask}>
+              <button type="button" className="secondary" onClick={cancelEditTask} disabled={isSavingTask}>
                 取消編輯
               </button>
+            </div>
+          ) : null}
+          {/* 儲存中提示 (#255) — 顯眼藍色提示，告知使用者系統處理中 */}
+          {isSavingTask ? (
+            <div className="col" style={{ width: "100%" }}>
+              <div
+                style={{
+                  marginTop: 6,
+                  padding: "10px 14px",
+                  borderRadius: 8,
+                  border: "1px solid #bfdbfe",
+                  background: "#eff6ff",
+                  color: "#1e40af",
+                  fontWeight: 600
+                }}
+              >
+                {savingMessage || "系統處理中，請稍候..."}
+              </div>
+            </div>
+          ) : null}
+          {/* 儲存成功提示 (#255) — 5 秒後自動消失 */}
+          {!isSavingTask && savedSuccessMessage ? (
+            <div className="col" style={{ width: "100%" }}>
+              <div
+                style={{
+                  marginTop: 6,
+                  padding: "10px 14px",
+                  borderRadius: 8,
+                  border: "1px solid #bbf7d0",
+                  background: "#f0fdf4",
+                  color: "#166534",
+                  fontWeight: 600
+                }}
+              >
+                {savedSuccessMessage}
+              </div>
             </div>
           ) : null}
           {error ? (
