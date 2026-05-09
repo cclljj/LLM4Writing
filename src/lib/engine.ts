@@ -385,9 +385,9 @@ async function generateAiTextForStep(
           : step === 4
             ? 800 // group discussion guidance
             : 1200; // long-form steps (6/7/8/9/10)
-    // Step 1/2 (short JSON) and Step 4 (group discussion guidance) skip continuation
-    // since truncation is rare and an extra round adds 30-45s tail latency (#243).
-    const shortStep = step === 1 || step === 2 || step === 4;
+    // Step 4 keeps single-round response for latency; Step 1/2 must allow continuation
+    // to avoid returning truncated JSON/feedback to students.
+    const shortStep = step === 4;
     return await generateAiTextWithRetry(messages, 0.6, maxTokensByStep, {
       continueOnTruncation: !shortStep,
       continuationMaxRounds: shortStep ? 0 : 1,

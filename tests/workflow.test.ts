@@ -96,9 +96,9 @@ test("LLM parser prefers structured JSON and still supports legacy marker parsin
   assert.equal(isUsableNextQuestion("請依上一則 AI 提問作答（本題要延伸討論）。"), false);
 });
 
-test("sanitizeStudentFacingText repairs dangling truncated connectors", () => {
-  assert.equal(sanitizeStudentFacingText("兩位同學都非常棒，都"), "兩位同學都非常棒。");
-  assert.equal(sanitizeStudentFacingText('{"feedback":"大家分析得很清楚，而且"}'), "大家分析得很清楚。");
+test("sanitizeStudentFacingText keeps text intact and extracts feedback from JSON-ish content", () => {
+  assert.equal(sanitizeStudentFacingText("兩位同學都非常棒，都"), "兩位同學都非常棒，都");
+  assert.equal(sanitizeStudentFacingText('{"feedback":"大家分析得很清楚，而且"}'), "大家分析得很清楚，而且");
 });
 
 test("OpenAI-compatible response parser detects truncated assistant output", () => {
