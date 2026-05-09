@@ -69,6 +69,10 @@ test("step1/2 simple validation accepts earnest 3C-related answer and still bloc
 
   const earnestAnswer = "我們平常生活中使用3C的頻繁程度，例如手機、電腦、電視、switch等等，可以代表我們和3C的距離，越長使用，距離就越近。";
   assert.equal(validateStudentAnswerSimple(session, "s1", 1, earnestAnswer), null);
+  assert.equal(
+    validateStudentAnswerSimple(session, "s1", 1, "如果使用手機上網就算數，如果只是接電話就不算數。"),
+    null
+  );
 
   assert.match(
     validateStudentAnswerSimple(session, "s1", 1, "今天中午我吃了炒飯和蛋花湯，味道不錯，吃完準備去打球流汗。") ?? "",

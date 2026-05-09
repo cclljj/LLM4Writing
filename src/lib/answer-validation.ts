@@ -125,9 +125,11 @@ function hasQuestionOverlap(question: string, answer: string): boolean {
   return questionTerms.some((term) => answer.includes(term));
 }
 
-const SIMPLE_RELEVANCE_MIN_LEN = 20;
+const SIMPLE_RELEVANCE_MIN_LEN = 12;
+const SIMPLE_HINT_MIN_LEN = 16;
 const SIMPLE_EXPLANATION_MARKERS = ["因為", "所以", "例如", "像是", "代表", "因此", "顯示", "說明", "比較", "影響"];
 const CJK_STOP_CHARS = new Set(["的", "了", "是", "在", "有", "和", "與", "及", "或", "你", "我", "他", "她", "它", "們", "請", "這", "那", "把", "就", "都", "很", "再", "更", "嗎", "呢", "吧", "啊"]);
+const SIMPLE_GENERIC_RELEVANCE_TERMS = ["題目", "重點", "關鍵", "想法", "觀點", "理由", "例子", "經驗", "情況", "情境", "條件", "標準", "定義", "範圍"];
 
 function extractQuestionKeywordsForSimple(question: string): string[] {
   const latinOrDigit = (question.match(/[A-Za-z0-9]+/g) ?? [])
@@ -159,13 +161,43 @@ function hasExplanationSignal(answer: string): boolean {
   return SIMPLE_EXPLANATION_MARKERS.some((marker) => answer.includes(marker));
 }
 
+function hasConditionStructure(answer: string): boolean {
+  return /如果.+(就|才|則)|只要.+(就|都)|除非.+否則/u.test(answer);
+}
+
+function hasBoundaryOrClassificationStructure(answer: string): boolean {
+  return /(算|不算|包含|不包含|屬於|不屬於|界線|範圍|標準|定義|條件)/u.test(answer);
+}
+
+function hasComparisonOrTradeoffStructure(answer: string): boolean {
+  return /(比較|相比|相對|不同|差別|優先|取捨|而不是|反而)/u.test(answer);
+}
+
+function hasExampleOrContextStructure(answer: string): boolean {
+  return /(例如|像是|比如|像|情況|情境|平常|生活中|在.*時候)/u.test(answer);
+}
+
+function hasGeneralSemanticAnswerStructure(answer: string): boolean {
+  return (
+    hasConditionStructure(answer) ||
+    hasBoundaryOrClassificationStructure(answer) ||
+    hasComparisonOrTradeoffStructure(answer) ||
+    hasExplanationSignal(answer) ||
+    hasExampleOrContextStructure(answer)
+  );
+}
+
+function hasGenericWeakRelevance(answer: string): boolean {
+  return SIMPLE_GENERIC_RELEVANCE_TERMS.some((term) => answer.includes(term));
+}
+
 export function validateStudentAnswerSimple(session: SessionState, userId: string, step: number, answer: string): string | null {
   const trimmed = answer.trim();
   if (!trimmed) {
     return "請先輸入你的回答，再送出。";
   }
   if (trimmed.length < SIMPLE_RELEVANCE_MIN_LEN) {
-    return `你的回答目前偏短，請至少寫到 ${SIMPLE_RELEVANCE_MIN_LEN} 字，並補上一個具體理由、例子或經驗。`;
+    return `你的回答目前偏短，請至少寫到 ${SIMPLE_RELEVANCE_MIN_LEN} 字，並補上一個清楚的理由、分類或例子。`;
   }
   if (looksLikeRandomToken(trimmed)) {
     return "你的回答看起來像隨機字串，請依題目內容用完整文字作答。";
@@ -175,12 +207,15 @@ export function validateStudentAnswerSimple(session: SessionState, userId: strin
   }
   const question = extractCurrentSystemQuestion(session, step, userId);
   if (!question) return null;
-  if (!hasSimpleRelevance(question, trimmed)) {
+  const hasSemanticStructure = hasGeneralSemanticAnswerStructure(trimmed);
+  const hasQuestionRelation = hasSimpleRelevance(question, trimmed);
+  const hasWeakGenericRelation = hasGenericWeakRelevance(trimmed);
+  if (!hasQuestionRelation && !hasSemanticStructure && !hasWeakGenericRelation) {
     return "你的回答和目前題目關聯性不足，請針對題目重點再具體作答。";
   }
-  // Step1/2 uses a looser relevance check: as long as the answer is relevant
-  // and includes a basic explanation trace, it should pass.
-  if (!hasExplanationSignal(trimmed) && trimmed.length < SIMPLE_RELEVANCE_MIN_LEN + 8) {
+  // For Step1/2, keep hints lightweight: only ask for expansion when text is
+  // very short and lacks any meaningful reasoning/classification structure.
+  if (!hasSemanticStructure && trimmed.length < SIMPLE_HINT_MIN_LEN) {
     return "請直接對準題目關鍵字作答，補上與題目相關的理由、例子或經驗。";
   }
   return null;
