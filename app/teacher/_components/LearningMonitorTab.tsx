@@ -13,6 +13,8 @@ type _AD = ArtifactDiagnostics;
 void (null as unknown as _QS);
 void (null as unknown as _AD);
 
+type MonitorMessage = { id: string; role: string; userId?: string; step: number; text: string; at: string };
+
 const stepNameMap: Record<number, string> = {
   1: "審視題目",
   2: "蒐集資料",
@@ -803,9 +805,9 @@ export default function LearningMonitorTab({
   }
 
   function getPersonalScopedMessagesForStudentHistory(
-    messages: Array<{ step: number; role: string; userId?: string }>,
+    messages: MonitorMessage[],
     username: string
-  ) {
+  ): MonitorMessage[] {
     return messages.filter((m) => {
       if (m.role === "student") return m.userId === username;
       if (m.role === "ai") return !m.userId || m.userId === username;
