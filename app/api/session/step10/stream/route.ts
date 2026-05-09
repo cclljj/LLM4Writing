@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { saveSession } from "@/src/lib/store";
 import {
   isLlmConfigured,
-  llmChatCompletionStream
+  llmChatCompletionText
 } from "@/src/lib/llm-client";
 import { sanitizeStudentFacingText } from "@/src/lib/llm-response";
 import { requireStudentInSession } from "@/src/lib/api-helpers";
@@ -63,13 +63,21 @@ export async function POST(request: NextRequest) {
           collected.push(fallback);
         } else {
           try {
-            for await (const delta of llmChatCompletionStream({
+            const fullText = await llmChatCompletionText({
               messages,
               temperature: 0.6,
-              maxTokens: 1200
-            })) {
-              collected.push(delta);
-              send({ type: "chunk", text: delta });
+              maxTokens: 1400,
+              timeoutMs: 60_000,
+              continueOnTruncation: true,
+              continuationMaxRounds: 4
+            });
+            if (fullText.trim()) {
+              const normalized = fullText.trim();
+              collected.push(normalized);
+              const chunkSize = 120;
+              for (let i = 0; i < normalized.length; i += chunkSize) {
+                send({ type: "chunk", text: normalized.slice(i, i + chunkSize) });
+              }
             }
           } catch {
             if (collected.length === 0) {

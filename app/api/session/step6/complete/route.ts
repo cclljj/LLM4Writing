@@ -4,7 +4,7 @@ import { recordArtifactUpdateSignal } from "@/src/lib/learning-diagnostics";
 import { saveSession } from "@/src/lib/store";
 import {
   isLlmConfigured,
-  llmChatCompletionStream,
+  llmChatCompletionText,
   type LlmChatMessage
 } from "@/src/lib/llm-client";
 import { sanitizeStudentFacingText } from "@/src/lib/llm-response";
@@ -85,13 +85,21 @@ export async function POST(request: NextRequest) {
         } else {
           const messages = buildStep7Messages(session.promptConfig?.stepPrompts?.["7"], finalDraft);
           try {
-            for await (const delta of llmChatCompletionStream({
+            const fullText = await llmChatCompletionText({
               messages,
               temperature: 0.5,
-              maxTokens: 1200
-            })) {
-              collected.push(delta);
-              send({ type: "chunk", text: delta });
+              maxTokens: 1400,
+              timeoutMs: 60_000,
+              continueOnTruncation: true,
+              continuationMaxRounds: 4
+            });
+            if (fullText.trim()) {
+              const normalized = fullText.trim();
+              collected.push(normalized);
+              const chunkSize = 120;
+              for (let i = 0; i < normalized.length; i += chunkSize) {
+                send({ type: "chunk", text: normalized.slice(i, i + chunkSize) });
+              }
             }
           } catch {
             if (collected.length === 0) {

@@ -502,10 +502,10 @@ Step6「完成文章撰寫」額外前後端驗證（#235）：
 
 | 功能 | Endpoint | 行為 |
 |---|---|---|
-| Step3 AI 回覆 | `/api/session/step3/stream` | SSE streaming，完成後寫入學生訊息與 AI 回覆，並以 `done` 回傳最新 session（#268） |
-| Step6 AI 修改建議 | `/api/session/step6/suggest` | SSE streaming，`Step68Panel` 即時累加顯示 chunk（#238） |
-| Step7 分析回饋 | `/api/session/step6/complete` | SSE streaming，Step6 完成時即時顯示 Step7 preview（#240） |
-| Step10 總結報告 | `/api/session/step10/stream` | 學生端偵測空報告後自動觸發，完成後寫入 report 與 AI 訊息（#241） |
+| Step3 AI 回覆 | `/api/session/step3/stream` | 先以截斷續寫模式取得完整回覆，再以 SSE 分段回傳；完成後寫入學生訊息與 AI 回覆（#268） |
+| Step6 AI 修改建議 | `/api/session/step6/suggest` | 先以截斷續寫模式取得完整建議，再以 SSE 分段回傳，`Step68Panel` 即時顯示（#238） |
+| Step7 分析回饋 | `/api/session/step6/complete` | 先以截斷續寫模式取得完整回饋，再以 SSE 分段回傳；Step6 完成時顯示 Step7 preview（#240） |
+| Step10 總結報告 | `/api/session/step10/stream` | 先以截斷續寫模式取得完整報告，再以 SSE 分段回傳；完成後寫入 report 與 AI 訊息（#241） |
 
 SSE 事件格式：
 
@@ -1120,13 +1120,6 @@ Request:
 - 不要求同組其他學生同步前進。
 - 僅當 `reports.step5[username]` 已存在時允許推進。
 
-#### `POST /api/session/step5/rerun`
-
-- 權限：student 且需為 session participant。
-- 僅允許在該學生個人步驟為 Step6 時呼叫。
-- 重新以該學生個人 Step1~4 歷程 + Step5 prompt 生成摘要，覆寫 `reports.step5[username]`，並追加一筆 Step5 AI 訊息。
-- 用於學生離線重進且仍在 Step6 時的自動補跑。
-
 #### `POST /api/session/step6/suggest`
 
 Request:
@@ -1157,7 +1150,7 @@ Request:
 - 僅允許個人 Step6。
 - 前後端皆需使用草稿品質檢查。
 - 通過後保存 `draftStep6[username]`。
-- 以 SSE streaming 產生 Step7 分析回饋。
+- 先以截斷續寫模式取得完整 Step7 回饋，再以 SSE 分段回傳。
 - 完成後將該學生個人步驟推進到 Step8。
 
 Error:
@@ -1192,7 +1185,7 @@ Request:
 
 - 權限：student 且需為 session participant。
 - 僅在學生個人 Step10 且 `reports.step10[username]` 尚未存在時觸發。
-- 以 SSE streaming 回傳個人總結報告。
+- 先以截斷續寫模式取得完整總結報告，再以 SSE 分段回傳。
 - 完成後寫入 `reports.step10[username]` 與 AI 訊息。
 
 #### `POST /api/session/advance-phase`

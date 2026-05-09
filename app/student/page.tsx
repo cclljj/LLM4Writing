@@ -156,14 +156,12 @@ export default function StudentPage() {
   const [isSendingMessage, setIsSendingMessage] = useState(false);
   const [isLoadingOverview, setIsLoadingOverview] = useState(false);
   const [isAutoAdvancingStep5, setIsAutoAdvancingStep5] = useState(false);
-  const [isAutoRerunningStep5, setIsAutoRerunningStep5] = useState(false);
   const [isSuggestingStep6, setIsSuggestingStep6] = useState(false);
   const [step3StreamingText, setStep3StreamingText] = useState("");
   const [step6StreamingText, setStep6StreamingText] = useState("");
   const [step7StreamingText, setStep7StreamingText] = useState("");
   const [step10StreamingText, setStep10StreamingText] = useState("");
   const step10StreamRequestedRef = useRef<string>("");
-  const step5RerunRequestedRef = useRef<string>("");
   const [isCompletingStep6, setIsCompletingStep6] = useState(false);
   const [savedDraft6Text, setSavedDraft6Text] = useState("");
   const [isCompletingStep8, setIsCompletingStep8] = useState(false);
@@ -277,33 +275,6 @@ export default function StudentPage() {
     }, 1200);
     return () => window.clearTimeout(timer);
   }, [isAutoAdvancingStep5, loginUser, session]);
-
-  useEffect(() => {
-    const ownStep = session && loginUser ? session.personalSteps?.[loginUser] ?? session.currentStep : 1;
-    if (!session || !loginUser || ownStep !== 6 || isAutoRerunningStep5) return;
-    const rerunKey = `${session.id}:${loginUser}:step6`;
-    if (step5RerunRequestedRef.current === rerunKey) return;
-    step5RerunRequestedRef.current = rerunKey;
-
-    const timer = window.setTimeout(async () => {
-      setIsAutoRerunningStep5(true);
-      try {
-        const response = await fetch("/api/session/step5/rerun", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sessionId: session.id })
-        });
-        const data = await response.json();
-        if (response.ok && data?.id) {
-          setSession(data);
-        }
-      } finally {
-        setIsAutoRerunningStep5(false);
-      }
-    }, 500);
-
-    return () => window.clearTimeout(timer);
-  }, [isAutoRerunningStep5, loginUser, session]);
 
   useEffect(() => {
     const ownStep = session && loginUser ? session.personalSteps?.[loginUser] ?? session.currentStep : 1;

@@ -535,17 +535,6 @@ async function generateStep5SummaryForUser(session: SessionState, userId: string
   }
 }
 
-export async function rerunStep5SummaryForUser(session: SessionState, userId: string): Promise<SessionState> {
-  normalizeSessionRuntimeShape(session);
-  if (!session.participants.includes(userId)) {
-    throw new Error("not_participant");
-  }
-  const summary = await generateStep5SummaryForUser(session, userId);
-  session.reports.step5[userId] = summary;
-  session.messages.push(makeMessage({ role: "ai", userId, step: 5, text: summary }));
-  return session;
-}
-
 /**
  * Builds the LLM input + fallback text for the Step 10 final report.
  * Exported so the streaming endpoint (#241) can reuse the same prompt structure.
