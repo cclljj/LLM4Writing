@@ -56,7 +56,7 @@ export default function LoginPage() {
         </form>
 
         <div style={{ marginTop: 14 }}>
-          <small>預設測試帳號：admin/admin123、teacher/teacher123、student/student123</small>
+          <small>請使用學校或系統管理單位提供的正式帳號密碼登入。</small>
         </div>
       </div>
     </main>
