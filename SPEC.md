@@ -394,7 +394,7 @@ Step1/2 遠端 LLM 優先輸出 JSON：
 - `nextQuestion` 不可空白、不可照抄 prompt、不可寫「請依上一則 AI 提問作答」。
 - 後端先解析 JSON；若不是 JSON，仍相容舊格式「請回答以下問題」。
 - 若 3 次重試後仍沒有可用 `nextQuestion`，使用 `subStepPromptsFallbacks`；若仍缺漏，使用內建安全 fallback。
-- Step1/2 單次遠端 LLM 嘗試需使用較短 timeout，避免課堂互動長時間卡住。
+- Step1/2 單次遠端 LLM 嘗試 timeout 為約 25 秒，並允許多輪續寫；優先避免在 2-3/2-4 等邊界產生截斷回覆。
 
 ### 5.5 學生可讀文字淨化
 
@@ -413,6 +413,7 @@ Step1/2 遠端 LLM 優先輸出 JSON：
 - Markdown code fence，例如 ```` ```json ````。
 - JSON 欄位包裝，例如 `{"feedback":...,"nextQuestion":...}`。
 - 其他非學生可讀的結構化欄位名或 prompt 殘留。
+- 若 LLM 回傳為半截 JSON（例如尚未閉合），仍需盡力抽出 `feedback`；若抽取失敗則改用安全備援句，不得把 JSON 殼直接顯示給學生。
 
 ### 5.6 學生回答品質檢查
 

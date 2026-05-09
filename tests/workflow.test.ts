@@ -99,6 +99,11 @@ test("LLM parser prefers structured JSON and still supports legacy marker parsin
 test("sanitizeStudentFacingText keeps text intact and extracts feedback from JSON-ish content", () => {
   assert.equal(sanitizeStudentFacingText("兩位同學都非常棒，都"), "兩位同學都非常棒，都");
   assert.equal(sanitizeStudentFacingText('{"feedback":"大家分析得很清楚，而且"}'), "大家分析得很清楚，而且");
+  assert.equal(
+    sanitizeStudentFacingText('{"feedback":"你們已經找到原因鏈，接下來請再補一個生活例子","nextQuestion":"'),
+    "你們已經找到原因鏈，接下來請再補一個生活例子"
+  );
+  assert.equal(sanitizeStudentFacingText('{"feedback":"'), "已收到大家的回覆。");
 });
 
 test("OpenAI-compatible response parser detects truncated assistant output", () => {
