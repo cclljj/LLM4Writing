@@ -1,10 +1,11 @@
 "use client";
 
-import { DragEvent, FormEvent, useEffect, useMemo, useState } from "react";
-import { ActivityGroup, ActivityRow, CourseTab, EssayRow, OpenClassRow, UserRow, genreOptions } from "./types";
+import { DragEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { ActivityGroup, ActivityRow, EssayRow, OpenClassRow, UserRow, genreOptions } from "./types";
 
 interface CourseManagementTabProps {
   loginRole: "teacher" | "admin";
+  loginUser: string;
   isAdminConsole: boolean;
   activities: ActivityRow[];
   setActivities: (updater: ActivityRow[] | ((prev: ActivityRow[]) => ActivityRow[])) => void;
@@ -19,8 +20,11 @@ interface CourseManagementTabProps {
   onRefresh: () => Promise<void>;
 }
 
+const TASK_LIST_PAGE_SIZE = 10;
+
 export default function CourseManagementTab({
   loginRole,
+  loginUser,
   activities,
   setActivities,
   essays,
@@ -31,7 +35,7 @@ export default function CourseManagementTab({
   setError,
   onRefresh,
 }: CourseManagementTabProps) {
-  const [courseTab, setCourseTab] = useState<CourseTab>("openclass");
+  // ── 寫作主題管理（admin only，保留原邏輯） ────────────────────────────
   const [essayForm, setEssayForm] = useState({
     id: "",
     title: "",
@@ -39,58 +43,126 @@ export default function CourseManagementTab({
     description: "",
     enabled: true
   });
-  const [openClassForm, setOpenClassForm] = useState({
+
+  // ── 增修寫作任務（合併 openClass + 分組） ───────────────────────────
+  const [taskForm, setTaskForm] = useState({
     id: "",
+    school: "", // admin 才會用到；teacher 會自動填入自己的學校
     classNumber: "",
     essayId: "",
     durationMinutes: 40,
     supplemental: ""
   });
-  const [selectedActivityId, setSelectedActivityId] = useState("");
   const [editableGroups, setEditableGroups] = useState<ActivityGroup[]>([]);
   const [unassignedStudents, setUnassignedStudents] = useState<string[]>([]);
   const [groupCount, setGroupCount] = useState(2);
 
-  const classOptions = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          users
-            .filter((user) => user.role === "student")
-            .map((user) => user.classNumber)
-            .filter((value): value is string => Boolean(value))
-        )
-      ).sort(),
-    [users]
-  );
+  // ── 寫作任務管理（list 篩選 + 分頁） ────────────────────────────────
+  const [listSchoolFilter, setListSchoolFilter] = useState<string>("all");
+  const [listClassFilter, setListClassFilter] = useState<string>("all");
+  const [listPage, setListPage] = useState(1);
 
-  const selectedGroupActivity = useMemo(
-    () => activities.find((activity) => activity.id === selectedActivityId),
-    [activities, selectedActivityId]
-  );
+  const taskFormRef = useRef<HTMLDivElement | null>(null);
 
-  const hasExistingGrouping = useMemo(
-    () => (selectedGroupActivity?.groups.length ?? 0) > 0,
-    [selectedGroupActivity]
-  );
+  // 教師自己的學校（從 users 中查）
+  const teacherSchool = useMemo(() => {
+    if (loginRole !== "teacher") return "";
+    return users.find((u) => u.username === loginUser)?.school ?? "";
+  }, [loginRole, loginUser, users]);
 
-  const canSaveGroups = useMemo(
-    () => Boolean(selectedActivityId) && editableGroups.length > 0 && unassignedStudents.length === 0,
-    [selectedActivityId, editableGroups.length, unassignedStudents.length]
-  );
+  // form 取得當前用於分組的學校（admin = taskForm.school；teacher = teacherSchool）
+  const currentFormSchool = loginRole === "admin" ? taskForm.school : teacherSchool;
 
-  useEffect(() => {
-    if (loginRole !== "admin" && courseTab === "essay") {
-      setCourseTab("openclass");
+  // 學校選單（admin form 用）：所有有學生的學校
+  const allSchools = useMemo(() => {
+    return Array.from(
+      new Set(users.filter((u) => u.role === "student" && u.school).map((u) => u.school))
+    ).sort((a, b) => a.localeCompare(b, "zh-Hant"));
+  }, [users]);
+
+  // 班級選單（依 currentFormSchool 過濾）
+  const classOptionsForForm = useMemo(() => {
+    if (!currentFormSchool) return [];
+    return Array.from(
+      new Set(
+        users
+          .filter((u) => u.role === "student" && u.school === currentFormSchool && u.classNumber)
+          .map((u) => u.classNumber!)
+      )
+    ).sort();
+  }, [users, currentFormSchool]);
+
+  // 列表篩選用：admin 學校選單 = 已有任務的學校
+  const listSchoolOptions = useMemo(() => {
+    return Array.from(new Set(openClasses.map((o) => o.school))).sort((a, b) => a.localeCompare(b, "zh-Hant"));
+  }, [openClasses]);
+
+  // 列表篩選用：admin 班級選單 = 該校已有任務的班級
+  const listClassOptions = useMemo(() => {
+    if (listSchoolFilter === "all") return [];
+    return Array.from(
+      new Set(openClasses.filter((o) => o.school === listSchoolFilter).map((o) => o.classNumber))
+    ).sort();
+  }, [openClasses, listSchoolFilter]);
+
+  // 過濾後的任務列表
+  const filteredOpenClasses = useMemo(() => {
+    let list = openClasses;
+    if (loginRole === "teacher") {
+      // 教師：僅看自己學校的任務
+      list = list.filter((o) => o.school === teacherSchool);
+    } else {
+      if (listSchoolFilter !== "all") list = list.filter((o) => o.school === listSchoolFilter);
+      if (listClassFilter !== "all") list = list.filter((o) => o.classNumber === listClassFilter);
     }
-  }, [courseTab, loginRole]);
+    // 由新到舊：id 為 oc-XXX 序號格式，desc 即新到舊
+    return list.slice().sort((a, b) => b.id.localeCompare(a.id));
+  }, [openClasses, loginRole, teacherSchool, listSchoolFilter, listClassFilter]);
+
+  const totalListPages = Math.max(1, Math.ceil(filteredOpenClasses.length / TASK_LIST_PAGE_SIZE));
+  const pagedOpenClasses = useMemo(() => {
+    const start = (listPage - 1) * TASK_LIST_PAGE_SIZE;
+    return filteredOpenClasses.slice(start, start + TASK_LIST_PAGE_SIZE);
+  }, [filteredOpenClasses, listPage]);
 
   useEffect(() => {
-    if (!selectedActivityId || activities.length === 0) return;
-    const activity = activities.find((item) => item.id === selectedActivityId);
-    if (!activity) return;
-    resetGroupDraft(activity);
-  }, [selectedActivityId, activities]);
+    setListPage(1);
+  }, [listSchoolFilter, listClassFilter]);
+
+  useEffect(() => {
+    if (listPage > totalListPages) setListPage(totalListPages);
+  }, [listPage, totalListPages]);
+
+  // 切換 admin 學校篩選時重置班級
+  useEffect(() => {
+    setListClassFilter("all");
+  }, [listSchoolFilter]);
+
+  // 當 admin 切換 form 學校時，重置班級
+  useEffect(() => {
+    if (loginRole !== "admin") return;
+    if (!taskForm.id) {
+      // 只有在新建模式下重置（編輯時學校固定）
+      setTaskForm((prev) => ({ ...prev, classNumber: "" }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [taskForm.school, loginRole]);
+
+  // 班級號碼變更時（且非編輯模式）：載入該班學生並初始化分組
+  useEffect(() => {
+    if (taskForm.id) return; // 編輯模式由 startEditTask 處理
+    if (!taskForm.classNumber) {
+      setUnassignedStudents([]);
+      setEditableGroups([]);
+      return;
+    }
+    const studentsForClass = users
+      .filter((u) => u.role === "student" && u.school === currentFormSchool && u.classNumber === taskForm.classNumber)
+      .map((u) => u.username);
+    setUnassignedStudents(studentsForClass);
+    setEditableGroups(buildEmptyGroups(groupCount));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [taskForm.classNumber, currentFormSchool]);
 
   function buildEmptyGroups(count: number): ActivityGroup[] {
     const safeCount = Math.max(1, count);
@@ -101,36 +173,69 @@ export default function CourseManagementTab({
     }));
   }
 
-  function resetGroupDraft(activity: ActivityRow) {
-    const nextGroups = activity.groups.map((group) => ({ ...group, members: [...group.members] }));
-    setEditableGroups(nextGroups);
-    setGroupCount(activity.groups.length > 0 ? Math.max(1, activity.groups.length) : 2);
-    const assigned = new Set(nextGroups.flatMap((group) => group.members));
-    const candidates = activity.studentCandidates ?? [];
-    setUnassignedStudents(candidates.filter((username) => !assigned.has(username)));
+  function resetTaskForm() {
+    setTaskForm({
+      id: "",
+      school: "",
+      classNumber: "",
+      essayId: "",
+      durationMinutes: 40,
+      supplemental: ""
+    });
+    setEditableGroups([]);
+    setUnassignedStudents([]);
+    setGroupCount(2);
   }
 
-  function resetAllStudentsToUnassigned() {
-    if (!selectedGroupActivity) return [];
-    const candidates = selectedGroupActivity.studentCandidates ?? [];
-    setUnassignedStudents(candidates);
-    return candidates;
+  function getStudentsForClass(school: string, classNumber: string): string[] {
+    return users
+      .filter((u) => u.role === "student" && u.school === school && u.classNumber === classNumber)
+      .map((u) => u.username);
   }
 
-  function initializeGroupsForDrag() {
-    const candidates = resetAllStudentsToUnassigned();
-    if (!selectedGroupActivity) return;
-    setEditableGroups(buildEmptyGroups(groupCount));
-    if (candidates.length === 0) {
-      setError("此任務沒有可分配的學生。");
-      return;
+  function startEditTask(openClass: OpenClassRow) {
+    setError("");
+    const activity = activities.find((a) => a.id === openClass.id);
+    setTaskForm({
+      id: openClass.id,
+      school: openClass.school,
+      classNumber: openClass.classNumber,
+      essayId: openClass.essayId,
+      durationMinutes: openClass.durationMinutes,
+      supplemental: openClass.supplemental
+    });
+    if (activity) {
+      const groups = activity.groups.map((g) => ({ ...g, members: [...g.members] }));
+      setEditableGroups(groups);
+      setGroupCount(Math.max(1, groups.length || 2));
+      const candidates = activity.studentCandidates ?? getStudentsForClass(openClass.school, openClass.classNumber);
+      const assigned = new Set(groups.flatMap((g) => g.members));
+      setUnassignedStudents(candidates.filter((u) => !assigned.has(u)));
+    } else {
+      const candidates = getStudentsForClass(openClass.school, openClass.classNumber);
+      setEditableGroups(buildEmptyGroups(2));
+      setGroupCount(2);
+      setUnassignedStudents(candidates);
     }
+    window.setTimeout(() => {
+      taskFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 0);
+  }
+
+  function cancelEditTask() {
+    resetTaskForm();
     setError("");
   }
 
   function randomAssignGroups() {
-    const candidates = resetAllStudentsToUnassigned();
-    if (!selectedGroupActivity) return;
+    const candidates = [
+      ...unassignedStudents,
+      ...editableGroups.flatMap((g) => g.members)
+    ];
+    if (candidates.length === 0) {
+      setError("此班級沒有可分配的學生。");
+      return;
+    }
     const safeCount = Math.max(1, groupCount);
     const pool = [...candidates].sort(() => Math.random() - 0.5);
     const nextGroups = buildEmptyGroups(safeCount);
@@ -142,14 +247,22 @@ export default function CourseManagementTab({
     setError("");
   }
 
-  function cancelGroupEdits() {
-    if (!selectedGroupActivity) return;
-    resetGroupDraft(selectedGroupActivity);
+  function initEmptyGroups() {
+    const candidates = [
+      ...unassignedStudents,
+      ...editableGroups.flatMap((g) => g.members)
+    ];
+    setEditableGroups(buildEmptyGroups(groupCount));
+    setUnassignedStudents(candidates);
     setError("");
   }
 
   function removeGroup(groupId: string) {
-    setEditableGroups((prev) => prev.filter((group) => group.groupId !== groupId));
+    const removed = editableGroups.find((g) => g.groupId === groupId);
+    if (removed && removed.members.length > 0) {
+      setUnassignedStudents((prev) => Array.from(new Set([...prev, ...removed.members])));
+    }
+    setEditableGroups((prev) => prev.filter((g) => g.groupId !== groupId));
   }
 
   function onDragStart(username: string, sourceGroupId: string) {
@@ -165,8 +278,8 @@ export default function CourseManagementTab({
       return;
     }
     setEditableGroups((prev) =>
-      prev.map((group) =>
-        group.groupId === sourceGroupId ? { ...group, members: group.members.filter((item) => item !== username) } : group
+      prev.map((g) =>
+        g.groupId === sourceGroupId ? { ...g, members: g.members.filter((m) => m !== username) } : g
       )
     );
   }
@@ -179,10 +292,10 @@ export default function CourseManagementTab({
       const { username, sourceGroupId } = JSON.parse(raw) as { username: string; sourceGroupId: string };
       removeFromSource(username, sourceGroupId);
       setEditableGroups((prev) =>
-        prev.map((group) => {
-          if (group.groupId !== targetGroupId) return group;
-          if (group.members.includes(username)) return group;
-          return { ...group, members: [...group.members, username] };
+        prev.map((g) => {
+          if (g.groupId !== targetGroupId) return g;
+          if (g.members.includes(username)) return g;
+          return { ...g, members: [...g.members, username] };
         })
       );
     };
@@ -197,32 +310,97 @@ export default function CourseManagementTab({
     setUnassignedStudents((prev) => (prev.includes(username) ? prev : [...prev, username]));
   }
 
-  async function saveGroups() {
-    if (!selectedActivityId) return;
-    if (unassignedStudents.length > 0) {
-      setError("尚有未分配學生，無法儲存分組。");
-      return;
-    }
-    const response = await fetch("/api/admin/groups", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ activityId: selectedActivityId, groups: editableGroups })
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      setError(data.error ?? "save_groups_failed");
-      return;
-    }
-    const updated = data.updated as ActivityRow;
-    setActivities((prev) =>
-      prev.map((activity) =>
-        activity.id === updated.id ? { ...updated, studentCandidates: activity.studentCandidates ?? [] } : activity
-      )
-    );
-    setEditableGroups(updated.groups.map((group) => ({ ...group, members: [...group.members] })));
+  // 儲存：先存 openClass、再存 groups、最後 refresh
+  async function saveTaskWithGroups(e: FormEvent) {
+    e.preventDefault();
     setError("");
+
+    if (loginRole === "admin" && !taskForm.school) {
+      setError("請選擇學校。");
+      return;
+    }
+    if (!taskForm.classNumber) {
+      setError("請選擇班級號碼。");
+      return;
+    }
+    if (!taskForm.essayId) {
+      setError("請選擇主題。");
+      return;
+    }
+    if (!taskForm.durationMinutes || taskForm.durationMinutes <= 0) {
+      setError("請輸入有效的時長（分鐘）。");
+      return;
+    }
+    if (editableGroups.length === 0) {
+      setError("請設定至少一組分組。");
+      return;
+    }
+    if (unassignedStudents.length > 0) {
+      setError(`尚有 ${unassignedStudents.length} 位學生未分配，無法儲存。請完成分配後再送出。`);
+      return;
+    }
+
+    try {
+      const ocPayload: Record<string, unknown> = {
+        id: taskForm.id || undefined,
+        classNumber: taskForm.classNumber,
+        essayId: taskForm.essayId,
+        durationMinutes: taskForm.durationMinutes,
+        supplemental: taskForm.supplemental ?? ""
+      };
+      if (loginRole === "admin") {
+        ocPayload.school = taskForm.school;
+      }
+      const ocResponse = await fetch("/api/admin/openclasses", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(ocPayload)
+      });
+      const ocData = await ocResponse.json();
+      if (!ocResponse.ok) {
+        if (ocData.error === "essay_disabled") {
+          setError("此主題已停用，無法建立新的寫作任務。");
+        } else if (ocData.error === "duplicate_class_essay_assignment") {
+          setError("此班級已被指派相同的寫作主題，無法重複指派。");
+        } else {
+          setError(ocData.error ?? "save_openclass_failed");
+        }
+        return;
+      }
+      const savedActivityId = (ocData?.saved as { id?: string })?.id;
+      if (!savedActivityId) {
+        setError("save_openclass_failed");
+        return;
+      }
+      // 存分組
+      const grpResponse = await fetch("/api/admin/groups", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ activityId: savedActivityId, groups: editableGroups })
+      });
+      const grpData = await grpResponse.json();
+      if (!grpResponse.ok) {
+        setError(grpData.error ?? "save_groups_failed");
+        return;
+      }
+      const updatedActivity = grpData.updated as ActivityRow;
+      setActivities((prev) => {
+        const idx = prev.findIndex((a) => a.id === updatedActivity.id);
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = { ...updatedActivity, studentCandidates: prev[idx]!.studentCandidates ?? updatedActivity.studentCandidates };
+          return next;
+        }
+        return [...prev, updatedActivity];
+      });
+      resetTaskForm();
+      await onRefresh();
+    } catch {
+      setError("save_failed");
+    }
   }
 
+  // ── 寫作主題管理 handlers（admin only） ───────────────────────────
   async function saveEssay(e: FormEvent) {
     e.preventDefault();
     setError("");
@@ -252,7 +430,6 @@ export default function CourseManagementTab({
         setError("save_essay_failed");
         return;
       }
-      // Optimistic local update
       setEssays((prev) => {
         const idx = prev.findIndex((item) => item.id === savedEssay.id);
         if (idx >= 0) {
@@ -262,14 +439,7 @@ export default function CourseManagementTab({
         }
         return [...prev, savedEssay];
       });
-      setEssayForm({
-        id: "",
-        title: "",
-        genre: "議論文",
-        description: "",
-        enabled: true
-      });
-      // Background sync
+      setEssayForm({ id: "", title: "", genre: "議論文", description: "", enabled: true });
       onRefresh().catch(() => undefined);
     } catch {
       setError("save_essay_failed");
@@ -284,51 +454,6 @@ export default function CourseManagementTab({
       genre: essay.genre,
       description: essay.description,
       enabled: essay.enabled
-    });
-  }
-
-  async function saveOpenClass(e: FormEvent) {
-    e.preventDefault();
-    setError("");
-    const response = await fetch("/api/admin/openclasses", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        id: openClassForm.id || undefined,
-        classNumber: openClassForm.classNumber,
-        essayId: openClassForm.essayId,
-        durationMinutes: openClassForm.durationMinutes,
-        supplemental: openClassForm.supplemental
-      })
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      if (data.error === "essay_disabled") {
-        setError("此主題已停用，無法建立新的寫作任務。");
-      } else if (data.error === "duplicate_class_essay_assignment") {
-        setError("此班級已被指派相同的寫作主題，無法重複指派。");
-      } else {
-        setError(data.error ?? "save_openclass_failed");
-      }
-      return;
-    }
-    setOpenClassForm({
-      id: "",
-      classNumber: "",
-      essayId: "",
-      durationMinutes: 40,
-      supplemental: ""
-    });
-    await onRefresh();
-  }
-
-  function startEditOpenClass(openClass: OpenClassRow) {
-    setOpenClassForm({
-      id: openClass.id,
-      classNumber: openClass.classNumber,
-      essayId: openClass.essayId,
-      durationMinutes: openClass.durationMinutes,
-      supplemental: openClass.supplemental
     });
   }
 
@@ -353,27 +478,15 @@ export default function CourseManagementTab({
     await onRefresh();
   }
 
+  // class option label format: "xx國中 801"
+  function formatClassOption(school: string, classNumber: string): string {
+    return `${school} ${classNumber}`;
+  }
+
   return (
     <>
-      <div className="card">
-        <h2>課程管理</h2>
-        <small>以下為第二層分頁，先選擇管理模組，再編輯對應內容。</small>
-        <div className="row" style={{ marginTop: 10 }}>
-          {loginRole === "admin" ? (
-            <div style={{ width: 210 }}>
-              <button type="button" className={courseTab === "essay" ? "" : "secondary"} onClick={() => setCourseTab("essay")}>寫作主題管理</button>
-            </div>
-          ) : null}
-          <div style={{ width: 210 }}>
-            <button type="button" className={courseTab === "openclass" ? "" : "secondary"} onClick={() => setCourseTab("openclass")}>寫作任務管理</button>
-          </div>
-          <div style={{ width: 210 }}>
-            <button type="button" className={courseTab === "group" ? "" : "secondary"} onClick={() => setCourseTab("group")}>組別管理</button>
-          </div>
-        </div>
-      </div>
-
-      {courseTab === "essay" && loginRole === "admin" ? (
+      {/* 寫作主題管理（admin only） */}
+      {loginRole === "admin" ? (
         <div className="card">
           <h2>寫作主題管理</h2>
           <small>Prompt 與問題庫改由系統參數 JSON 管理；此處僅維護主題資料。</small>
@@ -408,31 +521,14 @@ export default function CourseManagementTab({
                 <button
                   type="button"
                   className="secondary"
-                  onClick={() =>
-                    setEssayForm({
-                      id: "",
-                      title: "",
-                      genre: "議論文",
-                      description: "",
-                      enabled: true
-                    })
-                  }
+                  onClick={() => setEssayForm({ id: "", title: "", genre: "議論文", description: "", enabled: true })}
                 >
                   取消編輯
                 </button>
               </div>
             ) : null}
-            {error ? (
-              <div className="col" style={{ width: "100%" }}>
-                <small>{error}</small>
-              </div>
-            ) : null}
           </form>
-          {essayForm.id ? (
-            <small>
-              目前正在編輯：{essayForm.id}
-            </small>
-          ) : null}
+          {essayForm.id ? <small>目前正在編輯：{essayForm.id}</small> : null}
           <div style={{ overflowX: "auto", marginTop: 10 }}>
             <table className="pro-table">
               <thead>
@@ -496,229 +592,284 @@ export default function CourseManagementTab({
         </div>
       ) : null}
 
-      {courseTab === "openclass" ? (
-        <div className="card">
-          <h2>寫作任務管理</h2>
-          <form onSubmit={saveOpenClass} className="row">
+      {/* 增修寫作任務 */}
+      <div className="card" ref={taskFormRef}>
+        <h2>{taskForm.id ? "增修寫作任務（編輯中）" : "增修寫作任務"}</h2>
+        <form onSubmit={saveTaskWithGroups} className="row">
+          {loginRole === "admin" ? (
             <div className="col">
-              <label>班級號碼（由學生名單帶入）</label>
+              <label>學校</label>
               <select
-                value={openClassForm.classNumber}
-                onChange={(e) => setOpenClassForm({ ...openClassForm, classNumber: e.target.value })}
+                value={taskForm.school}
+                onChange={(e) => setTaskForm({ ...taskForm, school: e.target.value })}
+                disabled={Boolean(taskForm.id)}
               >
-                <option value="">請選擇</option>
-                {classOptions.map((classNumber) => (
-                  <option key={classNumber} value={classNumber}>
-                    {classNumber}
+                <option value="">請選擇學校</option>
+                {allSchools.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
                   </option>
                 ))}
               </select>
             </div>
-            <div className="col">
-              <label>主題（含 ID）</label>
-              <select
-                value={openClassForm.essayId}
-                onChange={(e) => setOpenClassForm({ ...openClassForm, essayId: e.target.value })}
-              >
-                <option value="">請選擇</option>
-                {essays
-                  .filter((essay) => essay.enabled || essay.id === openClassForm.essayId)
-                  .map((essay) => (
-                    <option key={essay.id} value={essay.id}>
-                      {essay.id} / {essay.title}
-                    </option>
-                  ))}
-              </select>
-            </div>
-            <div className="col">
-              <label>時長</label>
-              <input
-                type="number"
-                value={openClassForm.durationMinutes}
-                onChange={(e) => setOpenClassForm({ ...openClassForm, durationMinutes: Number(e.target.value) || 0 })}
-              />
-            </div>
-            <div className="col">
-              <label>補充資料</label>
-              <textarea
-                rows={6}
-                value={openClassForm.supplemental}
-                onChange={(e) => setOpenClassForm({ ...openClassForm, supplemental: e.target.value })}
-              />
-            </div>
-            <div className="col" style={{ alignSelf: "end" }}>
-              <button type="submit">{openClassForm.id ? "儲存任務編輯" : "新增班級任務"}</button>
-            </div>
-            {error ? (
-              <div className="col" style={{ width: "100%" }}>
-                <small>{error}</small>
-              </div>
-            ) : null}
-          </form>
-          <div style={{ overflowX: "auto", marginTop: 10 }}>
-            <table className="pro-table">
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>學校</th>
-                  <th>班級</th>
-                  <th>主題</th>
-                  <th>時長</th>
-                  <th>補充資料</th>
-                  <th>操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                {openClasses.map((openClass) => (
-                  <tr key={openClass.id}>
-                    <td>{openClass.id}</td>
-                    <td>{openClass.school}</td>
-                    <td>{openClass.classNumber}</td>
-                    <td>{openClass.essayTitle}</td>
-                    <td>{openClass.durationMinutes} 分鐘</td>
-                    <td>{openClass.supplemental || "—"}</td>
-                    <td>
-                      <button type="button" className="secondary" style={{ width: "auto" }} onClick={() => startEditOpenClass(openClass)}>
-                        編輯
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      ) : null}
-
-      {courseTab === "group" ? (
-        <div className="card">
-          <h2>組別管理</h2>
-          <div className="row">
-            <div className="col">
-              <label>選擇任務</label>
-              <select value={selectedActivityId} onChange={(e) => setSelectedActivityId(e.target.value)}>
-                <option value="">請選擇</option>
-                {activities.map((activity) => (
-                  <option key={activity.id} value={activity.id}>
-                    {activity.classNumber} 班 / {activity.title} ({activity.id})
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="col">
-              <label>小組數量</label>
-              <input type="number" min={1} value={groupCount} onChange={(e) => setGroupCount(Number(e.target.value) || 1)} />
-            </div>
-            <div className="col" style={{ alignSelf: "end" }}>
-              <div className="row">
-                <div style={{ width: 140 }}>
-                  <button
-                    type="button"
-                    className="secondary"
-                    onClick={randomAssignGroups}
-                    disabled={!selectedActivityId}
-                  >
-                    隨機平均分組
-                  </button>
-                </div>
-                <div style={{ width: 140 }}>
-                  <button
-                    type="button"
-                    className="secondary"
-                    onClick={initializeGroupsForDrag}
-                    disabled={!selectedActivityId}
-                  >
-                    先建空組
-                  </button>
-                </div>
-                <div style={{ width: 140 }}>
-                  <button
-                    type="button"
-                    onClick={saveGroups}
-                    disabled={!canSaveGroups}
-                    style={{
-                      background: !canSaveGroups ? "#f3f4f6" : undefined,
-                      color: !canSaveGroups ? "#9ca3af" : undefined,
-                      borderColor: !canSaveGroups ? "#e5e7eb" : undefined,
-                      cursor: !canSaveGroups ? "not-allowed" : undefined
-                    }}
-                  >
-                    儲存分組
-                  </button>
-                </div>
-                <div style={{ width: 140 }}>
-                  <button type="button" className="secondary" onClick={cancelGroupEdits} disabled={!selectedActivityId}>
-                    取消
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-          <small>
-            {hasExistingGrouping
-              ? "此任務已有既有分組，可直接拖曳調整；若按初始化按鈕會先將所有學生重設為未分配。"
-              : "此任務尚未分組，請先設定組數並執行隨機分組或先建空組後拖曳。"}
-          </small>
-          <small>
-            目前未分配學生：{unassignedStudents.length} 人（為 0 時才可儲存分組）
-          </small>
-
-          <div className="row" style={{ marginTop: 12 }}>
-            <div
-              className="col"
-              style={{ minHeight: 120, border: "1px dashed #94a3b8", borderRadius: 8, padding: 10 }}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={dropToUnassigned}
+          ) : null}
+          <div className="col">
+            <label>班級號碼（{loginRole === "admin" ? "依選定學校過濾" : "由教師所屬學校帶入"}）</label>
+            <select
+              value={taskForm.classNumber}
+              onChange={(e) => setTaskForm({ ...taskForm, classNumber: e.target.value })}
+              disabled={Boolean(taskForm.id) || (loginRole === "admin" && !taskForm.school)}
             >
-              <strong>未分配學生</strong>
-              {unassignedStudents.map((username) => (
-                <div
-                  key={username}
-                  draggable
-                  onDragStart={onDragStart(username, "unassigned")}
-                  style={{ padding: "6px 8px", marginTop: 6, border: "1px solid #cbd5e1", borderRadius: 6 }}
-                >
-                  {username}
-                </div>
+              <option value="">請選擇</option>
+              {classOptionsForForm.map((cn) => (
+                <option key={cn} value={cn}>
+                  {formatClassOption(currentFormSchool, cn)}
+                </option>
               ))}
-            </div>
+            </select>
+          </div>
+          <div className="col">
+            <label>主題（含 ID）</label>
+            <select
+              value={taskForm.essayId}
+              onChange={(e) => setTaskForm({ ...taskForm, essayId: e.target.value })}
+            >
+              <option value="">請選擇</option>
+              {essays
+                .filter((essay) => essay.enabled || essay.id === taskForm.essayId)
+                .map((essay) => (
+                  <option key={essay.id} value={essay.id}>
+                    {essay.id} / {essay.title}
+                  </option>
+                ))}
+            </select>
+          </div>
+          <div className="col">
+            <label>時長 (分鐘)</label>
+            <input
+              type="number"
+              min={1}
+              value={taskForm.durationMinutes}
+              onChange={(e) => setTaskForm({ ...taskForm, durationMinutes: Number(e.target.value) || 0 })}
+            />
+          </div>
+          <div className="col">
+            <label>補充資料</label>
+            <textarea
+              rows={4}
+              value={taskForm.supplemental}
+              onChange={(e) => setTaskForm({ ...taskForm, supplemental: e.target.value })}
+            />
+          </div>
+        </form>
 
-            {editableGroups.map((group) => (
+        {/* 分組區（選定班級後出現） */}
+        {taskForm.classNumber ? (
+          <>
+            <hr style={{ border: 0, borderTop: "1px solid #e5e7eb", margin: "12px 0" }} />
+            <h3 style={{ margin: "0 0 6px" }}>小組分配</h3>
+            <div className="row">
+              <div className="col">
+                <label>小組數量</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={groupCount}
+                  onChange={(e) => setGroupCount(Number(e.target.value) || 1)}
+                />
+              </div>
+              <div className="col" style={{ alignSelf: "end" }}>
+                <div className="row">
+                  <div style={{ width: 140 }}>
+                    <button type="button" className="secondary" onClick={randomAssignGroups}>
+                      隨機平均分組
+                    </button>
+                  </div>
+                  <div style={{ width: 140 }}>
+                    <button type="button" className="secondary" onClick={initEmptyGroups}>
+                      先建空組
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <small>
+              目前未分配學生：{unassignedStudents.length} 人（為 0 時才可儲存任務）
+            </small>
+            <div className="row" style={{ marginTop: 12 }}>
               <div
-                key={group.groupId}
                 className="col"
                 style={{ minHeight: 120, border: "1px dashed #94a3b8", borderRadius: 8, padding: 10 }}
                 onDragOver={(e) => e.preventDefault()}
-                onDrop={dropToGroup(group.groupId)}
+                onDrop={dropToUnassigned}
               >
-                <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
-                  <strong>組別 {group.groupName}</strong>
-                  {group.members.length === 0 ? (
-                    <button
-                      type="button"
-                      className="secondary"
-                      style={{ width: "auto", minWidth: 36, padding: "4px 8px" }}
-                      onClick={() => removeGroup(group.groupId)}
-                    >
-                      x
-                    </button>
-                  ) : null}
-                </div>
-                {group.members.map((username) => (
+                <strong>未分配學生</strong>
+                {unassignedStudents.map((username) => (
                   <div
                     key={username}
                     draggable
-                    onDragStart={onDragStart(username, group.groupId)}
+                    onDragStart={onDragStart(username, "unassigned")}
                     style={{ padding: "6px 8px", marginTop: 6, border: "1px solid #cbd5e1", borderRadius: 6 }}
                   >
                     {username}
                   </div>
                 ))}
               </div>
-            ))}
+              {editableGroups.map((group) => (
+                <div
+                  key={group.groupId}
+                  className="col"
+                  style={{ minHeight: 120, border: "1px dashed #94a3b8", borderRadius: 8, padding: 10 }}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={dropToGroup(group.groupId)}
+                >
+                  <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+                    <strong>組別 {group.groupName}</strong>
+                    {group.members.length === 0 ? (
+                      <button
+                        type="button"
+                        className="secondary"
+                        style={{ width: "auto", minWidth: 36, padding: "4px 8px" }}
+                        onClick={() => removeGroup(group.groupId)}
+                      >
+                        x
+                      </button>
+                    ) : null}
+                  </div>
+                  {group.members.map((username) => (
+                    <div
+                      key={username}
+                      draggable
+                      onDragStart={onDragStart(username, group.groupId)}
+                      style={{ padding: "6px 8px", marginTop: 6, border: "1px solid #cbd5e1", borderRadius: 6 }}
+                    >
+                      {username}
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </>
+        ) : null}
+
+        <div className="row" style={{ marginTop: 12, gap: 10 }}>
+          <div style={{ width: 200 }}>
+            <button type="button" onClick={saveTaskWithGroups}>
+              {taskForm.id ? "儲存班級任務" : "新增班級任務"}
+            </button>
           </div>
+          {taskForm.id ? (
+            <div style={{ width: 140 }}>
+              <button type="button" className="secondary" onClick={cancelEditTask}>
+                取消編輯
+              </button>
+            </div>
+          ) : null}
+          {error ? (
+            <div className="col" style={{ width: "100%" }}>
+              <small style={{ color: "#b91c1c" }}>{error}</small>
+            </div>
+          ) : null}
         </div>
-      ) : null}
+      </div>
+
+      {/* 寫作任務管理（list） */}
+      <div className="card">
+        <h2>寫作任務管理</h2>
+        {loginRole === "admin" ? (
+          <div className="row" style={{ marginBottom: 8 }}>
+            <div className="col">
+              <label>學校</label>
+              <select value={listSchoolFilter} onChange={(e) => setListSchoolFilter(e.target.value)}>
+                <option value="all">全部</option>
+                {listSchoolOptions.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="col">
+              <label>班級</label>
+              <select
+                value={listClassFilter}
+                onChange={(e) => setListClassFilter(e.target.value)}
+                disabled={listSchoolFilter === "all"}
+              >
+                <option value="all">全部</option>
+                {listClassOptions.map((cn) => (
+                  <option key={cn} value={cn}>
+                    {cn}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        ) : null}
+        <div style={{ overflowX: "auto" }}>
+          <table className="pro-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>學校</th>
+                <th>班級</th>
+                <th>主題</th>
+                <th>時長 (分鐘)</th>
+                <th>補充資料</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pagedOpenClasses.map((openClass) => (
+                <tr key={openClass.id}>
+                  <td>{openClass.id}</td>
+                  <td>{openClass.school}</td>
+                  <td>{openClass.classNumber}</td>
+                  <td>{openClass.essayTitle}</td>
+                  <td>{openClass.durationMinutes}</td>
+                  <td>{openClass.supplemental || "—"}</td>
+                  <td>
+                    <button type="button" className="secondary" style={{ width: "auto" }} onClick={() => startEditTask(openClass)}>
+                      編輯
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {filteredOpenClasses.length === 0 ? (
+          <small style={{ display: "block", marginTop: 8 }}>目前沒有符合條件的寫作任務。</small>
+        ) : null}
+        {/* 分頁控制 */}
+        {filteredOpenClasses.length > 0 ? (
+          <div className="row" style={{ marginTop: 10, alignItems: "center", gap: 8 }}>
+            <div style={{ width: 100 }}>
+              <button
+                type="button"
+                className="secondary"
+                disabled={listPage <= 1}
+                onClick={() => setListPage((p) => Math.max(1, p - 1))}
+              >
+                上一頁
+              </button>
+            </div>
+            <small>
+              第 {listPage} / {totalListPages} 頁（共 {filteredOpenClasses.length} 筆）
+            </small>
+            <div style={{ width: 100 }}>
+              <button
+                type="button"
+                className="secondary"
+                disabled={listPage >= totalListPages}
+                onClick={() => setListPage((p) => Math.min(totalListPages, p + 1))}
+              >
+                下一頁
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </div>
     </>
   );
 }

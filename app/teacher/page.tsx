@@ -198,6 +198,7 @@ export default function TeacherPage() {
       {tab === "course" ? (
         <CourseManagementTab
           loginRole={loginRole}
+          loginUser={loginUser}
           isAdminConsole={isAdminConsole}
           activities={activities}
           setActivities={setActivities}
