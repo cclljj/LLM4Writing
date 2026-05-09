@@ -1119,6 +1119,13 @@ Request:
 - 不要求同組其他學生同步前進。
 - 僅當 `reports.step5[username]` 已存在時允許推進。
 
+#### `POST /api/session/step5/rerun`
+
+- 權限：student 且需為 session participant。
+- 僅允許在該學生個人步驟為 Step6 時呼叫。
+- 重新以該學生個人 Step1~4 歷程 + Step5 prompt 生成摘要，覆寫 `reports.step5[username]`，並追加一筆 Step5 AI 訊息。
+- 用於學生離線重進且仍在 Step6 時的自動補跑。
+
 #### `POST /api/session/step6/suggest`
 
 Request:
