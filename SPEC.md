@@ -613,6 +613,7 @@ student 可儲存三種內容：
 25. Step3 互動資料隔離：同組學生間不得共享彼此在 Step3 與 AI 的互動內容；每位學生僅可見自己與 AI 的對話與系統提示。
 26. Step3 AI 生成上下文需採小組階段規則：帶入同組成員於 Step1~Step3 的互動內容（含必要系統提示）以支援共同討論；但學生端畫面仍維持個人可見性隔離。
 27. Step3 學生端互動區不得顯示 system 提示原文；system 訊息僅供 AI 內部理解，學生畫面只呈現學生與 AI 的自然對話。
+27.1 Step3 AI 回覆需使用 SSE streaming（#268）：學生送出 Step3 提問後，前端 POST `/api/session/step3/stream`，即時顯示 `chunk` 內容；完成後端點需將學生訊息與 AI 回覆寫入 session messages，並回傳 `done` 事件中的最新 session。LLM 未設定或串流失敗時需以可讀 fallback 文字完成流程，避免學生停留在無限 loading。
 
 ### 6.2.4 前序步驟回顧（History Review）
 28. 學生端進入當前步驟時，需在「課程內容」下方、當前步驟說明上方顯示「前序步驟回顧」：逐步列出步驟 1 到前一個步驟的步驟名稱與個人互動紀錄；紀錄僅顯示該學生本人訊息與 AI 回覆，且不得顯示同組其他同學、教師或 system 內部提問內容。
@@ -736,6 +737,7 @@ student 可儲存三種內容：
     - `查看狀態` 可按
 - 「開始上課 / 暫停或繼續 / 結束上課」呼叫 `/api/teacher/course-control`
 - 「查看狀態」可查看該課程即時或歷史 session 內容，並可繼續使用：
+  - 教師端 monitor 採「摘要先載入、詳情後載入」（#267）：`/api/teacher/monitor` 預設只回傳課堂儀表板、全班加入狀態與風險判斷所需摘要；完整 `messages`、`outlines`、`step3SubmittedOutlines` 僅在小組對話紀錄被選取時以 `?sessionId=...&detail=full` 延遲載入。輪詢僅使用摘要 payload，以降低課堂觀察頁 loading 與網路成本。
   - 步驟切換（`/api/teacher/step`），整併入「課堂儀表板」表格的「提醒 / 步驟切換」欄與「動作」欄一鍵推進（#244）；不再保留獨立的「課程狀態內容（即時/歷史）」卡片
   - 小組訊息檢視（1/2/4）
   - 個人進度與個人互動訊息（完整步驟紀錄，不限 3/6/8）
@@ -1052,10 +1054,11 @@ Request:
 
 ### `GET /api/teacher/monitor`
 
-- 回傳 `workflow === spec10` 的 session 列表與訊息
+- 回傳 `workflow === spec10` 的 session 列表摘要；預設不回傳完整對話內容
 - 支援分頁：`?limit=N&offset=N`（預設 limit=50, offset=0）
 - 回應格式：`{ sessions: [...], total: N, limit: N, offset: N }`
-- 每筆 session 包含 `outlines: Record<string, string>` 與 `step3SubmittedOutlines: Record<string, string>`，供教師端渲染各組員結構樹
+- 摘要每筆 session 包含 `messageCount`、`lastMessageAt`、`studentMessageStats`、`stepReadyHints`、`artifactDiagnostics` 等教師儀表板與加入狀態所需欄位
+- 完整小組詳情使用 `GET /api/teacher/monitor?sessionId=...&detail=full` 取得；該模式才回傳完整 `messages`、`outlines: Record<string, string>` 與 `step3SubmittedOutlines: Record<string, string>`，供教師端渲染小組對話與結構樹
 - 注意：目前為應用層分頁（先載入全部 sessions 再過濾）；DB 層分頁優化為後續工作
 
 ### `GET /api/teacher/personal-progress?sessionId=...&username=...`

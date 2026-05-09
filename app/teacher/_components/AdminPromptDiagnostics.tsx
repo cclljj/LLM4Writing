@@ -93,6 +93,7 @@ function fmtMs(value: number): string {
 }
 
 function endpointLabel(name: string): string {
+  if (name === "step3_stream") return "Step 3 AI 回覆 (stream)";
   if (name === "step6_suggest") return "Step 6 AI 建議 (suggest)";
   if (name === "step6_complete") return "Step 7 分析回饋 (complete)";
   if (name === "step10_stream") return "Step 10 總結 (stream)";

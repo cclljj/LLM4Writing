@@ -64,6 +64,13 @@ export type MonitorSession = {
   qualitySignals?: QualitySignals;
   artifactDiagnostics?: ArtifactDiagnostics;
   messages: ChatMessage[];
+  messageCount?: number;
+  lastMessageAt?: string | null;
+  studentMessageStats?: Record<string, { count: number; lastMessageAt: string | null }>;
+  stepReadyHints?: {
+    step1Ready?: boolean;
+    step2Ready?: boolean;
+  };
 };
 
 export type PersonalProgressRow = {

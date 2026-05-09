@@ -82,6 +82,7 @@ export default function LearningMonitorTab({
   // We hash the sessions payload to detect quiescent periods and stretch the interval.
   const monitorPayloadHashRef = useRef<string>("");
   const monitorPollDelayRef = useRef<number>(3000);
+  const monitorSessionsRef = useRef<MonitorSession[]>([]);
 
   const learningSchoolOptions = useMemo(
     () => Array.from(new Set(activities.map((item) => item.school).filter(Boolean))).sort((a, b) => a.localeCompare(b, "zh-Hant")),
@@ -231,6 +232,14 @@ export default function LearningMonitorTab({
       let messageCount = 0;
       let lastMessageAt: string | null = null;
       for (const s of joinedSessions) {
+        const summary = s.studentMessageStats?.[username];
+        if (summary) {
+          messageCount += summary.count;
+          if (summary.lastMessageAt && (!lastMessageAt || summary.lastMessageAt > lastMessageAt)) {
+            lastMessageAt = summary.lastMessageAt;
+          }
+          continue;
+        }
         for (const m of s.messages) {
           if (m.role === "student" && m.userId === username) {
             messageCount += 1;
@@ -279,7 +288,7 @@ export default function LearningMonitorTab({
       const personalStepsKey = session.personalSteps
         ? Object.entries(session.personalSteps).sort().map(([k, v]) => `${k}=${v}`).join(",")
         : "";
-      const signature = `${session.currentStep}:${session.messages.length}:${last?.at ?? ""}:${session.groupGate ? Object.keys(session.groupGate).length : 0}:${personalStepsKey}`;
+      const signature = `${session.currentStep}:${session.messageCount ?? session.messages.length}:${session.lastMessageAt ?? last?.at ?? ""}:${session.groupGate ? Object.keys(session.groupGate).length : 0}:${personalStepsKey}`;
       seen.add(session.sessionId);
       const cached = cache.get(session.sessionId);
       if (cached && cached.signature === signature && cached.value.session === session) {
@@ -386,6 +395,10 @@ export default function LearningMonitorTab({
   }, [monitorSessions, monitorSelected?.sessionId]);
 
   useEffect(() => {
+    monitorSessionsRef.current = monitorSessions;
+  }, [monitorSessions]);
+
+  useEffect(() => {
     setMonitorSelected(null);
     setProgressRows([]);
     setPersonalMessages([]);
@@ -483,7 +496,7 @@ export default function LearningMonitorTab({
     return sessions
       .map((s) => {
         const last = s.messages[s.messages.length - 1];
-        return `${s.sessionId}:${s.currentStep}:${s.messages.length}:${last?.at ?? ""}`;
+        return `${s.sessionId}:${s.currentStep}:${s.messageCount ?? s.messages.length}:${s.lastMessageAt ?? last?.at ?? ""}`;
       })
       .join("|");
   }
@@ -505,16 +518,40 @@ export default function LearningMonitorTab({
     }
     const data = await response.json();
     const sessions: MonitorSession[] = data.sessions ?? [];
-    setMonitorSessions(sessions);
+    const mergedSessions = sessions.map((session) => {
+      const existing = monitorSessionsRef.current.find((item) => item.sessionId === session.sessionId);
+      if (!existing || existing.messages.length === 0 || session.messages.length > 0) return session;
+      return {
+        ...session,
+        messages: existing.messages,
+        outlines: existing.outlines,
+        step3SubmittedOutlines: existing.step3SubmittedOutlines
+      };
+    });
+    setMonitorSessions(mergedSessions);
     setLearningWarning("");
 
     // Track payload changes for exponential-backoff polling (#239).
-    const nextHash = computeMonitorPayloadHash(sessions);
+    const nextHash = computeMonitorPayloadHash(mergedSessions);
     if (nextHash !== monitorPayloadHashRef.current) {
       monitorPayloadHashRef.current = nextHash;
       monitorPollDelayRef.current = 3000; // reset on activity
     }
-    return sessions;
+    return mergedSessions;
+  }
+
+  async function loadMonitorSessionDetail(sessionId: string): Promise<MonitorSession | null> {
+    const response = await fetch(`/api/teacher/monitor?sessionId=${encodeURIComponent(sessionId)}&detail=full`, { cache: "no-store" });
+    const data = await response.json();
+    if (!response.ok) {
+      setLearningWarning(data.error ?? "monitor_detail_load_failed");
+      return null;
+    }
+    const detail = data.session as MonitorSession;
+    setMonitorSessions((prev) => prev.map((session) => (session.sessionId === detail.sessionId ? detail : session)));
+    setMonitorSelected((prev) => (prev?.sessionId === detail.sessionId ? detail : prev));
+    setLearningWarning("");
+    return detail;
   }
 
   async function runLearningAction<T>(processingText: string, action: () => Promise<T>): Promise<T | undefined> {
@@ -560,6 +597,10 @@ export default function LearningMonitorTab({
   }
 
   function getSessionLastEventAt(session: MonitorSession): Date | null {
+    if (session.lastMessageAt) {
+      const parsed = new Date(session.lastMessageAt);
+      if (Number.isFinite(parsed.getTime())) return parsed;
+    }
     const latest = session.messages
       .map((message) => new Date(message.at).getTime())
       .filter((time) => Number.isFinite(time))
@@ -573,7 +614,7 @@ export default function LearningMonitorTab({
     const stepMessages = session.messages.filter((m) => m.step === step);
 
     if (step === 1) {
-      const ready = stepMessages.some(
+      const ready = Boolean(session.stepReadyHints?.step1Ready) || stepMessages.some(
         (m) => m.role === "system" && m.text.includes("步驟 1 子步驟已完成，等待教師切換下一步")
       );
       return ready
@@ -585,7 +626,7 @@ export default function LearningMonitorTab({
     }
 
     if (step === 2) {
-      const ready = stepMessages.some(
+      const ready = Boolean(session.stepReadyHints?.step2Ready) || stepMessages.some(
         (m) => m.role === "system" && m.text.includes("步驟 2 子步驟已完成，等待教師切換下一步")
       );
       return ready
@@ -1069,6 +1110,9 @@ export default function LearningMonitorTab({
               setMonitorSelected(session);
               setGroupViewStep("all");
               setProgressSessionId(session.sessionId);
+              if (session.messages.length === 0) {
+                loadMonitorSessionDetail(session.sessionId).catch(() => undefined);
+              }
               // Auto-expand section and scroll into view (#246).
               setGroupLogExpanded(true);
               window.setTimeout(() => {
@@ -1165,6 +1209,9 @@ export default function LearningMonitorTab({
                         setMonitorSelected(next.session);
                         setGroupViewStep("all");
                         setProgressSessionId(next.sessionId);
+                        if (next.session.messages.length === 0) {
+                          loadMonitorSessionDetail(next.sessionId).catch(() => undefined);
+                        }
                       }
                     }}
                   >

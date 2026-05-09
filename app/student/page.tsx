@@ -156,6 +156,7 @@ export default function StudentPage() {
   const [isLoadingOverview, setIsLoadingOverview] = useState(false);
   const [isAutoAdvancingStep5, setIsAutoAdvancingStep5] = useState(false);
   const [isSuggestingStep6, setIsSuggestingStep6] = useState(false);
+  const [step3StreamingText, setStep3StreamingText] = useState("");
   const [step6StreamingText, setStep6StreamingText] = useState("");
   const [step7StreamingText, setStep7StreamingText] = useState("");
   const [step10StreamingText, setStep10StreamingText] = useState("");
@@ -638,6 +639,70 @@ export default function StudentPage() {
     setError("");
     setIsSendingMessage(true);
     try {
+      if (currentStep === 3) {
+        setStep3StreamingText("");
+        const textToSend = text;
+        const response = await fetch("/api/session/step3/stream", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId: session.id, text: textToSend })
+        });
+        if (!response.ok || !response.body) {
+          try {
+            const data = await response.json();
+            setError(data.error ?? "step3_stream_failed");
+          } catch {
+            setError("step3_stream_failed");
+          }
+          return;
+        }
+
+        setText("");
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let liveText = "";
+        let finalSession: typeof session | null = null;
+        let streamError = "";
+        outer: while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const parts = buffer.split("\n\n");
+          buffer = parts.pop() ?? "";
+          for (const part of parts) {
+            const line = part.trim();
+            if (!line.startsWith("data:")) continue;
+            const payload = line.slice(5).trim();
+            if (!payload) continue;
+            try {
+              const event = JSON.parse(payload) as
+                | { type: "chunk"; text: string }
+                | { type: "done"; session: typeof session }
+                | { type: "error"; error?: string };
+              if (event.type === "chunk") {
+                liveText += event.text;
+                setStep3StreamingText(liveText);
+              } else if (event.type === "done") {
+                finalSession = event.session;
+                break outer;
+              } else if (event.type === "error") {
+                streamError = event.error ?? "step3_stream_failed";
+                break outer;
+              }
+            } catch {
+              // Ignore malformed event lines.
+            }
+          }
+        }
+        if (streamError) {
+          setError(streamError);
+        } else if (finalSession) {
+          setSession(finalSession);
+        }
+        return;
+      }
+
       const response = await fetch("/api/chat/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -654,6 +719,7 @@ export default function StudentPage() {
       setText("");
     } finally {
       setIsSendingMessage(false);
+      setStep3StreamingText("");
     }
   }
 
@@ -1154,6 +1220,18 @@ export default function StudentPage() {
               ))}
               {interactiveMessages.length === 0 ? (
                 <small>請先描述你目前想建構的文章主軸，或直接提出你在結構樹規劃上遇到的問題。</small>
+              ) : null}
+              {step3StreamingText ? (
+                <div
+                  style={{
+                    borderTop: "1px solid #e5e7eb",
+                    padding: "8px 0",
+                    whiteSpace: "pre-wrap"
+                  }}
+                >
+                  <strong>AI 回覆</strong>
+                  <div style={{ marginTop: 4 }}>{step3StreamingText}</div>
+                </div>
               ) : null}
               {isSendingMessage ? (
                 <p style={{ marginTop: 10 }}><small>AI 正在整理回覆中，請稍候...</small></p>
