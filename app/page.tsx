@@ -1,8 +1,33 @@
-import Link from "next/link";
+"use client";
+
+import { FormEvent, useState } from "react";
 
 export default function HomePage() {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+
+  async function handleLogin(event: FormEvent) {
+    event.preventDefault();
+    setError("");
+
+    const response = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password })
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      setError(data.error ?? "login_failed");
+      return;
+    }
+
+    window.location.href = data.redirectTo;
+  }
+
   return (
-    <main className="home-main">
+    <main id="top" className="home-main">
       <section className="home-hero">
         <div>
           <p className="home-kicker">LLM4Writing</p>
@@ -10,26 +35,34 @@ export default function HomePage() {
           <p className="home-lead">
             LLM4Writing 提供完整的分步引導、討論互動與學習歷程追蹤，協助學生從審題到總結，循序完成一篇有結構、有觀點的作品。
           </p>
-          <div className="home-cta-row">
-            <Link href="/login" className="home-btn-primary">
-              立即登入
-            </Link>
-            <Link href="/student" className="home-btn-secondary">
-              學生入口
-            </Link>
-            <Link href="/teacher" className="home-btn-secondary">
-              教師入口
-            </Link>
-          </div>
+          <p className="home-lead" style={{ marginBottom: 0 }}>
+            現在可直接在首頁登入，登入後系統會依你的身分自動導向對應頁面。
+          </p>
         </div>
         <div className="home-hero-panel card">
-          <h2>你可以在這裡完成什麼？</h2>
-          <ul>
-            <li>以 10 步驟引導學生完成寫作任務</li>
-            <li>在小組討論與個人修訂中持續優化內容</li>
-            <li>即時掌握每位學生的進度與學習風險</li>
-            <li>回看完整歷程，支持教學回饋與反思</li>
-          </ul>
+          <h2>立即登入</h2>
+          <form onSubmit={handleLogin}>
+            <label>帳號</label>
+            <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="請輸入帳號" />
+
+            <label style={{ marginTop: 10 }}>密碼</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="請輸入密碼"
+            />
+
+            <button type="submit" style={{ marginTop: 14 }}>
+              登入系統
+            </button>
+
+            {error ? (
+              <p style={{ marginBottom: 0 }}>
+                <small>{error}</small>
+              </p>
+            ) : null}
+          </form>
         </div>
       </section>
 
@@ -49,22 +82,12 @@ export default function HomePage() {
       </section>
 
       <section className="card">
-        <h2>三種角色入口</h2>
+        <h2>系統入口</h2>
         <div className="row">
           <div className="col card">
-            <h3>學生</h3>
-            <p>加入課程、參與互動、完成寫作並查看歷史紀錄。</p>
-            <Link href="/student">前往學生端</Link>
-          </div>
-          <div className="col card">
-            <h3>教師</h3>
-            <p>管理課程進行、查看小組與個人互動，支持教學決策。</p>
-            <Link href="/teacher">前往教師端</Link>
-          </div>
-          <div className="col card">
-            <h3>系統管理員</h3>
-            <p>維護帳號與課程資料，確保教學系統穩定運作。</p>
-            <Link href="/admin">前往管理端</Link>
+            <h3>單一登入入口</h3>
+            <p>學生、教師與管理員使用同一個登入入口，登入後將自動導向你的工作頁面。</p>
+            <a href="#top">請使用上方登入表單進入</a>
           </div>
         </div>
       </section>
