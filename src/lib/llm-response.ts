@@ -30,10 +30,27 @@ function extractFeedbackFromJsonish(raw: string): string | null {
   return extracted || null;
 }
 
+function normalizeDanglingTail(text: string): string {
+  const trimmed = text.trim();
+  if (!trimmed) return trimmed;
+
+  const trailingPunctuation = trimmed.replace(/[，、；：,.!?！？。]+$/g, "").trim();
+  if (!trailingPunctuation) return trimmed;
+
+  const danglingEnding = /(都|而且|但是|不過|並且|以及|所以|因此|另外|同時|然後|接著|且|並)$/u;
+  if (!danglingEnding.test(trailingPunctuation)) return trimmed;
+
+  // Remove the dangling connector token and force a clean sentence end.
+  const repaired = trailingPunctuation.replace(danglingEnding, "").trim();
+  const repairedNoCommaTail = repaired.replace(/[，、；：,]+$/g, "").trim();
+  if (!repairedNoCommaTail) return "已收到大家的回覆。";
+  return `${repairedNoCommaTail}。`;
+}
+
 export function sanitizeStudentFacingText(aiText: string): string {
   const raw = stripJsonFence(aiText);
   const feedbackFromJsonish = extractFeedbackFromJsonish(raw);
-  if (feedbackFromJsonish) return feedbackFromJsonish;
+  if (feedbackFromJsonish) return normalizeDanglingTail(feedbackFromJsonish);
 
   // Defensive cleanup for malformed JSON-like leftovers.
   const cleaned = raw
@@ -42,7 +59,7 @@ export function sanitizeStudentFacingText(aiText: string): string {
     .replace(/\}\s*$/g, "")
     .replace(/^"+|"+$/g, "")
     .trim();
-  return cleaned || aiText.trim();
+  return normalizeDanglingTail(cleaned || aiText.trim());
 }
 
 export function parseStructuredStepAiResponse(aiText: string): StepAiResponse | null {

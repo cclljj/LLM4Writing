@@ -5,7 +5,7 @@ import { validateStudentAnswer, validateDraftContent, validateStudentAnswerSimpl
 import { buildAdvancedStuckRisk, recordRejectedAnswerSignal } from "../src/lib/learning-diagnostics";
 import { isTruncatedFinishReason, pickAssistantTextResult } from "../src/lib/llm-openai-response";
 import { resolvePendingOutlineAfterServerSync, shouldSyncOutlineFromSession } from "../src/lib/outline-sync-guard";
-import { isUsableNextQuestion, splitAiFeedbackAndQuestion } from "../src/lib/llm-response";
+import { isUsableNextQuestion, sanitizeStudentFacingText, splitAiFeedbackAndQuestion } from "../src/lib/llm-response";
 import { getStructureTreeNodePermissions } from "../src/lib/structure-tree-permissions";
 import { buildStudentNextAction } from "../src/lib/student-next-action";
 import { buildStep1Question, buildStep2Question } from "../src/lib/workflow-questions";
@@ -94,6 +94,11 @@ test("LLM parser prefers structured JSON and still supports legacy marker parsin
   assert.equal(legacy.feedbackText, "這輪整理得不錯。");
   assert.equal(legacy.nextQuestion, "請補上一個例子。");
   assert.equal(isUsableNextQuestion("請依上一則 AI 提問作答（本題要延伸討論）。"), false);
+});
+
+test("sanitizeStudentFacingText repairs dangling truncated connectors", () => {
+  assert.equal(sanitizeStudentFacingText("兩位同學都非常棒，都"), "兩位同學都非常棒。");
+  assert.equal(sanitizeStudentFacingText('{"feedback":"大家分析得很清楚，而且"}'), "大家分析得很清楚。");
 });
 
 test("OpenAI-compatible response parser detects truncated assistant output", () => {
