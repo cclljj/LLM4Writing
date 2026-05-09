@@ -446,6 +446,26 @@ test("student next-action card gives concrete action instead of generic status",
     }).body,
     /至少完成開頭/
   );
+
+  const step4Action = buildStudentNextAction({
+    currentStep: 4,
+    currentMode: "group_interaction",
+    canReplyToQuestion: true,
+    isSendingMessage: false,
+    waitingAiForGroup: true,
+    waitingGroupMembers: false,
+    waitingGroupMemberNames: [],
+    step1CompletedWaitingTeacher: false,
+    step2CompletedWaitingTeacher: false,
+    step3CompletedByMe: false,
+    waitingStep3Members: false,
+    step4CompletedByMe: false,
+    allStep4Completed: false,
+    draftTextLength: 0,
+    unsavedDraftChars: 0,
+    step9AnsweredCount: 0
+  });
+  assert.equal(step4Action.title, "確認修正完成");
 });
 
 test("step6 draft validation rejects insufficient content and accepts a real essay draft", () => {

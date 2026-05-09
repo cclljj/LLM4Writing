@@ -30,7 +30,8 @@ function waitingNames(names: string[]): string {
 }
 
 export function buildStudentNextAction(input: StudentNextActionInput): StudentNextAction {
-  if (input.isSendingMessage || input.waitingAiForGroup) {
+  const hasAiWaitInThisStep = input.currentStep !== 4;
+  if (input.isSendingMessage || (hasAiWaitInThisStep && input.waitingAiForGroup)) {
     return {
       tone: "waiting",
       title: "等待系統回覆",

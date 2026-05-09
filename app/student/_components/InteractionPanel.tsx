@@ -119,7 +119,12 @@ export default function InteractionPanel({
         </div>
       ) : null}
 
-      {isSendingMessage || waitingAiForGroup ? (
+      {isSendingMessage ? (
+        <p style={{ marginTop: 10 }}>
+          <small>{currentStep === 4 ? "訊息送出中..." : "等待遠端 AI 回答中..."}</small>
+        </p>
+      ) : null}
+      {!isSendingMessage && currentStep !== 4 && waitingAiForGroup ? (
         <p style={{ marginTop: 10 }}>
           <small>等待遠端 AI 回答中...</small>
         </p>
