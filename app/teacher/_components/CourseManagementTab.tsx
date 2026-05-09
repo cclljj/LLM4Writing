@@ -35,6 +35,18 @@ export default function CourseManagementTab({
   setError,
   onRefresh,
 }: CourseManagementTabProps) {
+  // ── 子分頁（#253） ────────────────────────────
+  // admin 預設「寫作主題設定」；教師沒有主題設定權限，預設且唯一選項為「寫作任務設定」
+  type SubTab = "essay" | "task";
+  const [subTab, setSubTab] = useState<SubTab>(loginRole === "admin" ? "essay" : "task");
+
+  // 若 loginRole 變動（例如資料重新載入後角色更新），確保非 admin 不會卡在 essay 分頁
+  useEffect(() => {
+    if (loginRole !== "admin" && subTab === "essay") {
+      setSubTab("task");
+    }
+  }, [loginRole, subTab]);
+
   // ── 寫作主題管理（admin only，保留原邏輯） ────────────────────────────
   const [essayForm, setEssayForm] = useState({
     id: "",
@@ -512,8 +524,24 @@ export default function CourseManagementTab({
 
   return (
     <>
+      {/* 子分頁切換（#253） */}
+      <div className="card row">
+        {loginRole === "admin" ? (
+          <div style={{ width: 200 }}>
+            <button type="button" className={subTab === "essay" ? "" : "secondary"} onClick={() => setSubTab("essay")}>
+              寫作主題設定
+            </button>
+          </div>
+        ) : null}
+        <div style={{ width: 200 }}>
+          <button type="button" className={subTab === "task" ? "" : "secondary"} onClick={() => setSubTab("task")}>
+            寫作任務設定
+          </button>
+        </div>
+      </div>
+
       {/* 寫作主題管理（admin only） */}
-      {loginRole === "admin" ? (
+      {subTab === "essay" && loginRole === "admin" ? (
         <div className="card">
           <h2>寫作主題管理</h2>
           <small>Prompt 與問題庫改由系統參數 JSON 管理；此處僅維護主題資料。</small>
@@ -619,6 +647,9 @@ export default function CourseManagementTab({
         </div>
       ) : null}
 
+      {/* 寫作任務設定（增修寫作任務 + 寫作任務管理） */}
+      {subTab === "task" ? (
+        <>
       {/* 增修寫作任務 */}
       <div className="card" ref={taskFormRef}>
         <h2>{taskForm.id ? "增修寫作任務（編輯中）" : "增修寫作任務"}</h2>
@@ -898,6 +929,8 @@ export default function CourseManagementTab({
           </div>
         ) : null}
       </div>
+        </>
+      ) : null}
     </>
   );
 }
