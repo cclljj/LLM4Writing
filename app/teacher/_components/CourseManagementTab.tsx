@@ -279,7 +279,16 @@ export default function CourseManagementTab({
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      setError(data.error ?? "delete_task_failed");
+      const code = data?.error;
+      const friendly =
+        code === "not_owner"
+          ? "你不是這份任務的綁定教師，無法刪除。"
+          : code === "task_has_student_activity"
+            ? "此任務已有學生操作紀錄，無法刪除。"
+            : code === "activity_not_found"
+              ? "找不到此任務（可能已被其他人刪除）。"
+              : (code ?? "delete_task_failed");
+      setError(friendly);
       return;
     }
     // Reset form if we were editing this task

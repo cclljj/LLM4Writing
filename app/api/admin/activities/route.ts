@@ -54,14 +54,30 @@ export async function DELETE(request: Request) {
 
   await hydrateDomainState();
 
-  // Teacher delete (#254): only allowed for tasks they own AND no student activity exists.
+  // Teacher delete (#254、修正於 #256): allowed when:
+  //  - target.ownerTeacherUsername === user.username (explicit ownership), OR
+  //  - target.ownerTeacherUsername is missing (legacy task) AND the target's
+  //    school+class is visible to this teacher (class-scope fallback).
+  // AND no student activity exists in any related session.
   // admin retains unrestricted delete (used by both 課程管理 + 學習管理 flows).
   if (user.role === "teacher") {
     const target = getOpenClasses().find((oc) => oc.id === activityId);
     if (!target) {
       return NextResponse.json({ error: "activity_not_found" }, { status: 404 });
     }
-    if (target.ownerTeacherUsername !== user.username) {
+    const isExplicitOwner = target.ownerTeacherUsername === user.username;
+    let inTeacherScope = false;
+    if (!isExplicitOwner && !target.ownerTeacherUsername) {
+      // Legacy fallback: check class scope visibility.
+      const visibleUsers = await getUsersVisibleToTeacherStore(user.username);
+      const visibleClasses = new Set(
+        visibleUsers
+          .filter((u) => u.role === "student")
+          .map((u) => `${u.school}::${u.classNumber ?? ""}`)
+      );
+      inTeacherScope = visibleClasses.has(`${target.school}::${target.classNumber}`);
+    }
+    if (!isExplicitOwner && !inTeacherScope) {
       return NextResponse.json({ error: "not_owner" }, { status: 403 });
     }
     const sessions = await listSessions().catch(() => []);
