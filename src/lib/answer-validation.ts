@@ -125,10 +125,47 @@ function hasQuestionOverlap(question: string, answer: string): boolean {
   return questionTerms.some((term) => answer.includes(term));
 }
 
+const SIMPLE_RELEVANCE_MIN_LEN = 20;
+const SIMPLE_EXPLANATION_MARKERS = ["因為", "所以", "例如", "像是", "代表", "因此", "顯示", "說明", "比較", "影響"];
+const CJK_STOP_CHARS = new Set(["的", "了", "是", "在", "有", "和", "與", "及", "或", "你", "我", "他", "她", "它", "們", "請", "這", "那", "把", "就", "都", "很", "再", "更", "嗎", "呢", "吧", "啊"]);
+
+function extractQuestionKeywordsForSimple(question: string): string[] {
+  const latinOrDigit = (question.match(/[A-Za-z0-9]+/g) ?? [])
+    .map((token) => token.toLowerCase())
+    .filter((token) => token.length >= 1);
+  const cjkTerms = (question.match(/[\u3400-\u9fff]{2,}/gu) ?? [])
+    .map((term) => term.trim())
+    .filter((term) => term.length >= 2);
+  return Array.from(new Set([...latinOrDigit, ...cjkTerms])).slice(0, 20);
+}
+
+function hasMeaningfulCjkOverlap(question: string, answer: string): boolean {
+  const qChars = Array.from(question.match(/[\u3400-\u9fff]/gu) ?? [])
+    .filter((char) => !CJK_STOP_CHARS.has(char));
+  if (qChars.length === 0) return true;
+  const matched = qChars.filter((char) => answer.includes(char));
+  return new Set(matched).size >= 2;
+}
+
+function hasSimpleRelevance(question: string, answer: string): boolean {
+  const lowerAnswer = answer.toLowerCase();
+  const keywords = extractQuestionKeywordsForSimple(question);
+  const hasKeywordOverlap = keywords.some((keyword) => lowerAnswer.includes(keyword) || answer.includes(keyword));
+  if (hasKeywordOverlap) return true;
+  return hasMeaningfulCjkOverlap(question, answer);
+}
+
+function hasExplanationSignal(answer: string): boolean {
+  return SIMPLE_EXPLANATION_MARKERS.some((marker) => answer.includes(marker));
+}
+
 export function validateStudentAnswerSimple(session: SessionState, userId: string, step: number, answer: string): string | null {
   const trimmed = answer.trim();
   if (!trimmed) {
     return "請先輸入你的回答，再送出。";
+  }
+  if (trimmed.length < SIMPLE_RELEVANCE_MIN_LEN) {
+    return `你的回答目前偏短，請至少寫到 ${SIMPLE_RELEVANCE_MIN_LEN} 字，並補上一個具體理由、例子或經驗。`;
   }
   if (looksLikeRandomToken(trimmed)) {
     return "你的回答看起來像隨機字串，請依題目內容用完整文字作答。";
@@ -138,8 +175,13 @@ export function validateStudentAnswerSimple(session: SessionState, userId: strin
   }
   const question = extractCurrentSystemQuestion(session, step, userId);
   if (!question) return null;
-  if (!hasQuestionOverlap(question, trimmed)) {
+  if (!hasSimpleRelevance(question, trimmed)) {
     return "你的回答和目前題目關聯性不足，請針對題目重點再具體作答。";
+  }
+  // Step1/2 uses a looser relevance check: as long as the answer is relevant
+  // and includes a basic explanation trace, it should pass.
+  if (!hasExplanationSignal(trimmed) && trimmed.length < SIMPLE_RELEVANCE_MIN_LEN + 8) {
+    return "請直接對準題目關鍵字作答，補上與題目相關的理由、例子或經驗。";
   }
   return null;
 }

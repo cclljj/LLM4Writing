@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { ChatMessage, SessionState } from "../src/lib/types";
-import { validateStudentAnswer, validateDraftContent } from "../src/lib/answer-validation";
+import { validateStudentAnswer, validateDraftContent, validateStudentAnswerSimple } from "../src/lib/answer-validation";
 import { buildAdvancedStuckRisk, recordRejectedAnswerSignal } from "../src/lib/learning-diagnostics";
 import { isTruncatedFinishReason, pickAssistantTextResult } from "../src/lib/llm-openai-response";
 import { resolvePendingOutlineAfterServerSync, shouldSyncOutlineFromSession } from "../src/lib/outline-sync-guard";
@@ -56,6 +56,24 @@ test("answer validation rejects low-quality answers before they become history",
   assert.match(validateStudentAnswer(session, "s1", 1, "請提出三個關鍵字。") ?? "", /題目本身/);
   assert.match(validateStudentAnswer(session, "s1", 1, "勇氣，責任") ?? "", /至少 3 項/);
   assert.equal(validateStudentAnswer(session, "s1", 1, "我想到這個題目可以先用勇氣、責任、合作三個關鍵字來討論。"), null);
+});
+
+test("step1/2 simple validation accepts earnest 3C-related answer and still blocks unrelated text", () => {
+  const session = baseSession({
+    currentStep: 1,
+    stepState: { step1Substep: 3, step2Substep: 1, step1Substep3Question: 1, step1Substep4Question: 1, step2Substep1Question: 1 },
+    messages: [
+      makeMessage({ role: "system", step: 1, text: "請描述你和 3C 的距離，並舉一個生活中的例子。" })
+    ]
+  });
+
+  const earnestAnswer = "我們平常生活中使用3C的頻繁程度，例如手機、電腦、電視、switch等等，可以代表我們和3C的距離，越長使用，距離就越近。";
+  assert.equal(validateStudentAnswerSimple(session, "s1", 1, earnestAnswer), null);
+
+  assert.match(
+    validateStudentAnswerSimple(session, "s1", 1, "今天中午我吃了炒飯和蛋花湯，味道不錯，吃完準備去打球流汗。") ?? "",
+    /關聯性不足/
+  );
 });
 
 test("LLM parser prefers structured JSON and still supports legacy marker parsing", () => {
