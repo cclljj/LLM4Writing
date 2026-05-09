@@ -278,7 +278,7 @@ async function generateStep1Or2AiWithQuestionRetry(
   };
 
   for (let attempt = 1; attempt <= 3; attempt += 1) {
-    const aiRaw = await generateAiTextForStep(session, step, contextText, userId, { attempts: 1, timeoutMs: 10_000 });
+    const aiRaw = await generateAiTextForStep(session, step, contextText, userId, { attempts: 1, timeoutMs: 25_000 });
     const parsed = splitAiFeedbackAndQuestion(aiRaw);
     lastParsed = parsed;
     if (parsed.nextQuestion?.trim()) {
@@ -379,18 +379,19 @@ async function generateAiTextForStep(
     // generous budget only for long-form content (article suggestions, analyses).
     const maxTokensByStep =
       step === 1 || step === 2
-        ? 500 // group dialog feedback (short JSON)
+        ? 700 // group dialog feedback JSON (allow enough room for complete feedback + question)
         : step === 3
           ? 600 // tutor reply (typically short)
           : step === 4
             ? 800 // group discussion guidance
             : 1200; // long-form steps (6/7/8/9/10)
-    // Step 4 keeps single-round response for latency; Step 1/2 must allow continuation
-    // to avoid returning truncated JSON/feedback to students.
+    // Step 4 keeps single-round response for latency; Step 1/2 use extra continuation
+    // to avoid truncated feedback at substep boundaries (e.g., 2-3 -> 2-4).
     const shortStep = step === 4;
+    const continuationMaxRounds = step === 1 || step === 2 ? 3 : shortStep ? 0 : 1;
     return await generateAiTextWithRetry(messages, 0.6, maxTokensByStep, {
       continueOnTruncation: !shortStep,
-      continuationMaxRounds: shortStep ? 0 : 1,
+      continuationMaxRounds,
       ...retryOptions
     });
   } catch {

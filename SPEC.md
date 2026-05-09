@@ -1327,7 +1327,7 @@ Request:
 
 | 步驟 | maxTokens | 備註 |
 |---|---|---|
-| 1, 2 | 500 | 群組對話短 JSON，啟用截斷續寫避免殘句 |
+| 1, 2 | 700 | 群組對話 JSON，啟用截斷續寫避免殘句 |
 | 3 | 600 | 結構樹輔導短回覆 |
 | 4 | 800 | 群組討論引導，`continueOnTruncation: false` |
 | 5~10 | 1200 | 長文輸出 |
@@ -1335,7 +1335,8 @@ Request:
 Continuation 策略：
 
 - Step4：`continuationMaxRounds = 0`。
-- Step1/2/3/6/7/8/10：`continuationMaxRounds = 1`。
+- Step1/2：`continuationMaxRounds = 3`（確保 2-3 結束回饋可完整呈現）。
+- Step3/6/7/8/10：`continuationMaxRounds = 1`。
 
 ### 8.4 System Prompt Cache
 
