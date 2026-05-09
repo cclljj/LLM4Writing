@@ -89,7 +89,7 @@ export function createSession(payload: StartSessionPayload): SessionState {
     step3SubmittedOutlines: {},
     draftStep6: {},
     draftStep8: {},
-    reports: { step7: {}, step10: {} }
+    reports: { step5: {}, step7: {}, step10: {} }
   };
 
   if (workflow === "legacy_phase") {
@@ -192,7 +192,17 @@ function normalizeSessionRuntimeShape(session: SessionState): void {
     session.promptConfig.stepOpenings = {};
   }
   if (!session.reports || typeof session.reports !== "object") {
-    session.reports = { step7: {}, step10: {} };
+    session.reports = { step5: {}, step7: {}, step10: {} };
+  }
+  if (!session.reports.step5 || typeof session.reports.step5 !== "object" || Array.isArray(session.reports.step5)) {
+    const legacyRaw = (session.reports as unknown as { step5?: unknown }).step5;
+    const legacyStep5 = typeof legacyRaw === "string" ? legacyRaw : "";
+    session.reports.step5 = {};
+    if (legacyStep5.trim()) {
+      session.participants.forEach((participant) => {
+        session.reports.step5[participant] = legacyStep5;
+      });
+    }
   }
   if (!session.reports.step7 || typeof session.reports.step7 !== "object") {
     session.reports.step7 = {};
@@ -420,10 +430,18 @@ async function generateLegacyAiText(session: SessionState, step: number, context
   }
 }
 
-function buildStep5Summary(session: SessionState): string {
-  const relevant = session.messages.filter((m) => m.step >= 1 && m.step <= 4 && (m.role === "student" || m.role === "ai"));
-  const brief = relevant.slice(-8).map((m) => `${m.role}${m.userId ? `(${m.userId})` : ""}: ${m.text}`).join("\n");
-  return `步驟 5 摘要報告\n${brief || "目前尚無足夠資料。"}`;
+function buildStep5FallbackSummary(session: SessionState, userId: string): string {
+  const relevant = session.messages
+    .filter((m) => m.step >= 1 && m.step <= 4 && (m.role === "system" || m.role === "ai" || (m.role === "student" && m.userId === userId)))
+    .slice(-24);
+  const brief = relevant
+    .map((m) => {
+      if (m.role === "student") return `學生(${userId})：${m.text}`;
+      if (m.role === "ai") return `AI：${m.text}`;
+      return `系統：${m.text}`;
+    })
+    .join("\n");
+  return `### **讚美與鼓勵**\n你在前四個步驟有持續投入，已建立自己的寫作方向。\n\n### **我們討論了什麼**\n${brief || "目前尚無足夠資料。"}\n\n### **我們學到了什麼**\n接下來可把以上重點整理成段落主張與例子，進入初稿撰寫。`;
 }
 
 function buildStep7Report(session: SessionState, userId: string): string {
@@ -454,6 +472,66 @@ function buildFullCourseContextForUser(session: SessionState, userId: string): s
       return `S${m.step}-系統：${m.text}`;
     })
     .join("\n");
+}
+
+function buildStep1To4PersonalContextForUser(session: SessionState, userId: string): string {
+  const relevant = session.messages
+    .filter((m) => {
+      if (m.step < 1 || m.step > 4) return false;
+      if (m.role === "teacher") return false;
+      if (m.role === "student") return m.userId === userId;
+      if (m.role === "system" || m.role === "ai") return true;
+      return false;
+    })
+    .slice(-120);
+
+  return relevant
+    .map((m) => {
+      if (m.role === "student") return `S${m.step}-學生(${userId})：${m.text}`;
+      if (m.role === "ai") return `S${m.step}-AI：${m.text}`;
+      return `S${m.step}-系統：${m.text}`;
+    })
+    .join("\n");
+}
+
+function buildStep5LlmInput(
+  session: SessionState,
+  userId: string
+): { messages: LlmChatMessage[]; fallback: string } {
+  const fallback = buildStep5FallbackSummary(session, userId);
+  const systemParts: string[] = [];
+  if (session.promptConfig.systemPrompt) systemParts.push(session.promptConfig.systemPrompt);
+  const step5Prompt = session.promptConfig.stepPrompts["5"];
+  if (step5Prompt) systemParts.push(step5Prompt);
+  systemParts.push("請只輸出步驟五摘要報告，不要輸出 JSON。");
+
+  const personalContext = buildStep1To4PersonalContextForUser(session, userId);
+  const messages: LlmChatMessage[] = [
+    { role: "system", content: systemParts.join("\n\n") },
+    {
+      role: "user",
+      content:
+        `學生帳號：${userId}\n` +
+        `作文題目：${session.activityTitle?.trim() || "未命名題目"}\n` +
+        `題目說明：${session.activityEssayDescription?.trim() || "(無)"}\n` +
+        `補充資料：${session.activitySupplemental?.trim() || "(無)"}\n\n` +
+        `以下是這位學生在本課程 Step1-4 的個人互動歷程（含系統引導、互動題目、AI 回饋與該學生回應；不含同組其他同學發言）：\n` +
+        `${personalContext || "(無)"}\n\n` +
+        "請依照步驟五格式輸出摘要報告。"
+    }
+  ];
+
+  return { messages, fallback };
+}
+
+async function generateStep5SummaryForUser(session: SessionState, userId: string): Promise<string> {
+  const { messages, fallback } = buildStep5LlmInput(session, userId);
+  if (!isLlmConfigured()) return fallback;
+  try {
+    return sanitizeStudentFacingText(await generateAiTextWithRetry(messages, 0.6, 1000, { continuationMaxRounds: 2 }));
+  } catch {
+    return fallback;
+  }
 }
 
 /**
@@ -554,7 +632,7 @@ export async function reconcileCompletedStep9Users(session: SessionState): Promi
 
 // --- existing non-LLM report builders below ---
 
-export function switchStep(session: SessionState, step: number): SessionState {
+export async function switchStep(session: SessionState, step: number): Promise<SessionState> {
   normalizeSessionRuntimeShape(session);
   if (!STEP_DEFINITIONS.find((s) => s.step === step)) {
     throw new Error(`invalid_step:${step}`);
@@ -599,8 +677,11 @@ export function switchStep(session: SessionState, step: number): SessionState {
   const mode = getModeByStep(step);
   if (mode === "non_interactive") {
     if (step === 5) {
-      session.reports.step5 = buildStep5Summary(session);
-      session.messages.push(makeMessage({ role: "ai", step, text: session.reports.step5 }));
+      for (const participant of session.participants) {
+        const summary = await generateStep5SummaryForUser(session, participant);
+        session.reports.step5[participant] = summary;
+        session.messages.push(makeMessage({ role: "ai", userId: participant, step, text: summary }));
+      }
     }
 
     if (step === 7) {

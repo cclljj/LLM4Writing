@@ -12,7 +12,8 @@ export async function POST(request: NextRequest) {
   if (userStep !== 5) {
     return NextResponse.json({ error: "invalid_step" }, { status: 400 });
   }
-  if (!session.reports?.step5) {
+  const ownStep5Report = session.reports?.step5?.[user.username];
+  if (!ownStep5Report?.trim()) {
     return NextResponse.json({ error: "step5_summary_not_ready" }, { status: 400 });
   }
 

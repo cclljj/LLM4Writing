@@ -286,7 +286,7 @@ interface ChatMessage {
   draftStep6: Record<string, string>;
   draftStep8: Record<string, string>;
   reports: {
-    step5?: string;
+    step5: Record<string, string>;
     step7: Record<string, string>;
     step10: Record<string, string>;
   };
@@ -327,7 +327,7 @@ Artifact 類型：
 | 2 | 蒐集資料 | `group_interaction` | 小組共同回答資料與觀點題目 |
 | 3 | 生成論點 | `personal_interaction` | 個人與 AI 互動並完成結構樹 |
 | 4 | 對比修正 | `group_interaction` | 瀏覽同組結構樹、修正自己的結構樹、小組討論 |
-| 5 | 摘要報告 | `non_interactive` | 系統彙整 Step1~4 摘要 |
+| 5 | 摘要報告 | `non_interactive` | AI 依個人 Step1~4 歷程生成摘要 |
 | 6 | 撰寫初稿 | `personal_interaction` | 個人撰寫初稿並請 AI 建議 |
 | 7 | 分析回饋 | `non_interactive` | AI 產生 Step6 分析回饋 |
 | 8 | 修改潤飾 | `personal_interaction` | 個人修改最終稿 |
@@ -377,6 +377,12 @@ Prompt 組裝順序：
 1. 全域 `systemPrompt`
 2. 當前步驟 `stepPrompts[String(step)]`
 3. Step1/2 額外附加目前子步驟 key 對應的 `subStepPrompts[key]` 與 `questionBanks[key]`
+
+Step5 摘要報告生成：
+
+- 使用 `systemPrompt + stepPrompts["5"]` 呼叫 LLM。
+- User context 必須包含：作文題目、題目說明、補充資料、該學生在 Step1~4 的系統/AI/本人回應歷程。
+- 不得混入同組其他學生的 `student` 訊息。
 
 Step1/2 遠端 LLM 優先輸出 JSON：
 
@@ -469,7 +475,7 @@ Step6「完成文章撰寫」額外前後端驗證（#235）：
 
 非互動步驟：
 
-- Step5：彙整 Step1~4 最近訊息，寫入 `reports.step5`。
+- Step5：為每位 participant 生成 `reports.step5[user]`（只使用該學生 Step1~4 個人互動歷程，不混入同組其他學生訊息）。
 - Step7：為每位 participant 生成 `reports.step7[user]`。
 - Step10：為每位 participant 生成 `reports.step10[user]`。
 
@@ -1111,6 +1117,7 @@ Request:
 - 權限：student 且需為 session participant。
 - 用於 Step5 摘要顯示後，將該學生個人步驟推進到 Step6。
 - 不要求同組其他學生同步前進。
+- 僅當 `reports.step5[username]` 已存在時允許推進。
 
 #### `POST /api/session/step6/suggest`
 

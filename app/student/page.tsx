@@ -61,7 +61,7 @@ type SessionState = {
   step3SubmittedOutlines?: Record<string, string>;
   draftStep6: Record<string, string>;
   draftStep8: Record<string, string>;
-  reports: { step5?: string; step7: Record<string, string>; step10: Record<string, string> };
+  reports: { step5: Record<string, string>; step7: Record<string, string>; step10: Record<string, string> };
   promptConfig?: {
     questionBanks?: Record<string, string[]>;
     stepOpenings?: Record<string, string>;
@@ -1367,7 +1367,7 @@ export default function StudentPage() {
           {currentStep === 5 ? (
             <div className="card">
               <h2>摘要報告</h2>
-              <pre>{session.reports.step5 ?? "系統尚未產生摘要。"}</pre>
+              <pre>{(loginUser && session.reports?.step5?.[loginUser]) || "系統尚未產生摘要。"}</pre>
               <small>摘要顯示後將自動進入步驟 6。</small>
             </div>
           ) : null}

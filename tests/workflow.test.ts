@@ -42,7 +42,7 @@ function baseSession(overrides: Partial<SessionState> = {}): SessionState {
     step3SubmittedOutlines: {},
     draftStep6: {},
     draftStep8: {},
-    reports: { step7: {}, step10: {} },
+    reports: { step5: {}, step7: {}, step10: {} },
     ...overrides
   };
 }

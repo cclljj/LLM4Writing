@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const updated = switchStep(session, payload.step);
+    const updated = await switchStep(session, payload.step);
     await saveSession(updated);
     return NextResponse.json(updated);
   } catch (error) {

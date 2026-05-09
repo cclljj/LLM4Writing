@@ -88,7 +88,7 @@ export interface SessionState {
   draftStep6: Record<string, string>;
   draftStep8: Record<string, string>;
   reports: {
-    step5?: string;
+    step5: Record<string, string>;
     step7: Record<string, string>;
     step10: Record<string, string>;
   };
