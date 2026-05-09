@@ -2,17 +2,29 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArtifactDiagnostics, buildAdvancedStuckRisk, QualitySignals } from "@/src/lib/learning-diagnostics";
-import { extractMermaidText } from "@/src/lib/outline-utils";
 import OutlineSvg from "@/app/_components/OutlineSvg";
 import { renderMessageHtml } from "@/app/student/_components/renderMessageHtml";
 import TeacherDashboard, { TeacherDashboardData } from "./TeacherDashboard";
-import { ActivityRow, MonitorSession, PersonalProgressRow, UserRow, groupInteractionSteps } from "./types";
+import { ActivityRow, MonitorSession, PersonalProgressRow, UserRow } from "./types";
 
 // Re-export QualitySignals/ArtifactDiagnostics usage via types import
 type _QS = QualitySignals;
 type _AD = ArtifactDiagnostics;
 void (null as unknown as _QS);
 void (null as unknown as _AD);
+
+const stepNameMap: Record<number, string> = {
+  1: "審視題目",
+  2: "蒐集資料",
+  3: "生成論點",
+  4: "對比修正",
+  5: "摘要報告",
+  6: "撰寫初稿",
+  7: "分析回饋",
+  8: "修改潤飾",
+  9: "個人反思",
+  10: "總結報告"
+};
 
 interface LearningMonitorTabProps {
   loginRole: "teacher" | "admin";
@@ -786,6 +798,22 @@ export default function LearningMonitorTab({
     });
   }
 
+  function getStepsFromMessages(messages: Array<{ step: number }>): number[] {
+    return Array.from(new Set(messages.map((m) => m.step))).sort((a, b) => a - b);
+  }
+
+  function getPersonalScopedMessagesForStudentHistory(
+    messages: Array<{ step: number; role: string; userId?: string }>,
+    username: string
+  ) {
+    return messages.filter((m) => {
+      if (m.role === "student") return m.userId === username;
+      if (m.role === "ai") return !m.userId || m.userId === username;
+      if (m.role === "system") return !m.userId || m.userId === username;
+      return false;
+    });
+  }
+
   // suppress unused var warnings for functions that are defined but referenced only via void
   void getMonitorGateKey;
 
@@ -1148,8 +1176,8 @@ export default function LearningMonitorTab({
                 </div>
               ) : null}
               {groupLogExpanded && monitorSelected ? (() => {
-                const allGroupMsgs = monitorSelected.messages.filter((m) => groupInteractionSteps.includes(m.step));
-                const groupSteps = [1, 2, 4];
+                const allGroupMsgs = monitorSelected.messages;
+                const groupSteps = getStepsFromMessages(allGroupMsgs);
 
                 const hasStep3 = monitorSelected.participants.some((p) => monitorSelected.step3SubmittedOutlines?.[p]);
                 const hasStep4Revised = monitorSelected.participants.some((p) => {
@@ -1160,7 +1188,7 @@ export default function LearningMonitorTab({
 
                 const step3Block = hasStep3 ? (
                   <div style={{ borderTop: "2px solid #cbd5e1", padding: "12px 0", marginTop: 4 }}>
-                    <strong style={{ fontSize: 13, color: "#334155" }}>▶ 步驟三 各組員完成結構樹</strong>
+                    <strong style={{ fontSize: 13, color: "#334155" }}>步驟三 各組員完成結構樹</strong>
                     {monitorSelected.participants.map((p) => {
                       const submitted = monitorSelected.step3SubmittedOutlines?.[p];
                       if (!submitted) return null;
@@ -1176,7 +1204,7 @@ export default function LearningMonitorTab({
 
                 const step4Block = hasStep4Revised ? (
                   <div style={{ borderTop: "2px solid #cbd5e1", padding: "12px 0", marginTop: 4 }}>
-                    <strong style={{ fontSize: 13, color: "#334155" }}>▶ 步驟四 各組員修正後結構樹</strong>
+                    <strong style={{ fontSize: 13, color: "#334155" }}>步驟四 各組員修正後結構樹</strong>
                     {monitorSelected.participants.map((p) => {
                       const s = monitorSelected.step3SubmittedOutlines?.[p];
                       const c = monitorSelected.outlines?.[p];
@@ -1200,49 +1228,47 @@ export default function LearningMonitorTab({
                       // Per-step cards default to closed (#245).
                       const isExpanded = groupLogStepExpanded[step] ?? false;
                       return (
-                        <div key={step} style={{ border: "1px solid #e2e8f0", borderRadius: 8, marginBottom: 8, overflow: "hidden" }}>
-                          <div
-                            style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 14px", background: "#f1f5f9", cursor: "pointer", userSelect: "none" }}
-                            onClick={() => setGroupLogStepExpanded((prev) => ({ ...prev, [step]: !isExpanded }))}
-                          >
-                            <strong style={{ fontSize: 14 }}>步驟 {step}</strong>
-                            <span
-                              style={{
-                                width: "3em",
-                                padding: "2px 0",
-                                fontSize: 12,
-                                color: "#475569",
-                                background: "#fff",
-                                border: "1px solid #cbd5e1",
-                                borderRadius: 6,
-                                textAlign: "center"
-                              }}
+                        <div key={step} className="card">
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                            <h3 style={{ margin: 0 }}>
+                              Step {step} {stepNameMap[step] ? `- ${stepNameMap[step]}` : ""}
+                            </h3>
+                            <button
+                              type="button"
+                              className="secondary"
+                              aria-expanded={isExpanded}
+                              onClick={() => setGroupLogStepExpanded((prev) => ({ ...prev, [step]: !isExpanded }))}
+                              style={{ width: "fit-content", padding: "3px 6px", whiteSpace: "nowrap" }}
                             >
-                              {isExpanded ? "關閉" : "展開"}
-                            </span>
+                              {isExpanded ? "▾ 閉合" : "▸ 展開"}
+                            </button>
                           </div>
-                          {isExpanded && (
-                            <div style={{ padding: "4px 12px 12px" }}>
+                          {isExpanded ? (
+                            <>
+                              <hr style={{ border: 0, borderTop: "1px solid #e5e7eb", margin: "10px 0" }} />
                               {stepMsgs.map((message) => (
                                 <div key={message.id} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
                                   <strong>
-                                    [S{message.step}] {message.role}
-                                    {message.userId ? `(${message.userId})` : ""}
+                                    {message.role === "student"
+                                      ? `學生${message.userId ? `（${message.userId}）` : ""}`
+                                      : message.role === "ai"
+                                        ? "AI 回覆"
+                                        : message.role === "system"
+                                          ? "系統訊息"
+                                          : message.role}
                                   </strong>
                                   <div dangerouslySetInnerHTML={{ __html: renderMessageHtml(message.text) }} />
-                                  {[3, 4].includes(message.step) && (
-                                    <OutlineSvg mermaidText={extractMermaidText(message.text) ?? ""} label={`S${message.step} 結構樹`} />
-                                  )}
+                                  <small>{message.at}</small>
                                 </div>
                               ))}
                               {step === 2 && step3Block}
                               {step === 4 && step4Block}
-                            </div>
-                          )}
+                            </>
+                          ) : null}
                         </div>
                       );
                     })}
-                    {!anyMsgs && <small>目前沒有 1/2/4 步驟對話。</small>}
+                    {!anyMsgs && <small>目前沒有可顯示的對話內容。</small>}
                   </>
                 );
               })() : groupLogExpanded ? (
@@ -1296,19 +1322,22 @@ export default function LearningMonitorTab({
                 </div>
               ) : null}
               {personalLogExpanded && personalMessages.length > 0 ? (() => {
-                const personalSteps = [...new Set(personalMessages.map((m) => m.step))].sort((a, b) => a - b);
+                const scopedPersonalMessages = selectedProgressUser
+                  ? getPersonalScopedMessagesForStudentHistory(personalMessages, selectedProgressUser)
+                  : personalMessages;
+                const personalSteps = getStepsFromMessages(scopedPersonalMessages);
                 const hasStep4Revised = Boolean(userOutline && userOutline !== userStep3SubmittedOutline);
 
                 const step3Block = userStep3SubmittedOutline ? (
                   <div style={{ borderTop: "2px solid #cbd5e1", padding: "12px 0", marginTop: 4 }}>
-                    <strong style={{ fontSize: 13, color: "#334155" }}>▶ 步驟三完成結構樹</strong>
+                    <strong style={{ fontSize: 13, color: "#334155" }}>步驟三完成結構樹</strong>
                     <OutlineSvg mermaidText={userStep3SubmittedOutline} label="步驟三完成結構樹" />
                   </div>
                 ) : null;
 
                 const step4Block = hasStep4Revised ? (
                   <div style={{ borderTop: "2px solid #cbd5e1", padding: "12px 0", marginTop: 4 }}>
-                    <strong style={{ fontSize: 13, color: "#334155" }}>▶ 步驟四對比修正後結構樹</strong>
+                    <strong style={{ fontSize: 13, color: "#334155" }}>步驟四對比修正後結構樹</strong>
                     <OutlineSvg mermaidText={userOutline} label="步驟四對比修正後" />
                   </div>
                 ) : null;
@@ -1316,49 +1345,47 @@ export default function LearningMonitorTab({
                 return (
                   <>
                     {personalSteps.map((step) => {
-                      const stepMsgs = personalMessages.filter((m) => m.step === step);
+                      const stepMsgs = scopedPersonalMessages.filter((m) => m.step === step);
                       // Per-step cards default to closed (#245).
                       const isExpanded = personalLogStepExpanded[step] ?? false;
                       return (
-                        <div key={step} style={{ border: "1px solid #e2e8f0", borderRadius: 8, marginBottom: 8, overflow: "hidden" }}>
-                          <div
-                            style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 14px", background: "#f1f5f9", cursor: "pointer", userSelect: "none" }}
-                            onClick={() => setPersonalLogStepExpanded((prev) => ({ ...prev, [step]: !isExpanded }))}
-                          >
-                            <strong style={{ fontSize: 14 }}>步驟 {step}</strong>
-                            <span
-                              style={{
-                                width: "3em",
-                                padding: "2px 0",
-                                fontSize: 12,
-                                color: "#475569",
-                                background: "#fff",
-                                border: "1px solid #cbd5e1",
-                                borderRadius: 6,
-                                textAlign: "center"
-                              }}
+                        <div key={step} className="card">
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                            <h3 style={{ margin: 0 }}>
+                              Step {step} {stepNameMap[step] ? `- ${stepNameMap[step]}` : ""}
+                            </h3>
+                            <button
+                              type="button"
+                              className="secondary"
+                              aria-expanded={isExpanded}
+                              onClick={() => setPersonalLogStepExpanded((prev) => ({ ...prev, [step]: !isExpanded }))}
+                              style={{ width: "fit-content", padding: "3px 6px", whiteSpace: "nowrap" }}
                             >
-                              {isExpanded ? "關閉" : "展開"}
-                            </span>
+                              {isExpanded ? "▾ 閉合" : "▸ 展開"}
+                            </button>
                           </div>
-                          {isExpanded && (
-                            <div style={{ padding: "4px 12px 12px" }}>
+                          {isExpanded ? (
+                            <>
+                              <hr style={{ border: 0, borderTop: "1px solid #e5e7eb", margin: "10px 0" }} />
                               {stepMsgs.map((message) => (
                                 <div key={message.id} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
                                   <strong>
-                                    [S{message.step}] {message.role}
-                                    {message.userId ? `(${message.userId})` : ""}
+                                    {message.role === "student"
+                                      ? "你"
+                                      : message.role === "ai"
+                                        ? "AI 回覆"
+                                        : message.role === "system"
+                                          ? "系統訊息"
+                                          : message.role}
                                   </strong>
                                   <div dangerouslySetInnerHTML={{ __html: renderMessageHtml(message.text) }} />
-                                  {[3, 4].includes(message.step) && (
-                                    <OutlineSvg mermaidText={extractMermaidText(message.text) ?? ""} label={`S${message.step} 結構樹`} />
-                                  )}
+                                  <small>{message.at}</small>
                                 </div>
                               ))}
                               {step === 3 && step3Block}
                               {step === 4 && step4Block}
-                            </div>
-                          )}
+                            </>
+                          ) : null}
                         </div>
                       );
                     })}
