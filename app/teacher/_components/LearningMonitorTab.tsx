@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArtifactDiagnostics, buildAdvancedStuckRisk, QualitySignals } from "@/src/lib/learning-diagnostics";
+import { formatUserError } from "@/src/lib/error-messages";
 import OutlineSvg from "@/app/_components/OutlineSvg";
 import { renderMessageHtml } from "@/app/student/_components/renderMessageHtml";
 import TeacherDashboard, { TeacherDashboardData } from "./TeacherDashboard";
@@ -60,6 +61,8 @@ export default function LearningMonitorTab({
   const [showCourseStatusView, setShowCourseStatusView] = useState(false);
   const [isLearningProcessing, setIsLearningProcessing] = useState(false);
   const [learningProcessingText, setLearningProcessingText] = useState("");
+  const [learningActionKey, setLearningActionKey] = useState("");
+  const [detailLoadingSessionId, setDetailLoadingSessionId] = useState("");
   const [learningWarning, setLearningWarning] = useState("");
   const [progressRows, setProgressRows] = useState<PersonalProgressRow[]>([]);
   const [selectedProgressUser, setSelectedProgressUser] = useState("");
@@ -438,7 +441,7 @@ export default function LearningMonitorTab({
 
     const tick = async () => {
       if (cancelled) return;
-      if (monitorPollingBusyRef.current || isLearningProcessing) {
+      if (monitorPollingBusyRef.current) {
         // Try again soon without changing backoff.
         timerId = window.setTimeout(tick, MIN_DELAY);
         return;
@@ -467,7 +470,7 @@ export default function LearningMonitorTab({
       cancelled = true;
       if (timerId !== null) window.clearTimeout(timerId);
     };
-  }, [showCourseStatusView, selectedLearningActivityId, isLearningProcessing]);
+  }, [showCourseStatusView, selectedLearningActivityId]);
 
   useEffect(() => {
     setLearningPage(1);
@@ -485,7 +488,7 @@ export default function LearningMonitorTab({
 
   // Load data on mount (replaces the tab === "learning" guard)
   useEffect(() => {
-    runLearningAction("系統正在載入學習管理資料，請稍候...", async () => {
+    runLearningAction("initial", "系統正在載入學習管理資料，請稍候...", async () => {
       await onRefreshData();
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -513,7 +516,7 @@ export default function LearningMonitorTab({
       response = null;
     }
     if (!response?.ok) {
-      setLearningWarning("monitor_load_failed");
+      setLearningWarning(formatUserError("monitor_load_failed"));
       return [];
     }
     const data = await response.json();
@@ -541,26 +544,33 @@ export default function LearningMonitorTab({
   }
 
   async function loadMonitorSessionDetail(sessionId: string): Promise<MonitorSession | null> {
-    const response = await fetch(`/api/teacher/monitor?sessionId=${encodeURIComponent(sessionId)}&detail=full`, { cache: "no-store" });
-    const data = await response.json();
-    if (!response.ok) {
-      setLearningWarning(data.error ?? "monitor_detail_load_failed");
-      return null;
+    setDetailLoadingSessionId(sessionId);
+    try {
+      const response = await fetch(`/api/teacher/monitor?sessionId=${encodeURIComponent(sessionId)}&detail=full`, { cache: "no-store" });
+      const data = await response.json();
+      if (!response.ok) {
+        setLearningWarning(formatUserError(data.error ?? "monitor_detail_load_failed"));
+        return null;
+      }
+      const detail = data.session as MonitorSession;
+      setMonitorSessions((prev) => prev.map((session) => (session.sessionId === detail.sessionId ? detail : session)));
+      setMonitorSelected((prev) => (prev?.sessionId === detail.sessionId ? detail : prev));
+      setLearningWarning("");
+      return detail;
+    } finally {
+      setDetailLoadingSessionId("");
     }
-    const detail = data.session as MonitorSession;
-    setMonitorSessions((prev) => prev.map((session) => (session.sessionId === detail.sessionId ? detail : session)));
-    setMonitorSelected((prev) => (prev?.sessionId === detail.sessionId ? detail : prev));
-    setLearningWarning("");
-    return detail;
   }
 
-  async function runLearningAction<T>(processingText: string, action: () => Promise<T>): Promise<T | undefined> {
+  async function runLearningAction<T>(actionKey: string, processingText: string, action: () => Promise<T>): Promise<T | undefined> {
     setIsLearningProcessing(true);
+    setLearningActionKey(actionKey);
     setLearningProcessingText(processingText);
     try {
       return await action();
     } finally {
       setIsLearningProcessing(false);
+      setLearningActionKey("");
       setLearningProcessingText("");
     }
   }
@@ -710,7 +720,7 @@ export default function LearningMonitorTab({
   async function openCourseStatus(activityId: string) {
     setSelectedLearningActivityId(activityId);
     setShowCourseStatusView(true);
-    await runLearningAction("系統正在載入課程狀態，請稍候...", async () => {
+    await runLearningAction(`course:${activityId}:view`, "系統正在載入課程狀態，請稍候...", async () => {
       const sessions = await refreshMonitor();
       const targetSessions = sessions.filter((item: MonitorSession) => item.activityId === activityId);
       if (targetSessions.length > 0) {
@@ -727,7 +737,7 @@ export default function LearningMonitorTab({
   async function handleCourseLifecycle(activityId: string, action: "start" | "pause_resume" | "end") {
     const processingText =
       action === "start" ? "系統正在開始上課，請稍候..." : action === "end" ? "系統正在結束上課，請稍候..." : "系統正在更新課程狀態，請稍候...";
-    await runLearningAction(processingText, async () => {
+    await runLearningAction(`course:${activityId}:${action}`, processingText, async () => {
       const response = await fetch("/api/teacher/course-control", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -735,7 +745,7 @@ export default function LearningMonitorTab({
       });
       const data = await response.json();
       if (!response.ok) {
-        setError(data.error ?? "course_lifecycle_failed");
+        setError(formatUserError(data.error ?? "course_lifecycle_failed"));
         return;
       }
       setError("");
@@ -748,7 +758,7 @@ export default function LearningMonitorTab({
     if (!isAdminConsole || loginRole !== "admin") return;
     const confirmed = window.confirm(`是否要刪除「${title}」的所有資料？\n\n此操作會刪除寫作任務、分組資料與學生參與過程，且無法復原。`);
     if (!confirmed) return;
-    await runLearningAction("系統正在刪除寫作任務課程資料，請稍候...", async () => {
+    await runLearningAction(`course:${activityId}:delete`, "系統正在刪除寫作任務課程資料，請稍候...", async () => {
       const response = await fetch("/api/admin/activities", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
@@ -756,7 +766,7 @@ export default function LearningMonitorTab({
       });
       const data = await response.json();
       if (!response.ok) {
-        setError(data.error ?? "delete_activity_failed");
+        setError(formatUserError(data.error ?? "delete_activity_failed"));
         return;
       }
       await onRefreshData();
@@ -770,7 +780,7 @@ export default function LearningMonitorTab({
   }
 
   async function applyStepSwitch(sessionId: string, step: number) {
-    await runLearningAction(`系統正在切換到 Step ${step}，請稍候...`, async () => {
+    await runLearningAction(`step:${sessionId}:${step}`, `系統正在切換到 Step ${step}，請稍候...`, async () => {
       setError("");
       const response = await fetch("/api/teacher/step", {
         method: "POST",
@@ -779,7 +789,7 @@ export default function LearningMonitorTab({
       });
       const data = await response.json();
       if (!response.ok) {
-        setError(data.error ?? "switch_failed");
+        setError(formatUserError(data.error ?? "switch_failed"));
         return;
       }
       setMonitorSessions((prev) =>
@@ -817,7 +827,7 @@ export default function LearningMonitorTab({
   async function loadProgress(sessionTarget?: string, username?: string) {
     const sid = sessionTarget ?? progressSessionId;
     if (!sid) return;
-    await runLearningAction("系統正在載入個人進度，請稍候...", async () => {
+    await runLearningAction(`progress:${sid}:${username ?? ""}`, "系統正在載入個人進度，請稍候...", async () => {
       const q = new URLSearchParams({ sessionId: sid });
       if (username) {
         q.set("username", username);
@@ -825,7 +835,7 @@ export default function LearningMonitorTab({
       const response = await fetch(`/api/teacher/personal-progress?${q.toString()}`);
       const data = await response.json();
       if (!response.ok) {
-        setError(data.error ?? "progress_failed");
+        setError(formatUserError(data.error ?? "progress_failed"));
         return;
       }
       setProgressRows(data.progress ?? []);
@@ -864,7 +874,7 @@ export default function LearningMonitorTab({
     <>
       <div className="card">
         <h2>學習管理</h2>
-        {isLearningProcessing ? (
+        {isLearningProcessing && learningActionKey === "initial" ? (
           <div
             style={{
               marginBottom: 12,
@@ -942,6 +952,12 @@ export default function LearningMonitorTab({
                 const pauseResumeDisabled = status === "not_started" || status === "ended";
                 const endDisabled = status === "not_started" || status === "ended";
                 const viewDisabled = status === "not_started";
+                const startKey = `course:${activity.id}:start`;
+                const pauseResumeKey = `course:${activity.id}:pause_resume`;
+                const endKey = `course:${activity.id}:end`;
+                const viewKey = `course:${activity.id}:view`;
+                const refreshKey = `course:${activity.id}:refresh`;
+                const deleteKey = `course:${activity.id}:delete`;
                 const disabledButtonStyle = {
                   width: "auto",
                   background: "#f3f4f6",
@@ -962,66 +978,66 @@ export default function LearningMonitorTab({
                           type="button"
                           style={startDisabled ? disabledButtonStyle : enabledButtonStyle}
                           className={startDisabled ? "secondary" : ""}
-                          disabled={startDisabled || isLearningProcessing}
+                          disabled={startDisabled || learningActionKey === startKey}
                           onClick={() => handleCourseLifecycle(activity.id, "start")}
                         >
-                          開始上課
+                          {learningActionKey === startKey ? "開始中..." : "開始上課"}
                         </button>
                         <button
                           type="button"
                           className={pauseResumeDisabled ? "secondary" : ""}
                           style={pauseResumeDisabled ? disabledButtonStyle : enabledButtonStyle}
-                          disabled={pauseResumeDisabled || isLearningProcessing}
+                          disabled={pauseResumeDisabled || learningActionKey === pauseResumeKey}
                           onClick={() => handleCourseLifecycle(activity.id, "pause_resume")}
                         >
-                          {status === "in_progress" ? "暫停上課" : "繼續上課"}
+                          {learningActionKey === pauseResumeKey ? "更新中..." : status === "in_progress" ? "暫停上課" : "繼續上課"}
                         </button>
                         <button
                           type="button"
                           className={endDisabled ? "secondary" : ""}
                           style={endDisabled ? disabledButtonStyle : enabledButtonStyle}
-                          disabled={endDisabled || isLearningProcessing}
+                          disabled={endDisabled || learningActionKey === endKey}
                           onClick={() => handleCourseLifecycle(activity.id, "end")}
                         >
-                          結束上課
+                          {learningActionKey === endKey ? "結束中..." : "結束上課"}
                         </button>
                         <button
                           type="button"
                           className="secondary"
                           style={viewDisabled ? disabledButtonStyle : enabledButtonStyle}
-                          disabled={viewDisabled || isLearningProcessing}
+                          disabled={viewDisabled || learningActionKey === viewKey}
                           onClick={() => {
                             openCourseStatus(activity.id).catch(() => undefined);
                           }}
                         >
-                          查看狀態
+                          {learningActionKey === viewKey ? "載入中..." : "查看狀態"}
                         </button>
                         <button
                           type="button"
                           className="secondary"
                           style={{ width: "auto" }}
-                          disabled={isLearningProcessing}
+                          disabled={learningActionKey === refreshKey}
                           onClick={() => {
                             setSelectedLearningActivityId(activity.id);
-                            runLearningAction("系統正在重新整理課程資料，請稍候...", async () => {
+                            runLearningAction(`course:${activity.id}:refresh`, "系統正在重新整理課程資料，請稍候...", async () => {
                               await onRefreshData();
                               if (showCourseStatusView) await refreshMonitor();
                             });
                           }}
                         >
-                          重新整理
+                          {learningActionKey === refreshKey ? "整理中..." : "重新整理"}
                         </button>
                         {isAdminConsole ? (
                           <button
                             type="button"
                             className="secondary"
                             style={{ width: "auto", background: "#ffe4e6", color: "#9f1239", borderColor: "#fecdd3" }}
-                            disabled={isLearningProcessing}
+                            disabled={learningActionKey === deleteKey}
                             onClick={() => {
                               deleteActivityTask(activity.id, activity.title).catch(() => undefined);
                             }}
                           >
-                            刪除
+                            {learningActionKey === deleteKey ? "刪除中..." : "刪除"}
                           </button>
                         ) : null}
                       </div>
@@ -1089,7 +1105,7 @@ export default function LearningMonitorTab({
 
       {showCourseStatusView ? (
         <>
-          {isLearningProcessing ? (
+          {isLearningProcessing && (learningActionKey === "initial" || learningActionKey.endsWith(":view")) ? (
             <div
               className="card"
               style={{
@@ -1103,7 +1119,8 @@ export default function LearningMonitorTab({
           ) : null}
           <TeacherDashboard
             dashboard={teacherDashboard}
-            isProcessing={isLearningProcessing}
+            processingActionKey={learningActionKey}
+            inspectingSessionId={detailLoadingSessionId}
             headerSuffix={contextLabel}
             onAdvanceStep={(sessionId, step) => applyStepSwitch(sessionId, step)}
             onInspectDialogue={(session) => {
@@ -1141,7 +1158,10 @@ export default function LearningMonitorTab({
                   </tr>
                 </thead>
                 <tbody>
-                  {classJoinRows.map((row, idx) => (
+                  {classJoinRows.map((row, idx) => {
+                    const progressKey = row.sessionId ? `progress:${row.sessionId}:${row.username}` : "";
+                    const isProgressLoading = learningActionKey === progressKey;
+                    return (
                     <tr key={row.username}>
                       <td>{idx + 1}</td>
                       <td>{row.displayName} ({row.username})</td>
@@ -1155,7 +1175,7 @@ export default function LearningMonitorTab({
                           type="button"
                           className="secondary"
                           style={{ width: "auto" }}
-                          disabled={isLearningProcessing || !row.sessionId}
+                          disabled={isProgressLoading || !row.sessionId}
                           onClick={() => {
                             if (!row.sessionId) return;
                             setProgressSessionId(row.sessionId);
@@ -1167,11 +1187,12 @@ export default function LearningMonitorTab({
                             }, 0);
                           }}
                         >
-                          查看
+                          {isProgressLoading ? "載入中..." : "查看"}
                         </button>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

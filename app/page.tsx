@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { formatUserError } from "@/src/lib/error-messages";
 
 export default function HomePage() {
   const [username, setUsername] = useState("");
@@ -19,7 +20,7 @@ export default function HomePage() {
 
     const data = await response.json();
     if (!response.ok) {
-      setError(data.error ?? "login_failed");
+      setError(formatUserError(data.error ?? "login_failed", "登入失敗。建議：請確認帳號密碼，或聯繫教師。"));
       return;
     }
 

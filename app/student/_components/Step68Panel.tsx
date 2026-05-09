@@ -16,6 +16,10 @@ type Step68PanelProps = {
   isCompletingStep6: boolean;
   isCompletingStep8: boolean;
   unsavedChars: number;
+  saveStatus: {
+    state: "saved" | "dirty" | "saving" | "error";
+    text: string;
+  };
   step6RefUser: string;
   onStep6RefUserChange: (user: string) => void;
   step6StreamingText?: string;
@@ -36,6 +40,7 @@ export default function Step68Panel({
   isCompletingStep6,
   isCompletingStep8,
   unsavedChars,
+  saveStatus,
   step6RefUser,
   onStep6RefUserChange,
   step6StreamingText,
@@ -63,8 +68,8 @@ export default function Step68Panel({
       <textarea value={draftText} onChange={(e) => onDraftChange(e.target.value)} rows={10} style={{ minHeight: 220 }} />
       <div className="row" style={{ marginTop: 10, gap: 10 }}>
         <div style={{ width: 180 }}>
-          <button type="button" onClick={onSaveDraft}>
-            儲存文章
+          <button type="button" onClick={onSaveDraft} disabled={saveStatus.state === "saving"}>
+            {saveStatus.state === "saving" ? "儲存中..." : "儲存文章"}
           </button>
         </div>
         {currentStep === 6 ? (
@@ -92,6 +97,7 @@ export default function Step68Panel({
           </div>
         ) : null}
       </div>
+      <small className={`draft-save-status ${saveStatus.state}`}>{saveStatus.text}</small>
       {currentStep === 6 && isSuggestingStep6 ? (
         <small style={{ display: "block", marginTop: 6, color: "#94a3b8" }}>
           AI 正在分析你的文章並產生修改建議，請稍候...
@@ -140,9 +146,7 @@ export default function Step68Panel({
           {step7StreamingText}
         </div>
       ) : null}
-      <small style={{ display: "block", marginTop: 8, color: "#94a3b8" }}>
-        未儲存字數：{unsavedChars}
-      </small>
+      {unsavedChars > 0 ? <small style={{ display: "block", marginTop: 6, color: "#b45309" }}>未保存字數：{unsavedChars}</small> : null}
     </div>
   );
 }

@@ -7,6 +7,7 @@ import StudentAccountTab from "./_components/StudentAccountTab";
 import LearningMonitorTab from "./_components/LearningMonitorTab";
 import CourseManagementTab from "./_components/CourseManagementTab";
 import OutlineSvg from "@/app/_components/OutlineSvg";
+import { formatUserError } from "@/src/lib/error-messages";
 import { ActivityRow, EssayRow, MonitorSession, OpenClassRow, UserRow } from "./_components/types";
 
 // The following type fields are declared in _components/types.ts and reproduced
@@ -123,7 +124,7 @@ export default function TeacherPage() {
       setActivities(list);
       setError("");
     } else {
-      setError("activities_load_failed");
+      setError(formatUserError("activities_load_failed"));
     }
   }
 

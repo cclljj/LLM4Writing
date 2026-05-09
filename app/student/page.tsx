@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { buildStudentNextAction } from "@/src/lib/student-next-action";
 import { validateDraftContent } from "@/src/lib/answer-validation";
+import { appendErrorHint, formatUserError } from "@/src/lib/error-messages";
 import OutlineSvg from "@/app/_components/OutlineSvg";
 import GroupWaitingStatus from "./_components/GroupWaitingStatus";
 import NextActionCard from "./_components/NextActionCard";
@@ -165,6 +166,9 @@ export default function StudentPage() {
   const [savedDraft6Text, setSavedDraft6Text] = useState("");
   const [isCompletingStep8, setIsCompletingStep8] = useState(false);
   const [savedDraft8Text, setSavedDraft8Text] = useState("");
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
+  const [draftSaveError, setDraftSaveError] = useState("");
+  const [lastDraftSavedAt, setLastDraftSavedAt] = useState<string | null>(null);
   const [step6RefUser, setStep6RefUser] = useState("");
   const lastOwnStepRef = useRef<number | null>(null);
   const sessionEtagRef = useRef<string>("");
@@ -231,12 +235,16 @@ export default function StudentPage() {
       const latestDraft = session.draftStep6[loginUser] ?? "";
       setDraftText(latestDraft);
       setSavedDraft6Text(latestDraft);
+      setDraftSaveError("");
+      setLastDraftSavedAt(null);
       setStep6RefUser((prev) => (prev ? prev : loginUser));
     }
     if (ownStep === 8) {
       const latestDraft = session.draftStep8[loginUser] ?? session.draftStep6[loginUser] ?? "";
       setDraftText(latestDraft);
       setSavedDraft8Text(latestDraft);
+      setDraftSaveError("");
+      setLastDraftSavedAt(null);
     }
     if (!refUser && session.participants.length > 0) {
       setRefUser((session.participants.find((user) => user !== loginUser) ?? session.participants[0])!);
@@ -259,7 +267,7 @@ export default function StudentPage() {
         if (response.ok && data?.id) {
           setSession(data);
         } else {
-          setError(data.error ?? "step5_auto_advance_failed");
+          setError(formatUserError(data.error ?? "step5_auto_advance_failed"));
         }
       } finally {
         setIsAutoAdvancingStep5(false);
@@ -532,6 +540,17 @@ export default function StudentPage() {
   const ownStep10Report = session && loginUser ? session.reports.step10[loginUser] : undefined;
   const unsavedDraft6Chars = currentStep === 6 && draftText !== savedDraft6Text ? draftText.length : 0;
   const unsavedDraft8Chars = currentStep === 8 && draftText !== savedDraft8Text ? draftText.length : 0;
+  const currentUnsavedDraftChars = currentStep === 8 ? unsavedDraft8Chars : unsavedDraft6Chars;
+  const draftSaveStatus = useMemo(() => {
+    if (isSavingDraft) return { state: "saving" as const, text: "正在儲存..." };
+    if (draftSaveError) return { state: "error" as const, text: draftSaveError };
+    if (currentUnsavedDraftChars > 0) return { state: "dirty" as const, text: `尚有 ${currentUnsavedDraftChars} 字未保存` };
+    if (lastDraftSavedAt) {
+      const time = new Date(lastDraftSavedAt).toLocaleTimeString("zh-TW", { hour: "2-digit", minute: "2-digit" });
+      return { state: "saved" as const, text: `已自動保存於 ${time}` };
+    }
+    return { state: "saved" as const, text: "目前內容已保存" };
+  }, [currentUnsavedDraftChars, draftSaveError, isSavingDraft, lastDraftSavedAt]);
   const nextAction = buildStudentNextAction({
     currentStep,
     currentMode,
@@ -547,7 +566,7 @@ export default function StudentPage() {
     step4CompletedByMe,
     allStep4Completed,
     draftTextLength: draftText.trim().length,
-    unsavedDraftChars: currentStep === 8 ? unsavedDraft8Chars : unsavedDraft6Chars,
+    unsavedDraftChars: currentUnsavedDraftChars,
     step9AnsweredCount: step9Answers.filter((a) => a.trim().length > 0).length
   });
   const stepOpeningText = session?.promptConfig?.stepOpenings?.[String(currentStep)]?.trim() ?? "";
@@ -565,7 +584,7 @@ export default function StudentPage() {
     try {
       const response = await fetch("/api/student/overview", { cache: "no-store" });
       const data = await response.json();
-      if (!response.ok) { setError(data.error ?? "overview_failed"); return; }
+      if (!response.ok) { setError(formatUserError(data.error ?? "overview_failed")); return; }
       setProfile(data.profile ?? null);
       setMissingFields(data.missingFields ?? []);
       setClassCourses(data.classCourses ?? []);
@@ -603,7 +622,7 @@ export default function StudentPage() {
   }
 
   async function joinActivity(activityId: string) {
-    if (!loginUser) { setError("auth_not_ready"); return; }
+    if (!loginUser) { setError(formatUserError("auth_not_ready")); return; }
     setError("");
     const response = await fetch("/api/student/join", {
       method: "POST",
@@ -616,16 +635,16 @@ export default function StudentPage() {
       try { data = JSON.parse(raw) as Record<string, unknown>; } catch { data = {}; }
     }
     if (!response.ok) {
-      if (data.error === "course_not_started") { setError("課程尚未開始，請等待老師開始上課後再進入討論。"); return; }
-      if (data.error === "course_ended") { setError("課程已結束，無法再進入討論。"); return; }
-      if (data.error === "course_paused") { setError("課程目前暫停中，請等待老師繼續上課後再進入討論。"); return; }
-      if (data.error === "not_group_member") { setError("你尚未被分配到該課程小組，請向老師確認分組設定。"); return; }
+      if (data.error === "course_not_started") { setError(formatUserError("course_not_started")); return; }
+      if (data.error === "course_ended") { setError(formatUserError("course_ended")); return; }
+      if (data.error === "course_paused") { setError(formatUserError("course_paused")); return; }
+      if (data.error === "not_group_member") { setError(formatUserError("not_group_member")); return; }
       if (data.error === "student_join_failed") {
         const detail = typeof data.detail === "string" ? data.detail : "unknown";
-        setError(`進入課程失敗：${detail}`);
+        setError(`進入課程失敗：${detail}。建議：請重新整理後再試，或請教師確認課程設定。`);
         return;
       }
-      setError(typeof data.error === "string" ? data.error : "join_failed");
+      setError(formatUserError(typeof data.error === "string" ? data.error : "join_failed"));
       return;
     }
     setSession(data as SessionState);
@@ -650,9 +669,9 @@ export default function StudentPage() {
         if (!response.ok || !response.body) {
           try {
             const data = await response.json();
-            setError(data.error ?? "step3_stream_failed");
+            setError(formatUserError(data.error ?? "step3_stream_failed"));
           } catch {
-            setError("step3_stream_failed");
+            setError(formatUserError("step3_stream_failed"));
           }
           return;
         }
@@ -696,7 +715,7 @@ export default function StudentPage() {
           }
         }
         if (streamError) {
-          setError(streamError);
+          setError(formatUserError(streamError));
         } else if (finalSession) {
           setSession(finalSession);
         }
@@ -712,7 +731,7 @@ export default function StudentPage() {
       if (!response.ok) {
         const errorText = typeof data.error === "string" ? data.error : "send_failed";
         const hintText = typeof data.hint === "string" && data.hint.trim() ? data.hint.trim() : "";
-        setError(hintText ? `${errorText}｜建議修改：${hintText}` : errorText);
+        setError(appendErrorHint(errorText, hintText));
         return;
       }
       setSession(data);
@@ -739,7 +758,7 @@ export default function StudentPage() {
       if (!response.ok) {
         const errorText = typeof data.error === "string" ? data.error : "send_failed";
         const hintText = typeof data.hint === "string" && data.hint.trim() ? data.hint.trim() : "";
-        setError(hintText ? `${errorText}｜建議修改：${hintText}` : errorText);
+        setError(appendErrorHint(errorText, hintText));
         return;
       }
       setSession(data);
@@ -751,16 +770,31 @@ export default function StudentPage() {
 
   async function saveArtifact(type: "outline" | "draft6" | "draft8", content: string) {
     if (!session) return;
-    const response = await fetch("/api/session/artifact/save", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionId: session.id, type, content })
-    });
-    const data = await response.json();
-    if (!response.ok) { setError(data.error ?? "save_failed"); return; }
-    if (type === "draft6") setSavedDraft6Text(content);
-    if (type === "draft8") setSavedDraft8Text(content);
-    setSession(data);
+    const isDraft = type === "draft6" || type === "draft8";
+    if (isDraft) {
+      setIsSavingDraft(true);
+      setDraftSaveError("");
+    }
+    try {
+      const response = await fetch("/api/session/artifact/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: session.id, type, content })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        const message = formatUserError(data.error ?? "save_failed");
+        setError(message);
+        if (isDraft) setDraftSaveError(message);
+        return;
+      }
+      if (type === "draft6") setSavedDraft6Text(content);
+      if (type === "draft8") setSavedDraft8Text(content);
+      if (isDraft) setLastDraftSavedAt(new Date().toISOString());
+      setSession(data);
+    } finally {
+      if (isDraft) setIsSavingDraft(false);
+    }
   }
 
   async function handleOutlineSave(mermaid: string) {
@@ -781,7 +815,7 @@ export default function StudentPage() {
       body: JSON.stringify({ sessionId: session.id, outline: mermaid })
     });
     const data = await response.json();
-    if (!response.ok) { setError(data.error ?? "complete_step3_failed"); return; }
+    if (!response.ok) { setError(formatUserError(data.error ?? "complete_step3_failed")); return; }
     setSession(data);
   }
 
@@ -800,7 +834,7 @@ export default function StudentPage() {
       body: JSON.stringify({ sessionId: session.id, outline: outlineToSave })
     });
     const data = await response.json();
-    if (!response.ok) { setError(data.error ?? "complete_step4_failed"); return; }
+    if (!response.ok) { setError(formatUserError(data.error ?? "complete_step4_failed")); return; }
     setSession(data);
   }
 
@@ -824,9 +858,9 @@ export default function StudentPage() {
         // Fallback: try to parse JSON error body for legacy error responses.
         try {
           const data = await response.json();
-          setError(data.error ?? "step6_suggest_failed");
+          setError(formatUserError(data.error ?? "step6_suggest_failed"));
         } catch {
-          setError("step6_suggest_failed");
+          setError(formatUserError("step6_suggest_failed"));
         }
         return;
       }
@@ -868,12 +902,12 @@ export default function StudentPage() {
         }
       }
       if (streamError) {
-        setError(streamError);
+        setError(formatUserError(streamError));
       } else if (finalSession) {
         setSession(finalSession);
       }
     } catch {
-      setError("step6_suggest_failed");
+      setError(formatUserError("step6_suggest_failed"));
     } finally {
       setIsSuggestingStep6(false);
       setStep6StreamingText("");
@@ -959,10 +993,9 @@ export default function StudentPage() {
       if (!response.ok || !response.body) {
         try {
           const data = await response.json();
-          const hint = typeof data.hint === "string" && data.hint.trim() ? `｜建議修改：${data.hint.trim()}` : "";
-          setError(`${data.error ?? "step6_complete_failed"}${hint}`);
+          setError(appendErrorHint(data.error ?? "step6_complete_failed", typeof data.hint === "string" ? data.hint : undefined));
         } catch {
-          setError("step6_complete_failed");
+          setError(formatUserError("step6_complete_failed"));
         }
         return;
       }
@@ -1004,13 +1037,14 @@ export default function StudentPage() {
         }
       }
       if (streamError) {
-        setError(streamError);
+        setError(formatUserError(streamError));
       } else if (finalSession) {
         setSavedDraft6Text(draftText);
+        setLastDraftSavedAt(new Date().toISOString());
         setSession(finalSession);
       }
     } catch {
-      setError("step6_complete_failed");
+      setError(formatUserError("step6_complete_failed"));
     } finally {
       setIsCompletingStep6(false);
       setStep7StreamingText("");
@@ -1028,8 +1062,9 @@ export default function StudentPage() {
         body: JSON.stringify({ sessionId: session.id, draft: draftText })
       });
       const data = await response.json();
-      if (!response.ok) { setError(data.error ?? "step8_complete_failed"); return; }
+      if (!response.ok) { setError(formatUserError(data.error ?? "step8_complete_failed")); return; }
       setSavedDraft8Text(draftText);
+      setLastDraftSavedAt(new Date().toISOString());
       setSession(data);
     } finally {
       setIsCompletingStep8(false);
@@ -1321,6 +1356,7 @@ export default function StudentPage() {
               isCompletingStep6={isCompletingStep6}
               isCompletingStep8={isCompletingStep8}
               unsavedChars={currentStep === 6 ? unsavedDraft6Chars : unsavedDraft8Chars}
+              saveStatus={draftSaveStatus}
               step6RefUser={step6RefUser || loginUser}
               onStep6RefUserChange={setStep6RefUser}
               step6StreamingText={currentStep === 6 ? step6StreamingText : undefined}

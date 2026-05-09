@@ -54,7 +54,8 @@ export type TeacherDashboardData<TSession extends DashboardSession = DashboardSe
 
 type TeacherDashboardProps<TSession extends DashboardSession> = {
   dashboard: TeacherDashboardData<TSession>;
-  isProcessing: boolean;
+  processingActionKey?: string;
+  inspectingSessionId?: string;
   onAdvanceStep: (sessionId: string, step: number) => void;
   onInspectDialogue: (session: TSession) => void;
   /** Optional context appended to the card header, e.g. "school / class / essay" (#258). */
@@ -77,7 +78,8 @@ function statusBadgeStyle(row: TeacherDashboardRow): CSSProperties {
 
 export default function TeacherDashboard<TSession extends DashboardSession>({
   dashboard,
-  isProcessing,
+  processingActionKey,
+  inspectingSessionId,
   onAdvanceStep,
   onInspectDialogue,
   headerSuffix
@@ -128,7 +130,11 @@ export default function TeacherDashboard<TSession extends DashboardSession>({
             </tr>
           </thead>
           <tbody>
-            {dashboard.riskRows.map((row) => (
+            {dashboard.riskRows.map((row) => {
+              const advanceKey = row.hint.nextStep ? `step:${row.session.sessionId}:${row.hint.nextStep}` : "";
+              const isAdvancing = processingActionKey === advanceKey;
+              const isInspecting = inspectingSessionId === row.session.sessionId;
+              return (
               <tr key={`dashboard-${row.session.sessionId}`}>
                 <td>
                   <span
@@ -188,10 +194,10 @@ export default function TeacherDashboard<TSession extends DashboardSession>({
                         type="button"
                         className="secondary"
                         style={{ width: "auto" }}
-                        disabled={isProcessing}
+                        disabled={isAdvancing}
                         onClick={() => onAdvanceStep(row.session.sessionId, row.hint.nextStep!)}
                       >
-                        套用 Step {row.hint.nextStep}
+                        {isAdvancing ? "切換中..." : `套用 Step ${row.hint.nextStep}`}
                       </button>
                     </div>
                   ) : null}
@@ -202,19 +208,20 @@ export default function TeacherDashboard<TSession extends DashboardSession>({
                       <button
                         type="button"
                         style={{ width: "auto" }}
-                        disabled={isProcessing}
+                        disabled={isAdvancing}
                         onClick={() => onAdvanceStep(row.session.sessionId, row.hint.nextStep!)}
                       >
-                        推進 Step {row.hint.nextStep}
+                        {isAdvancing ? "推進中..." : `推進 Step ${row.hint.nextStep}`}
                       </button>
                     ) : null}
-                    <button type="button" className="secondary" style={{ width: "auto" }} disabled={isProcessing} onClick={() => onInspectDialogue(row.session)}>
-                      查看對話
+                    <button type="button" className="secondary" style={{ width: "auto" }} disabled={isInspecting} onClick={() => onInspectDialogue(row.session)}>
+                      {isInspecting ? "載入中..." : "查看對話"}
                     </button>
                   </div>
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>
