@@ -164,6 +164,33 @@ export default function CourseManagementTab({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [taskForm.classNumber, currentFormSchool]);
 
+  // 動態調整小組數量（#252）：useEffect 讓 editableGroups 隨 groupCount 增減
+  // 增加時 → 補空組
+  // 減少時 → 把超出範圍的小組移除，其成員回到「未分配學生」
+  useEffect(() => {
+    if (!taskForm.classNumber) return; // 尚未選班級時不動
+    const safeCount = Math.max(1, groupCount);
+    setEditableGroups((prev) => {
+      if (prev.length === safeCount) return prev;
+      if (prev.length < safeCount) {
+        const additions: ActivityGroup[] = [];
+        for (let i = prev.length; i < safeCount; i += 1) {
+          additions.push({ groupId: `g${i + 1}`, groupName: String(i + 1), members: [] });
+        }
+        return [...prev, ...additions];
+      }
+      // 縮減：把被移除小組的成員放回未分配
+      const kept = prev.slice(0, safeCount);
+      const removed = prev.slice(safeCount);
+      const displaced = removed.flatMap((g) => g.members);
+      if (displaced.length > 0) {
+        setUnassignedStudents((u) => Array.from(new Set([...u, ...displaced])));
+      }
+      return kept;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groupCount, taskForm.classNumber]);
+
   function buildEmptyGroups(count: number): ActivityGroup[] {
     const safeCount = Math.max(1, count);
     return Array.from({ length: safeCount }, (_, idx) => ({
@@ -595,6 +622,7 @@ export default function CourseManagementTab({
       {/* 增修寫作任務 */}
       <div className="card" ref={taskFormRef}>
         <h2>{taskForm.id ? "增修寫作任務（編輯中）" : "增修寫作任務"}</h2>
+        <h3 style={{ margin: "0 0 6px" }}>文章設定</h3>
         <form onSubmit={saveTaskWithGroups} className="row">
           {loginRole === "admin" ? (
             <div className="col">
