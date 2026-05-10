@@ -56,3 +56,9 @@ node_modules/
 .data/
 test-results/
 playwright-report/
+
+### Local archives / one-off dumps ###
+.migration-artifacts/
+SPEC_yunchieh.md
+database/mysql/aidb-20260415_233125.sql
+database/mongodb/mongo-llm4writing-init.js
