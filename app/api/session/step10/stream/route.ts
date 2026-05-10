@@ -2,12 +2,42 @@ import { NextRequest, NextResponse } from "next/server";
 import { saveSession } from "@/src/lib/store";
 import {
   isLlmConfigured,
-  llmChatCompletionText
+  llmChatCompletionText,
+  type LlmChatMessage
 } from "@/src/lib/llm-client";
-import { sanitizeStudentFacingText } from "@/src/lib/llm-response";
+import { hasFormalLlmQualityRisk, normalizeFormalLlmText } from "@/src/lib/llm-response";
 import { requireStudentInSession } from "@/src/lib/api-helpers";
 import { buildStep10LlmInput, recordStep10Report } from "@/src/lib/engine";
 import { recordStreamingCall } from "@/src/lib/llm-stats";
+
+async function generateStep10ReportText(messages: LlmChatMessage[], fallback: string): Promise<string> {
+  const firstRaw = await llmChatCompletionText({
+    messages,
+    temperature: 0.6,
+    maxTokens: 1400,
+    timeoutMs: 60_000,
+    continueOnTruncation: true,
+    continuationMaxRounds: 4
+  });
+  const first = normalizeFormalLlmText(firstRaw, { fallback });
+  if (!hasFormalLlmQualityRisk(first)) return first;
+
+  const retryRaw = await llmChatCompletionText({
+    messages: [
+      ...messages,
+      {
+        role: "user",
+        content: "請重新輸出完整且正式的總結報告：不得重複句段、不得提到截斷或續寫過程、每句要完整收尾。"
+      }
+    ],
+    temperature: 0.4,
+    maxTokens: 1600,
+    timeoutMs: 75_000,
+    continueOnTruncation: true,
+    continuationMaxRounds: 5
+  });
+  return normalizeFormalLlmText(retryRaw, { fallback });
+}
 
 /**
  * SSE-streamed endpoint for the Step 10 final report (#241).
@@ -63,21 +93,11 @@ export async function POST(request: NextRequest) {
           collected.push(fallback);
         } else {
           try {
-            const fullText = await llmChatCompletionText({
-              messages,
-              temperature: 0.6,
-              maxTokens: 1400,
-              timeoutMs: 60_000,
-              continueOnTruncation: true,
-              continuationMaxRounds: 4
-            });
-            if (fullText.trim()) {
-              const normalized = fullText.trim();
-              collected.push(normalized);
-              const chunkSize = 120;
-              for (let i = 0; i < normalized.length; i += chunkSize) {
-                send({ type: "chunk", text: normalized.slice(i, i + chunkSize) });
-              }
+            const normalized = await generateStep10ReportText(messages, fallback);
+            collected.push(normalized);
+            const chunkSize = 120;
+            for (let i = 0; i < normalized.length; i += chunkSize) {
+              send({ type: "chunk", text: normalized.slice(i, i + chunkSize) });
             }
           } catch {
             if (collected.length === 0) {
@@ -87,7 +107,7 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        const report = sanitizeStudentFacingText(collected.join(""));
+        const report = normalizeFormalLlmText(collected.join(""), { fallback });
         recordStep10Report(session, user.username, report);
         await saveSession(session);
         send({ type: "done", session });

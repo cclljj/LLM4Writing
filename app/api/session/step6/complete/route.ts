@@ -7,7 +7,7 @@ import {
   llmChatCompletionText,
   type LlmChatMessage
 } from "@/src/lib/llm-client";
-import { sanitizeStudentFacingText } from "@/src/lib/llm-response";
+import { hasFormalLlmQualityRisk, normalizeFormalLlmText } from "@/src/lib/llm-response";
 import { requireStudentInSession } from "@/src/lib/api-helpers";
 import { validateDraftContent } from "@/src/lib/answer-validation";
 import { recordStreamingCall } from "@/src/lib/llm-stats";
@@ -44,6 +44,35 @@ function buildStep7Messages(stepPrompt: string | undefined, essay: string): LlmC
 
 const FALLBACK_FEEDBACK =
   "AI 分析回饋：已收到你的文章。建議優先檢查主題句是否明確、段落是否對應論點、例證是否足夠具體，最後再強化結語收束。";
+
+async function generateStep7FeedbackText(messages: LlmChatMessage[]): Promise<string> {
+  const firstRaw = await llmChatCompletionText({
+    messages,
+    temperature: 0.5,
+    maxTokens: 1400,
+    timeoutMs: 60_000,
+    continueOnTruncation: true,
+    continuationMaxRounds: 4
+  });
+  const first = normalizeFormalLlmText(firstRaw, { fallback: FALLBACK_FEEDBACK });
+  if (!hasFormalLlmQualityRisk(first)) return first;
+
+  const retryRaw = await llmChatCompletionText({
+    messages: [
+      ...messages,
+      {
+        role: "user",
+        content: "請重新輸出完整且正式的分析回饋：不得重複句段、不得提到截斷或續寫過程、每句要完整收尾。"
+      }
+    ],
+    temperature: 0.4,
+    maxTokens: 1600,
+    timeoutMs: 75_000,
+    continueOnTruncation: true,
+    continuationMaxRounds: 5
+  });
+  return normalizeFormalLlmText(retryRaw, { fallback: FALLBACK_FEEDBACK });
+}
 
 export async function POST(request: NextRequest) {
   const body = (await request.json()) as { sessionId?: string; draft?: string };
@@ -85,21 +114,11 @@ export async function POST(request: NextRequest) {
         } else {
           const messages = buildStep7Messages(session.promptConfig?.stepPrompts?.["7"], finalDraft);
           try {
-            const fullText = await llmChatCompletionText({
-              messages,
-              temperature: 0.5,
-              maxTokens: 1400,
-              timeoutMs: 60_000,
-              continueOnTruncation: true,
-              continuationMaxRounds: 4
-            });
-            if (fullText.trim()) {
-              const normalized = fullText.trim();
-              collected.push(normalized);
-              const chunkSize = 120;
-              for (let i = 0; i < normalized.length; i += chunkSize) {
-                send({ type: "chunk", text: normalized.slice(i, i + chunkSize) });
-              }
+            const normalized = await generateStep7FeedbackText(messages);
+            collected.push(normalized);
+            const chunkSize = 120;
+            for (let i = 0; i < normalized.length; i += chunkSize) {
+              send({ type: "chunk", text: normalized.slice(i, i + chunkSize) });
             }
           } catch {
             if (collected.length === 0) {
@@ -109,7 +128,7 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        const feedback = sanitizeStudentFacingText(collected.join(""));
+        const feedback = normalizeFormalLlmText(collected.join(""), { fallback: FALLBACK_FEEDBACK });
         session.reports.step7[user.username] = feedback;
         session.messages.push(makeAiStep7Message(feedback, user.username));
         session.personalSteps = session.personalSteps ?? {};

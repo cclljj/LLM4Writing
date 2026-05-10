@@ -110,6 +110,10 @@ function looksLikeTruncationMeta(text: string): boolean {
 }
 
 export function normalizeStep6SuggestionText(raw: string): string {
+  return normalizeFormalLlmText(raw, { fallback: "AI 建議：目前無法整理可讀建議，請再試一次。" });
+}
+
+export function normalizeFormalLlmText(raw: string, options: { fallback?: string } = {}): string {
   const cleaned = sanitizeStudentFacingText(raw);
   const paras = cleaned
     .split(/\n{2,}/)
@@ -133,11 +137,15 @@ export function normalizeStep6SuggestionText(raw: string): string {
   });
 
   const result = deduped.join("\n\n").trim();
-  if (!result) return "AI 建議：目前無法整理可讀建議，請再試一次。";
+  if (!result) return options.fallback ?? "目前無法整理可讀內容，請再試一次。";
   return result;
 }
 
 export function hasStep6SuggestionQualityRisk(text: string): boolean {
+  return hasFormalLlmQualityRisk(text);
+}
+
+export function hasFormalLlmQualityRisk(text: string): boolean {
   const trimmed = text.trim();
   if (!trimmed) return true;
   if (looksLikeTruncationMeta(trimmed)) return true;

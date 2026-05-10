@@ -5,7 +5,13 @@ import { isLlmConfigured, llmChatCompletionText, LlmChatMessage } from "@/src/li
 import { buildStudentCourseContext } from "@/src/lib/llm-context";
 import { normalizeForCompare, validateStudentAnswer, validateStudentAnswerSimple } from "@/src/lib/answer-validation";
 import { recordRejectedAnswerSignal } from "@/src/lib/learning-diagnostics";
-import { normalizeStep5Summary, sanitizeStudentFacingText, splitAiFeedbackAndQuestion } from "@/src/lib/llm-response";
+import {
+  hasFormalLlmQualityRisk,
+  normalizeFormalLlmText,
+  normalizeStep5Summary,
+  sanitizeStudentFacingText,
+  splitAiFeedbackAndQuestion
+} from "@/src/lib/llm-response";
 import { buildStep1Question, buildStep2Question, buildStep9BatchPrompt, getCurrentGroupGateKey, getCurrentSubstepKey, getStep9Questions } from "@/src/lib/workflow-questions";
 import { advanceStep1Or2SubstepAfterAi, handleStep1Or2Group, isNextQuestionSubStepPromptDriven } from "@/src/lib/workflow-step1-2";
 
@@ -529,7 +535,23 @@ async function generateStep5SummaryForUser(session: SessionState, userId: string
   if (!isLlmConfigured()) return fallback;
   try {
     const raw = await generateAiTextWithRetry(messages, 0.6, 1200, { continuationMaxRounds: 4 });
-    return normalizeStep5Summary(sanitizeStudentFacingText(raw));
+    const first = normalizeStep5Summary(normalizeFormalLlmText(raw, { fallback }));
+    if (!hasFormalLlmQualityRisk(first)) return first;
+
+    const retryRaw = await generateAiTextWithRetry(
+      [
+        ...messages,
+        {
+          role: "user",
+          content:
+            "請重新輸出完整且正式的摘要報告：不得重複句段、不得提到截斷或續寫過程、每句要完整收尾。"
+        }
+      ],
+      0.5,
+      1400,
+      { continuationMaxRounds: 5 }
+    );
+    return normalizeStep5Summary(normalizeFormalLlmText(retryRaw, { fallback }));
   } catch {
     return fallback;
   }
@@ -572,7 +594,24 @@ async function generateStep10Report(session: SessionState, userId: string): Prom
     return fallback;
   }
   try {
-    return await generateAiTextWithRetry(messages, 0.6, 900);
+    const raw = await generateAiTextWithRetry(messages, 0.6, 900, { continuationMaxRounds: 4 });
+    const first = normalizeFormalLlmText(raw, { fallback });
+    if (!hasFormalLlmQualityRisk(first)) return first;
+
+    const retryRaw = await generateAiTextWithRetry(
+      [
+        ...messages,
+        {
+          role: "user",
+          content:
+            "請重新輸出完整且正式的總結報告：不得重複句段、不得提到截斷或續寫過程、每句要完整收尾。"
+        }
+      ],
+      0.5,
+      1200,
+      { continuationMaxRounds: 5 }
+    );
+    return normalizeFormalLlmText(retryRaw, { fallback });
   } catch {
     return fallback;
   }
