@@ -101,6 +101,66 @@ export function normalizeStep5Summary(raw: string): string {
     .trim();
 }
 
+function normalizeCompact(text: string): string {
+  return text.replace(/\s+/g, "").trim();
+}
+
+function looksLikeTruncationMeta(text: string): boolean {
+  return /(上一則回覆被截斷|很抱歉上一則回覆被截斷|從中斷處|繼續討論，讓它)/.test(text);
+}
+
+export function normalizeStep6SuggestionText(raw: string): string {
+  const cleaned = sanitizeStudentFacingText(raw);
+  const paras = cleaned
+    .split(/\n{2,}/)
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0)
+    .filter((p) => !looksLikeTruncationMeta(p));
+
+  const deduped: string[] = [];
+  const seen = new Map<string, number>();
+  paras.forEach((p) => {
+    const key = normalizeCompact(p);
+    const existingIdx = seen.get(key);
+    if (existingIdx === undefined) {
+      seen.set(key, deduped.length);
+      deduped.push(p);
+      return;
+    }
+    if (p.length > deduped[existingIdx]!.length) {
+      deduped[existingIdx] = p;
+    }
+  });
+
+  const result = deduped.join("\n\n").trim();
+  if (!result) return "AI 建議：目前無法整理可讀建議，請再試一次。";
+  return result;
+}
+
+export function hasStep6SuggestionQualityRisk(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return true;
+  if (looksLikeTruncationMeta(trimmed)) return true;
+
+  const lines = trimmed
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length >= 16);
+  const counts = new Map<string, number>();
+  for (const line of lines) {
+    const key = normalizeCompact(line);
+    const n = (counts.get(key) ?? 0) + 1;
+    counts.set(key, n);
+    if (n >= 2) return true;
+  }
+
+  const end = trimmed.at(-1) ?? "";
+  const completeEnding = /[。！？.!?」』]$/.test(end);
+  if (!completeEnding && trimmed.length >= 80) return true;
+
+  return false;
+}
+
 export function sanitizeStudentFacingText(aiText: string): string {
   const raw = stripJsonFence(aiText);
   const feedbackFromJsonish = extractFeedbackFromLooseJsonish(raw);

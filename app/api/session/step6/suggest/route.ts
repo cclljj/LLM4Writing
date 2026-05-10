@@ -8,7 +8,7 @@ import {
   type LlmChatMessage
 } from "@/src/lib/llm-client";
 import { buildStudentCourseContext } from "@/src/lib/llm-context";
-import { sanitizeStudentFacingText } from "@/src/lib/llm-response";
+import { hasStep6SuggestionQualityRisk, normalizeStep6SuggestionText } from "@/src/lib/llm-response";
 import { requireStudentInSession } from "@/src/lib/api-helpers";
 import { recordStreamingCall } from "@/src/lib/llm-stats";
 
@@ -52,6 +52,36 @@ function buildSuggestMessages(
 
 const FALLBACK_SUGGESTION =
   "AI 建議：已收到你的草稿。建議先強化主論點句，並讓每段都對應一個清楚子論點，再補上具體例子與結語收束。";
+
+async function generateStep6SuggestionText(messages: LlmChatMessage[]): Promise<string> {
+  const firstRaw = await llmChatCompletionText({
+    messages,
+    temperature: 0.6,
+    maxTokens: 1400,
+    timeoutMs: 60_000,
+    continueOnTruncation: true,
+    continuationMaxRounds: 4
+  });
+  const firstNormalized = normalizeStep6SuggestionText(firstRaw);
+  if (!hasStep6SuggestionQualityRisk(firstNormalized)) return firstNormalized;
+
+  const retryRaw = await llmChatCompletionText({
+    messages: [
+      ...messages,
+      {
+        role: "user",
+        content:
+          "請重新輸出一份完整且正式的最終版建議：不得重複句段、不得提到截斷或續寫過程、每句要完整收尾。"
+      }
+    ],
+    temperature: 0.4,
+    maxTokens: 1600,
+    timeoutMs: 75_000,
+    continueOnTruncation: true,
+    continuationMaxRounds: 5
+  });
+  return normalizeStep6SuggestionText(retryRaw);
+}
 
 export async function POST(request: NextRequest) {
   const body = (await request.json()) as { sessionId?: string; draft?: string };
@@ -100,23 +130,11 @@ export async function POST(request: NextRequest) {
             crossStepContext
           );
           try {
-            // Step6 suggestions favor complete output over token-by-token latency,
-            // so we use truncation-aware non-stream completion and then emit SSE chunks.
-            const fullText = await llmChatCompletionText({
-              messages,
-              temperature: 0.6,
-              maxTokens: 1400,
-              timeoutMs: 60_000,
-              continueOnTruncation: true,
-              continuationMaxRounds: 4
-            });
-            if (fullText.trim()) {
-              const normalized = fullText.trim();
-              collected.push(normalized);
-              const chunkSize = 120;
-              for (let i = 0; i < normalized.length; i += chunkSize) {
-                send({ type: "chunk", text: normalized.slice(i, i + chunkSize) });
-              }
+            const normalized = await generateStep6SuggestionText(messages);
+            collected.push(normalized);
+            const chunkSize = 120;
+            for (let i = 0; i < normalized.length; i += chunkSize) {
+              send({ type: "chunk", text: normalized.slice(i, i + chunkSize) });
             }
           } catch {
             if (collected.length === 0) {
@@ -126,7 +144,7 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        const suggestion = sanitizeStudentFacingText(collected.join(""));
+        const suggestion = normalizeStep6SuggestionText(collected.join(""));
         const logText = [
           "### Step6 AI 修改建議",
           `- 時間：${timestamp}`,

@@ -1137,6 +1137,7 @@ Request:
 - 僅允許個人 Step6。
 - 以 `stepPrompts["6"]` 與學生草稿呼叫 LLM。
 - 先以截斷續寫模式取得完整建議，再以 SSE 分段回傳修改建議。
+- Step6 建議需經正式化品質閘門：檢查並排除截斷殘留描述、重複句段與不完整結尾；若偵測風險，需自動重生一次（強約束 prompt）後再輸出。
 - 完成後將 AI 建議追加到 session messages。
 
 #### `POST /api/session/step6/complete`

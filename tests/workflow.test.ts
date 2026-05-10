@@ -5,7 +5,14 @@ import { validateStudentAnswer, validateDraftContent, validateStudentAnswerSimpl
 import { buildAdvancedStuckRisk, recordRejectedAnswerSignal } from "../src/lib/learning-diagnostics";
 import { isTruncatedFinishReason, pickAssistantTextResult } from "../src/lib/llm-openai-response";
 import { resolvePendingOutlineAfterServerSync, shouldSyncOutlineFromSession } from "../src/lib/outline-sync-guard";
-import { isUsableNextQuestion, normalizeStep5Summary, sanitizeStudentFacingText, splitAiFeedbackAndQuestion } from "../src/lib/llm-response";
+import {
+  hasStep6SuggestionQualityRisk,
+  isUsableNextQuestion,
+  normalizeStep5Summary,
+  normalizeStep6SuggestionText,
+  sanitizeStudentFacingText,
+  splitAiFeedbackAndQuestion
+} from "../src/lib/llm-response";
 import { getStructureTreeNodePermissions } from "../src/lib/structure-tree-permissions";
 import { buildStudentNextAction } from "../src/lib/student-next-action";
 import { buildStep1Question, buildStep2Question } from "../src/lib/workflow-questions";
@@ -123,6 +130,38 @@ clj01同學，你非常棒！在前面的步驟中，你很認真地思考了作
   const normalized = normalizeStep5Summary(raw);
   assert.equal((normalized.match(/### \*\*讚美與鼓勵\*\*/g) ?? []).length, 1);
   assert.match(normalized, /真實經驗和想法/);
+});
+
+test("normalizeStep6SuggestionText removes truncation meta and duplicate paragraphs", () => {
+  const raw = `
+同學，你這份初稿寫得很不錯耶！你把之前我們討論的重點都放進去了。
+
+同學，你這份初稿寫得很不錯耶！你把之前我們討論的重點都放進去了。
+
+同學，很抱歉上一則回覆被截斷了，而且我發現你這次提供的文章...
+
+字詞使用建議
+這段可以改得更精準。
+`;
+  const normalized = normalizeStep6SuggestionText(raw);
+  assert.equal((normalized.match(/同學，你這份初稿寫得很不錯耶/g) ?? []).length, 1);
+  assert.equal(normalized.includes("上一則回覆被截斷"), false);
+});
+
+test("hasStep6SuggestionQualityRisk detects duplicated lines and incomplete ending", () => {
+  assert.equal(
+    hasStep6SuggestionQualityRisk(
+      "同學，這一段建議需要再補一個具體例子，讓讀者更容易理解你的主張。\n同學，這一段建議需要再補一個具體例子，讓讀者更容易理解你的主張。"
+    ),
+    true
+  );
+  assert.equal(
+    hasStep6SuggestionQualityRisk(
+      "這是一段很長的建議內容但是最後沒有收尾符號而且看起來像是被中斷這是一段很長的建議內容但是最後沒有收尾符號而且看起來像是被中斷這是一段很長的建議內容但是最後沒有收尾符號而且看起來像是被中斷"
+    ),
+    true
+  );
+  assert.equal(hasStep6SuggestionQualityRisk("這是一段完整的建議內容，句子完整收尾。"), false);
 });
 
 test("OpenAI-compatible response parser detects truncated assistant output", () => {
