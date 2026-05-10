@@ -80,7 +80,7 @@ export default function Step68Panel({
               onClick={onSuggest}
               disabled={isSuggestingStep6 || isCompletingStep6}
             >
-              AI 修改建議
+              請 AI 給我修改建議
             </button>
           </div>
         ) : null}

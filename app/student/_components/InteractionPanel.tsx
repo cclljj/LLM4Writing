@@ -40,6 +40,33 @@ type InteractionPanelProps = {
   error: string;
 };
 
+function formatUtc8Title(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "互動時間：未知";
+  const fmt = new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false
+  }).format(date);
+  const normalized = fmt.replace(" ", " ").replace(/:/g, "-");
+  return `互動時間：${normalized} (UTC+8)`;
+}
+
+function parseStep6Suggestion(text: string): { draft: string; suggestion: string } | null {
+  if (!text.includes("Step6 AI 修改建議")) return null;
+  const draftMatch = text.match(/- 文章內容：\n([\s\S]*?)\n- AI 建議：/);
+  const suggestionMatch = text.match(/- AI 建議：\n([\s\S]*)$/);
+  const draft = (draftMatch?.[1] ?? "").trim();
+  const suggestion = (suggestionMatch?.[1] ?? "").trim();
+  if (!draft && !suggestion) return null;
+  return { draft, suggestion };
+}
+
 export default function InteractionPanel({
   currentStep,
   currentMode,
@@ -87,6 +114,29 @@ export default function InteractionPanel({
                 <span style={{ marginLeft: 4, whiteSpace: "pre-wrap" }}>{message.text}</span>
                 <small style={{ marginLeft: 6 }}>({message.at})</small>
               </p>
+            ) : currentStep === 6 && message.kind === "ai" && parseStep6Suggestion(message.text) ? (
+              (() => {
+                const parsed = parseStep6Suggestion(message.text)!;
+                return (
+                  <details open style={{ border: "1px solid #dbeafe", borderRadius: 10, padding: "8px 10px", background: "#f8fbff" }}>
+                    <summary style={{ cursor: "pointer", fontWeight: 700, color: "#1d4ed8" }}>
+                      {formatUtc8Title(message.at)}
+                    </summary>
+                    <div style={{ marginTop: 10 }}>
+                      <h4 style={{ margin: "0 0 6px", fontSize: 14 }}>文章內容</h4>
+                      <div
+                        style={{ marginLeft: 14 }}
+                        dangerouslySetInnerHTML={{ __html: renderMessageHtml(parsed.draft || "（無）") }}
+                      />
+                      <h4 style={{ margin: "12px 0 6px", fontSize: 14 }}>AI 建議</h4>
+                      <div
+                        style={{ marginLeft: 14 }}
+                        dangerouslySetInnerHTML={{ __html: renderMessageHtml(parsed.suggestion || "（無）") }}
+                      />
+                    </div>
+                  </details>
+                );
+              })()
             ) : (
               <>
                 <strong>
