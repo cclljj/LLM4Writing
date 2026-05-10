@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { renderMessageHtml } from "./renderMessageHtml";
 
 type InteractiveItem = {
@@ -105,20 +105,31 @@ export default function InteractionPanel({
     [currentStep, interactiveMessages]
   );
   const [step6ExpandedById, setStep6ExpandedById] = useState<Record<string, boolean>>({});
+  const prevStep6CardIdsRef = useRef<string[]>([]);
 
   useEffect(() => {
     if (step6SuggestionCardIds.length === 0) {
       setStep6ExpandedById({});
+      prevStep6CardIdsRef.current = [];
       return;
     }
+    const prevIds = prevStep6CardIdsRef.current;
+    const hasNewCard = step6SuggestionCardIds.some((id) => !prevIds.includes(id));
     const latestId = step6SuggestionCardIds[step6SuggestionCardIds.length - 1]!;
     setStep6ExpandedById((prev) => {
       const next: Record<string, boolean> = {};
-      step6SuggestionCardIds.forEach((id) => {
-        next[id] = Object.prototype.hasOwnProperty.call(prev, id) ? prev[id]! : id === latestId;
-      });
+      if (hasNewCard) {
+        step6SuggestionCardIds.forEach((id) => {
+          next[id] = id === latestId;
+        });
+      } else {
+        step6SuggestionCardIds.forEach((id) => {
+          next[id] = Object.prototype.hasOwnProperty.call(prev, id) ? prev[id]! : id === latestId;
+        });
+      }
       return next;
     });
+    prevStep6CardIdsRef.current = step6SuggestionCardIds;
   }, [step6SuggestionCardIds]);
 
   return (
