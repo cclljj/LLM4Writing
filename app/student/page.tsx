@@ -161,6 +161,7 @@ export default function StudentPage() {
   const [step6StreamingText, setStep6StreamingText] = useState("");
   const [step7StreamingText, setStep7StreamingText] = useState("");
   const [step10StreamingText, setStep10StreamingText] = useState("");
+  const [step10LoadingDots, setStep10LoadingDots] = useState<"..." | "......">("...");
   const step10StreamRequestedRef = useRef<string>("");
   const [isCompletingStep6, setIsCompletingStep6] = useState(false);
   const [savedDraft6Text, setSavedDraft6Text] = useState("");
@@ -538,6 +539,17 @@ export default function StudentPage() {
   const groupStatusTone = groupStatusAllDone ? "success" : groupStatusSubmittedByMe ? "warning" : "";
   const ownStep7Report = session && loginUser ? session.reports.step7[loginUser] : undefined;
   const ownStep10Report = session && loginUser ? session.reports.step10[loginUser] : undefined;
+  useEffect(() => {
+    const isStep10Waiting = currentStep === 10 && !ownStep10Report?.trim();
+    if (!isStep10Waiting) {
+      setStep10LoadingDots("...");
+      return;
+    }
+    const timer = window.setInterval(() => {
+      setStep10LoadingDots((prev) => (prev === "..." ? "......" : "..."));
+    }, 600);
+    return () => window.clearInterval(timer);
+  }, [currentStep, ownStep10Report]);
   const unsavedDraft6Chars = currentStep === 6 && draftText !== savedDraft6Text ? draftText.length : 0;
   const unsavedDraft8Chars = currentStep === 8 && draftText !== savedDraft8Text ? draftText.length : 0;
   const currentUnsavedDraftChars = currentStep === 8 ? unsavedDraft8Chars : unsavedDraft6Chars;
@@ -1220,12 +1232,14 @@ export default function StudentPage() {
                     }}
                   >
                     <small style={{ display: "block", marginBottom: 6, color: "#64748b", fontWeight: 600 }}>
-                      AI 正在產生總結報告…
+                      AI 正在產生總結，這個步驟會花比較多的時間，請稍候{step10LoadingDots}
                     </small>
                     {step10StreamingText}
                   </div>
                 ) : (
-                  <small style={{ color: "#94a3b8" }}>AI 正在產生總結，請稍候...</small>
+                  <small style={{ color: "#94a3b8" }}>
+                    AI 正在產生總結，這個步驟會花比較多的時間，請稍候{step10LoadingDots}
+                  </small>
                 )}
               </>
             ) : null}
