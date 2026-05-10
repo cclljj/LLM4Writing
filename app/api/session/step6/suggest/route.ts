@@ -38,7 +38,7 @@ function buildSuggestMessages(
       role: "system",
       content:
         `${stepPrompt ?? "你是寫作教練，請用繁體中文給予可操作、具體的作文修改建議。"}\n\n` +
-        "請根據學生文章提供：1) 結構建議 2) 論點與證據建議 3) 可直接改寫的示例句。語氣自然且鼓勵。"
+        "請根據學生文章提供完整且具體的多面向回饋，至少涵蓋：1) 字詞與語句 2) 段落結構 3) 論點與證據 4) 可直接改寫示例句。語氣自然且鼓勵。"
     },
     {
       role: "user",
@@ -53,14 +53,38 @@ function buildSuggestMessages(
 const FALLBACK_SUGGESTION =
   "AI 建議：已收到你的草稿。建議先強化主論點句，並讓每段都對應一個清楚子論點，再補上具體例子與結語收束。";
 
+function scoreStep6Suggestion(text: string): number {
+  const t = text.trim();
+  if (!t) return -1;
+  const lenScore = Math.min(3000, t.length);
+  const keywordScore =
+    (/(字詞|語句|用詞)/.test(t) ? 300 : 0) +
+    (/(結構|段落)/.test(t) ? 300 : 0) +
+    (/(論點|證據|例子|案例)/.test(t) ? 300 : 0) +
+    (/(改寫|示例|試試看這樣說)/.test(t) ? 300 : 0);
+  const bulletScore = (t.match(/(^|\n)\s*[-•]/g) ?? []).length * 40;
+  const sentenceScore = (t.match(/[。！？]/g) ?? []).length * 10;
+  return lenScore + keywordScore + bulletScore + sentenceScore;
+}
+
+function pickBetterStep6Suggestion(a: string, b: string): string {
+  const aRisk = hasStep6SuggestionQualityRisk(a);
+  const bRisk = hasStep6SuggestionQualityRisk(b);
+  if (aRisk !== bRisk) return aRisk ? b : a;
+  const aScore = scoreStep6Suggestion(a);
+  const bScore = scoreStep6Suggestion(b);
+  if (aScore !== bScore) return aScore > bScore ? a : b;
+  return a.length >= b.length ? a : b;
+}
+
 async function generateStep6SuggestionText(messages: LlmChatMessage[]): Promise<string> {
   const firstRaw = await llmChatCompletionText({
     messages,
     temperature: 0.6,
-    maxTokens: 1400,
-    timeoutMs: 60_000,
+    maxTokens: 1800,
+    timeoutMs: 75_000,
     continueOnTruncation: true,
-    continuationMaxRounds: 4
+    continuationMaxRounds: 6
   });
   const firstNormalized = normalizeStep6SuggestionText(firstRaw);
   if (!hasStep6SuggestionQualityRisk(firstNormalized)) return firstNormalized;
@@ -75,12 +99,13 @@ async function generateStep6SuggestionText(messages: LlmChatMessage[]): Promise<
       }
     ],
     temperature: 0.4,
-    maxTokens: 1600,
-    timeoutMs: 75_000,
+    maxTokens: 2200,
+    timeoutMs: 90_000,
     continueOnTruncation: true,
-    continuationMaxRounds: 5
+    continuationMaxRounds: 7
   });
-  return normalizeStep6SuggestionText(retryRaw);
+  const retryNormalized = normalizeStep6SuggestionText(retryRaw);
+  return pickBetterStep6Suggestion(firstNormalized, retryNormalized);
 }
 
 export async function POST(request: NextRequest) {
