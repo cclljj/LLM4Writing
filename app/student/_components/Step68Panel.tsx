@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import OutlineSvg from "@/app/_components/OutlineSvg";
 
 type Step68PanelProps = {
@@ -46,6 +47,19 @@ export default function Step68Panel({
   step6StreamingText,
   step7StreamingText,
 }: Step68PanelProps) {
+  const [suggestingDots, setSuggestingDots] = useState<"..." | "......">("...");
+
+  useEffect(() => {
+    if (!(currentStep === 6 && isSuggestingStep6)) {
+      setSuggestingDots("...");
+      return;
+    }
+    const timer = window.setInterval(() => {
+      setSuggestingDots((prev) => (prev === "..." ? "......" : "..."));
+    }, 600);
+    return () => window.clearInterval(timer);
+  }, [currentStep, isSuggestingStep6]);
+
   return (
     <div className="card">
       <h2>{currentStep === 6 ? "撰寫初稿" : "修改潤飾"}</h2>
@@ -100,7 +114,7 @@ export default function Step68Panel({
       <small className={`draft-save-status ${saveStatus.state}`}>{saveStatus.text}</small>
       {currentStep === 6 && isSuggestingStep6 ? (
         <small style={{ display: "block", marginTop: 6, color: "#94a3b8" }}>
-          AI 正在分析你的文章並產生修改建議，請稍候...
+          AI 正在分析你的文章並產生修改建議，這個步驟會花比較多的時間，請稍候{suggestingDots}
         </small>
       ) : null}
       {currentStep === 6 && step6StreamingText ? (
