@@ -60,6 +60,10 @@ type DiagnosticsPayload = {
       messageCount: number;
       lastMessageAt: string;
       estimatedCompletionTokens: number;
+      activityStatus: "active" | "idle" | "stuck";
+      currentStepDwellMinutes: number;
+      groupStepDistribution: string;
+      rejectedAnswerCount: number;
     }>;
   };
   timeWindow: DiagnosticsWindow;
@@ -93,6 +97,12 @@ function fmtMs(value: number): string {
 
 function fmtNum(value: number): string {
   return new Intl.NumberFormat("zh-TW").format(value);
+}
+
+function activityStatusLabel(status: "active" | "idle" | "stuck"): string {
+  if (status === "active") return "活躍";
+  if (status === "stuck") return "可能卡住";
+  return "閒置";
 }
 
 function fallbackToneColor(rate: number): string {
@@ -398,6 +408,10 @@ export default function AdminPromptDiagnostics() {
                     <th>成員</th>
                     <th>訊息</th>
                     <th>估算 Token</th>
+                    <th>活躍度</th>
+                    <th>停留時長</th>
+                    <th>小組進度分布</th>
+                    <th>拒答次數</th>
                     <th>最後事件</th>
                   </tr>
                 </thead>
@@ -412,6 +426,10 @@ export default function AdminPromptDiagnostics() {
                       <td>{session.participantCount}</td>
                       <td>{session.messageCount}</td>
                       <td>{fmtNum(session.estimatedCompletionTokens)}</td>
+                      <td>{activityStatusLabel(session.activityStatus)}</td>
+                      <td>{fmtNum(session.currentStepDwellMinutes)} 分</td>
+                      <td>{session.groupStepDistribution || "—"}</td>
+                      <td>{fmtNum(session.rejectedAnswerCount)}</td>
                       <td>{new Date(session.lastMessageAt).toLocaleString("zh-TW")}</td>
                     </tr>
                   ))}

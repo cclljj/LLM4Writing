@@ -931,6 +931,7 @@ Loading 規則（#270）：
 - 作品 artifact 健康度：Step3 結構樹、Step6 初稿、Step8 潤飾稿、Step10 報告完成率與平均字元數（以所選時間窗內有活動之 spec10 sessions 計算）。
 - Token 使用量（估算 completion tokens）：整體與分步驟統計，需隨 `24h/7d/14d/30d` 時間窗切換更新。
 - 「近期使用狀況」清單需含學校、班級，並顯示各 session 在時間窗內的估算 token 使用量。
+- 「近期使用狀況」需額外顯示：活躍度（活躍/閒置/可能卡住）、目前步驟停留時長（分鐘）、小組進度分布（各 step 人數）、拒答次數（qualitySignals 累計）。
 - 不得回傳 `LLM_KEY`、DB URL 或其他 secret。
 
 ## 7. API 契約

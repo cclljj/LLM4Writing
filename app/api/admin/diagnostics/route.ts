@@ -293,6 +293,47 @@ function hasRecentActivity(session: SessionState, cutoffMs: number): boolean {
   return Number.isFinite(ts) && ts >= cutoffMs;
 }
 
+type RecentActivityStatus = "active" | "idle" | "stuck";
+
+function computeRecentActivityStatus(lastEventAt: string, nowMs: number): RecentActivityStatus {
+  const ts = new Date(lastEventAt).getTime();
+  if (!Number.isFinite(ts)) return "idle";
+  const diffMin = (nowMs - ts) / (60 * 1000);
+  if (diffMin <= 5) return "active";
+  if (diffMin <= 20) return "idle";
+  return "stuck";
+}
+
+function computeCurrentStepDwellMinutes(session: SessionState, nowMs: number): number {
+  const targetStep = session.currentStep;
+  const firstMsgInStep = session.messages.find((m) => m.step === targetStep);
+  const startAt = firstMsgInStep?.at ?? session.createdAt;
+  const startMs = new Date(startAt).getTime();
+  if (!Number.isFinite(startMs) || startMs > nowMs) return 0;
+  return Math.max(0, Math.floor((nowMs - startMs) / (60 * 1000)));
+}
+
+function buildGroupStepDistribution(session: SessionState): string {
+  const counter: Record<number, number> = {};
+  const steps = session.personalSteps && Object.keys(session.personalSteps).length > 0
+    ? Object.values(session.personalSteps)
+    : session.participants.map(() => session.currentStep);
+  for (const step of steps) {
+    const normalized = Number.isFinite(step) ? step : session.currentStep;
+    counter[normalized] = (counter[normalized] ?? 0) + 1;
+  }
+  return Object.entries(counter)
+    .sort((a, b) => Number(a[0]) - Number(b[0]))
+    .map(([step, count]) => `Step ${step}: ${count}人`)
+    .join(" / ");
+}
+
+function computeRejectedAnswerCount(session: SessionState): number {
+  const counts = session.qualitySignals?.rejectedAnswerCounts;
+  if (!counts || typeof counts !== "object") return 0;
+  return Object.values(counts).reduce((sum, value) => sum + (Number.isFinite(value) ? value : 0), 0);
+}
+
 export async function GET(request: Request) {
   const user = await getCurrentUser();
   if (!user || user.role !== "admin") {
@@ -321,6 +362,7 @@ export async function GET(request: Request) {
     .slice(0, 5)
     .map((session) => {
       const activity = session.activityId ? findActivity(session.activityId) : undefined;
+      const lastMessageAt = session.messages.at(-1)?.at ?? session.createdAt;
       return {
         sessionId: session.id,
         activityTitle: session.activityTitle ?? session.activityId ?? "未命名課程",
@@ -330,7 +372,11 @@ export async function GET(request: Request) {
         currentStep: session.currentStep,
         participantCount: session.participants.length,
         messageCount: session.messages.length,
-        lastMessageAt: session.messages.at(-1)?.at ?? session.createdAt
+        lastMessageAt,
+        activityStatus: computeRecentActivityStatus(lastMessageAt, nowMs),
+        currentStepDwellMinutes: computeCurrentStepDwellMinutes(session, nowMs),
+        groupStepDistribution: buildGroupStepDistribution(session),
+        rejectedAnswerCount: computeRejectedAnswerCount(session)
       };
     });
 
