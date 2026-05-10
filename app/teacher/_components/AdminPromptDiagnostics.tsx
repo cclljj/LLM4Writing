@@ -2,17 +2,6 @@
 
 import { useEffect, useState } from "react";
 
-type StreamingStat = {
-  endpoint: string;
-  total: number;
-  errors: number;
-  errorRate: number;
-  avgMs: number;
-  medianMs: number;
-  p95Ms: number;
-  sampleSize: number;
-};
-
 type ResponseTimeBucket = {
   median: number;
   avg: number;
@@ -67,7 +56,6 @@ type DiagnosticsPayload = {
       lastMessageAt: string;
     }>;
   };
-  streamingStats: StreamingStat[];
   llmResponseTime: Record<string, ResponseTimeBucket>;
   fallbackRate: {
     byStep: Record<string, FallbackBucket>;
@@ -90,14 +78,6 @@ function fmtPct(value: number): string {
 function fmtMs(value: number): string {
   if (value < 1000) return `${value} ms`;
   return `${(value / 1000).toFixed(2)} s`;
-}
-
-function endpointLabel(name: string): string {
-  if (name === "step3_stream") return "Step 3 AI 回覆 (stream)";
-  if (name === "step6_suggest") return "Step 6 AI 建議 (suggest)";
-  if (name === "step6_complete") return "Step 7 分析回饋 (complete)";
-  if (name === "step10_stream") return "Step 10 總結 (stream)";
-  return name;
 }
 
 function fallbackToneColor(rate: number): string {
@@ -194,49 +174,6 @@ export default function AdminPromptDiagnostics() {
               <small>stepOpenings：{data.promptConfig.stepOpenings}</small><br />
               <small>writingTasks：{data.promptConfig.writingTasks}</small>
             </div>
-          </div>
-
-          {/* Streaming endpoint stats (#250 part A) */}
-          <div className="card" style={{ marginTop: 12 }}>
-            <h3 style={{ marginBottom: 6 }}>Streaming 端點呼叫統計</h3>
-            <small style={{ display: "block", marginBottom: 8, color: "#64748b" }}>
-              In-memory 計數器（process 重啟後重置）；每端點保留近 200 筆樣本。
-            </small>
-            <div style={{ overflowX: "auto" }}>
-              <table className="pro-table">
-                <thead>
-                  <tr>
-                    <th>端點</th>
-                    <th>總呼叫</th>
-                    <th>錯誤數</th>
-                    <th>錯誤率</th>
-                    <th>平均</th>
-                    <th>中位數</th>
-                    <th>P95</th>
-                    <th>樣本</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.streamingStats.map((s) => (
-                    <tr key={s.endpoint}>
-                      <td>{endpointLabel(s.endpoint)}</td>
-                      <td>{s.total}</td>
-                      <td>{s.errors}</td>
-                      <td style={{ color: s.errorRate >= 0.05 ? "#b91c1c" : "#475569" }}>
-                        {fmtPct(s.errorRate)}
-                      </td>
-                      <td>{fmtMs(s.avgMs)}</td>
-                      <td>{fmtMs(s.medianMs)}</td>
-                      <td>{fmtMs(s.p95Ms)}</td>
-                      <td>{s.sampleSize}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {data.streamingStats.length === 0 ? (
-              <small>本 process 尚無 streaming 呼叫紀錄。</small>
-            ) : null}
           </div>
 
           {/* LLM response time per step (#250 part B) */}

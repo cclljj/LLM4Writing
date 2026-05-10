@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/src/lib/auth-server";
 import systemPromptConfig from "@/src/config/system-prompt-config.json";
 import { listSessions } from "@/src/lib/store";
-import { getStreamingStats } from "@/src/lib/llm-stats";
 import type { SessionState } from "@/src/lib/types";
 
 function readEnvFlag(name: string): boolean {
@@ -265,7 +264,6 @@ export async function GET() {
       spec10: specSessions.length,
       recent: recentSessions
     },
-    streamingStats: getStreamingStats(),
     llmResponseTime: computeLlmResponseTime(specSessions),
     fallbackRate: computeFallbackRate(specSessions),
     artifactHealth: computeArtifactHealth(specSessions),
