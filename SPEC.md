@@ -929,6 +929,8 @@ Loading 規則（#270）：
 - LLM 回應時間（依步驟），過大閒置間隔需濾除。
 - LLM fallback 觸發率；> 5% 紅燈，1~5% 黃燈，< 1% 綠燈。
 - 作品 artifact 健康度：Step3 結構樹、Step6 初稿、Step8 潤飾稿、Step10 報告完成率與平均字元數（以所選時間窗內有活動之 spec10 sessions 計算）。
+- Token 使用量（估算 completion tokens）：整體與分步驟統計，需隨 `24h/7d/14d/30d` 時間窗切換更新。
+- 「近期使用狀況」清單需含學校、班級，並顯示各 session 在時間窗內的估算 token 使用量。
 - 不得回傳 `LLM_KEY`、DB URL 或其他 secret。
 
 ## 7. API 契約

@@ -59,6 +59,7 @@ type DiagnosticsPayload = {
       participantCount: number;
       messageCount: number;
       lastMessageAt: string;
+      estimatedCompletionTokens: number;
     }>;
   };
   timeWindow: DiagnosticsWindow;
@@ -74,6 +75,10 @@ type DiagnosticsPayload = {
     draft8: ArtifactBucket;
     step10: { has: number; empty: number; completionRate: number };
   };
+  tokenUsage: {
+    overall: { aiMessages: number; estimatedCompletionTokens: number; avgPerMessage: number };
+    byStep: Record<string, { aiMessages: number; estimatedCompletionTokens: number; avgPerMessage: number }>;
+  };
   generatedAt: string;
 };
 
@@ -84,6 +89,10 @@ function fmtPct(value: number): string {
 function fmtMs(value: number): string {
   if (value < 1000) return `${value} ms`;
   return `${(value / 1000).toFixed(2)} s`;
+}
+
+function fmtNum(value: number): string {
+  return new Intl.NumberFormat("zh-TW").format(value);
 }
 
 function fallbackToneColor(rate: number): string {
@@ -329,6 +338,50 @@ export default function AdminPromptDiagnostics() {
                 </tbody>
               </table>
             </div>
+            <hr style={{ border: 0, borderTop: "1px solid #e2e8f0", margin: "14px 0" }} />
+            <h4 style={{ marginBottom: 6 }}>Token 使用量（估算）</h4>
+            <small style={{ display: "block", marginBottom: 8, color: "#64748b" }}>
+              範圍：最近 {data.timeWindow}。以 AI 回覆文字進行 completion token 估算（非 provider 帳單精算值）。
+            </small>
+            <div style={{ display: "flex", gap: 20, flexWrap: "wrap", marginBottom: 10 }}>
+              <div>
+                <small style={{ color: "#475569" }}>估算總 tokens</small>
+                <div style={{ fontSize: 18, fontWeight: 600 }}>{fmtNum(data.tokenUsage.overall.estimatedCompletionTokens)}</div>
+              </div>
+              <div>
+                <small style={{ color: "#475569" }}>AI 訊息數</small>
+                <div style={{ fontSize: 18, fontWeight: 600 }}>{fmtNum(data.tokenUsage.overall.aiMessages)}</div>
+              </div>
+              <div>
+                <small style={{ color: "#475569" }}>每則平均 tokens</small>
+                <div style={{ fontSize: 18, fontWeight: 600 }}>{fmtNum(data.tokenUsage.overall.avgPerMessage)}</div>
+              </div>
+            </div>
+            <div style={{ overflowX: "auto" }}>
+              <table className="pro-table">
+                <thead>
+                  <tr>
+                    <th>步驟</th>
+                    <th>AI 訊息數</th>
+                    <th>估算 tokens</th>
+                    <th>每則平均</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(data.tokenUsage.byStep)
+                    .sort((a, b) => Number(a[0]) - Number(b[0]))
+                    .map(([step, bucket]) => (
+                      <tr key={step}>
+                        <td>Step {step}</td>
+                        <td>{fmtNum(bucket.aiMessages)}</td>
+                        <td>{fmtNum(bucket.estimatedCompletionTokens)}</td>
+                        <td>{fmtNum(bucket.avgPerMessage)}</td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+            {Object.keys(data.tokenUsage.byStep).length === 0 ? <small>尚無可用 token 估算樣本。</small> : null}
           </div>
 
           <div className="card">
@@ -344,6 +397,7 @@ export default function AdminPromptDiagnostics() {
                     <th>Step</th>
                     <th>成員</th>
                     <th>訊息</th>
+                    <th>估算 Token</th>
                     <th>最後事件</th>
                   </tr>
                 </thead>
@@ -357,6 +411,7 @@ export default function AdminPromptDiagnostics() {
                       <td>Step {session.currentStep}</td>
                       <td>{session.participantCount}</td>
                       <td>{session.messageCount}</td>
+                      <td>{fmtNum(session.estimatedCompletionTokens)}</td>
                       <td>{new Date(session.lastMessageAt).toLocaleString("zh-TW")}</td>
                     </tr>
                   ))}

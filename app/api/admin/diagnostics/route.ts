@@ -38,6 +38,15 @@ function median(values: number[]): number {
   return sorted.length % 2 === 0 ? (sorted[mid - 1]! + sorted[mid]!) / 2 : sorted[mid]!;
 }
 
+function estimateTokensFromText(text: string): number {
+  if (!text.trim()) return 0;
+  const cjkChars = (text.match(/[\u3400-\u9fff]/g) ?? []).length;
+  const latinWords = (text.match(/[A-Za-z0-9_]+/g) ?? []).length;
+  const symbols = Math.max(0, text.length - cjkChars);
+  // Coarse heuristic for mixed Traditional Chinese + English content.
+  return Math.max(1, Math.round(cjkChars * 1.2 + latinWords * 0.8 + symbols * 0.15));
+}
+
 /**
  * Per-step LLM response time, estimated from `student → ai` consecutive message
  * pairs in the same step (#250 part B). Not perfectly accurate for group steps
@@ -228,6 +237,56 @@ function computeArtifactHealth(sessions: SessionState[]) {
   };
 }
 
+function computeTokenUsageStats(sessions: SessionState[], cutoffMs: number): {
+  overall: { aiMessages: number; estimatedCompletionTokens: number; avgPerMessage: number };
+  byStep: Record<string, { aiMessages: number; estimatedCompletionTokens: number; avgPerMessage: number }>;
+  bySessionId: Record<string, { aiMessages: number; estimatedCompletionTokens: number }>;
+} {
+  const byStep: Record<string, { aiMessages: number; estimatedCompletionTokens: number }> = {};
+  const bySessionId: Record<string, { aiMessages: number; estimatedCompletionTokens: number }> = {};
+  let aiMessages = 0;
+  let estimatedCompletionTokens = 0;
+
+  for (const session of sessions) {
+    for (const m of session.messages) {
+      if (m.role !== "ai") continue;
+      const atMs = new Date(m.at).getTime();
+      if (!Number.isFinite(atMs) || atMs < cutoffMs) continue;
+      const est = estimateTokensFromText(m.text ?? "");
+      aiMessages += 1;
+      estimatedCompletionTokens += est;
+
+      const stepKey = String(m.step);
+      const stepBucket = byStep[stepKey] ?? (byStep[stepKey] = { aiMessages: 0, estimatedCompletionTokens: 0 });
+      stepBucket.aiMessages += 1;
+      stepBucket.estimatedCompletionTokens += est;
+
+      const sessionBucket = bySessionId[session.id] ?? (bySessionId[session.id] = { aiMessages: 0, estimatedCompletionTokens: 0 });
+      sessionBucket.aiMessages += 1;
+      sessionBucket.estimatedCompletionTokens += est;
+    }
+  }
+
+  const byStepWithAvg: Record<string, { aiMessages: number; estimatedCompletionTokens: number; avgPerMessage: number }> = {};
+  for (const [step, bucket] of Object.entries(byStep)) {
+    byStepWithAvg[step] = {
+      aiMessages: bucket.aiMessages,
+      estimatedCompletionTokens: bucket.estimatedCompletionTokens,
+      avgPerMessage: bucket.aiMessages > 0 ? Math.round(bucket.estimatedCompletionTokens / bucket.aiMessages) : 0
+    };
+  }
+
+  return {
+    overall: {
+      aiMessages,
+      estimatedCompletionTokens,
+      avgPerMessage: aiMessages > 0 ? Math.round(estimatedCompletionTokens / aiMessages) : 0
+    },
+    byStep: byStepWithAvg,
+    bySessionId
+  };
+}
+
 function hasRecentActivity(session: SessionState, cutoffMs: number): boolean {
   const lastAt = session.messages.at(-1)?.at ?? session.createdAt;
   const ts = new Date(lastAt).getTime();
@@ -282,6 +341,7 @@ export async function GET(request: Request) {
     modelPresent: readEnvFlag("LLM_MODEL"),
     model: readEnvFlag("LLM_MODEL") ? process.env.LLM_MODEL : null
   };
+  const tokenUsage = computeTokenUsageStats(windowedSpecSessions, cutoffMs);
 
   return NextResponse.json({
     llm,
@@ -301,12 +361,16 @@ export async function GET(request: Request) {
       total: sessions.length,
       spec10: specSessions.length,
       spec10InWindow: windowedSpecSessions.length,
-      recent: recentSessions
+      recent: recentSessions.map((session) => ({
+        ...session,
+        estimatedCompletionTokens: tokenUsage.bySessionId[session.sessionId]?.estimatedCompletionTokens ?? 0
+      }))
     },
     timeWindow: selectedWindow,
     llmResponseTime: computeLlmResponseTime(windowedSpecSessions, cutoffMs),
     fallbackRate: computeFallbackRate(windowedSpecSessions, cutoffMs),
     artifactHealth: computeArtifactHealth(windowedSpecSessions),
+    tokenUsage,
     generatedAt: new Date().toISOString()
   });
 }
