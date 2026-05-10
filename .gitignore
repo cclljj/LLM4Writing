@@ -59,5 +59,4 @@ playwright-report/
 
 ### Local archives / one-off dumps ###
 .migration-artifacts/
-database/mysql/aidb-20260415_233125.sql
-database/mongodb/mongo-llm4writing-init.js
+database/
