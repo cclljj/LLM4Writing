@@ -54,6 +54,8 @@ export default function StudentAccountTab({
   });
   const [csvInput, setCsvInput] = useState("");
   const [csvPreviewErrors, setCsvPreviewErrors] = useState<string[]>([]);
+  const [isBulkCreatingUsers, setIsBulkCreatingUsers] = useState(false);
+  const [bulkCreateDots, setBulkCreateDots] = useState<"..." | "......">("...");
   const [resetTargetUser, setResetTargetUser] = useState("");
   const [resetMode, setResetMode] = useState<"system" | "manual">("system");
   const [generatedPassword, setGeneratedPassword] = useState("");
@@ -153,6 +155,17 @@ export default function StudentAccountTab({
       }
     }
   }, [newUserForm.role, loginRole, loginUser, loginTeacherProfile?.school, newUserForm.ownerTeacherUsername, newUserForm.school]);
+
+  useEffect(() => {
+    if (!isBulkCreatingUsers) {
+      setBulkCreateDots("...");
+      return;
+    }
+    const timer = window.setInterval(() => {
+      setBulkCreateDots((prev) => (prev === "..." ? "......" : "..."));
+    }, 600);
+    return () => window.clearInterval(timer);
+  }, [isBulkCreatingUsers]);
 
   function toggleUserSort(field: "username" | "name" | "classNumber") {
     if (userSortBy === field) {
@@ -467,23 +480,28 @@ export default function StudentAccountTab({
       setAccountError("csv_validation_failed");
       return;
     }
-    const response = await fetch("/api/admin/users", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "bulk_create_from_csv", csv: csvInput })
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      const detail = Array.isArray(data.details)
-        ? data.details.map((d: { line: number; message: string }) => `line ${d.line}: ${d.message}`).join("; ")
-        : data.error;
-      setAccountError(detail ?? "bulk_create_failed");
-      return;
+    setIsBulkCreatingUsers(true);
+    try {
+      const response = await fetch("/api/admin/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "bulk_create_from_csv", csv: csvInput })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        const detail = Array.isArray(data.details)
+          ? data.details.map((d: { line: number; message: string }) => `line ${d.line}: ${d.message}`).join("; ")
+          : data.error;
+        setAccountError(detail ?? "bulk_create_failed");
+        return;
+      }
+      setCsvInput("");
+      setCsvPreviewErrors([]);
+      setAccountSuccess(`已批次新增 ${data.createdCount ?? 0} 筆帳號。`);
+      await onRefresh();
+    } finally {
+      setIsBulkCreatingUsers(false);
     }
-    setCsvInput("");
-    setCsvPreviewErrors([]);
-    setAccountSuccess(`已批次新增 ${data.createdCount ?? 0} 筆帳號。`);
-    await onRefresh();
   }
 
   return (
@@ -634,8 +652,8 @@ export default function StudentAccountTab({
           />
           <div className="row" style={{ marginTop: 10 }}>
             <div style={{ width: 220 }}>
-              <button type="button" onClick={importUsersFromCsv}>
-                驗證並批次新增
+              <button type="button" onClick={importUsersFromCsv} disabled={isBulkCreatingUsers}>
+                {isBulkCreatingUsers ? "批次新增中..." : "驗證並批次新增"}
               </button>
             </div>
             <div style={{ width: 220 }}>
@@ -654,6 +672,11 @@ export default function StudentAccountTab({
               </button>
             </div>
           </div>
+          {isBulkCreatingUsers ? (
+            <small style={{ display: "block", marginTop: 8, color: "#1e40af", fontWeight: 600 }}>
+              系統新增帳號中，這步驟需要一點時間，請耐心等候 {bulkCreateDots}
+            </small>
+          ) : null}
           {csvPreviewErrors.length > 0 ? (
             <div style={{ marginTop: 8 }}>
               {csvPreviewErrors.map((item, idx) => (
