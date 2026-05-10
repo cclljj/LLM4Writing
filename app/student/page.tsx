@@ -1205,13 +1205,15 @@ export default function StudentPage() {
                 </small>
               </p>
             ) : null}
-            <p>
-              <small>
-                {currentStep >= 5
-                  ? "此階段為個人步調，系統會依你的完成狀態自動推進步驟（例如步驟 9 完成後自動進入步驟 10）。"
-                  : "步驟切換由教師端控制，你的頁面會自動同步。"}
-              </small>
-            </p>
+            {currentStep !== 10 ? (
+              <p>
+                <small>
+                  {currentStep >= 5
+                    ? "此階段為個人步調，系統會依你的完成狀態自動推進步驟（例如步驟 9 完成後自動進入步驟 10）。"
+                    : "步驟切換由教師端控制，你的頁面會自動同步。"}
+                </small>
+              </p>
+            ) : null}
             {currentStep === 10 ? (
               <>
                 <hr style={{ border: 0, borderTop: "1px solid #e5e7eb", margin: "10px 0" }} />
