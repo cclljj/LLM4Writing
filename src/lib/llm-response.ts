@@ -105,6 +105,53 @@ function normalizeCompact(text: string): string {
   return text.replace(/\s+/g, "").trim();
 }
 
+function dedupeBoundaryOverlap(text: string): string {
+  // Remove accidental "tail-head" overlap from continuation stitching:
+  // e.g. "...這篇文章" + "這篇文章還可以..." -> keep single "這篇文章".
+  let out = text;
+  for (let size = 16; size >= 4; size -= 1) {
+    const head = out.slice(0, size);
+    const tail = out.slice(-size);
+    if (head && tail && head === tail) {
+      out = out.slice(0, -size);
+      break;
+    }
+  }
+  return out;
+}
+
+function polishFlowWithoutChangingMeaning(text: string): string {
+  const normalizedNewline = text.replace(/\r\n?/g, "\n");
+  const lines = normalizedNewline.split("\n");
+  const merged: string[] = [];
+
+  for (const rawLine of lines) {
+    const line = rawLine.trimEnd();
+    if (!line.trim()) {
+      if (merged.length > 0 && merged[merged.length - 1] !== "") merged.push("");
+      continue;
+    }
+    if (merged.length === 0) {
+      merged.push(line);
+      continue;
+    }
+
+    const prev = merged[merged.length - 1]!;
+    const prevEnd = prev.at(-1) ?? "";
+    const startsAsList = /^[-•\d]+[.)\s]/.test(line) || /^###\s/.test(line) || /^【.+】$/.test(line);
+    const keepParagraphBreak = prev === "" || startsAsList || /[。！？.!?：:]$/.test(prevEnd);
+    if (keepParagraphBreak) {
+      merged.push(line);
+      continue;
+    }
+
+    const joined = `${prev}${line.trimStart()}`;
+    merged[merged.length - 1] = dedupeBoundaryOverlap(joined);
+  }
+
+  return merged.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
 function looksLikeTruncationMeta(text: string): boolean {
   return /(上一則回覆被截斷|很抱歉上一則回覆被截斷|從中斷處|繼續討論，讓它)/.test(text);
 }
@@ -136,7 +183,7 @@ export function normalizeFormalLlmText(raw: string, options: { fallback?: string
     }
   });
 
-  const result = deduped.join("\n\n").trim();
+  const result = polishFlowWithoutChangingMeaning(deduped.join("\n\n").trim());
   if (!result) return options.fallback ?? "目前無法整理可讀內容，請再試一次。";
   return result;
 }

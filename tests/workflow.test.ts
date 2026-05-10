@@ -148,6 +148,23 @@ test("normalizeStep6SuggestionText removes truncation meta and duplicate paragra
   assert.equal(normalized.includes("上一則回覆被截斷"), false);
 });
 
+test("normalizeStep6SuggestionText polishes bad line-break stitching without changing content", () => {
+  const raw = `
+同學，你這份初稿寫得很不錯耶！接下來我們來看看這篇文章
+還有沒有可以讓它更亮眼的地方吧！
+
+內容結構建議
+你可以再補一個例子來支持主張。
+
+你可以再補一個例子來支持主張。
+`;
+  const normalized = normalizeStep6SuggestionText(raw);
+  assert.equal(normalized.includes("文章\n還有沒有"), false);
+  assert.match(normalized, /文章還有沒有可以讓它更亮眼的地方吧/);
+  assert.equal(normalized.includes("內容結構建議"), true);
+  assert.equal(normalized.includes("你可以再補一個例子來支持主張"), true);
+});
+
 test("hasStep6SuggestionQualityRisk detects duplicated lines and incomplete ending", () => {
   assert.equal(
     hasStep6SuggestionQualityRisk(
