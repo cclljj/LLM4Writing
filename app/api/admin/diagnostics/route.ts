@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/src/lib/auth-server";
 import systemPromptConfig from "@/src/config/system-prompt-config.json";
 import { listSessions } from "@/src/lib/store";
+import { findActivity } from "@/src/lib/activity-store";
 import type { SessionState } from "@/src/lib/types";
 type DiagnosticsWindow = "24h" | "7d" | "14d" | "30d";
 const WINDOW_MS: Record<DiagnosticsWindow, number> = {
@@ -259,15 +260,20 @@ export async function GET(request: Request) {
       return bLast.localeCompare(aLast);
     })
     .slice(0, 5)
-    .map((session) => ({
-      sessionId: session.id,
-      activityTitle: session.activityTitle ?? session.activityId ?? "未命名課程",
-      groupName: session.groupName ?? session.groupId ?? "未命名組",
-      currentStep: session.currentStep,
-      participantCount: session.participants.length,
-      messageCount: session.messages.length,
-      lastMessageAt: session.messages.at(-1)?.at ?? session.createdAt
-    }));
+    .map((session) => {
+      const activity = session.activityId ? findActivity(session.activityId) : undefined;
+      return {
+        sessionId: session.id,
+        activityTitle: session.activityTitle ?? session.activityId ?? "未命名課程",
+        school: activity?.school ?? "—",
+        classNumber: activity?.classNumber ?? "—",
+        groupName: session.groupName ?? session.groupId ?? "未命名組",
+        currentStep: session.currentStep,
+        participantCount: session.participants.length,
+        messageCount: session.messages.length,
+        lastMessageAt: session.messages.at(-1)?.at ?? session.createdAt
+      };
+    });
 
   const llm = {
     configured: readEnvFlag("LLM_URL") && (readEnvFlag("LLM_KEY") || readEnvFlag("LLM_key")) && readEnvFlag("LLM_MODEL"),

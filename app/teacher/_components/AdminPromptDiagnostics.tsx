@@ -52,6 +52,8 @@ type DiagnosticsPayload = {
     recent: Array<{
       sessionId: string;
       activityTitle: string;
+      school: string;
+      classNumber: string;
       groupName: string;
       currentStep: number;
       participantCount: number;
@@ -330,12 +332,14 @@ export default function AdminPromptDiagnostics() {
           </div>
 
           <div className="card">
-            <h3 style={{ marginBottom: 10 }}>即時使用狀況</h3>
+            <h3 style={{ marginBottom: 10 }}>近期使用狀況</h3>
             <div style={{ overflowX: "auto" }}>
               <table className="pro-table">
                 <thead>
                   <tr>
                     <th>近期 Session</th>
+                    <th>學校</th>
+                    <th>班級</th>
                     <th>組別</th>
                     <th>Step</th>
                     <th>成員</th>
@@ -347,6 +351,8 @@ export default function AdminPromptDiagnostics() {
                   {data.sessions.recent.map((session) => (
                     <tr key={session.sessionId}>
                       <td>{session.activityTitle}</td>
+                      <td>{session.school}</td>
+                      <td>{session.classNumber}</td>
                       <td>{session.groupName}</td>
                       <td>Step {session.currentStep}</td>
                       <td>{session.participantCount}</td>
