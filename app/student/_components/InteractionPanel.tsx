@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { renderMessageHtml } from "./renderMessageHtml";
 
 type InteractiveItem = {
@@ -95,6 +95,32 @@ export default function InteractionPanel({
   step9QuestionTexts,
   error,
 }: InteractionPanelProps) {
+  const step6SuggestionCardIds = useMemo(
+    () =>
+      currentStep === 6
+        ? interactiveMessages
+            .filter((message) => message.kind === "ai" && parseStep6Suggestion(message.text))
+            .map((message) => message.id)
+        : [],
+    [currentStep, interactiveMessages]
+  );
+  const [step6ExpandedById, setStep6ExpandedById] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    if (step6SuggestionCardIds.length === 0) {
+      setStep6ExpandedById({});
+      return;
+    }
+    const latestId = step6SuggestionCardIds[step6SuggestionCardIds.length - 1]!;
+    setStep6ExpandedById((prev) => {
+      const next: Record<string, boolean> = {};
+      step6SuggestionCardIds.forEach((id) => {
+        next[id] = Object.prototype.hasOwnProperty.call(prev, id) ? prev[id]! : id === latestId;
+      });
+      return next;
+    });
+  }, [step6SuggestionCardIds]);
+
   return (
     <div className="card">
       <h2>{currentStep === 4 ? "小組討論區" : "互動內容"}</h2>
@@ -117,24 +143,37 @@ export default function InteractionPanel({
             ) : currentStep === 6 && message.kind === "ai" && parseStep6Suggestion(message.text) ? (
               (() => {
                 const parsed = parseStep6Suggestion(message.text)!;
+                const expanded = step6ExpandedById[message.id] ?? false;
                 return (
-                  <details open style={{ border: "1px solid #dbeafe", borderRadius: 10, padding: "8px 10px", background: "#f8fbff" }}>
-                    <summary style={{ cursor: "pointer", fontWeight: 700, color: "#1d4ed8" }}>
-                      {formatUtc8Title(message.at)}
-                    </summary>
-                    <div style={{ marginTop: 10 }}>
-                      <h4 style={{ margin: "0 0 6px", fontSize: 14 }}>文章內容</h4>
-                      <div
-                        style={{ marginLeft: 14 }}
-                        dangerouslySetInnerHTML={{ __html: renderMessageHtml(parsed.draft || "（無）") }}
-                      />
-                      <h4 style={{ margin: "12px 0 6px", fontSize: 14 }}>AI 建議</h4>
-                      <div
-                        style={{ marginLeft: 14 }}
-                        dangerouslySetInnerHTML={{ __html: renderMessageHtml(parsed.suggestion || "（無）") }}
-                      />
+                  <div style={{ border: "1px solid #dbeafe", borderRadius: 10, padding: "8px 10px", background: "#f8fbff" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                      <strong style={{ color: "#1d4ed8" }}>{formatUtc8Title(message.at)}</strong>
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={() =>
+                          setStep6ExpandedById((prev) => ({ ...prev, [message.id]: !(prev[message.id] ?? false) }))
+                        }
+                        style={{ fontSize: 12, lineHeight: 1.1, padding: "3px 6px", minHeight: "unset", width: "fit-content", whiteSpace: "nowrap" }}
+                      >
+                        {expanded ? "關閉" : "展開"}
+                      </button>
                     </div>
-                  </details>
+                    {expanded ? (
+                      <div style={{ marginTop: 10 }}>
+                        <h4 style={{ margin: "0 0 6px", fontSize: 14 }}>文章內容</h4>
+                        <div
+                          style={{ marginLeft: 14 }}
+                          dangerouslySetInnerHTML={{ __html: renderMessageHtml(parsed.draft || "（無）") }}
+                        />
+                        <h4 style={{ margin: "12px 0 6px", fontSize: 14 }}>AI 建議</h4>
+                        <div
+                          style={{ marginLeft: 14 }}
+                          dangerouslySetInnerHTML={{ __html: renderMessageHtml(parsed.suggestion || "（無）") }}
+                        />
+                      </div>
+                    ) : null}
+                  </div>
                 );
               })()
             ) : (
