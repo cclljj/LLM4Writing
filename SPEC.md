@@ -924,11 +924,11 @@ Loading 規則（#270）：
 
 - LLM 設定狀態，只顯示 URL/key/model 是否存在，不顯示 secret。
 - Prompt config key counts。
+- 時間篩選器：`24h` / `7d` / `14d` / `30d`，預設 `7d`，切換後需重新查詢 API 並以該時間窗重算指標。
 - 近期 spec10 session 摘要。
-- Streaming 端點呼叫統計：`step6_suggest`、`step6_complete`、`step10_stream` 的總呼叫、錯誤數、錯誤率、平均/中位數/P95 耗時、樣本數。
 - LLM 回應時間（依步驟），過大閒置間隔需濾除。
 - LLM fallback 觸發率；> 5% 紅燈，1~5% 黃燈，< 1% 綠燈。
-- 作品 artifact 健康度：Step3 結構樹、Step6 初稿、Step8 潤飾稿、Step10 報告完成率與平均字元數。
+- 作品 artifact 健康度：Step3 結構樹、Step6 初稿、Step8 潤飾稿、Step10 報告完成率與平均字元數（以所選時間窗內有活動之 spec10 sessions 計算）。
 - 不得回傳 `LLM_KEY`、DB URL 或其他 secret。
 
 ## 7. API 契約

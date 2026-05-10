@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+type DiagnosticsWindow = "24h" | "7d" | "14d" | "30d";
+const WINDOW_OPTIONS: DiagnosticsWindow[] = ["24h", "7d", "14d", "30d"];
 
 type ResponseTimeBucket = {
   median: number;
@@ -46,6 +48,7 @@ type DiagnosticsPayload = {
   sessions: {
     total: number;
     spec10: number;
+    spec10InWindow: number;
     recent: Array<{
       sessionId: string;
       activityTitle: string;
@@ -56,6 +59,7 @@ type DiagnosticsPayload = {
       lastMessageAt: string;
     }>;
   };
+  timeWindow: DiagnosticsWindow;
   llmResponseTime: Record<string, ResponseTimeBucket>;
   fallbackRate: {
     byStep: Record<string, FallbackBucket>;
@@ -90,12 +94,13 @@ export default function AdminPromptDiagnostics() {
   const [data, setData] = useState<DiagnosticsPayload | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [timeWindow, setTimeWindow] = useState<DiagnosticsWindow>("7d");
 
-  async function loadDiagnostics() {
+  async function loadDiagnostics(window: DiagnosticsWindow = timeWindow) {
     setLoading(true);
     setError("");
     try {
-      const response = await fetch("/api/admin/diagnostics", { cache: "no-store" });
+      const response = await fetch(`/api/admin/diagnostics?window=${window}`, { cache: "no-store" });
       const payload = await response.json();
       if (!response.ok) {
         setError(payload.error ?? "diagnostics_failed");
@@ -112,8 +117,8 @@ export default function AdminPromptDiagnostics() {
   }
 
   useEffect(() => {
-    loadDiagnostics().catch(() => undefined);
-  }, []);
+    loadDiagnostics(timeWindow).catch(() => undefined);
+  }, [timeWindow]);
 
   return (
     <div className="card" data-testid="admin-prompt-diagnostics">
@@ -125,6 +130,20 @@ export default function AdminPromptDiagnostics() {
         <button type="button" className="secondary" style={{ width: "auto" }} onClick={() => loadDiagnostics()}>
           重新整理診斷
         </button>
+      </div>
+      <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+        {WINDOW_OPTIONS.map((option) => (
+          <button
+            key={option}
+            type="button"
+            className={timeWindow === option ? "" : "secondary"}
+            style={{ width: "auto", minWidth: 64 }}
+            onClick={() => setTimeWindow(option)}
+            disabled={loading && timeWindow === option}
+          >
+            {option}
+          </button>
+        ))}
       </div>
 
       {loading ? <small style={{ display: "block", marginTop: 10 }}>診斷資料載入中...</small> : null}
@@ -154,8 +173,8 @@ export default function AdminPromptDiagnostics() {
               <small>任務題庫 keys</small>
             </div>
             <div className="metric-card">
-              <span className="metric-value">{data.sessions.spec10}</span>
-              <small>spec10 sessions</small>
+              <span className="metric-value">{data.sessions.spec10InWindow}</span>
+              <small>{data.timeWindow} 內 spec10 sessions</small>
             </div>
           </div>
 
@@ -180,7 +199,7 @@ export default function AdminPromptDiagnostics() {
           <div className="card" style={{ marginTop: 12 }}>
             <h3 style={{ marginBottom: 6 }}>LLM 回應時間（依步驟）</h3>
             <small style={{ display: "block", marginBottom: 8, color: "#64748b" }}>
-              從訊息 timestamp 估算（student → 接續 ai 同步驟）；異常值（&gt; 5 分鐘）已濾除。
+              範圍：最近 {data.timeWindow}。從訊息 timestamp 估算（student → 接續 ai 同步驟）；異常值（&gt; 5 分鐘）已濾除。
             </small>
             <div style={{ overflowX: "auto" }}>
               <table className="pro-table">
@@ -215,7 +234,7 @@ export default function AdminPromptDiagnostics() {
           <div className="card" style={{ marginTop: 12 }}>
             <h3 style={{ marginBottom: 6 }}>LLM Fallback 觸發率</h3>
             <small style={{ display: "block", marginBottom: 8, color: "#64748b" }}>
-              ai 訊息含 fallback 標誌字串的比例。&gt; 5% 紅燈、1-5% 黃燈、&lt; 1% 綠燈。
+              範圍：最近 {data.timeWindow}。ai 訊息含 fallback 標誌字串的比例。&gt; 5% 紅燈、1-5% 黃燈、&lt; 1% 綠燈。
             </small>
             <div style={{ display: "flex", gap: 16, marginBottom: 10, flexWrap: "wrap" }}>
               <div>
@@ -259,7 +278,7 @@ export default function AdminPromptDiagnostics() {
           <div className="card" style={{ marginTop: 12 }}>
             <h3 style={{ marginBottom: 6 }}>作品 Artifact 健康度</h3>
             <small style={{ display: "block", marginBottom: 8, color: "#64748b" }}>
-              所有 spec10 sessions 學生（總計 {data.artifactHealth.totalStudents} 人）的 artifact 完成率。
+              範圍：最近 {data.timeWindow} 內有活動的 spec10 sessions（總計 {data.artifactHealth.totalStudents} 人）的 artifact 完成率。
             </small>
             <div style={{ overflowX: "auto" }}>
               <table className="pro-table">

@@ -3,6 +3,13 @@ import { getCurrentUser } from "@/src/lib/auth-server";
 import systemPromptConfig from "@/src/config/system-prompt-config.json";
 import { listSessions } from "@/src/lib/store";
 import type { SessionState } from "@/src/lib/types";
+type DiagnosticsWindow = "24h" | "7d" | "14d" | "30d";
+const WINDOW_MS: Record<DiagnosticsWindow, number> = {
+  "24h": 24 * 60 * 60 * 1000,
+  "7d": 7 * 24 * 60 * 60 * 1000,
+  "14d": 14 * 24 * 60 * 60 * 1000,
+  "30d": 30 * 24 * 60 * 60 * 1000
+};
 
 function readEnvFlag(name: string): boolean {
   const value = process.env[name];
@@ -35,12 +42,17 @@ function median(values: number[]): number {
  * pairs in the same step (#250 part B). Not perfectly accurate for group steps
  * (1/2/4) where AI replies to a gate, but works well as a proxy.
  */
-function computeLlmResponseTime(sessions: SessionState[]): Record<string, { median: number; avg: number; samples: number }> {
+function computeLlmResponseTime(
+  sessions: SessionState[],
+  cutoffMs: number
+): Record<string, { median: number; avg: number; samples: number }> {
   const byStep: Record<string, number[]> = {};
   for (const session of sessions) {
     const messages = session.messages;
     let lastStudentByStep: Record<number, string | null> = {};
     for (const m of messages) {
+      const atMs = new Date(m.at).getTime();
+      if (!Number.isFinite(atMs) || atMs < cutoffMs) continue;
       if (m.role === "student" && m.step >= 1) {
         lastStudentByStep[m.step] = m.at;
       } else if (m.role === "ai" && m.step >= 1) {
@@ -90,7 +102,10 @@ function isFallbackText(text: string): boolean {
   return false;
 }
 
-function computeFallbackRate(sessions: SessionState[]): {
+function computeFallbackRate(
+  sessions: SessionState[],
+  cutoffMs: number
+): {
   byStep: Record<string, { totalAi: number; fallbacks: number; rate: number }>;
   overall: { totalAi: number; fallbacks: number; rate: number };
 } {
@@ -100,6 +115,8 @@ function computeFallbackRate(sessions: SessionState[]): {
   for (const session of sessions) {
     for (const m of session.messages) {
       if (m.role !== "ai") continue;
+      const atMs = new Date(m.at).getTime();
+      if (!Number.isFinite(atMs) || atMs < cutoffMs) continue;
       totalAi += 1;
       const stepKey = String(m.step);
       const bucket = byStep[stepKey] ?? (byStep[stepKey] = { totalAi: 0, fallbacks: 0 });
@@ -210,7 +227,13 @@ function computeArtifactHealth(sessions: SessionState[]) {
   };
 }
 
-export async function GET() {
+function hasRecentActivity(session: SessionState, cutoffMs: number): boolean {
+  const lastAt = session.messages.at(-1)?.at ?? session.createdAt;
+  const ts = new Date(lastAt).getTime();
+  return Number.isFinite(ts) && ts >= cutoffMs;
+}
+
+export async function GET(request: Request) {
   const user = await getCurrentUser();
   if (!user || user.role !== "admin") {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
@@ -218,8 +241,17 @@ export async function GET() {
 
   const config = systemPromptConfig as Record<string, unknown>;
   const sessions = await listSessions();
+  const requestUrl = new URL(request.url);
+  const windowParam = requestUrl.searchParams.get("window");
+  const selectedWindow: DiagnosticsWindow =
+    windowParam === "24h" || windowParam === "7d" || windowParam === "14d" || windowParam === "30d"
+      ? windowParam
+      : "7d";
+  const nowMs = Date.now();
+  const cutoffMs = nowMs - WINDOW_MS[selectedWindow];
   const specSessions = sessions.filter((session) => session.workflow === "spec10");
-  const recentSessions = specSessions
+  const windowedSpecSessions = specSessions.filter((session) => hasRecentActivity(session, cutoffMs));
+  const recentSessions = windowedSpecSessions
     .slice()
     .sort((a, b) => {
       const aLast = a.messages.at(-1)?.at ?? a.createdAt;
@@ -262,11 +294,13 @@ export async function GET() {
     sessions: {
       total: sessions.length,
       spec10: specSessions.length,
+      spec10InWindow: windowedSpecSessions.length,
       recent: recentSessions
     },
-    llmResponseTime: computeLlmResponseTime(specSessions),
-    fallbackRate: computeFallbackRate(specSessions),
-    artifactHealth: computeArtifactHealth(specSessions),
+    timeWindow: selectedWindow,
+    llmResponseTime: computeLlmResponseTime(windowedSpecSessions, cutoffMs),
+    fallbackRate: computeFallbackRate(windowedSpecSessions, cutoffMs),
+    artifactHealth: computeArtifactHealth(windowedSpecSessions),
     generatedAt: new Date().toISOString()
   });
 }
