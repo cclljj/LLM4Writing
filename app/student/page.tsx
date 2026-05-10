@@ -768,8 +768,8 @@ export default function StudentPage() {
     }
   }
 
-  async function saveArtifact(type: "outline" | "draft6" | "draft8", content: string) {
-    if (!session) return;
+  async function saveArtifact(type: "outline" | "draft6" | "draft8", content: string): Promise<boolean> {
+    if (!session) return false;
     const isDraft = type === "draft6" || type === "draft8";
     if (isDraft) {
       setIsSavingDraft(true);
@@ -786,12 +786,13 @@ export default function StudentPage() {
         const message = formatUserError(data.error ?? "save_failed");
         setError(message);
         if (isDraft) setDraftSaveError(message);
-        return;
+        return false;
       }
       if (type === "draft6") setSavedDraft6Text(content);
       if (type === "draft8") setSavedDraft8Text(content);
       if (isDraft) setLastDraftSavedAt(new Date().toISOString());
       setSession(data);
+      return true;
     } finally {
       if (isDraft) setIsSavingDraft(false);
     }
@@ -849,6 +850,11 @@ export default function StudentPage() {
     setStep6StreamingText("");
     setIsSuggestingStep6(true);
     try {
+      const saved = await saveArtifact("draft6", draftText);
+      if (!saved) {
+        setError((prev) => prev || "儲存文章失敗，尚未送出 AI 建議。請先儲存成功後再試。");
+        return;
+      }
       const response = await fetch("/api/session/step6/suggest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
