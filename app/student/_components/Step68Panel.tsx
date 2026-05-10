@@ -48,6 +48,7 @@ export default function Step68Panel({
   step7StreamingText,
 }: Step68PanelProps) {
   const [suggestingDots, setSuggestingDots] = useState<"..." | "......">("...");
+  const [completingDots, setCompletingDots] = useState<"..." | "......">("...");
 
   useEffect(() => {
     if (!(currentStep === 6 && isSuggestingStep6)) {
@@ -59,6 +60,17 @@ export default function Step68Panel({
     }, 600);
     return () => window.clearInterval(timer);
   }, [currentStep, isSuggestingStep6]);
+
+  useEffect(() => {
+    if (!(currentStep === 6 && isCompletingStep6)) {
+      setCompletingDots("...");
+      return;
+    }
+    const timer = window.setInterval(() => {
+      setCompletingDots((prev) => (prev === "..." ? "......" : "..."));
+    }, 600);
+    return () => window.clearInterval(timer);
+  }, [currentStep, isCompletingStep6]);
 
   return (
     <div className="card">
@@ -138,7 +150,7 @@ export default function Step68Panel({
       ) : null}
       {currentStep === 6 && isCompletingStep6 ? (
         <small style={{ display: "block", marginTop: 6, color: "#94a3b8" }}>
-          AI 正在產生步驟 7 分析回饋，請稍候...
+          AI 正在產生步驟 7 分析回饋，這個步驟會花比較多的時間，請稍候{completingDots}
         </small>
       ) : null}
       {currentStep === 6 && step7StreamingText ? (
