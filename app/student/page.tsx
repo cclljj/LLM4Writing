@@ -133,6 +133,12 @@ function looksLikeInstructionPromptText(text: string): boolean {
   return lines.length >= 4 || text.length >= 160;
 }
 
+function appendTeacherHelpHint(message: string): string {
+  const hint = "如果你不確定怎麼修改，可以先舉手請老師來幫忙。";
+  if (message.includes(hint)) return message;
+  return `${message}\n\n${hint}`;
+}
+
 export default function StudentPage() {
   const router = useRouter();
   const [showDebugLog, setShowDebugLog] = useState(false);
@@ -681,14 +687,12 @@ export default function StudentPage() {
         if (!response.ok || !response.body) {
           try {
             const data = await response.json();
-            setError(formatUserError(data.error ?? "step3_stream_failed"));
+            setError(appendTeacherHelpHint(formatUserError(data.error ?? "step3_stream_failed")));
           } catch {
-            setError(formatUserError("step3_stream_failed"));
+            setError(appendTeacherHelpHint(formatUserError("step3_stream_failed")));
           }
           return;
         }
-
-        setText("");
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let buffer = "";
@@ -727,9 +731,10 @@ export default function StudentPage() {
           }
         }
         if (streamError) {
-          setError(formatUserError(streamError));
+          setError(appendTeacherHelpHint(formatUserError(streamError)));
         } else if (finalSession) {
           setSession(finalSession);
+          setText("");
         }
         return;
       }
@@ -743,7 +748,7 @@ export default function StudentPage() {
       if (!response.ok) {
         const errorText = typeof data.error === "string" ? data.error : "send_failed";
         const hintText = typeof data.hint === "string" && data.hint.trim() ? data.hint.trim() : "";
-        setError(appendErrorHint(errorText, hintText));
+        setError(appendTeacherHelpHint(appendErrorHint(errorText, hintText)));
         return;
       }
       setSession(data);
@@ -770,7 +775,7 @@ export default function StudentPage() {
       if (!response.ok) {
         const errorText = typeof data.error === "string" ? data.error : "send_failed";
         const hintText = typeof data.hint === "string" && data.hint.trim() ? data.hint.trim() : "";
-        setError(appendErrorHint(errorText, hintText));
+        setError(appendTeacherHelpHint(appendErrorHint(errorText, hintText)));
         return;
       }
       setSession(data);

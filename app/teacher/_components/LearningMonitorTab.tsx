@@ -76,6 +76,7 @@ export default function LearningMonitorTab({
   const [learningStatusFilter, setLearningStatusFilter] = useState("all");
   const [learningPage, setLearningPage] = useState(1);
   const [learningJumpPage, setLearningJumpPage] = useState("1");
+  const [progressStatsPage, setProgressStatsPage] = useState(1);
   const monitorPollingBusyRef = useRef(false);
   // Anchor for "查看對話" jump-to-section behavior (#246).
   const groupLogRef = useRef<HTMLDivElement | null>(null);
@@ -389,6 +390,110 @@ export default function LearningMonitorTab({
     };
   }, [filteredMonitorSessions.length, sessionsWithAnalytics, riskRows, joinedUsersCount, onlineUsersCount]);
 
+  function formatStepDurationsText(entries: Array<{ step: number; minutes: number }>): string {
+    if (entries.length === 0) return "—";
+    return entries
+      .sort((a, b) => a.step - b.step)
+      .map((entry) => `S${entry.step}:${entry.minutes}分`)
+      .join(" / ");
+  }
+
+  function computeSessionStepDurations(session: MonitorSession): Array<{ step: number; minutes: number }> {
+    const byStep = new Map<number, { start: number; end: number }>();
+    for (const message of session.messages) {
+      const ts = new Date(message.at).getTime();
+      if (!Number.isFinite(ts)) continue;
+      const prev = byStep.get(message.step);
+      if (!prev) {
+        byStep.set(message.step, { start: ts, end: ts });
+      } else {
+        prev.start = Math.min(prev.start, ts);
+        prev.end = Math.max(prev.end, ts);
+      }
+    }
+    const now = Date.now();
+    const result: Array<{ step: number; minutes: number }> = [];
+    for (const [step, range] of byStep.entries()) {
+      const end = step === session.currentStep ? now : range.end;
+      const minutes = Math.max(0, Math.floor((end - range.start) / 60000));
+      result.push({ step, minutes });
+    }
+    return result;
+  }
+
+  function computeUserStepDurations(session: MonitorSession, username: string): Array<{ step: number; minutes: number }> {
+    const personalStep = session.personalSteps?.[username] ?? session.currentStep;
+    const byStep = new Map<number, { start: number; end: number }>();
+    for (const message of session.messages) {
+      if (message.userId !== username) continue;
+      const ts = new Date(message.at).getTime();
+      if (!Number.isFinite(ts)) continue;
+      const prev = byStep.get(message.step);
+      if (!prev) {
+        byStep.set(message.step, { start: ts, end: ts });
+      } else {
+        prev.start = Math.min(prev.start, ts);
+        prev.end = Math.max(prev.end, ts);
+      }
+    }
+    const now = Date.now();
+    const result: Array<{ step: number; minutes: number }> = [];
+    for (const [step, range] of byStep.entries()) {
+      const end = step === personalStep ? now : range.end;
+      const minutes = Math.max(0, Math.floor((end - range.start) / 60000));
+      result.push({ step, minutes });
+    }
+    return result;
+  }
+
+  const groupProgressRows = useMemo(() => {
+    return filteredMonitorSessions.map((session) => ({
+      sessionId: session.sessionId,
+      groupName: session.groupName ?? session.groupId ?? "未命名組",
+      membersText: (session.participants ?? []).join("、") || "—",
+      currentStep: getGroupCurrentStep(session),
+      stepDurationsText: formatStepDurationsText(computeSessionStepDurations(session)),
+      totalSpeechCount: session.messages.filter((m) => m.role === "student").length
+    }));
+  }, [filteredMonitorSessions]);
+
+  const personalProgressStatsRows = useMemo(() => {
+    const userMap = new Map(users.map((u) => [u.username, u]));
+    const rows: Array<{
+      sessionId: string;
+      username: string;
+      displayName: string;
+      groupName: string;
+      currentStep: number;
+      stepDurationsText: string;
+      totalSpeechCount: number;
+    }> = [];
+    for (const session of filteredMonitorSessions) {
+      const groupName = session.groupName ?? session.groupId ?? "未命名組";
+      for (const username of session.participants ?? []) {
+        const user = userMap.get(username);
+        const ownMessages = session.messages.filter((m) => m.role === "student" && m.userId === username);
+        rows.push({
+          sessionId: session.sessionId,
+          username,
+          displayName: user?.name?.trim() || username,
+          groupName,
+          currentStep: session.personalSteps?.[username] ?? session.currentStep,
+          stepDurationsText: formatStepDurationsText(computeUserStepDurations(session, username)),
+          totalSpeechCount: ownMessages.length
+        });
+      }
+    }
+    return rows.sort((a, b) => a.username.localeCompare(b.username, "zh-Hant"));
+  }, [filteredMonitorSessions, users]);
+
+  const personalProgressStatsPageSize = 10;
+  const personalProgressStatsTotalPages = Math.max(1, Math.ceil(personalProgressStatsRows.length / personalProgressStatsPageSize));
+  const pagedPersonalProgressStatsRows = useMemo(() => {
+    const start = (progressStatsPage - 1) * personalProgressStatsPageSize;
+    return personalProgressStatsRows.slice(start, start + personalProgressStatsPageSize);
+  }, [personalProgressStatsRows, progressStatsPage]);
+
   useEffect(() => {
     if (!monitorSelected) return;
     const latest = monitorSessions.find((session) => session.sessionId === monitorSelected.sessionId);
@@ -474,6 +579,16 @@ export default function LearningMonitorTab({
   useEffect(() => {
     setLearningPage(1);
   }, [learningSchoolFilter, learningClassFilter, learningCourseFilter, learningStatusFilter]);
+
+  useEffect(() => {
+    setProgressStatsPage(1);
+  }, [selectedLearningActivityId, filteredMonitorSessions.length]);
+
+  useEffect(() => {
+    if (progressStatsPage > personalProgressStatsTotalPages) {
+      setProgressStatsPage(personalProgressStatsTotalPages);
+    }
+  }, [progressStatsPage, personalProgressStatsTotalPages]);
 
   useEffect(() => {
     if (learningPage > totalLearningPages) {
@@ -1215,6 +1330,93 @@ export default function LearningMonitorTab({
             </div>
             {classJoinRows.length === 0 ? <small>此課程目前沒有可見學生名單。</small> : null}
             {selectedProgressUser ? <small style={{ display: "block", marginTop: 8 }}>目前檢視個人對話：{selectedProgressUser}</small> : null}
+          </div>
+
+          <div className="card">
+            <h2>
+              課堂進度統計
+              {contextLabel ? <span style={{ fontSize: 14, color: "#64748b", fontWeight: 400, marginLeft: 8 }}>— {contextLabel}</span> : null}
+            </h2>
+
+            <h3 style={{ marginTop: 8 }}>小組進度統計</h3>
+            <div style={{ overflowX: "auto" }}>
+              <table className="pro-table">
+                <thead>
+                  <tr>
+                    <th>小組組別</th>
+                    <th>成員</th>
+                    <th>目前進度</th>
+                    <th>各步驟停留時間</th>
+                    <th>總發言數</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {groupProgressRows.map((row) => (
+                    <tr key={`group-progress-${row.sessionId}`}>
+                      <td>{row.groupName}</td>
+                      <td>{row.membersText}</td>
+                      <td>Step {row.currentStep}</td>
+                      <td>{row.stepDurationsText}</td>
+                      <td>{row.totalSpeechCount}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {groupProgressRows.length === 0 ? <small>目前沒有可統計的小組資料。</small> : null}
+
+            <h3 style={{ marginTop: 14 }}>個人進度統計</h3>
+            <div style={{ overflowX: "auto" }}>
+              <table className="pro-table">
+                <thead>
+                  <tr>
+                    <th>帳號姓名</th>
+                    <th>所屬組別</th>
+                    <th>目前進度</th>
+                    <th>各步驟停留時間</th>
+                    <th>總發言數</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pagedPersonalProgressStatsRows.map((row) => (
+                    <tr key={`personal-progress-${row.sessionId}-${row.username}`}>
+                      <td>{row.displayName} ({row.username})</td>
+                      <td>{row.groupName}</td>
+                      <td>Step {row.currentStep}</td>
+                      <td>{row.stepDurationsText}</td>
+                      <td>{row.totalSpeechCount}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {personalProgressStatsRows.length === 0 ? (
+              <small>目前沒有可統計的個人資料。</small>
+            ) : (
+              <div className="row" style={{ gap: 8, marginTop: 8 }}>
+                <small style={{ alignSelf: "center" }}>
+                  第 {progressStatsPage} / {personalProgressStatsTotalPages} 頁，共 {personalProgressStatsRows.length} 位學生（每頁 10 位）
+                </small>
+                <button
+                  type="button"
+                  className="secondary"
+                  style={{ width: "auto" }}
+                  disabled={progressStatsPage <= 1}
+                  onClick={() => setProgressStatsPage((p) => Math.max(1, p - 1))}
+                >
+                  上一頁
+                </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  style={{ width: "auto" }}
+                  disabled={progressStatsPage >= personalProgressStatsTotalPages}
+                  onClick={() => setProgressStatsPage((p) => Math.min(personalProgressStatsTotalPages, p + 1))}
+                >
+                  下一頁
+                </button>
+              </div>
+            )}
           </div>
 
           {filteredMonitorSessions.length > 0 ? (
