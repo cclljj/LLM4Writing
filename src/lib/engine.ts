@@ -254,6 +254,29 @@ function ensureParticipants(session: SessionState, fallbackUserId: string): stri
   return session.participants;
 }
 
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+  const safeConcurrency = Math.max(1, Math.floor(concurrency));
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+
+  async function runWorker() {
+    while (true) {
+      const current = nextIndex;
+      nextIndex += 1;
+      if (current >= items.length) return;
+      results[current] = await worker(items[current]!, current);
+    }
+  }
+
+  const workers = Array.from({ length: Math.min(safeConcurrency, items.length) }, () => runWorker());
+  await Promise.all(workers);
+  return results;
+}
+
 async function generateAiTextWithRetry(
   messages: LlmChatMessage[],
   temperature: number,
@@ -717,11 +740,17 @@ export async function switchStep(session: SessionState, step: number): Promise<S
   const mode = getModeByStep(step);
   if (mode === "non_interactive") {
     if (step === 5) {
-      for (const participant of session.participants) {
-        const summary = await generateStep5SummaryForUser(session, participant);
+      const STEP5_CONCURRENCY = 4;
+      const summaries = await mapWithConcurrency(
+        session.participants,
+        STEP5_CONCURRENCY,
+        async (participant) => generateStep5SummaryForUser(session, participant)
+      );
+      session.participants.forEach((participant, idx) => {
+        const summary = summaries[idx]!;
         session.reports.step5[participant] = summary;
         session.messages.push(makeMessage({ role: "ai", userId: participant, step, text: summary }));
-      }
+      });
     }
 
     if (step === 7) {

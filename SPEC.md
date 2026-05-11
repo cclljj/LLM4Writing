@@ -481,6 +481,7 @@ Step6「完成文章撰寫」額外前後端驗證（#235）：
 非互動步驟：
 
 - Step5：為每位 participant 生成 `reports.step5[user]`（只使用該學生 Step1~4 個人互動歷程，不混入同組其他學生訊息）。
+- Step4→Step5 切換時，Step5 摘要生成採有限併發批次處理（非逐位串行），以降低班級人數較多時的等待時間；語意與輸出格式不變。
 - Step7：為每位 participant 生成 `reports.step7[user]`。
 - Step10：為每位 participant 生成 `reports.step10[user]`。
 
