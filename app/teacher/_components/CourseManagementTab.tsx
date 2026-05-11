@@ -2,6 +2,7 @@
 
 import { DragEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityGroup, ActivityRow, EssayRow, OpenClassRow, UserRow, genreOptions } from "./types";
+import CourseImplementationReportTab from "./CourseImplementationReportTab";
 
 interface CourseManagementTabProps {
   loginRole: "teacher" | "admin";
@@ -37,7 +38,7 @@ export default function CourseManagementTab({
 }: CourseManagementTabProps) {
   // ── 子分頁（#253） ────────────────────────────
   // admin 預設「寫作主題設定」；教師沒有主題設定權限，預設且唯一選項為「寫作任務設定」
-  type SubTab = "essay" | "task";
+  type SubTab = "essay" | "task" | "report";
   const [subTab, setSubTab] = useState<SubTab>(loginRole === "admin" ? "essay" : "task");
 
   // 若 loginRole 變動（例如資料重新載入後角色更新），確保非 admin 不會卡在 essay 分頁
@@ -638,6 +639,11 @@ export default function CourseManagementTab({
             寫作任務設定
           </button>
         </div>
+        <div style={{ width: 200 }}>
+          <button type="button" className={subTab === "report" ? "" : "secondary"} onClick={() => setSubTab("report")}>
+            課程實施報告
+          </button>
+        </div>
       </div>
 
       {/* 寫作主題管理（admin only） */}
@@ -1106,6 +1112,16 @@ export default function CourseManagementTab({
         ) : null}
       </div>
         </>
+      ) : null}
+
+      {subTab === "report" ? (
+        <CourseImplementationReportTab
+          loginRole={loginRole}
+          users={users}
+          activities={activities}
+          openClasses={openClasses}
+          setError={setError}
+        />
       ) : null}
     </>
   );
