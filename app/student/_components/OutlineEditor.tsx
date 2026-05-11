@@ -400,6 +400,7 @@ export default function OutlineEditor({
                       );
                     }}
                     onBlur={(e) => finishNodeEditing(node.id, e.target.value)}
+                    onPaste={(e) => e.preventDefault()}
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
                         e.preventDefault();

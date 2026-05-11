@@ -119,6 +119,7 @@ export async function GET(request: NextRequest) {
   const offset = parsePaginationParam(url.searchParams.get("offset"), 0);
   const detail = url.searchParams.get("detail") === "full" ? "full" : "summary";
   const requestedSessionId = url.searchParams.get("sessionId") ?? "";
+  const requestedActivityId = url.searchParams.get("activityId") ?? "";
 
   await hydrateDomainState();
   const baseActivities = getAllActivities();
@@ -135,6 +136,7 @@ export async function GET(request: NextRequest) {
   const sessions = await listSessions();
   const visibleSessions = sessions
     .filter((s) => s.workflow === "spec10" && Boolean(s.activityId) && visibleActivityIds.has(s.activityId!))
+    .filter((s) => (requestedActivityId ? s.activityId === requestedActivityId : true))
     .map((s) => buildMonitorSessionPayload(s, activityMap.get(s.activityId!), detail));
 
   if (requestedSessionId) {

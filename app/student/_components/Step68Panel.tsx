@@ -72,6 +72,10 @@ export default function Step68Panel({
     return () => window.clearInterval(timer);
   }, [currentStep, isCompletingStep6]);
 
+  function preventTextPaste(e: { preventDefault: () => void }) {
+    e.preventDefault();
+  }
+
   return (
     <div className="card">
       <h2>{currentStep === 6 ? "撰寫初稿" : "修改潤飾"}</h2>
@@ -91,7 +95,13 @@ export default function Step68Panel({
       {currentStep === 8 ? (
         <small style={{ display: "block", marginTop: 8 }}>已預載步驟 6 初稿內容，可直接修改後儲存。</small>
       ) : null}
-      <textarea value={draftText} onChange={(e) => onDraftChange(e.target.value)} rows={10} style={{ minHeight: 220 }} />
+      <textarea
+        value={draftText}
+        onChange={(e) => onDraftChange(e.target.value)}
+        onPaste={preventTextPaste}
+        rows={10}
+        style={{ minHeight: 220 }}
+      />
       <div className="row" style={{ marginTop: 10, gap: 10 }}>
         <div style={{ width: 180 }}>
           <button type="button" onClick={onSaveDraft} disabled={saveStatus.state === "saving"}>

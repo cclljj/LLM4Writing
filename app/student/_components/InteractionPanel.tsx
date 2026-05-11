@@ -67,6 +67,10 @@ function parseStep6Suggestion(text: string): { draft: string; suggestion: string
   return { draft, suggestion };
 }
 
+function preventTextPaste(e: { preventDefault: () => void }) {
+  e.preventDefault();
+}
+
 export default function InteractionPanel({
   currentStep,
   currentMode,
@@ -268,7 +272,7 @@ export default function InteractionPanel({
       !step2CompletedWaitingTeacher ? (
         <form onSubmit={onSendMessage}>
           <label>{currentStep === 4 ? "我的發言" : "你的回答"}</label>
-          <textarea value={text} onChange={(e) => onTextChange(e.target.value)} />
+          <textarea value={text} onChange={(e) => onTextChange(e.target.value)} onPaste={preventTextPaste} />
           <button type="submit" style={{ marginTop: 10 }}>
             發送訊息
           </button>
@@ -295,6 +299,7 @@ export default function InteractionPanel({
               <textarea
                 value={step9Answers[idx]}
                 onChange={(e) => onStep9AnswerChange(idx, e.target.value)}
+                onPaste={preventTextPaste}
               />
             </div>
           ))}

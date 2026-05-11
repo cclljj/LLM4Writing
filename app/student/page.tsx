@@ -1301,7 +1301,7 @@ export default function StudentPage() {
               {!step3CompletedByMe && isInputEnabled && canReplyToQuestion && !isSendingMessage ? (
                 <form onSubmit={sendMessage}>
                   <label>你的回答</label>
-                  <textarea value={text} onChange={(e) => setText(e.target.value)} />
+                  <textarea value={text} onChange={(e) => setText(e.target.value)} onPaste={(e) => e.preventDefault()} />
                   <button type="submit" style={{ marginTop: 10 }}>發送訊息</button>
                 </form>
               ) : null}

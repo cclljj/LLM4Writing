@@ -188,19 +188,6 @@ export default function TeacherDashboard<TSession extends DashboardSession>({
                       建議：{row.risk.suggestions[0]}
                     </small>
                   ) : null}
-                  {row.hint.ready && row.hint.nextStep ? (
-                    <div style={{ marginTop: 6 }}>
-                      <button
-                        type="button"
-                        className="secondary"
-                        style={{ width: "auto" }}
-                        disabled={isAdvancing}
-                        onClick={() => onAdvanceStep(row.session.sessionId, row.hint.nextStep!)}
-                      >
-                        {isAdvancing ? "切換中..." : `套用 Step ${row.hint.nextStep}`}
-                      </button>
-                    </div>
-                  ) : null}
                 </td>
                 <td>
                   <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>

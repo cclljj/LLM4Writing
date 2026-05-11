@@ -347,15 +347,14 @@ export default function LearningMonitorTab({
 
   /**
    * All sessions presented in dashboard row format (#244).
-   * Sorted: stuck → watch → ready (ok with hint.ready) → ok (others), so teachers
-   * see most urgent rows first while still having access to every session in one view.
+   * Sorted with "ready to advance" first so teachers can immediately act.
    */
   const riskRows = useMemo(() => {
     return sessionsWithAnalytics.slice().sort((a, b) => {
       const rankFor = (row: SessionAnalytics): number => {
-        if (row.risk.level === "stuck") return 0;
-        if (row.risk.level === "watch") return 1;
-        if (row.hint.ready) return 2;
+        if (row.hint.ready) return 0;
+        if (row.risk.level === "stuck") return 1;
+        if (row.risk.level === "watch") return 2;
         return 3;
       };
       return rankFor(a) - rankFor(b);
@@ -504,13 +503,17 @@ export default function LearningMonitorTab({
       .join("|");
   }
 
-  async function refreshMonitor(): Promise<MonitorSession[]> {
+  async function refreshMonitor(activityIdOverride?: string): Promise<MonitorSession[]> {
+    const targetActivityId = activityIdOverride ?? selectedLearningActivityId;
+    const monitorUrl = targetActivityId
+      ? `/api/teacher/monitor?activityId=${encodeURIComponent(targetActivityId)}`
+      : "/api/teacher/monitor";
     const fetchOpts: RequestInit = { cache: "no-store" };
     let response: Response | null = null;
     try {
-      response = await fetch("/api/teacher/monitor", fetchOpts);
+      response = await fetch(monitorUrl, fetchOpts);
       if (!response.ok) {
-        response = await fetch("/api/teacher/monitor", fetchOpts);
+        response = await fetch(monitorUrl, fetchOpts);
       }
     } catch {
       response = null;
@@ -721,7 +724,7 @@ export default function LearningMonitorTab({
     setSelectedLearningActivityId(activityId);
     setShowCourseStatusView(true);
     await runLearningAction(`course:${activityId}:view`, "系統正在載入課程狀態，請稍候...", async () => {
-      const sessions = await refreshMonitor();
+      const sessions = await refreshMonitor(activityId);
       const targetSessions = sessions.filter((item: MonitorSession) => item.activityId === activityId);
       if (targetSessions.length > 0) {
         const first = targetSessions[0]!;
