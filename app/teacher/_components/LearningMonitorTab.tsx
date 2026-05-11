@@ -738,6 +738,20 @@ export default function LearningMonitorTab({
   }
 
   async function handleCourseLifecycle(activityId: string, action: "start" | "pause_resume" | "end") {
+    if (action === "pause_resume") {
+      const activity = activities.find((item) => item.id === activityId);
+      const isPausing = (activity?.courseStatus ?? "not_started") === "in_progress";
+      const confirmed = window.confirm(
+        isPausing
+          ? "確定要暫停上課嗎？暫停後學生將無法繼續互動，直到恢復上課。"
+          : "確定要繼續上課嗎？"
+      );
+      if (!confirmed) return;
+    }
+    if (action === "end") {
+      const confirmed = window.confirm("確定要結束上課嗎？結束後此課程將停止互動。");
+      if (!confirmed) return;
+    }
     const processingText =
       action === "start" ? "系統正在開始上課，請稍候..." : action === "end" ? "系統正在結束上課，請稍候..." : "系統正在更新課程狀態，請稍候...";
     await runLearningAction(`course:${activityId}:${action}`, processingText, async () => {

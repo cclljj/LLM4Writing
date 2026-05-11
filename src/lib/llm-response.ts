@@ -21,6 +21,13 @@ function stripJsonFence(text: string): string {
     .trim();
 }
 
+function sanitizeNextQuestionText(text: string): string {
+  const cleaned = stripJsonFence(text).trim();
+  if (!cleaned) return "";
+  if (/^\s*\{[\s\S]*\}\s*$/.test(cleaned)) return "";
+  return cleaned;
+}
+
 function unescapeJsonString(input: string): string {
   return input.replace(/\\"/g, "\"").replace(/\\n/g, "\n").replace(/\\t/g, "\t").trim();
 }
@@ -242,7 +249,8 @@ export function parseStructuredStepAiResponse(aiText: string): StepAiResponse | 
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
     const record = parsed as Record<string, unknown>;
     const feedbackText = readString(record, ["feedback", "feedbackText", "response", "reply"]);
-    const nextQuestion = readString(record, ["nextQuestion", "question", "next_question"]);
+    const nextQuestionRaw = readString(record, ["nextQuestion", "question", "next_question"]);
+    const nextQuestion = nextQuestionRaw ? sanitizeNextQuestionText(nextQuestionRaw) : undefined;
     if (!feedbackText && !nextQuestion) return null;
     return {
       feedbackText: feedbackText ?? "已收到大家的回覆。",
@@ -269,14 +277,16 @@ export function splitAiFeedbackAndQuestion(aiText: string): StepAiResponse {
     return { feedbackText: sanitizeStudentFacingText(before || aiText.trim()) };
   }
 
-  const normalizedQuestion = after
+  const normalizedQuestion = sanitizeNextQuestionText(
+    after
     .replace(/^[-*]\s*/, "")
     .replace(/^###\s*/, "")
-    .trim();
+    .trim()
+  );
 
   return {
     feedbackText: sanitizeStudentFacingText(before || "已收到大家的回覆。"),
-    nextQuestion: normalizedQuestion
+    nextQuestion: normalizedQuestion || undefined
   };
 }
 

@@ -113,7 +113,18 @@ export async function POST(request: NextRequest) {
         send({ type: "done", session });
       } catch (err) {
         errored = true;
-        send({ type: "error", error: err instanceof Error ? err.message : "step10_stream_failed" });
+        // Hard guarantee for Step 10: even when LLM/streaming fails, persist a
+        // readable fallback so students never end up at Step 10 with empty output.
+        try {
+          const { fallback } = buildStep10LlmInput(session, user.username);
+          const safeReport = normalizeFormalLlmText(fallback, { fallback });
+          recordStep10Report(session, user.username, safeReport);
+          await saveSession(session);
+          send({ type: "chunk", text: safeReport });
+          send({ type: "done", session });
+        } catch {
+          send({ type: "error", error: err instanceof Error ? err.message : "step10_stream_failed" });
+        }
       } finally {
         recordStreamingCall("step10_stream", Date.now() - startedAt, errored);
         controller.close();

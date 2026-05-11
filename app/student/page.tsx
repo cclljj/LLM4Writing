@@ -932,7 +932,7 @@ export default function StudentPage() {
     }
   }
 
-  async function streamStep10Report(sessionId: string) {
+  async function streamStep10Report(sessionId: string): Promise<boolean> {
     setStep10StreamingText("");
     try {
       const response = await fetch("/api/session/step10/stream", {
@@ -940,12 +940,16 @@ export default function StudentPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sessionId })
       });
-      if (!response.ok || !response.body) return;
+      if (!response.ok || !response.body) {
+        setError(formatUserError("step10_stream_failed"));
+        return false;
+      }
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
       let liveText = "";
       let finalSession: typeof session | null = null;
+      let streamError = "";
       outer: while (true) {
         const { value, done } = await reader.read();
         if (done) break;
@@ -969,6 +973,7 @@ export default function StudentPage() {
               finalSession = event.session;
               break outer;
             } else if (event.type === "error") {
+              streamError = event.error ?? "step10_stream_failed";
               break outer;
             }
           } catch {
@@ -976,9 +981,18 @@ export default function StudentPage() {
           }
         }
       }
-      if (finalSession) setSession(finalSession);
+      if (streamError) {
+        setError(formatUserError(streamError));
+        return false;
+      }
+      if (finalSession) {
+        setSession(finalSession);
+        return true;
+      }
+      return false;
     } catch {
-      // best-effort; reconcile path will eventually generate the report
+      setError(formatUserError("step10_stream_failed"));
+      return false;
     } finally {
       setStep10StreamingText("");
     }
@@ -992,7 +1006,15 @@ export default function StudentPage() {
     if (ownStep10Report && ownStep10Report.trim()) return;
     if (step10StreamRequestedRef.current === session.id) return;
     step10StreamRequestedRef.current = session.id;
-    streamStep10Report(session.id).catch(() => undefined);
+    streamStep10Report(session.id)
+      .then((ok) => {
+        if (!ok) {
+          step10StreamRequestedRef.current = "";
+        }
+      })
+      .catch(() => {
+        step10StreamRequestedRef.current = "";
+      });
   }, [session?.id, currentStep, ownStep10Report, loginUser]);
 
   async function completeStep6ToStep8() {
