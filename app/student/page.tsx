@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { buildStudentNextAction } from "@/src/lib/student-next-action";
+import { getStep9QuestionsFromConfig } from "@/src/lib/spec";
 import { validateDraftContent } from "@/src/lib/answer-validation";
 import { appendErrorHint, formatUserError } from "@/src/lib/error-messages";
 import OutlineSvg from "@/app/_components/OutlineSvg";
@@ -65,6 +66,7 @@ type SessionState = {
   promptConfig?: {
     questionBanks?: Record<string, string[]>;
     stepOpenings?: Record<string, string>;
+    step9Questions?: Record<string, string>;
   };
   messages: Array<{
     id: string;
@@ -139,6 +141,10 @@ function appendTeacherHelpHint(message: string): string {
   return `${message}\n\n${hint}`;
 }
 
+function getOwnStepFromSession(session: SessionState, username: string): number {
+  return session.personalSteps?.[username] ?? session.currentStep;
+}
+
 export default function StudentPage() {
   const router = useRouter();
   const [showDebugLog, setShowDebugLog] = useState(false);
@@ -180,6 +186,23 @@ export default function StudentPage() {
   const lastOwnStepRef = useRef<number | null>(null);
   const sessionEtagRef = useRef<string>("");
   const outlineMermaidRef = useRef<string>("");
+
+  const applySessionSafely = (incoming: SessionState) => {
+    setSession((prev) => {
+      if (!prev || !loginUser) return incoming;
+      if (prev.id !== incoming.id) return incoming;
+      const prevOwnStep = getOwnStepFromSession(prev, loginUser);
+      const nextOwnStep = getOwnStepFromSession(incoming, loginUser);
+      const prevMessageCount = prev.messages?.length ?? 0;
+      const nextMessageCount = incoming.messages?.length ?? 0;
+      // Guard against out-of-order polling responses that would roll the user
+      // back to an earlier personal step with no newer payload.
+      if (nextOwnStep < prevOwnStep && nextMessageCount <= prevMessageCount) {
+        return prev;
+      }
+      return incoming;
+    });
+  };
 
   useEffect(() => {
     fetch("/api/auth/me", { cache: "no-store" })
@@ -225,7 +248,7 @@ export default function StudentPage() {
           return res.json();
         })
         .then((data) => {
-          if (data?.id) setSession(data);
+          if (data?.id) applySessionSafely(data);
         })
         .catch(() => undefined);
       if (tick % 3 === 0) refreshActivityStatuses().catch(() => undefined);
@@ -272,7 +295,7 @@ export default function StudentPage() {
         });
         const data = await response.json();
         if (response.ok && data?.id) {
-          setSession(data);
+          applySessionSafely(data);
         } else {
           setError(formatUserError(data.error ?? "step5_auto_advance_failed"));
         }
@@ -593,9 +616,12 @@ export default function StudentPage() {
     const latestSystem = [...(session?.messages ?? [])]
       .filter((m) => m.step === 9 && m.role === "system")
       .at(-1)?.text;
-    if (!latestSystem) return [] as string[];
-    return Array.from(latestSystem.matchAll(/\n?[1-4]\.\s*(.+)/g)).map((m) => (m[1] ?? "").trim()).slice(0, 4);
-  }, [currentStep, session?.messages]);
+    const fromSystem = latestSystem
+      ? Array.from(latestSystem.matchAll(/\n?[1-4]\.\s*(.+)/g)).map((m) => (m[1] ?? "").trim()).slice(0, 4)
+      : [];
+    if (fromSystem.length === 4) return fromSystem;
+    return getStep9QuestionsFromConfig(session?.promptConfig?.step9Questions).slice(0, 4);
+  }, [currentStep, session?.messages, session?.promptConfig?.step9Questions]);
 
   async function refreshOverview() {
     setIsLoadingOverview(true);
@@ -665,7 +691,7 @@ export default function StudentPage() {
       setError(formatUserError(typeof data.error === "string" ? data.error : "join_failed"));
       return;
     }
-    setSession(data as SessionState);
+    applySessionSafely(data as SessionState);
     setPreparingCourse(null);
     await refreshOverview();
   }
@@ -733,7 +759,7 @@ export default function StudentPage() {
         if (streamError) {
           setError(appendTeacherHelpHint(formatUserError(streamError)));
         } else if (finalSession) {
-          setSession(finalSession);
+          applySessionSafely(finalSession);
           setText("");
         }
         return;
@@ -751,7 +777,7 @@ export default function StudentPage() {
         setError(appendTeacherHelpHint(appendErrorHint(errorText, hintText)));
         return;
       }
-      setSession(data);
+      applySessionSafely(data);
       setText("");
     } finally {
       setIsSendingMessage(false);
@@ -778,7 +804,7 @@ export default function StudentPage() {
         setError(appendTeacherHelpHint(appendErrorHint(errorText, hintText)));
         return;
       }
-      setSession(data);
+      applySessionSafely(data);
       setStep9Answers(["", "", "", ""]);
     } finally {
       setIsSendingMessage(false);
@@ -808,7 +834,7 @@ export default function StudentPage() {
       if (type === "draft6") setSavedDraft6Text(content);
       if (type === "draft8") setSavedDraft8Text(content);
       if (isDraft) setLastDraftSavedAt(new Date().toISOString());
-      setSession(data);
+      applySessionSafely(data);
       return true;
     } finally {
       if (isDraft) setIsSavingDraft(false);
@@ -834,7 +860,7 @@ export default function StudentPage() {
     });
     const data = await response.json();
     if (!response.ok) { setError(formatUserError(data.error ?? "complete_step3_failed")); return; }
-    setSession(data);
+    applySessionSafely(data);
   }
 
   async function completeStep4() {
@@ -853,7 +879,7 @@ export default function StudentPage() {
     });
     const data = await response.json();
     if (!response.ok) { setError(formatUserError(data.error ?? "complete_step4_failed")); return; }
-    setSession(data);
+    applySessionSafely(data);
   }
 
   async function requestStep6Suggestion() {
@@ -927,7 +953,7 @@ export default function StudentPage() {
       if (streamError) {
         setError(formatUserError(streamError));
       } else if (finalSession) {
-        setSession(finalSession);
+        applySessionSafely(finalSession);
       }
     } catch {
       setError(formatUserError("step6_suggest_failed"));
@@ -991,7 +1017,7 @@ export default function StudentPage() {
         return false;
       }
       if (finalSession) {
-        setSession(finalSession);
+        applySessionSafely(finalSession);
         return true;
       }
       return false;
@@ -1086,7 +1112,7 @@ export default function StudentPage() {
       } else if (finalSession) {
         setSavedDraft6Text(draftText);
         setLastDraftSavedAt(new Date().toISOString());
-        setSession(finalSession);
+        applySessionSafely(finalSession);
       }
     } catch {
       setError(formatUserError("step6_complete_failed"));
@@ -1110,7 +1136,7 @@ export default function StudentPage() {
       if (!response.ok) { setError(formatUserError(data.error ?? "step8_complete_failed")); return; }
       setSavedDraft8Text(draftText);
       setLastDraftSavedAt(new Date().toISOString());
-      setSession(data);
+      applySessionSafely(data);
     } finally {
       setIsCompletingStep8(false);
     }
