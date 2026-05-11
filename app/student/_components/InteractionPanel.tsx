@@ -195,7 +195,7 @@ export default function InteractionPanel({
               <>
                 <strong>
                   {message.kind === "question"
-                    ? "系統提問"
+                    ? "問題"
                     : message.kind === "student"
                       ? `學生${message.userId ? `(${message.userId})` : ""}`
                       : "AI 回覆"}

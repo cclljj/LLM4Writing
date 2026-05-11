@@ -399,7 +399,6 @@ export default function StudentPage() {
       }
       if (m.role === "system") {
         if (currentStep >= 5 && m.userId && m.userId !== loginUser) return;
-        if (currentStep === 3) return;
         const q = toQuestionText(m.text);
         if (q) result.push({ id: m.id, kind: "question", text: q, at: m.at });
       }
@@ -1319,7 +1318,7 @@ export default function StudentPage() {
                 <div key={message.id} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
                   <strong>
                     {message.kind === "question"
-                      ? "系統提問"
+                      ? "問題"
                       : message.kind === "student"
                         ? `學生${message.userId ? `(${message.userId})` : ""}`
                         : "AI 回覆"}
