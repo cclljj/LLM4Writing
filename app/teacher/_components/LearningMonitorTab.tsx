@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArtifactDiagnostics, buildAdvancedStuckRisk, QualitySignals } from "@/src/lib/learning-diagnostics";
 import { formatUserError } from "@/src/lib/error-messages";
+import { getActivityScopedSessions, isSessionInActivityScope } from "@/src/lib/monitor-session-scope";
 import OutlineSvg from "@/app/_components/OutlineSvg";
 import { renderMessageHtml } from "@/app/student/_components/renderMessageHtml";
 import TeacherDashboard, { TeacherDashboardData } from "./TeacherDashboard";
@@ -136,10 +137,7 @@ export default function LearningMonitorTab({
   }, [selectedLearningActivity]);
 
   const filteredMonitorSessions = useMemo(
-    () =>
-      selectedLearningActivityId
-        ? monitorSessions.filter((session) => session.activityId === selectedLearningActivityId)
-        : [],
+    () => getActivityScopedSessions(monitorSessions, selectedLearningActivityId),
     [monitorSessions, selectedLearningActivityId]
   );
 
@@ -496,10 +494,13 @@ export default function LearningMonitorTab({
 
   useEffect(() => {
     if (!monitorSelected) return;
-    const latest = monitorSessions.find((session) => session.sessionId === monitorSelected.sessionId);
-    if (!latest) return;
+    const latest = filteredMonitorSessions.find((session) => session.sessionId === monitorSelected.sessionId);
+    if (!latest) {
+      setMonitorSelected(null);
+      return;
+    }
     setMonitorSelected(latest);
-  }, [monitorSessions, monitorSelected?.sessionId]);
+  }, [filteredMonitorSessions, monitorSelected?.sessionId]);
 
   useEffect(() => {
     monitorSessionsRef.current = monitorSessions;
@@ -638,7 +639,10 @@ export default function LearningMonitorTab({
       return [];
     }
     const data = await response.json();
-    const sessions: MonitorSession[] = data.sessions ?? [];
+    const rawSessions: MonitorSession[] = data.sessions ?? [];
+    const sessions = targetActivityId
+      ? getActivityScopedSessions(rawSessions, targetActivityId)
+      : rawSessions;
     const mergedSessions = sessions.map((session) => {
       const existing = monitorSessionsRef.current.find((item) => item.sessionId === session.sessionId);
       if (!existing || existing.messages.length === 0 || session.messages.length > 0) return session;
@@ -664,13 +668,19 @@ export default function LearningMonitorTab({
   async function loadMonitorSessionDetail(sessionId: string): Promise<MonitorSession | null> {
     setDetailLoadingSessionId(sessionId);
     try {
-      const response = await fetch(`/api/teacher/monitor?sessionId=${encodeURIComponent(sessionId)}&detail=full`, { cache: "no-store" });
+      const q = new URLSearchParams({ sessionId, detail: "full" });
+      if (selectedLearningActivityId) q.set("activityId", selectedLearningActivityId);
+      const response = await fetch(`/api/teacher/monitor?${q.toString()}`, { cache: "no-store" });
       const data = await response.json();
       if (!response.ok) {
         setLearningWarning(formatUserError(data.error ?? "monitor_detail_load_failed"));
         return null;
       }
       const detail = data.session as MonitorSession;
+      if (selectedLearningActivityId && !isSessionInActivityScope(detail, selectedLearningActivityId)) {
+        setLearningWarning(formatUserError("monitor_detail_load_failed"));
+        return null;
+      }
       setMonitorSessions((prev) => prev.map((session) => (session.sessionId === detail.sessionId ? detail : session)));
       setMonitorSelected((prev) => (prev?.sessionId === detail.sessionId ? detail : prev));
       setLearningWarning("");
@@ -882,7 +892,7 @@ export default function LearningMonitorTab({
       }
       setError("");
       await onRefreshData();
-      if (showCourseStatusView) await refreshMonitor();
+      if (showCourseStatusView) await refreshMonitor(selectedLearningActivityId);
     });
   }
 
@@ -902,7 +912,7 @@ export default function LearningMonitorTab({
         return;
       }
       await onRefreshData();
-      if (showCourseStatusView) await refreshMonitor();
+      if (showCourseStatusView) await refreshMonitor(selectedLearningActivityId);
       if (selectedLearningActivityId === activityId) {
         setShowCourseStatusView(false);
         setSelectedLearningActivityId("");
@@ -922,6 +932,10 @@ export default function LearningMonitorTab({
       const data = await response.json();
       if (!response.ok) {
         setError(formatUserError(data.error ?? "switch_failed"));
+        return;
+      }
+      if (selectedLearningActivityId && data.activityId && data.activityId !== selectedLearningActivityId) {
+        setLearningWarning(formatUserError("monitor_detail_load_failed"));
         return;
       }
       setMonitorSessions((prev) =>
@@ -952,15 +966,21 @@ export default function LearningMonitorTab({
       });
       setGroupViewStep("all");
       await onRefreshData();
-      await refreshMonitor();
+      await refreshMonitor(selectedLearningActivityId);
     });
   }
 
   async function loadProgress(sessionTarget?: string, username?: string) {
     const sid = sessionTarget ?? progressSessionId;
     if (!sid) return;
+    const targetSession = filteredMonitorSessions.find((session) => session.sessionId === sid);
+    if (!targetSession) {
+      setLearningWarning(formatUserError("monitor_detail_load_failed"));
+      return;
+    }
     await runLearningAction(`progress:${sid}:${username ?? ""}`, "系統正在載入個人進度，請稍候...", async () => {
       const q = new URLSearchParams({ sessionId: sid });
+      if (selectedLearningActivityId) q.set("activityId", selectedLearningActivityId);
       if (username) {
         q.set("username", username);
       }
@@ -1153,7 +1173,7 @@ export default function LearningMonitorTab({
                             setSelectedLearningActivityId(activity.id);
                             runLearningAction(`course:${activity.id}:refresh`, "系統正在重新整理課程資料，請稍候...", async () => {
                               await onRefreshData();
-                              if (showCourseStatusView) await refreshMonitor();
+                              if (showCourseStatusView) await refreshMonitor(activity.id);
                             });
                           }}
                         >

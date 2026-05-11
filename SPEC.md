@@ -806,13 +806,14 @@ classnumber,username,name,school,role,password,ownerTeacherUsername
 - Monitor 採摘要先載入、詳情後載入（#267）。
 - `/api/teacher/monitor` 預設只回傳儀表板與加入狀態所需摘要。
 - 進入某課程的「查看狀態」後，課堂儀表板與對話區僅顯示該課程 sessions，不顯示其他課程 sessions。
+- 前端摘要輪詢、查看對話詳情、個人進度詳情都必須以目前選定課程的 `activityId` 作為 scope；若回傳資料不屬於目前課程，不得併入儀表板或對話區。
 - 完整 `messages`、`outlines`、`step3SubmittedOutlines` 僅在選取小組對話時以 `?sessionId=...&detail=full` 延遲載入。
 - 輪詢只使用摘要 payload，降低 loading 與網路成本。
 - 課堂儀表板、全班加入狀態、小組對話紀錄、個人對話紀錄四個 h2 標題後附加「— 學校 / 班級 / 文章題目」（#258）。
 
 課堂儀表板（#244）：
 
-- 顯示所有 sessions，不只卡關或可推進小組。
+- 顯示目前選定課程的所有 sessions，不只卡關或可推進小組。
 - 排序：可推進 -> 高風險 -> 留意 -> 正常。
 - 欄位：狀態、小組、成員、目前進度、Step5~10 分布、提醒/步驟切換、動作。
 - 目前進度顯示 `min(personalSteps[member])`，避免 Step5 後停在 `session.currentStep`。
@@ -1249,13 +1250,14 @@ Request:
 - 支援 `?activityId=...`，僅回傳指定課程的 sessions（學習管理「查看狀態」模式使用）。
 - 回應：`{ sessions: [...], total: N, limit: N, offset: N }`。
 - 摘要包含 `messageCount`、`lastMessageAt`、`studentMessageStats`、`stepReadyHints`、`artifactDiagnostics`。
-- 完整小組詳情使用 `?sessionId=...&detail=full`。
+- 完整小組詳情使用 `?sessionId=...&detail=full`；學習管理「查看狀態」模式應同時帶入 `activityId`，避免跨課程 session 被載入。
 - detail 模式才回傳完整 `messages`、`outlines`、`step3SubmittedOutlines`。
 - 目前分頁為應用層分頁；DB 層分頁是後續優化。
 
-#### `GET /api/teacher/personal-progress?sessionId=...&username=...`
+#### `GET /api/teacher/personal-progress?sessionId=...&username=...&activityId=...`
 
 - 權限：teacher/admin。
+- `activityId` 選填；若提供，session 必須屬於該課程，否則回傳 `session_not_found`。
 - 回傳 participant 個人進度統計。
 - `username` 有值時回傳個人訊息、`userOutline`、`userStep3SubmittedOutline`。
 

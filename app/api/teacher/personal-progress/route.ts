@@ -15,6 +15,7 @@ export async function GET(request: NextRequest) {
   }
 
   const sessionId = request.nextUrl.searchParams.get("sessionId") ?? "";
+  const requestedActivityId = request.nextUrl.searchParams.get("activityId") ?? "";
   const username = request.nextUrl.searchParams.get("username") ?? "";
 
   await hydrateDomainState();
@@ -34,6 +35,9 @@ export async function GET(request: NextRequest) {
   }
   if (!session.activityId || !visibleActivityIds.has(session.activityId)) {
     return NextResponse.json({ error: "forbidden_session" }, { status: 403 });
+  }
+  if (requestedActivityId && session.activityId !== requestedActivityId) {
+    return NextResponse.json({ error: "session_not_found" }, { status: 404 });
   }
   if (username && !session.participants.includes(username)) {
     return NextResponse.json({ error: "participant_not_found" }, { status: 404 });
