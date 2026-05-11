@@ -48,6 +48,24 @@ export interface ArtifactSignals {
   draftStep8UpdatedAt?: Record<string, string>;
 }
 
+export interface Step12RoundLog {
+  currentStep: number;
+  currentSubStep: string;
+  nextSubStep: string;
+  feedbackSource: "llm" | "fallback";
+  questionSource: "subStepPrompt_llm" | "questionBank_random" | "fallback";
+  llmAttemptCountFeedback: number;
+  llmAttemptCountQuestion: number;
+  usedFallback: boolean;
+  latencyMs: number;
+  at: string;
+}
+
+export interface Step12RoundState {
+  inFlightGateKey?: string;
+  completedGateKeys?: string[];
+}
+
 export interface SessionState {
   id: string;
   createdAt: string;
@@ -59,6 +77,8 @@ export interface SessionState {
   messages: ChatMessage[];
   qualitySignals?: QualitySignals;
   artifactSignals?: ArtifactSignals;
+  step12RoundLogs?: Step12RoundLog[];
+  step12RoundState?: Step12RoundState;
   groupGate: Record<string, string[]>;
   reflectionIndex: Record<string, number>;
   workflow: SessionWorkflow;

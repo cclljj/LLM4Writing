@@ -336,7 +336,7 @@ Artifact 類型：
 
 ### 5.2 Step1/2 子步驟與題目來源
 
-Step1 有 5 個子步驟，Step2 有 4 個子步驟。每個子步驟需所有 participants 都回覆至少一次，AI 才回覆並進入下一子步。
+Step1 有 5 個子步驟，Step2 有 4 個子步驟。每個子步驟需所有 participants 都回覆至少一次，才會觸發 Step1/2 的兩段式處理（先回饋，再產生下一題）。
 
 Gate key 範例：
 
@@ -346,37 +346,53 @@ Gate key 範例：
 - `2-1-3`
 - `2-4`
 
-題目來源優先序：
+下一題來源優先序（以 `nextSubstepKey` 判定）：
 
-| Step/Substep | 題目來源 |
+| 條件 | 下一題來源 |
 |---|---|
-| `1-1`、`1-2`、`1-5` | `questionBanks` 隨機抽題 |
-| `1-3-x`、`1-4-x` | LLM 依 `subStepPrompts` 產生 `nextQuestion`；缺失時 fallback |
-| `2-1-x`、`2-2`、`2-3` | LLM 依 `subStepPrompts` 產生 `nextQuestion`；缺失時 fallback |
-| `2-4` | `questionBanks` 隨機抽題 |
+| `subStepPrompts[nextSubstepKey]` 存在 | 使用 LLM 產生 `nextQuestion` |
+| `subStepPrompts[nextSubstepKey]` 不存在，且 `questionBanks[nextSubstepKey]` 有題目 | 直接從 `questionBanks[nextSubstepKey]` 隨機抽 1 題 |
+| 以上都缺失 | `subStepPromptsFallbacks[nextSubstepKey]`，再不行用內建安全 fallback |
 
 強制規則：
 
-- `1-2`、`1-5`、`2-4` 不得被 AI 回覆中的下一題覆蓋。
-- `questionBanks` 主要來源為 `writingTasks[essayId].questionBanks`。
+- Step1/2 觸發後必須執行兩段式：
+1. 先產生回饋（feedback only，不出題）。
+2. 再產生下一題（question only，不輸出回饋）。
 - `PromptConfig.subStepPrompts` 中部分內容是給 LLM 的指示，不可直接顯示給學生。
-- 首題或 fallback 題目若缺失，必須使用短、安全、學生可讀的保底問句，不得回退成 prompt 原文。
+- `questionBanks` 主要來源為 `writingTasks[essayId].questionBanks`。
+- 題目缺失時必須使用短、安全、學生可讀的保底問句，不得回退成 prompt 原文。
+- gate 清空、子步驟推進、下一題寫入必須同輪完成，避免「全員已答但無下一題」卡住。
 
 ### 5.3 Step1/2 Group Gate 與等待狀態
 
 - 學生在尚未完成當前 gate 前，不可看到同組其他同學在當前 gate 的 student 訊息。
 - 第一位學生提交後，其餘尚未提交者仍可輸入；已提交者進入等待狀態。
-- 最後一位學生送出後，全組已作答同學顯示「等待遠端 AI 回答中...」。
+- 最後一位學生送出後，全組已作答同學顯示「等待遠端 AI 回答中...」（此時後端會依序執行回饋階段與下一題階段）。
 - 若全員已完成但 AI 或 system 下一題沒有出現，學生端輪詢 `/api/session/[sessionId]` 需在安全等待時間後補推進，避免永久卡住。
 - 自動補推進需涵蓋子題邊界，如 `1-3-3 -> 1-4-1`、`1-4-3 -> 1-5`、`2-1-3 -> 2-2`。
+- 後端需有重入保護，避免同一 gate 在併發情境下重複推進。
 
 ### 5.4 LLM Prompt 組裝與輸出契約
 
-Prompt 組裝順序：
+Step1/2 改為兩段式 prompt 組裝：
+
+第一段（回饋）：
 
 1. 全域 `systemPrompt`
 2. 當前步驟 `stepPrompts[String(step)]`
-3. Step1/2 額外附加目前子步驟 key 對應的 `subStepPrompts[key]` 與 `questionBanks[key]`
+3. 目前子步驟 key 與「目前子步驟題目」
+4. 本步驟最近對話 + 跨步驟歷史節錄
+
+第二段（下一題）：
+
+1. 若 `subStepPrompts[nextSubstepKey]` 存在：
+1. 全域 `systemPrompt`
+2. 當前步驟 `stepPrompts[String(step)]`
+3. `subStepPrompts[nextSubstepKey]`
+4. 以第一段回饋與最近對話做上下文，產生下一題
+2. 若 `subStepPrompts[nextSubstepKey]` 不存在：
+1. 不呼叫 LLM 生成題目，直接從 `questionBanks[nextSubstepKey]` 隨機抽題
 
 Step5 摘要報告生成：
 
@@ -386,11 +402,18 @@ Step5 摘要報告生成：
 - 若 LLM 續寫導致同一章節重複（如重複「讚美與鼓勵」），後端需做章節正規化去重，保留較完整版本，避免學生看到重複段落。
 - Step5 套用正式回覆品質閘門：若偵測重複句段、截斷殘留或不完整結尾，需自動重生一次後再輸出。
 
-Step1/2 遠端 LLM 優先輸出 JSON：
+Step1/2 第一段（回饋）JSON 契約：
 
 ```json
 {
-  "feedback": "給全組的簡短回饋",
+  "feedback": "給全組的簡短回饋"
+}
+```
+
+Step1/2 第二段（下一題）JSON 契約（僅當使用 `subStepPrompts[nextSubstepKey]` 呼叫 LLM）：
+
+```json
+{
   "nextQuestion": "下一題要問學生的一句完整問題"
 }
 ```
@@ -399,11 +422,13 @@ Step1/2 遠端 LLM 優先輸出 JSON：
 
 - LLM 應只輸出 JSON object，不加 Markdown code fence 或額外說明。
 - `feedback` 與 `nextQuestion` 必須為繁體中文。
+- 第一段 `feedback` 不可提出新問題；第二段 `nextQuestion` 不可夾帶回饋段落。
 - `nextQuestion` 不可空白、不可照抄 prompt、不可寫「請依上一則 AI 提問作答」。
 - 後端先解析 JSON；若不是 JSON，仍相容舊格式「請回答以下問題」。
 - `nextQuestion` 顯示前需再做文字淨化：去除 code fence（如 ```json）與 JSON 殼層殘留；若仍為 JSON 結構樣式則視為無效題目並走 fallback。
-- 若 3 次重試後仍沒有可用 `nextQuestion`，使用 `subStepPromptsFallbacks`；若仍缺漏，使用內建安全 fallback。
-- Step1/2 單次遠端 LLM 嘗試 timeout 為約 25 秒，並允許多輪續寫；優先避免在 2-3/2-4 等邊界產生截斷回覆。
+- 第一段與第二段都需有 timeout/retry/fallback，任一階段失敗不得造成流程卡住。
+- Step1/2 單次遠端 LLM 嘗試 timeout 約 20~25 秒，並允許有限續寫；優先避免邊界子題截斷。
+- 每輪完成後需記錄可觀測欄位：`currentStep/currentSubStep/nextSubStep/feedbackSource/questionSource/llmAttemptCountFeedback/llmAttemptCountQuestion/usedFallback/latencyMs`。
 
 ### 5.5 學生可讀文字淨化
 

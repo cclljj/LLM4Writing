@@ -47,6 +47,38 @@ export function isNextQuestionSubStepPromptDriven(session: SessionState, step: 1
   return false;
 }
 
+export function getNextSubstepKeyAfterCompletion(
+  session: SessionState,
+  step: 1 | 2,
+  completedSubstep: number
+): string | null {
+  if (step === 1) {
+    if (completedSubstep === 3 && (session.stepState.step1Substep3Question ?? 1) < 3) {
+      return `1-3-${(session.stepState.step1Substep3Question ?? 1) + 1}`;
+    }
+    if (completedSubstep === 4 && (session.stepState.step1Substep4Question ?? 1) < 3) {
+      return `1-4-${(session.stepState.step1Substep4Question ?? 1) + 1}`;
+    }
+    if (completedSubstep < 5) {
+      const nextSub = completedSubstep + 1;
+      if (nextSub === 3) return "1-3-1";
+      if (nextSub === 4) return "1-4-1";
+      return `1-${nextSub}`;
+    }
+    return null;
+  }
+
+  if (completedSubstep === 1 && (session.stepState.step2Substep1Question ?? 1) < 3) {
+    return `2-1-${(session.stepState.step2Substep1Question ?? 1) + 1}`;
+  }
+  if (completedSubstep < 4) {
+    const nextSub = completedSubstep + 1;
+    if (nextSub === 1) return "2-1-1";
+    return `2-${nextSub}`;
+  }
+  return null;
+}
+
 export function advanceStep1Or2SubstepAfterAi(
   session: SessionState,
   step: 1 | 2,
@@ -92,23 +124,21 @@ export function advanceStep1Or2SubstepAfterAi(
       if (nextSub === 3) session.stepState.step1Substep3Question = 1;
       if (nextSub === 4) session.stepState.step1Substep4Question = 1;
       const mustUseQuestionBank = nextSub === 2 || nextSub === 5;
-      const q = mustUseQuestionBank
+      const q = safeNextQuestion || (mustUseQuestionBank
         ? buildStep1Question(session)
         : nextSub === 3
-          ? safeNextQuestion ||
-            pickQuestionFromSubStepFallback(
+          ? pickQuestionFromSubStepFallback(
               session,
               "1-3-1",
               "請先用一個生活中的具體例子，說明你認為題目關鍵詞在這裡代表什麼。"
             )
           : nextSub === 4
-            ? safeNextQuestion ||
-              pickQuestionFromSubStepFallback(
+            ? pickQuestionFromSubStepFallback(
                 session,
                 "1-4-1",
                 "請根據剛才的討論，用一句話說出你們最核心、最想傳達的觀點。"
               )
-            : safeNextQuestion || buildStep1Question(session);
+            : buildStep1Question(session));
       if (nextSub === 3) {
         session.messages.push(makeMessage({ role: "system", step, text: `子步驟 1-3-1：${q}` }));
       } else if (nextSub === 4) {
@@ -143,16 +173,15 @@ export function advanceStep1Or2SubstepAfterAi(
     const nextSub = session.stepState.step2Substep;
     if (nextSub === 1) session.stepState.step2Substep1Question = 1;
     const mustUseQuestionBank = nextSub === 4;
-    const q = mustUseQuestionBank
+    const q = safeNextQuestion || (mustUseQuestionBank
       ? buildStep2Question(session)
-      : safeNextQuestion ||
-        pickQuestionFromSubStepFallback(
+      : pickQuestionFromSubStepFallback(
           session,
           `2-${nextSub}`,
           nextSub === 2
             ? "請把你的例子補充得更具體：時間、地點、人物、發生了什麼，以及它如何連回你的主張？"
             : "請再往前一步：根據你剛才的例子，推論造成這個現象的深層原因是什麼？請至少說出一個因果鏈。"
-        );
+        ));
     if (nextSub === 1) {
       session.messages.push(makeMessage({ role: "system", step, text: `子步驟 2-1-1：${q}` }));
     } else {

@@ -16,7 +16,7 @@ import {
 import { getStructureTreeNodePermissions } from "../src/lib/structure-tree-permissions";
 import { buildStudentNextAction } from "../src/lib/student-next-action";
 import { buildStep1Question, buildStep2Question } from "../src/lib/workflow-questions";
-import { advanceStep1Or2SubstepAfterAi, handleStep1Or2Group, recoverStalledStep1Or2AiWait } from "../src/lib/workflow-step1-2";
+import { advanceStep1Or2SubstepAfterAi, getNextSubstepKeyAfterCompletion, handleStep1Or2Group, recoverStalledStep1Or2AiWait } from "../src/lib/workflow-step1-2";
 
 function makeMessage(input: Omit<ChatMessage, "id" | "at">): ChatMessage {
   return { id: `m-${Math.random()}`, at: "2026-05-06T00:00:00.000Z", ...input };
@@ -282,7 +282,7 @@ test("Step1/2 group gate waits for all participants before advancing", () => {
   assert.deepEqual(new Set(session.groupGate["1-1"]), new Set(["s1", "s2"]));
 });
 
-test("Step1/2 advancement preserves questionBanks and uses fallback when LLM nextQuestion is missing", () => {
+test("Step1/2 advancement accepts resolved next question and still falls back when missing", () => {
   const session = baseSession({
     promptConfig: {
       stepPrompts: {},
@@ -294,9 +294,9 @@ test("Step1/2 advancement preserves questionBanks and uses fallback when LLM nex
     }
   });
 
-  advanceStep1Or2SubstepAfterAi(session, 1, 1, "AI 不應覆蓋 1-2 題庫", makeMessage);
+  advanceStep1Or2SubstepAfterAi(session, 1, 1, "resolved：請補充你們小組目前的立場。", makeMessage);
   assert.equal(session.stepState.step1Substep, 2);
-  assert.match(session.messages.at(-1)?.text ?? "", /題庫：請補充小組立場/);
+  assert.match(session.messages.at(-1)?.text ?? "", /resolved：請補充你們小組目前的立場/);
 
   const step2Session = baseSession({
     currentStep: 2,
@@ -418,6 +418,61 @@ test("stalled Step1/2 recovery handles boundary subquestions", () => {
   );
   assert.equal(step213.stepState.step2Substep, 2);
   assert.match(step213.messages.at(-1)?.text ?? "", /子步驟 2-2：fallback/);
+});
+
+test("next-substep key transitions are explicit and deterministic", () => {
+  const s = baseSession({
+    currentStep: 1,
+    stepState: { step1Substep: 3, step2Substep: 1, step1Substep3Question: 2, step1Substep4Question: 1, step2Substep1Question: 1 }
+  });
+  assert.equal(getNextSubstepKeyAfterCompletion(s, 1, 3), "1-3-3");
+
+  s.stepState.step1Substep3Question = 3;
+  assert.equal(getNextSubstepKeyAfterCompletion(s, 1, 3), "1-4-1");
+
+  s.stepState.step1Substep = 4;
+  s.stepState.step1Substep4Question = 3;
+  assert.equal(getNextSubstepKeyAfterCompletion(s, 1, 4), "1-5");
+
+  const s2 = baseSession({
+    currentStep: 2,
+    stepState: { step1Substep: 5, step2Substep: 1, step1Substep3Question: 3, step1Substep4Question: 3, step2Substep1Question: 1 }
+  });
+  assert.equal(getNextSubstepKeyAfterCompletion(s2, 2, 1), "2-1-2");
+  s2.stepState.step2Substep1Question = 3;
+  assert.equal(getNextSubstepKeyAfterCompletion(s2, 2, 1), "2-2");
+});
+
+test("Step1/2 advancement accepts resolved next question for Step2 branches", () => {
+  const session = baseSession({
+    currentStep: 2,
+    stepState: { step1Substep: 5, step2Substep: 2, step1Substep3Question: 3, step1Substep4Question: 3, step2Substep1Question: 3 },
+    promptConfig: {
+      stepPrompts: {},
+      subStepPrompts: {},
+      subStepPromptsFallbacks: {},
+      questionBanks: {},
+      step9Questions: {},
+      stepOpenings: {}
+    }
+  });
+  advanceStep1Or2SubstepAfterAi(session, 2, 2, "resolved：請說明這個例子的因果鏈？", makeMessage);
+  assert.equal(session.stepState.step2Substep, 3);
+  assert.match(session.messages.at(-1)?.text ?? "", /子步驟 2-3：resolved/);
+});
+
+test("engine source includes two-stage Step1/2 observability and question source branching", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { resolve, dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const thisDir = dirname(fileURLToPath(import.meta.url));
+  const src = readFileSync(resolve(thisDir, "../src/lib/engine.ts"), "utf8");
+
+  assert.ok(src.includes("generateStep12Feedback"), "engine should have stage-1 feedback generator");
+  assert.ok(src.includes("generateStep12NextQuestion"), "engine should have stage-2 question generator");
+  assert.ok(src.includes('"questionBank_random"'), "engine should track questionBank_random source");
+  assert.ok(src.includes("step12RoundLogs"), "engine should record step12RoundLogs observability fields");
+  assert.ok(src.includes("step12RoundState"), "engine should keep step12RoundState for re-entry guard");
 });
 
 test("advanced stuck risk combines rejection, idle, Step3, and Step6 signals", () => {

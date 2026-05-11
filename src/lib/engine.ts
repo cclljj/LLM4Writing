@@ -1,23 +1,27 @@
 import { randomUUID } from "node:crypto";
-import { ChatMessage, SessionState, StartSessionPayload } from "@/src/lib/types";
+import { ChatMessage, SessionState, StartSessionPayload, Step12RoundLog } from "@/src/lib/types";
 import { STEP_DEFINITIONS, getModeByStep, getStepName } from "@/src/lib/spec";
 import { isLlmConfigured, llmChatCompletionText, LlmChatMessage } from "@/src/lib/llm-client";
 import { buildStudentCourseContext } from "@/src/lib/llm-context";
-import { normalizeForCompare, validateStudentAnswer, validateStudentAnswerSimple } from "@/src/lib/answer-validation";
+import { extractCurrentSystemQuestion, normalizeForCompare, validateStudentAnswer, validateStudentAnswerSimple } from "@/src/lib/answer-validation";
 import { recordRejectedAnswerSignal } from "@/src/lib/learning-diagnostics";
 import {
   hasFormalLlmQualityRisk,
+  parseStructuredStepAiResponse,
   normalizeFormalLlmText,
   normalizeStep5Summary,
   sanitizeStudentFacingText,
-  splitAiFeedbackAndQuestion
+  splitAiFeedbackAndQuestion,
+  isUsableNextQuestion
 } from "@/src/lib/llm-response";
 import { buildStep1Question, buildStep2Question, buildStep9BatchPrompt, getCurrentGroupGateKey, getCurrentSubstepKey, getStep9Questions } from "@/src/lib/workflow-questions";
-import { advanceStep1Or2SubstepAfterAi, handleStep1Or2Group, isNextQuestionSubStepPromptDriven } from "@/src/lib/workflow-step1-2";
+import { advanceStep1Or2SubstepAfterAi, getNextSubstepKeyAfterCompletion, handleStep1Or2Group } from "@/src/lib/workflow-step1-2";
 
 function now(): string {
   return new Date().toISOString();
 }
+
+const step12RoundLocks = new Set<string>();
 
 function makeMessage(input: Omit<ChatMessage, "id" | "at">): ChatMessage {
   return {
@@ -71,6 +75,8 @@ export function createSession(payload: StartSessionPayload): SessionState {
     messages: [],
     qualitySignals: { rejectedAnswerCounts: {}, rejectedAnswerLastAt: {} },
     artifactSignals: { outlineUpdatedAt: {}, draftStep6UpdatedAt: {}, draftStep8UpdatedAt: {} },
+    step12RoundLogs: [],
+    step12RoundState: { completedGateKeys: [] },
     groupGate: {},
     reflectionIndex: Object.fromEntries(participants.map((id) => [id, 0])),
     workflow,
@@ -147,6 +153,15 @@ function normalizeSessionRuntimeShape(session: SessionState): void {
   }
   if (!session.artifactSignals.draftStep8UpdatedAt || typeof session.artifactSignals.draftStep8UpdatedAt !== "object") {
     session.artifactSignals.draftStep8UpdatedAt = {};
+  }
+  if (!Array.isArray(session.step12RoundLogs)) {
+    session.step12RoundLogs = [];
+  }
+  if (!session.step12RoundState || typeof session.step12RoundState !== "object") {
+    session.step12RoundState = { completedGateKeys: [] };
+  }
+  if (!Array.isArray(session.step12RoundState.completedGateKeys)) {
+    session.step12RoundState.completedGateKeys = [];
   }
   if (!session.reflectionIndex || typeof session.reflectionIndex !== "object") {
     session.reflectionIndex = {};
@@ -305,30 +320,231 @@ async function generateAiTextWithRetry(
   throw lastError instanceof Error ? lastError : new Error("llm_retry_exhausted");
 }
 
-async function generateStep1Or2AiWithQuestionRetry(
+function compactWhitespace(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+function buildStep12StepContext(session: SessionState, step: 1 | 2, userId: string): {
+  essayTitle: string;
+  currentSubstepKey: string;
+  currentQuestion: string;
+  sameStepRecent: string;
+  crossStepContext: string;
+} {
+  const currentSubstepKey = getCurrentSubstepKey(session, step) ?? `${step}-unknown`;
+  const currentQuestion = extractCurrentSystemQuestion(session, step, userId) || "(尚無題目)";
+  const essayTitle = session.activityTitle?.trim() || "未命名題目";
+  const sameStepRecent = session.messages
+    .filter((m) => m.step === step)
+    .slice(-10)
+    .map((m) => {
+      if (m.role === "student") return `學生${m.userId ? `(${m.userId})` : ""}：${m.text}`;
+      if (m.role === "ai") return `AI：${m.text}`;
+      return `系統：${m.text}`;
+    })
+    .join("\n");
+  const crossStepContext = buildStudentCourseContext(session, userId, step, {
+    maxMessages: 48,
+    maxChars: 6500,
+    includeSystem: true
+  });
+  return { essayTitle, currentSubstepKey, currentQuestion, sameStepRecent, crossStepContext };
+}
+
+function isStep12FeedbackQualityRisk(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return true;
+  if (/[？?]/.test(trimmed)) return true;
+  if (/請回答以下問題|nextQuestion|子步驟\s*\d-\d/.test(trimmed)) return true;
+  return hasFormalLlmQualityRisk(trimmed);
+}
+
+function sanitizeStep12Feedback(raw: string): string {
+  const parsed = parseStructuredStepAiResponse(raw);
+  const feedback = parsed?.feedbackText ?? splitAiFeedbackAndQuestion(raw).feedbackText ?? raw;
+  return normalizeFormalLlmText(feedback, { fallback: "已收到大家的回覆，請繼續下一題。" });
+}
+
+function isStep12QuestionQualityRisk(text: string): boolean {
+  const q = compactWhitespace(text);
+  if (!isUsableNextQuestion(q)) return true;
+  if (q.length < 8) return true;
+  if (!/[？?]$/.test(q)) return true;
+  if (q.includes("\n")) return true;
+  if (/提問規則|子步驟 Prompt|請依上一則 AI 提問作答|questionBanks|stepPrompts/i.test(q)) return true;
+  return false;
+}
+
+function getRandomQuestionFromBank(session: SessionState, key: string): string | undefined {
+  const bank = session.promptConfig.questionBanks?.[key] ?? [];
+  const candidates = bank.map((item) => item.trim()).filter((item) => item.length > 0);
+  if (candidates.length === 0) return undefined;
+  return candidates[Math.floor(Math.random() * candidates.length)]!;
+}
+
+function getDefaultStep12FallbackQuestion(nextSubstepKey: string): string {
+  const fallbackMap: Record<string, string> = {
+    "1-2": "請補充你們小組目前的立場。",
+    "1-3-1": "請先用一個生活中的具體例子，說明你認為題目關鍵詞在這裡代表什麼。",
+    "1-3-2": "你剛剛提到的關鍵詞，哪些情況算、哪些情況不算？請各舉一個例子。",
+    "1-3-3": "請再補上一個理由，說明你怎麼判斷這個情況算或不算。",
+    "1-4-1": "請根據剛才的討論，用一句話說出你們最核心、最想傳達的觀點。",
+    "1-4-2": "請說明：你們的核心主張想解決的關鍵問題是什麼？",
+    "1-4-3": "請再收斂一次：用一句話寫出你們最終核心主張。",
+    "1-5": "請總結本步驟結論。",
+    "2-1-2": "請挑一個最能支持主張的具體例子，並說明為什麼選它。",
+    "2-1-3": "請說明：這個例子哪一個部分最能支持你的觀點？為什麼？",
+    "2-2": "請把你的例子補充得更具體：時間、地點、人物、發生了什麼，以及它如何連回你的主張？",
+    "2-3": "請再往前一步：根據你剛才的例子，推論造成這個現象的深層原因是什麼？",
+    "2-4": "請補上一個具體案例，並說明它如何支持你們的立場。"
+  };
+  return fallbackMap[nextSubstepKey] ?? "請延伸剛才的討論，補上一個具體理由或例子。";
+}
+
+function getStep12FallbackQuestion(session: SessionState, nextSubstepKey: string): string {
+  const configFallback = session.promptConfig.subStepPromptsFallbacks?.[nextSubstepKey]?.trim();
+  if (configFallback) return configFallback;
+  const bankQuestion = getRandomQuestionFromBank(session, nextSubstepKey);
+  if (bankQuestion) return bankQuestion;
+  return getDefaultStep12FallbackQuestion(nextSubstepKey);
+}
+
+async function generateStep12Feedback(
   session: SessionState,
   step: 1 | 2,
-  contextText: string,
   userId: string
-): Promise<{ feedbackText: string; nextQuestion?: string }> {
-  let lastParsed: { feedbackText: string; nextQuestion?: string } = {
-    feedbackText: "已收到大家的回覆。",
-    nextQuestion: undefined
-  };
-
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
-    const aiRaw = await generateAiTextForStep(session, step, contextText, userId, { attempts: 1, timeoutMs: 25_000 });
-    const parsed = splitAiFeedbackAndQuestion(aiRaw);
-    lastParsed = parsed;
-    if (parsed.nextQuestion?.trim()) {
-      return parsed;
+): Promise<{ feedbackText: string; source: "llm" | "fallback"; llmAttempts: number; usedFallback: boolean }> {
+  const fallback = "已收到大家的回覆，整理得很好，請繼續下一題。";
+  const context = buildStep12StepContext(session, step, userId);
+  const stepPrompt = session.promptConfig.stepPrompts[String(step)] ?? "";
+  const systemParts = [session.promptConfig.systemPrompt ?? "", stepPrompt, `目前子步驟：${context.currentSubstepKey}`]
+    .filter(Boolean)
+    .join("\n\n");
+  const baseMessages: LlmChatMessage[] = [
+    {
+      role: "system",
+      content:
+        `${systemParts}\n\n` +
+        '你現在只負責「回饋」，禁止提出下一題或任何問句。' +
+        '請只輸出 JSON：{"feedback":"..."}，不要輸出其他文字。'
+    },
+    {
+      role: "user",
+      content:
+        `作文題目：${context.essayTitle}\n` +
+        `目前子步驟題目：${context.currentQuestion}\n\n` +
+        `本步驟最近對話：\n${context.sameStepRecent || "(無)"}\n\n` +
+        `課程歷史（節錄）：\n${context.crossStepContext || "(無)"}\n\n` +
+        `目前事件：all members answered step ${step} substep ${context.currentSubstepKey}`
     }
-    if (attempt < 3) {
-      await new Promise((resolve) => setTimeout(resolve, 120));
+  ];
+
+  if (!isLlmConfigured()) {
+    return { feedbackText: fallback, source: "fallback", llmAttempts: 0, usedFallback: true };
+  }
+
+  let llmAttempts = 0;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    llmAttempts = attempt;
+    try {
+      const raw = await generateAiTextWithRetry(baseMessages, 0.5, 700, {
+        attempts: 1,
+        timeoutMs: 25_000,
+        continuationMaxRounds: 2
+      });
+      const normalized = sanitizeStep12Feedback(raw);
+      if (!isStep12FeedbackQualityRisk(normalized)) {
+        return { feedbackText: normalized, source: "llm", llmAttempts, usedFallback: false };
+      }
+    } catch {
+      // Continue to next attempt; fallback handled after loop.
     }
   }
 
-  return lastParsed;
+  return { feedbackText: fallback, source: "fallback", llmAttempts, usedFallback: true };
+}
+
+async function generateStep12NextQuestion(
+  session: SessionState,
+  step: 1 | 2,
+  userId: string,
+  nextSubstepKey: string,
+  feedbackText: string
+): Promise<{
+  nextQuestion: string;
+  source: "subStepPrompt_llm" | "questionBank_random" | "fallback";
+  llmAttempts: number;
+  usedFallback: boolean;
+}> {
+  const subStepPrompt = session.promptConfig.subStepPrompts?.[nextSubstepKey]?.trim() ?? "";
+  if (!subStepPrompt) {
+    const bankQuestion = getRandomQuestionFromBank(session, nextSubstepKey);
+    if (bankQuestion) {
+      return { nextQuestion: bankQuestion, source: "questionBank_random", llmAttempts: 0, usedFallback: false };
+    }
+    return {
+      nextQuestion: getStep12FallbackQuestion(session, nextSubstepKey),
+      source: "fallback",
+      llmAttempts: 0,
+      usedFallback: true
+    };
+  }
+
+  const fallback = getStep12FallbackQuestion(session, nextSubstepKey);
+  if (!isLlmConfigured()) {
+    return { nextQuestion: fallback, source: "fallback", llmAttempts: 0, usedFallback: true };
+  }
+
+  const context = buildStep12StepContext(session, step, userId);
+  const stepPrompt = session.promptConfig.stepPrompts[String(step)] ?? "";
+  const baseMessages: LlmChatMessage[] = [
+    {
+      role: "system",
+      content:
+        [session.promptConfig.systemPrompt ?? "", stepPrompt, `目前子步驟：${nextSubstepKey}`, `子步驟 Prompt（${nextSubstepKey}）：\n${subStepPrompt}`]
+          .filter(Boolean)
+          .join("\n\n") +
+        '\n\n你現在只負責產生「下一題」。請只輸出 JSON：{"nextQuestion":"..."}，不要輸出其他文字。'
+    },
+    {
+      role: "user",
+      content:
+        `作文題目：${context.essayTitle}\n` +
+        `前一題：${context.currentQuestion}\n` +
+        `AI 回饋：${feedbackText}\n\n` +
+        `本步驟最近對話：\n${context.sameStepRecent || "(無)"}\n\n` +
+        `請產生下一題（僅一個完整問句，需以「？」結尾）。`
+    }
+  ];
+
+  let llmAttempts = 0;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    llmAttempts = attempt;
+    try {
+      const raw = await generateAiTextWithRetry(baseMessages, 0.4, 320, {
+        attempts: 1,
+        timeoutMs: 20_000,
+        continuationMaxRounds: 1
+      });
+      const parsed = parseStructuredStepAiResponse(raw) ?? splitAiFeedbackAndQuestion(raw);
+      const nextQuestion = compactWhitespace(parsed.nextQuestion ?? "");
+      if (!isStep12QuestionQualityRisk(nextQuestion)) {
+        return { nextQuestion, source: "subStepPrompt_llm", llmAttempts, usedFallback: false };
+      }
+    } catch {
+      // Continue to retry.
+    }
+  }
+
+  return { nextQuestion: fallback, source: "fallback", llmAttempts, usedFallback: true };
+}
+
+function appendStep12RoundLog(session: SessionState, log: Step12RoundLog): void {
+  session.step12RoundLogs = session.step12RoundLogs ?? [];
+  session.step12RoundLogs.push(log);
+  if (session.step12RoundLogs.length > 60) {
+    session.step12RoundLogs.splice(0, session.step12RoundLogs.length - 60);
+  }
 }
 
 async function generateAiTextForStep(
@@ -795,12 +1011,6 @@ export function advanceLegacyPhase(session: SessionState): SessionState {
 
 type SendMessageHooks = {
   onBeforeGroupAi?: (session: SessionState) => Promise<void> | void;
-  generateStep1Or2Ai?: (
-    session: SessionState,
-    step: 1 | 2,
-    contextText: string,
-    userId: string
-  ) => Promise<{ feedbackText: string; nextQuestion?: string }>;
 };
 
 export async function sendStudentMessage(
@@ -842,34 +1052,89 @@ export async function sendStudentMessage(
   if (step === 1 || step === 2) {
     const result = handleStep1Or2Group(session, userId, text, makeMessage);
     if (result.allResponded) {
-      if (hooks?.onBeforeGroupAi) {
-        await hooks.onBeforeGroupAi(result.session);
+      const completedGateKey = getCurrentGroupGateKey(result.session, step as 1 | 2);
+      const roundKey = `${step}:${completedGateKey}`;
+      result.session.step12RoundState = result.session.step12RoundState ?? { completedGateKeys: [] };
+      result.session.step12RoundState.completedGateKeys = result.session.step12RoundState.completedGateKeys ?? [];
+
+      if (result.session.step12RoundState.completedGateKeys.includes(roundKey)) {
+        return result.session;
       }
-      let parsed: { feedbackText: string; nextQuestion?: string };
+      if (result.session.step12RoundState.inFlightGateKey === roundKey) {
+        return result.session;
+      }
+
+      const lockKey = `${result.session.id}:${roundKey}`;
+      if (step12RoundLocks.has(lockKey)) {
+        return result.session;
+      }
+
+      step12RoundLocks.add(lockKey);
+      result.session.step12RoundState.inFlightGateKey = roundKey;
+      const startedAt = Date.now();
       try {
-        const contextText = `all members answered step ${step} substep ${result.substep}`;
-        parsed = hooks?.generateStep1Or2Ai
-          ? await hooks.generateStep1Or2Ai(result.session, step as 1 | 2, contextText, userId)
-          : await generateStep1Or2AiWithQuestionRetry(result.session, step as 1 | 2, contextText, userId);
-      } catch {
-        parsed = {
-          feedbackText: "已收到大家的回覆。遠端 AI 暫時無法完成回覆，系統先使用備用問題讓討論繼續。",
-          nextQuestion: undefined
-        };
-      }
-      const shouldEmitAiFeedback = !isNextQuestionSubStepPromptDriven(result.session, step as 1 | 2, result.substep);
-      if (shouldEmitAiFeedback) {
+        if (hooks?.onBeforeGroupAi) {
+          await hooks.onBeforeGroupAi(result.session);
+        }
+
+        const nextSubStepKey = getNextSubstepKeyAfterCompletion(result.session, step as 1 | 2, result.substep);
+        const feedbackResult = await generateStep12Feedback(result.session, step as 1 | 2, userId);
         result.session.messages.push(
           makeMessage({
             role: "ai",
             step,
-            text: parsed.feedbackText
+            text: feedbackResult.feedbackText
           })
         );
+
+        let questionSource: "subStepPrompt_llm" | "questionBank_random" | "fallback" = "fallback";
+        let llmAttemptCountQuestion = 0;
+        let questionUsedFallback = false;
+        let nextQuestion: string | undefined;
+
+        if (nextSubStepKey) {
+          const questionResult = await generateStep12NextQuestion(
+            result.session,
+            step as 1 | 2,
+            userId,
+            nextSubStepKey,
+            feedbackResult.feedbackText
+          );
+          questionSource = questionResult.source;
+          llmAttemptCountQuestion = questionResult.llmAttempts;
+          questionUsedFallback = questionResult.usedFallback;
+          nextQuestion = questionResult.nextQuestion;
+        }
+
+        result.session.groupGate[completedGateKey] = [];
+        advanceStep1Or2SubstepAfterAi(result.session, step as 1 | 2, result.substep, nextQuestion, makeMessage);
+
+        result.session.step12RoundState.completedGateKeys.push(roundKey);
+        if (result.session.step12RoundState.completedGateKeys.length > 120) {
+          result.session.step12RoundState.completedGateKeys.splice(
+            0,
+            result.session.step12RoundState.completedGateKeys.length - 120
+          );
+        }
+
+        appendStep12RoundLog(result.session, {
+          currentStep: step,
+          currentSubStep: completedGateKey,
+          nextSubStep: nextSubStepKey ?? "(end)",
+          feedbackSource: feedbackResult.source,
+          questionSource,
+          llmAttemptCountFeedback: feedbackResult.llmAttempts,
+          llmAttemptCountQuestion,
+          usedFallback: feedbackResult.usedFallback || questionUsedFallback,
+          latencyMs: Date.now() - startedAt,
+          at: now()
+        });
+      } finally {
+        if (result.session.step12RoundState?.inFlightGateKey === roundKey) {
+          result.session.step12RoundState.inFlightGateKey = undefined;
+        }
+        step12RoundLocks.delete(lockKey);
       }
-      const completedGateKey = getCurrentGroupGateKey(result.session, step as 1 | 2);
-      result.session.groupGate[completedGateKey] = [];
-      advanceStep1Or2SubstepAfterAi(result.session, step as 1 | 2, result.substep, parsed.nextQuestion, makeMessage);
     }
     return result.session;
   }
