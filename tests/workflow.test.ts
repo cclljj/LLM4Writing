@@ -111,6 +111,8 @@ test("sanitizeStudentFacingText keeps text intact and extracts feedback from JSO
     "你們已經找到原因鏈，接下來請再補一個生活例子"
   );
   assert.equal(sanitizeStudentFacingText('{"feedback":"'), "已收到大家的回覆。");
+  assert.equal(sanitizeStudentFacingText("```json{"), "已收到大家的回覆。");
+  assert.equal(sanitizeStudentFacingText("{"), "已收到大家的回覆。");
 });
 
 test("normalizeStep5Summary deduplicates repeated section blocks and keeps the fullest content", () => {

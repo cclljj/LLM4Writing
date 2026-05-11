@@ -354,15 +354,29 @@ function buildStep12StepContext(session: SessionState, step: 1 | 2, userId: stri
 function isStep12FeedbackQualityRisk(text: string): boolean {
   const trimmed = text.trim();
   if (!trimmed) return true;
+  if (/```|^\{+|\}+$/m.test(trimmed)) return true;
+  if (/"feedback"|nextQuestion|\"question\"|json/i.test(trimmed)) return true;
   if (/[？?]/.test(trimmed)) return true;
   if (/請回答以下問題|nextQuestion|子步驟\s*\d-\d/.test(trimmed)) return true;
+  if (/[，、：；]$/.test(trimmed)) return true;
+  if (/(而且|並且|所以|但是|例如|像是|包含|以及)$/.test(trimmed)) return true;
+  const end = trimmed.at(-1) ?? "";
+  const completeEnding = /[。！？.!?」』]$/.test(end);
+  if (!completeEnding && trimmed.length >= 12) return true;
   return hasFormalLlmQualityRisk(trimmed);
 }
 
 function sanitizeStep12Feedback(raw: string): string {
   const parsed = parseStructuredStepAiResponse(raw);
   const feedback = parsed?.feedbackText ?? splitAiFeedbackAndQuestion(raw).feedbackText ?? raw;
-  return normalizeFormalLlmText(feedback, { fallback: "已收到大家的回覆，請繼續下一題。" });
+  const normalized = normalizeFormalLlmText(feedback, { fallback: "已收到大家的回覆，請繼續下一題。" });
+  return normalized
+    .replace(/^```(?:json)?/i, "")
+    .replace(/```$/i, "")
+    .replace(/^\{\s*/, "")
+    .replace(/\s*\}$/, "")
+    .replace(/^"+|"+$/g, "")
+    .trim();
 }
 
 function isStep12QuestionQualityRisk(text: string): boolean {

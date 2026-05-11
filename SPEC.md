@@ -426,6 +426,7 @@ Step1/2 第二段（下一題）JSON 契約（僅當使用 `subStepPrompts[nextS
 - `nextQuestion` 不可空白、不可照抄 prompt、不可寫「請依上一則 AI 提問作答」。
 - 後端先解析 JSON；若不是 JSON，仍相容舊格式「請回答以下問題」。
 - `nextQuestion` 顯示前需再做文字淨化：去除 code fence（如 ```json）與 JSON 殼層殘留；若仍為 JSON 結構樣式則視為無效題目並走 fallback。
+- `feedback` 顯示前也需做同級淨化與完整性檢查：若偵測 JSON 殘留（如 ` ```json{`、裸 `{`、欄位名殘留）或疑似截斷半句，視為無效回饋並重試/走 fallback。
 - 第一段與第二段都需有 timeout/retry/fallback，任一階段失敗不得造成流程卡住。
 - Step1/2 單次遠端 LLM 嘗試 timeout 約 20~25 秒，並允許有限續寫；優先避免邊界子題截斷。
 - 每輪完成後需記錄可觀測欄位：`currentStep/currentSubStep/nextSubStep/feedbackSource/questionSource/llmAttemptCountFeedback/llmAttemptCountQuestion/usedFallback/latencyMs`。
