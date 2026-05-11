@@ -807,6 +807,7 @@ classnumber,username,name,school,role,password,ownerTeacherUsername
 - `/api/teacher/monitor` 預設只回傳儀表板與加入狀態所需摘要。
 - 進入某課程的「查看狀態」後，課堂儀表板與對話區僅顯示該課程 sessions，不顯示其他課程 sessions。
 - 前端摘要輪詢、查看對話詳情、個人進度詳情都必須以目前選定課程的 `activityId` 作為 scope；若回傳資料不屬於目前課程，不得併入儀表板或對話區。
+- scope 判定需同時確認 session 屬於目前課程的分組定義：若 session 的小組成員與目前課程分組不一致，視為舊資料或跨課程污染，不得顯示於儀表板、對話區或個人進度。
 - 完整 `messages`、`outlines`、`step3SubmittedOutlines` 僅在選取小組對話時以 `?sessionId=...&detail=full` 延遲載入。
 - 輪詢只使用摘要 payload，降低 loading 與網路成本。
 - 課堂儀表板、全班加入狀態、小組對話紀錄、個人對話紀錄四個 h2 標題後附加「— 學校 / 班級 / 文章題目」（#258）。
@@ -1248,6 +1249,7 @@ Request:
 - 預設不回傳完整對話內容。
 - 支援 `?limit=N&offset=N`，預設 `limit=50`、`offset=0`。
 - 支援 `?activityId=...`，僅回傳指定課程的 sessions（學習管理「查看狀態」模式使用）。
+- 回傳前必須依活動目前分組再次過濾 session；同 `activityId` 但小組成員不符合目前分組者不得回傳。
 - 回應：`{ sessions: [...], total: N, limit: N, offset: N }`。
 - 摘要包含 `messageCount`、`lastMessageAt`、`studentMessageStats`、`stepReadyHints`、`artifactDiagnostics`。
 - 完整小組詳情使用 `?sessionId=...&detail=full`；學習管理「查看狀態」模式應同時帶入 `activityId`，避免跨課程 session 被載入。

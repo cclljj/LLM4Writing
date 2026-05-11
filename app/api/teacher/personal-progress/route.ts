@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/src/lib/auth-server";
 import { getAllActivities, hydrateDomainState } from "@/src/lib/activity-store";
 import { getSession } from "@/src/lib/store";
 import { getUsersVisibleToTeacherStore, listUsersStore } from "@/src/lib/user-store";
+import { isSessionInActivityGroupScope } from "@/src/lib/monitor-session-scope";
 
 function normalizeText(text: string): string {
   return text.replace(/\r\n/g, "\n").trim();
@@ -37,6 +38,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "forbidden_session" }, { status: 403 });
   }
   if (requestedActivityId && session.activityId !== requestedActivityId) {
+    return NextResponse.json({ error: "session_not_found" }, { status: 404 });
+  }
+  const activity = visibleActivities.find((item) => item.id === session.activityId);
+  if (!activity || !isSessionInActivityGroupScope(session, activity)) {
     return NextResponse.json({ error: "session_not_found" }, { status: 404 });
   }
   if (username && !session.participants.includes(username)) {

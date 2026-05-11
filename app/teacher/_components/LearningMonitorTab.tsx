@@ -3,7 +3,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArtifactDiagnostics, buildAdvancedStuckRisk, QualitySignals } from "@/src/lib/learning-diagnostics";
 import { formatUserError } from "@/src/lib/error-messages";
-import { getActivityScopedSessions, isSessionInActivityScope } from "@/src/lib/monitor-session-scope";
+import {
+  getActivityGroupScopedSessions,
+  getActivityScopedSessions,
+  isSessionInActivityGroupScope,
+  isSessionInActivityScope
+} from "@/src/lib/monitor-session-scope";
 import OutlineSvg from "@/app/_components/OutlineSvg";
 import { renderMessageHtml } from "@/app/student/_components/renderMessageHtml";
 import TeacherDashboard, { TeacherDashboardData } from "./TeacherDashboard";
@@ -137,8 +142,8 @@ export default function LearningMonitorTab({
   }, [selectedLearningActivity]);
 
   const filteredMonitorSessions = useMemo(
-    () => getActivityScopedSessions(monitorSessions, selectedLearningActivityId),
-    [monitorSessions, selectedLearningActivityId]
+    () => getActivityGroupScopedSessions(monitorSessions, selectedLearningActivity),
+    [monitorSessions, selectedLearningActivity]
   );
 
   /**
@@ -640,8 +645,11 @@ export default function LearningMonitorTab({
     }
     const data = await response.json();
     const rawSessions: MonitorSession[] = data.sessions ?? [];
+    const targetActivity = activities.find((activity) => activity.id === targetActivityId);
     const sessions = targetActivityId
-      ? getActivityScopedSessions(rawSessions, targetActivityId)
+      ? targetActivity
+        ? getActivityGroupScopedSessions(rawSessions, targetActivity)
+        : getActivityScopedSessions(rawSessions, targetActivityId)
       : rawSessions;
     const mergedSessions = sessions.map((session) => {
       const existing = monitorSessionsRef.current.find((item) => item.sessionId === session.sessionId);
@@ -678,6 +686,10 @@ export default function LearningMonitorTab({
       }
       const detail = data.session as MonitorSession;
       if (selectedLearningActivityId && !isSessionInActivityScope(detail, selectedLearningActivityId)) {
+        setLearningWarning(formatUserError("monitor_detail_load_failed"));
+        return null;
+      }
+      if (selectedLearningActivity && !isSessionInActivityGroupScope(detail, selectedLearningActivity)) {
         setLearningWarning(formatUserError("monitor_detail_load_failed"));
         return null;
       }

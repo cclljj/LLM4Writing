@@ -4,6 +4,7 @@ import { getAllActivities, hydrateDomainState } from "@/src/lib/activity-store";
 import { listSessions } from "@/src/lib/store";
 import { getUsersVisibleToTeacherStore, listUsersStore } from "@/src/lib/user-store";
 import { getOnlineUsers } from "@/src/lib/session-presence";
+import { isSessionInActivityGroupScope } from "@/src/lib/monitor-session-scope";
 import { ChatMessage, SessionState } from "@/src/lib/types";
 
 function normalizeText(text: string): string {
@@ -137,6 +138,10 @@ export async function GET(request: NextRequest) {
   const visibleSessions = sessions
     .filter((s) => s.workflow === "spec10" && Boolean(s.activityId) && visibleActivityIds.has(s.activityId!))
     .filter((s) => (requestedActivityId ? s.activityId === requestedActivityId : true))
+    .filter((s) => {
+      const activity = activityMap.get(s.activityId!);
+      return Boolean(activity && isSessionInActivityGroupScope(s, activity));
+    })
     .map((s) => buildMonitorSessionPayload(s, activityMap.get(s.activityId!), detail));
 
   if (requestedSessionId) {
