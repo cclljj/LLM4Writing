@@ -1,7 +1,7 @@
 # LLM4Writing (Vercel-native)
 
 [![Deploy to Vercel](https://github.com/cclljj/llm4writing_fork/actions/workflows/vercel-deploy.yml/badge.svg)](https://github.com/cclljj/llm4writing_fork/actions/workflows/vercel-deploy.yml)
-[![Next.js](https://img.shields.io/badge/Next.js-16.2.4-000000?logo=nextdotjs)](https://nextjs.org/)
+[![Next.js](https://img.shields.io/badge/Next.js-16.2.6-000000?logo=nextdotjs)](https://nextjs.org/)
 [![React](https://img.shields.io/badge/React-19.2.0-149ECA?logo=react&logoColor=white)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8.3-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Node](https://img.shields.io/badge/Node.js-20%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
@@ -15,7 +15,7 @@ LLM4Writing 是一個以 **Next.js App Router + Serverless API** 為核心的 AI
 
 - 學生端完整學習流程：Step1~Step10
 - 教師端課程管理、分組、切步驟與監控
-- 教師/管理端課程實施報告：已結束課程清單、學生完成度星等、個人紀錄查看入口
+- 教師/管理端課程實施報告：已結束課程清單、學生完成度星等、個人紀錄查看與 PDF v1 下載
 - 學生端進度軌、小組等待狀態、Step3 結構樹工具提示與「下一步該做什麼」微引導
 - 教師端課堂儀表板、進階卡關偵測與一鍵推進/檢視入口
 - Prompt 配置外部化：`src/config/system-prompt-config.json`

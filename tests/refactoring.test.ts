@@ -218,3 +218,28 @@ test("#318: admin diagnostics UI renders new monitoring sections", async () => {
   assert.ok(src.includes("課程 / 班級趨勢"), "UI must render trend section");
   assert.ok(src.includes("LLM 錯誤分類"), "UI must render error taxonomy section");
 });
+
+test("#319: course implementation report replaces download placeholder with PDF generation flow", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { resolve, dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const thisDir = dirname(fileURLToPath(import.meta.url));
+
+  const src = readFileSync(resolve(thisDir, "../app/teacher/_components/CourseImplementationReportTab.tsx"), "utf8");
+  assert.ok(src.includes("downloadStudentReportPdf"), "download action should use real PDF generation function");
+  assert.ok(src.includes("generateCourseImplementationPdf"), "component should call PDF generator");
+  assert.ok(!src.includes("PDF 下載功能即將推出"), "placeholder text should be removed");
+});
+
+test("#319: course implementation PDF builder includes required v1 sections", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { resolve, dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const thisDir = dirname(fileURLToPath(import.meta.url));
+
+  const src = readFileSync(resolve(thisDir, "../app/teacher/_components/courseImplementationPdf.ts"), "utf8");
+  assert.ok(src.includes("學生摘要"), "PDF must include student summary section");
+  assert.ok(src.includes("步驟進度與產出指標"), "PDF must include step progress section");
+  assert.ok(src.includes("星等依據"), "PDF must include star rationale section");
+  assert.ok(src.includes("代表互動片段"), "PDF must include representative snippets section");
+});

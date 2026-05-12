@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import OutlineSvg from "@/app/_components/OutlineSvg";
 import { renderMessageHtml } from "@/app/student/_components/renderMessageHtml";
 import { ActivityRow, MonitorSession, OpenClassRow, UserRow } from "./types";
+import { generateCourseImplementationPdf } from "./courseImplementationPdf";
 
 type CourseImplementationReportTabProps = {
   loginRole: "teacher" | "admin";
@@ -29,6 +30,12 @@ type StudentReportMetric = {
   stars: number;
   stepText: string;
   sessionId: string;
+  maxStep: number;
+  messageCount: number;
+  rejectedCount: number;
+  step3OutlineChars: number;
+  draftStep6Chars: number;
+  joined: boolean;
 };
 
 type PersonalMessage = {
@@ -74,6 +81,20 @@ function getStepsFromMessages(messages: PersonalMessage[]): number[] {
   return Array.from(new Set(messages.map((m) => m.step))).sort((a, b) => a - b);
 }
 
+function buildStarRationales(metric: StudentReportMetric): string[] {
+  const reasons: string[] = [];
+  reasons.push(`基礎分：1 星。`);
+  if (metric.joined || metric.messageCount > 0) reasons.push(`有加入/互動紀錄（+1）。`);
+  if (metric.maxStep >= 4) reasons.push(`完成到 Step 4（+1）。`);
+  if (metric.maxStep >= 8) reasons.push(`完成到 Step 8（+1）。`);
+  if (metric.maxStep >= 10) reasons.push(`完成到 Step 10（+1）。`);
+  if (metric.step3OutlineChars >= 60) reasons.push(`Step3 結構樹內容充足（>=60 字，+1）。`);
+  if (metric.draftStep6Chars < 80 && metric.maxStep >= 6) reasons.push(`Step6 初稿偏短（<80 字，-1）。`);
+  if (metric.rejectedCount >= 3) reasons.push(`回答品質拒答次數偏高（>=3 次，-1）。`);
+  reasons.push(`最終星等：${renderStars(metric.stars)}。`);
+  return reasons;
+}
+
 export default function CourseImplementationReportTab({
   loginRole,
   users,
@@ -91,6 +112,7 @@ export default function CourseImplementationReportTab({
 
   const [selectedStudent, setSelectedStudent] = useState("");
   const [loadingStudentLog, setLoadingStudentLog] = useState(false);
+  const [downloadingStudent, setDownloadingStudent] = useState("");
   const [personalMessages, setPersonalMessages] = useState<PersonalMessage[]>([]);
   const [userOutline, setUserOutline] = useState("");
   const [userStep3SubmittedOutline, setUserStep3SubmittedOutline] = useState("");
@@ -220,6 +242,12 @@ export default function CourseImplementationReportTab({
         stars,
         stepText: formatStepText(maxStep),
         sessionId: primarySession?.sessionId ?? "",
+        maxStep,
+        messageCount,
+        rejectedCount,
+        step3OutlineChars,
+        draftStep6Chars,
+        joined,
       });
     }
 
@@ -288,8 +316,93 @@ export default function CourseImplementationReportTab({
     }
   }
 
-  function onDownloadPlaceholder(username: string) {
-    window.confirm(`學生 ${username} 的 PDF 下載功能即將推出，敬請期待。`);
+  async function downloadStudentReportPdf(username: string) {
+    setError("");
+    if (!selectedCourse || !selectedActivityId) {
+      setError("尚未選擇課程，無法下載課程實施報告。");
+      return;
+    }
+
+    const metric = metricsByUser.get(username);
+    if (!metric?.sessionId) {
+      setError("此學生目前沒有可下載的課程紀錄（可能尚未加入課程）。");
+      return;
+    }
+
+    setDownloadingStudent(username);
+    try {
+      const q = new URLSearchParams({
+        sessionId: metric.sessionId,
+        activityId: selectedActivityId,
+        username,
+      });
+      const response = await fetch(`/api/teacher/personal-progress?${q.toString()}`, { cache: "no-store" });
+      const data = await response.json();
+      if (!response.ok) {
+        setError(data.error ?? "personal_progress_failed");
+        return;
+      }
+
+      const allMessages = (data.personalMessages ?? []) as PersonalMessage[];
+      const scopedMessages = allMessages.filter((message) => {
+        if (message.role === "student") return message.userId === username;
+        if (message.role === "ai") return !message.userId || message.userId === username;
+        if (message.role === "system") return !message.userId || message.userId === username;
+        return false;
+      });
+
+      const snippets = scopedMessages
+        .filter((message) => Boolean(message.text?.trim()))
+        .slice(0, 8)
+        .map((message) => ({
+          role: message.role,
+          step: message.step,
+          text: message.text,
+          at: message.at,
+        }));
+
+      const blob = await generateCourseImplementationPdf({
+        activityId: selectedCourse.activityId,
+        school: selectedCourse.school,
+        classNumber: selectedCourse.classNumber,
+        title: selectedCourse.title,
+        username,
+        name: metric.name,
+        metric: {
+          stars: metric.stars,
+          stepText: metric.stepText,
+          maxStep: metric.maxStep,
+          messageCount: metric.messageCount,
+          rejectedCount: metric.rejectedCount,
+          step3OutlineChars: metric.step3OutlineChars,
+          draftStep6Chars: metric.draftStep6Chars,
+          joined: metric.joined,
+        },
+        starLabel: renderStars(metric.stars),
+        starRationales: buildStarRationales(metric),
+        snippets,
+        generatedAtIso: new Date().toISOString(),
+      });
+
+      const filename = `${selectedCourse.activityId}_${selectedCourse.classNumber}_${username}_course-report-v1.pdf`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "report_pdf_generate_failed";
+      if (message === "pdf_font_load_failed") {
+        setError("PDF 下載失敗：中文字型載入失敗，請確認網路後重試。");
+      } else {
+        setError("PDF 下載失敗，請稍後再試。");
+      }
+    } finally {
+      setDownloadingStudent("");
+    }
   }
 
   useEffect(() => {
@@ -464,9 +577,12 @@ export default function CourseImplementationReportTab({
                           type="button"
                           className="secondary"
                           style={{ width: "auto" }}
-                          onClick={() => onDownloadPlaceholder(student.username)}
+                          disabled={downloadingStudent === student.username}
+                          onClick={() => {
+                            downloadStudentReportPdf(student.username).catch(() => undefined);
+                          }}
                         >
-                          下載
+                          {downloadingStudent === student.username ? "產生中..." : "下載"}
                         </button>
                       </td>
                     </tr>
