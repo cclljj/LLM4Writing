@@ -341,6 +341,16 @@ a {
   gap: 12px;
 }
 
+.home-footer {
+  margin-top: 18px;
+  background: #f8fafc;
+}
+
+.home-footer p {
+  line-height: 1.65;
+  color: #334155;
+}
+
 @media (max-width: 640px) {
   main {
     padding: 16px 12px 40px;

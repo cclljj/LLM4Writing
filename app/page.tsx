@@ -99,6 +99,20 @@ export default function HomePage() {
           為保障學習隱私與資料安全，請使用由學校或系統管理單位提供的正式帳號登入。若你尚未取得帳號，請聯繫授課教師或管理人員。
         </p>
       </section>
+
+      <footer className="card home-footer">
+        <p>
+          <strong>計畫名稱：</strong>
+          新世代兒少數位行為及價值觀研究計畫 (NSTC 113-2420-H-305 -001-MY3)
+        </p>
+        <p>
+          <strong>執行單位：</strong>
+          中央研究院、國立台灣師範大學
+        </p>
+        <p style={{ marginBottom: 0 }}>
+          本計畫之實施過程已送交人體研究倫理審查委員會 (Institutional Review Board, IRB) 審議通過，所有參與者並已徵求本人及家長同意，若有興趣加入本計畫參與實驗，可與本計畫團隊聯繫。
+        </p>
+      </footer>
     </main>
   );
 }
