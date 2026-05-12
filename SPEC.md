@@ -1010,6 +1010,9 @@ Loading 規則（#270）：
 - 近期 spec10 session 摘要。
 - LLM 回應時間（依步驟），過大閒置間隔需濾除。
 - LLM fallback 觸發率；> 5% 紅燈，1~5% 黃燈，< 1% 綠燈。
+- 每步驟 KPI：成功率、fallback 率、拒答率、平均等待時間。
+- 課程維度與班級維度趨勢（至少日粒度）：成功率、fallback 率、拒答率、平均等待時間。
+- LLM 錯誤分類：`timeout`、`truncation`、`parse fail`（其餘歸 `other`）。
 - 作品 artifact 健康度：Step3 結構樹、Step6 初稿、Step8 潤飾稿、Step10 報告完成率與平均字元數（以所選時間窗內有活動之 spec10 sessions 計算）。
 - Token 使用量（估算 completion tokens）：整體與分步驟統計，需隨 `24h/7d/14d/30d` 時間窗切換更新。
 - 「近期使用狀況」清單需含學校、班級，並顯示各 session 在時間窗內的估算 token 使用量。
@@ -1345,6 +1348,19 @@ Request:
 - 權限：admin only。
 - 回傳非敏感診斷摘要。
 - 不得回傳 secret。
+- 需包含：
+  - `llmResponseTime`（每步驟等待時間估算）
+  - `fallbackRate`（每步驟/整體 fallback）
+  - `stepKpis`（每步驟成功率、fallback 率、拒答率、平均等待）
+  - `trends.byCourse`、`trends.byClass`（日粒度趨勢）
+  - `llmErrorTaxonomy`（`timeout` / `truncation` / `parse_fail` / `other`）
+
+追蹤來源說明：
+
+- 成功率與 fallback 率：依 ai 訊息與 fallback 標誌字串估算。
+- 拒答率：依 `qualitySignals.rejectedAnswerCounts` 與學生已送出訊息估算。
+- 等待時間：`student -> ai` 同步驟訊息對估算，過大閒置值濾除。
+- LLM 錯誤分類：由 `src/lib/llm-observability.ts` 於執行期記憶體計數（非持久化）。
 
 #### `GET/POST /api/admin/essays`
 
@@ -1549,6 +1565,8 @@ Retry-After: <秒數>
 4. 若未配置 Upstash（或 Redis 故障），rate limiting 會 fallback in-memory，跨副本一致性會下降。
 5. `/api/teacher/monitor` 分頁目前為應用層分頁；大規模部署需改 DB 層查詢。
 6. Presence 本質為短生命週期狀態；即使使用 Redis，也不做長期持久化，TTL 到期或服務重啟後會自然重建。
+7. diagnostics 的 LLM 錯誤分類來自 process-memory 觀測值，服務重啟會重置；不應作為帳務或 SLA 唯一依據。
+8. diagnostics 的拒答趨勢使用 `qualitySignals` 聚合值（含最後時間戳）估算，非逐筆事件流水。
 
 ## 13. 資料庫遷移與維運
 

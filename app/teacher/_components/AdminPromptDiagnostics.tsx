@@ -72,6 +72,82 @@ type DiagnosticsPayload = {
     byStep: Record<string, FallbackBucket>;
     overall: FallbackBucket;
   };
+  stepKpis: Record<
+    string,
+    {
+      successRate: number;
+      fallbackRate: number;
+      refusalRate: number;
+      avgWaitMs: number;
+      totalAi: number;
+      successes: number;
+      fallbacks: number;
+      acceptedAnswers: number;
+      rejectedAnswers: number;
+      waitSamples: number;
+    }
+  >;
+  trends: {
+    byCourse: Array<{
+      key: string;
+      school: string;
+      classNumber: string;
+      activityTitle: string;
+      points: Array<{
+        date: string;
+        totalAi: number;
+        successes: number;
+        fallbacks: number;
+        acceptedAnswers: number;
+        rejectedAnswers: number;
+        waitSamples: number;
+        avgWaitMs: number;
+        successRate: number;
+        fallbackRate: number;
+        refusalRate: number;
+      }>;
+    }>;
+    byClass: Array<{
+      key: string;
+      school: string;
+      classNumber: string;
+      activityTitle: string;
+      points: Array<{
+        date: string;
+        totalAi: number;
+        successes: number;
+        fallbacks: number;
+        acceptedAnswers: number;
+        rejectedAnswers: number;
+        waitSamples: number;
+        avgWaitMs: number;
+        successRate: number;
+        fallbackRate: number;
+        refusalRate: number;
+      }>;
+    }>;
+  };
+  llmErrorTaxonomy: {
+    totalCalls: number;
+    totalClassified: number;
+    timeout: { count: number; rate: number };
+    truncation: { count: number; rate: number };
+    parseFail: { count: number; rate: number };
+    other: { count: number; rate: number };
+    byKind: Array<{
+      kind: "chat" | "stream";
+      total: number;
+      errors: number;
+      errorRate: number;
+      truncations: number;
+      truncationRate: number;
+      avgMs: number;
+      medianMs: number;
+      p95Ms: number;
+      sampleSize: number;
+      errorCategories: { timeout: number; truncation: number; parse_fail: number; other: number };
+    }>;
+  };
   artifactHealth: {
     totalStudents: number;
     outline: ArtifactBucket;
@@ -97,6 +173,11 @@ function fmtMs(value: number): string {
 
 function fmtNum(value: number): string {
   return new Intl.NumberFormat("zh-TW").format(value);
+}
+
+function trendValuesText(values: number[]): string {
+  if (values.length === 0) return "—";
+  return values.map((v) => `${(v * 100).toFixed(0)}%`).join(" → ");
 }
 
 function activityStatusLabel(status: "active" | "idle" | "stuck"): string {
@@ -294,6 +375,178 @@ export default function AdminPromptDiagnostics() {
             {Object.keys(data.fallbackRate.byStep).length === 0 ? (
               <small>尚無 ai 訊息可供分析。</small>
             ) : null}
+
+            <hr style={{ border: 0, borderTop: "1px solid #e2e8f0", margin: "14px 0" }} />
+            <h4 style={{ marginBottom: 6 }}>每步驟 KPI（成功率 / fallback 率 / 拒答率 / 平均等待）</h4>
+            <small style={{ display: "block", marginBottom: 8, color: "#64748b" }}>
+              範圍：最近 {data.timeWindow}。成功率以 AI 回覆是否為 fallback 估算；拒答率為拒答次數 /（已送出+拒答）。
+            </small>
+            <div style={{ overflowX: "auto" }}>
+              <table className="pro-table">
+                <thead>
+                  <tr>
+                    <th>步驟</th>
+                    <th>成功率</th>
+                    <th>Fallback 率</th>
+                    <th>拒答率</th>
+                    <th>平均等待</th>
+                    <th>等待樣本</th>
+                    <th>AI 回覆</th>
+                    <th>拒答次數</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(data.stepKpis)
+                    .sort((a, b) => Number(a[0]) - Number(b[0]))
+                    .map(([step, kpi]) => (
+                      <tr key={step}>
+                        <td>Step {step}</td>
+                        <td>{fmtPct(kpi.successRate)}</td>
+                        <td style={{ color: fallbackToneColor(kpi.fallbackRate) }}>{fmtPct(kpi.fallbackRate)}</td>
+                        <td>{fmtPct(kpi.refusalRate)}</td>
+                        <td>{fmtMs(kpi.avgWaitMs)}</td>
+                        <td>{fmtNum(kpi.waitSamples)}</td>
+                        <td>{fmtNum(kpi.totalAi)}</td>
+                        <td>{fmtNum(kpi.rejectedAnswers)}</td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+            {Object.keys(data.stepKpis).length === 0 ? <small>尚無步驟 KPI 樣本。</small> : null}
+
+            <hr style={{ border: 0, borderTop: "1px solid #e2e8f0", margin: "14px 0" }} />
+            <h4 style={{ marginBottom: 6 }}>課程 / 班級趨勢</h4>
+            <small style={{ display: "block", marginBottom: 8, color: "#64748b" }}>
+              日粒度趨勢（最近 {data.timeWindow}）：顯示成功率、fallback 率、拒答率、平均等待時間。
+            </small>
+            <h5 style={{ marginBottom: 6 }}>課程維度</h5>
+            <div style={{ overflowX: "auto" }}>
+              <table className="pro-table">
+                <thead>
+                  <tr>
+                    <th>學校</th>
+                    <th>班級</th>
+                    <th>課程</th>
+                    <th>日期點</th>
+                    <th>成功率趨勢</th>
+                    <th>Fallback 趨勢</th>
+                    <th>拒答率趨勢</th>
+                    <th>最近平均等待</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.trends.byCourse.map((series) => {
+                    const latest = series.points.at(-1);
+                    return (
+                      <tr key={series.key}>
+                        <td>{series.school}</td>
+                        <td>{series.classNumber}</td>
+                        <td>{series.activityTitle}</td>
+                        <td>{series.points.length}</td>
+                        <td>{trendValuesText(series.points.map((point) => point.successRate))}</td>
+                        <td>{trendValuesText(series.points.map((point) => point.fallbackRate))}</td>
+                        <td>{trendValuesText(series.points.map((point) => point.refusalRate))}</td>
+                        <td>{latest ? fmtMs(latest.avgWaitMs) : "—"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {data.trends.byCourse.length === 0 ? <small>尚無課程趨勢資料。</small> : null}
+
+            <h5 style={{ marginBottom: 6, marginTop: 12 }}>班級維度</h5>
+            <div style={{ overflowX: "auto" }}>
+              <table className="pro-table">
+                <thead>
+                  <tr>
+                    <th>學校</th>
+                    <th>班級</th>
+                    <th>日期點</th>
+                    <th>成功率趨勢</th>
+                    <th>Fallback 趨勢</th>
+                    <th>拒答率趨勢</th>
+                    <th>最近平均等待</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.trends.byClass.map((series) => {
+                    const latest = series.points.at(-1);
+                    return (
+                      <tr key={series.key}>
+                        <td>{series.school}</td>
+                        <td>{series.classNumber}</td>
+                        <td>{series.points.length}</td>
+                        <td>{trendValuesText(series.points.map((point) => point.successRate))}</td>
+                        <td>{trendValuesText(series.points.map((point) => point.fallbackRate))}</td>
+                        <td>{trendValuesText(series.points.map((point) => point.refusalRate))}</td>
+                        <td>{latest ? fmtMs(latest.avgWaitMs) : "—"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {data.trends.byClass.length === 0 ? <small>尚無班級趨勢資料。</small> : null}
+
+            <hr style={{ border: 0, borderTop: "1px solid #e2e8f0", margin: "14px 0" }} />
+            <h4 style={{ marginBottom: 6 }}>LLM 錯誤分類（timeout / truncation / parse fail）</h4>
+            <small style={{ display: "block", marginBottom: 8, color: "#64748b" }}>
+              來源：執行期 LLM 呼叫觀測。`truncation` 包含回覆被長度截斷但後續續寫成功的事件。
+            </small>
+            <div style={{ display: "flex", gap: 20, flexWrap: "wrap", marginBottom: 10 }}>
+              <div>
+                <small style={{ color: "#475569" }}>timeout</small>
+                <div style={{ fontSize: 18, fontWeight: 600 }}>{fmtNum(data.llmErrorTaxonomy.timeout.count)}</div>
+                <small>{fmtPct(data.llmErrorTaxonomy.timeout.rate)}</small>
+              </div>
+              <div>
+                <small style={{ color: "#475569" }}>truncation</small>
+                <div style={{ fontSize: 18, fontWeight: 600 }}>{fmtNum(data.llmErrorTaxonomy.truncation.count)}</div>
+                <small>{fmtPct(data.llmErrorTaxonomy.truncation.rate)}</small>
+              </div>
+              <div>
+                <small style={{ color: "#475569" }}>parse fail</small>
+                <div style={{ fontSize: 18, fontWeight: 600 }}>{fmtNum(data.llmErrorTaxonomy.parseFail.count)}</div>
+                <small>{fmtPct(data.llmErrorTaxonomy.parseFail.rate)}</small>
+              </div>
+              <div>
+                <small style={{ color: "#475569" }}>other</small>
+                <div style={{ fontSize: 18, fontWeight: 600 }}>{fmtNum(data.llmErrorTaxonomy.other.count)}</div>
+                <small>{fmtPct(data.llmErrorTaxonomy.other.rate)}</small>
+              </div>
+            </div>
+            <div style={{ overflowX: "auto" }}>
+              <table className="pro-table">
+                <thead>
+                  <tr>
+                    <th>呼叫類型</th>
+                    <th>總呼叫</th>
+                    <th>錯誤數</th>
+                    <th>錯誤率</th>
+                    <th>截斷事件</th>
+                    <th>截斷率</th>
+                    <th>平均耗時</th>
+                    <th>P95</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.llmErrorTaxonomy.byKind.map((bucket) => (
+                    <tr key={bucket.kind}>
+                      <td>{bucket.kind}</td>
+                      <td>{fmtNum(bucket.total)}</td>
+                      <td>{fmtNum(bucket.errors)}</td>
+                      <td>{fmtPct(bucket.errorRate)}</td>
+                      <td>{fmtNum(bucket.truncations)}</td>
+                      <td>{fmtPct(bucket.truncationRate)}</td>
+                      <td>{fmtMs(bucket.avgMs)}</td>
+                      <td>{fmtMs(bucket.p95Ms)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
 
             <hr style={{ border: 0, borderTop: "1px solid #e2e8f0", margin: "14px 0" }} />
             <h4 style={{ marginBottom: 6 }}>作品 Artifact 健康度</h4>

@@ -1,5 +1,6 @@
 import "server-only";
 import { isTruncatedFinishReason, pickAssistantTextResult } from "@/src/lib/llm-openai-response";
+import { classifyLlmError, recordLlmCall } from "@/src/lib/llm-observability";
 
 export type LlmChatMessage = {
   role: "system" | "user" | "assistant";
@@ -38,6 +39,7 @@ export async function llmChatCompletionText(input: {
   continueOnTruncation?: boolean;
   continuationMaxRounds?: number;
 }): Promise<string> {
+  const startedAt = Date.now();
   const cfg = getLlmConfig();
   if (!cfg) {
     throw new Error("llm_not_configured_missing_LLM_URL_LLM_KEY_LLM_MODEL");
@@ -51,6 +53,7 @@ export async function llmChatCompletionText(input: {
   const continuationMaxRounds = input.continuationMaxRounds ?? 1;
   const collected: string[] = [];
   let messages = input.messages;
+  let hadTruncation = false;
 
   try {
     for (let round = 0; round <= continuationMaxRounds; round += 1) {
@@ -89,7 +92,11 @@ export async function llmChatCompletionText(input: {
       }
       collected.push(text);
 
-      if (!continueOnTruncation || !isTruncatedFinishReason(result.finishReason) || round >= continuationMaxRounds) {
+      const truncated = isTruncatedFinishReason(result.finishReason);
+      if (truncated) hadTruncation = true;
+
+      if (!continueOnTruncation || !truncated || round >= continuationMaxRounds) {
+        recordLlmCall({ kind: "chat", durationMs: Date.now() - startedAt, hadTruncation });
         return collected.join("\n").trim();
       }
 
@@ -106,7 +113,16 @@ export async function llmChatCompletionText(input: {
       ];
     }
 
+    recordLlmCall({ kind: "chat", durationMs: Date.now() - startedAt, hadTruncation });
     return collected.join("\n").trim();
+  } catch (error) {
+    recordLlmCall({
+      kind: "chat",
+      durationMs: Date.now() - startedAt,
+      hadTruncation,
+      errorCategory: classifyLlmError(error)
+    });
+    throw error;
   } finally {
     clearTimeout(timeout);
   }
@@ -127,6 +143,7 @@ export async function* llmChatCompletionStream(input: {
   maxTokens?: number;
   timeoutMs?: number;
 }): AsyncGenerator<string, void, unknown> {
+  const startedAt = Date.now();
   const cfg = getLlmConfig();
   if (!cfg) {
     throw new Error("llm_not_configured_missing_LLM_URL_LLM_KEY_LLM_MODEL");
@@ -135,6 +152,8 @@ export async function* llmChatCompletionStream(input: {
   const controller = new AbortController();
   const timeoutMs = input.timeoutMs ?? 60_000;
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  let parseFailCount = 0;
+  let emittedChunks = 0;
 
   try {
     const res = await fetch(cfg.url, {
@@ -182,13 +201,27 @@ export async function* llmChatCompletionStream(input: {
           };
           const delta = parsed.choices?.[0]?.delta?.content;
           if (typeof delta === "string" && delta.length > 0) {
+            emittedChunks += 1;
             yield delta;
           }
         } catch {
           // Skip malformed SSE lines; some providers emit keep-alives or comments.
+          parseFailCount += 1;
         }
       }
     }
+    recordLlmCall({
+      kind: "stream",
+      durationMs: Date.now() - startedAt,
+      errorCategory: emittedChunks === 0 && parseFailCount > 0 ? "parse_fail" : undefined
+    });
+  } catch (error) {
+    recordLlmCall({
+      kind: "stream",
+      durationMs: Date.now() - startedAt,
+      errorCategory: classifyLlmError(error)
+    });
+    throw error;
   } finally {
     clearTimeout(timeout);
   }

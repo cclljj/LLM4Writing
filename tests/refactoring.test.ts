@@ -194,3 +194,27 @@ test("#223: student page polling source sends If-None-Match and handles 304", as
   assert.ok(src.includes("304"), "student page must handle 304 status");
   assert.ok(src.includes("ETag"), "student page must track ETag");
 });
+
+test("#318: admin diagnostics route exposes step KPIs, trends, and LLM error taxonomy", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { resolve, dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const thisDir = dirname(fileURLToPath(import.meta.url));
+
+  const src = readFileSync(resolve(thisDir, "../app/api/admin/diagnostics/route.ts"), "utf8");
+  assert.ok(src.includes("stepKpis"), "diagnostics route must include stepKpis");
+  assert.ok(src.includes("trends"), "diagnostics route must include trends");
+  assert.ok(src.includes("llmErrorTaxonomy"), "diagnostics route must include llmErrorTaxonomy");
+});
+
+test("#318: admin diagnostics UI renders new monitoring sections", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { resolve, dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const thisDir = dirname(fileURLToPath(import.meta.url));
+
+  const src = readFileSync(resolve(thisDir, "../app/teacher/_components/AdminPromptDiagnostics.tsx"), "utf8");
+  assert.ok(src.includes("每步驟 KPI"), "UI must render step KPI section");
+  assert.ok(src.includes("課程 / 班級趨勢"), "UI must render trend section");
+  assert.ok(src.includes("LLM 錯誤分類"), "UI must render error taxonomy section");
+});

@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/src/lib/auth-server";
 import systemPromptConfig from "@/src/config/system-prompt-config.json";
 import { listSessions } from "@/src/lib/store";
 import { findActivity } from "@/src/lib/activity-store";
+import { getLlmCallStats } from "@/src/lib/llm-observability";
 import type { SessionState } from "@/src/lib/types";
 type DiagnosticsWindow = "24h" | "7d" | "14d" | "30d";
 const WINDOW_MS: Record<DiagnosticsWindow, number> = {
@@ -334,6 +335,338 @@ function computeRejectedAnswerCount(session: SessionState): number {
   return Object.values(counts).reduce((sum, value) => sum + (Number.isFinite(value) ? value : 0), 0);
 }
 
+function dayKeyFromIso(iso: string): string {
+  const ms = new Date(iso).getTime();
+  if (!Number.isFinite(ms)) return "";
+  return new Date(ms).toISOString().slice(0, 10);
+}
+
+function parseRejectedKey(key: string): { scope: string; countKey: string } | null {
+  const [userId, ...rest] = key.split("::");
+  if (!userId || rest.length === 0) return null;
+  return { scope: rest.join("::"), countKey: key };
+}
+
+function parseStepFromScope(scope: string): string | null {
+  const normalized = scope.trim();
+  if (!normalized) return null;
+  if (normalized.startsWith("step-")) {
+    const step = normalized.slice(5).split(/[^0-9]/)[0] ?? "";
+    return step || null;
+  }
+  const first = normalized.split("-")[0] ?? "";
+  return /^\d+$/.test(first) ? first : null;
+}
+
+function computeRejectedByStep(sessions: SessionState[], cutoffMs: number): Record<string, number> {
+  const byStep: Record<string, number> = {};
+  for (const session of sessions) {
+    const counts = session.qualitySignals?.rejectedAnswerCounts ?? {};
+    const lastAt = session.qualitySignals?.rejectedAnswerLastAt ?? {};
+    for (const [key, count] of Object.entries(counts)) {
+      const parsed = parseRejectedKey(key);
+      if (!parsed) continue;
+      const stepKey = parseStepFromScope(parsed.scope);
+      if (!stepKey) continue;
+      const ts = new Date(lastAt[parsed.countKey] ?? "").getTime();
+      if (!Number.isFinite(ts) || ts < cutoffMs) continue;
+      byStep[stepKey] = (byStep[stepKey] ?? 0) + (Number.isFinite(count) ? count : 0);
+    }
+  }
+  return byStep;
+}
+
+function computeAcceptedByStep(sessions: SessionState[], cutoffMs: number): Record<string, number> {
+  const byStep: Record<string, number> = {};
+  for (const session of sessions) {
+    for (const m of session.messages) {
+      if (m.role !== "student") continue;
+      const atMs = new Date(m.at).getTime();
+      if (!Number.isFinite(atMs) || atMs < cutoffMs) continue;
+      const key = String(m.step);
+      byStep[key] = (byStep[key] ?? 0) + 1;
+    }
+  }
+  return byStep;
+}
+
+function computeStepKpis(
+  sessions: SessionState[],
+  cutoffMs: number,
+  fallbackRate: ReturnType<typeof computeFallbackRate>,
+  llmResponseTime: ReturnType<typeof computeLlmResponseTime>
+): Record<
+  string,
+  {
+    successRate: number;
+    fallbackRate: number;
+    refusalRate: number;
+    avgWaitMs: number;
+    totalAi: number;
+    successes: number;
+    fallbacks: number;
+    acceptedAnswers: number;
+    rejectedAnswers: number;
+    waitSamples: number;
+  }
+> {
+  const rejectedByStep = computeRejectedByStep(sessions, cutoffMs);
+  const acceptedByStep = computeAcceptedByStep(sessions, cutoffMs);
+  const stepKeys = new Set<string>([
+    ...Object.keys(fallbackRate.byStep),
+    ...Object.keys(rejectedByStep),
+    ...Object.keys(acceptedByStep),
+    ...Object.keys(llmResponseTime)
+  ]);
+
+  const result: Record<
+    string,
+    {
+      successRate: number;
+      fallbackRate: number;
+      refusalRate: number;
+      avgWaitMs: number;
+      totalAi: number;
+      successes: number;
+      fallbacks: number;
+      acceptedAnswers: number;
+      rejectedAnswers: number;
+      waitSamples: number;
+    }
+  > = {};
+
+  for (const stepKey of stepKeys) {
+    const fallbackBucket = fallbackRate.byStep[stepKey] ?? { totalAi: 0, fallbacks: 0, rate: 0 };
+    const totalAi = fallbackBucket.totalAi;
+    const fallbacks = fallbackBucket.fallbacks;
+    const successes = Math.max(0, totalAi - fallbacks);
+    const accepted = acceptedByStep[stepKey] ?? 0;
+    const rejected = rejectedByStep[stepKey] ?? 0;
+    const waitBucket = llmResponseTime[stepKey];
+    result[stepKey] = {
+      successRate: totalAi > 0 ? successes / totalAi : 0,
+      fallbackRate: totalAi > 0 ? fallbacks / totalAi : 0,
+      refusalRate: accepted + rejected > 0 ? rejected / (accepted + rejected) : 0,
+      avgWaitMs: waitBucket?.avg ?? 0,
+      totalAi,
+      successes,
+      fallbacks,
+      acceptedAnswers: accepted,
+      rejectedAnswers: rejected,
+      waitSamples: waitBucket?.samples ?? 0
+    };
+  }
+
+  return result;
+}
+
+type TrendDimension = "course" | "class";
+
+type TrendPoint = {
+  date: string;
+  totalAi: number;
+  successes: number;
+  fallbacks: number;
+  acceptedAnswers: number;
+  rejectedAnswers: number;
+  waitSamples: number;
+  avgWaitMs: number;
+  successRate: number;
+  fallbackRate: number;
+  refusalRate: number;
+};
+
+type TrendSeries = {
+  key: string;
+  school: string;
+  classNumber: string;
+  activityTitle: string;
+  points: TrendPoint[];
+};
+
+type TrendMutableBucket = {
+  totalAi: number;
+  successes: number;
+  fallbacks: number;
+  acceptedAnswers: number;
+  rejectedAnswers: number;
+  waitTotalMs: number;
+  waitSamples: number;
+};
+
+type TrendMeta = {
+  key: string;
+  school: string;
+  classNumber: string;
+  activityTitle: string;
+};
+
+function buildTrendMeta(
+  session: SessionState,
+  activity: { school?: string; classNumber?: string; title?: string } | undefined,
+  dimension: TrendDimension
+): TrendMeta {
+  const school = activity?.school ?? "—";
+  const classNumber = activity?.classNumber ?? "—";
+  const activityTitle = session.activityTitle ?? activity?.title ?? session.activityId ?? "未命名課程";
+  if (dimension === "class") {
+    return {
+      key: `${school}::${classNumber}`,
+      school,
+      classNumber,
+      activityTitle: "全部課程"
+    };
+  }
+  return {
+    key: `${school}::${classNumber}::${activityTitle}`,
+    school,
+    classNumber,
+    activityTitle
+  };
+}
+
+function computeTrendSeries(
+  sessions: SessionState[],
+  cutoffMs: number,
+  dimension: TrendDimension
+): TrendSeries[] {
+  const byGroupDay = new Map<string, TrendMutableBucket>();
+  const metaMap = new Map<string, TrendMeta>();
+  const waitTracker = new Map<string, string | null>();
+
+  for (const session of sessions) {
+    const activity = session.activityId ? findActivity(session.activityId) : undefined;
+    const meta = buildTrendMeta(session, activity, dimension);
+    metaMap.set(meta.key, meta);
+
+    for (const message of session.messages) {
+      const atMs = new Date(message.at).getTime();
+      if (!Number.isFinite(atMs) || atMs < cutoffMs) continue;
+      const day = dayKeyFromIso(message.at);
+      if (!day) continue;
+      const dayKey = `${meta.key}::${day}`;
+      const bucket = byGroupDay.get(dayKey) ?? {
+        totalAi: 0,
+        successes: 0,
+        fallbacks: 0,
+        acceptedAnswers: 0,
+        rejectedAnswers: 0,
+        waitTotalMs: 0,
+        waitSamples: 0
+      };
+
+      if (message.role === "student") {
+        bucket.acceptedAnswers += 1;
+        waitTracker.set(`${session.id}::${meta.key}::${message.step}`, message.at);
+      } else if (message.role === "ai") {
+        bucket.totalAi += 1;
+        if (isFallbackText(message.text ?? "")) bucket.fallbacks += 1;
+        else bucket.successes += 1;
+
+        const waitKey = `${session.id}::${meta.key}::${message.step}`;
+        const lastStudentAt = waitTracker.get(waitKey);
+        if (lastStudentAt) {
+          const diff = new Date(message.at).getTime() - new Date(lastStudentAt).getTime();
+          if (Number.isFinite(diff) && diff > 0 && diff < 5 * 60 * 1000) {
+            bucket.waitTotalMs += diff;
+            bucket.waitSamples += 1;
+          }
+          waitTracker.set(waitKey, null);
+        }
+      }
+
+      byGroupDay.set(dayKey, bucket);
+    }
+
+    const counts = session.qualitySignals?.rejectedAnswerCounts ?? {};
+    const lastAt = session.qualitySignals?.rejectedAnswerLastAt ?? {};
+    for (const [key, count] of Object.entries(counts)) {
+      const rejectedAt = lastAt[key];
+      const ts = new Date(rejectedAt ?? "").getTime();
+      if (!Number.isFinite(ts) || ts < cutoffMs) continue;
+      const day = dayKeyFromIso(rejectedAt ?? "");
+      if (!day) continue;
+      const dayKey = `${meta.key}::${day}`;
+      const bucket = byGroupDay.get(dayKey) ?? {
+        totalAi: 0,
+        successes: 0,
+        fallbacks: 0,
+        acceptedAnswers: 0,
+        rejectedAnswers: 0,
+        waitTotalMs: 0,
+        waitSamples: 0
+      };
+      bucket.rejectedAnswers += Number.isFinite(count) ? count : 0;
+      byGroupDay.set(dayKey, bucket);
+    }
+  }
+
+  const pointsByGroup = new Map<string, TrendPoint[]>();
+  for (const [groupDayKey, bucket] of byGroupDay.entries()) {
+    const splitAt = groupDayKey.lastIndexOf("::");
+    if (splitAt < 0) continue;
+    const groupKey = groupDayKey.slice(0, splitAt);
+    const day = groupDayKey.slice(splitAt + 2);
+    const points = pointsByGroup.get(groupKey) ?? [];
+    points.push({
+      date: day,
+      totalAi: bucket.totalAi,
+      successes: bucket.successes,
+      fallbacks: bucket.fallbacks,
+      acceptedAnswers: bucket.acceptedAnswers,
+      rejectedAnswers: bucket.rejectedAnswers,
+      waitSamples: bucket.waitSamples,
+      avgWaitMs: bucket.waitSamples > 0 ? Math.round(bucket.waitTotalMs / bucket.waitSamples) : 0,
+      successRate: bucket.totalAi > 0 ? bucket.successes / bucket.totalAi : 0,
+      fallbackRate: bucket.totalAi > 0 ? bucket.fallbacks / bucket.totalAi : 0,
+      refusalRate:
+        bucket.acceptedAnswers + bucket.rejectedAnswers > 0
+          ? bucket.rejectedAnswers / (bucket.acceptedAnswers + bucket.rejectedAnswers)
+          : 0
+    });
+    pointsByGroup.set(groupKey, points);
+  }
+
+  return Array.from(pointsByGroup.entries())
+    .map(([groupKey, points]) => {
+      const meta = metaMap.get(groupKey);
+      return {
+        key: groupKey,
+        school: meta?.school ?? "—",
+        classNumber: meta?.classNumber ?? "—",
+        activityTitle: meta?.activityTitle ?? "未命名課程",
+        points: points.sort((a, b) => a.date.localeCompare(b.date))
+      };
+    })
+    .sort((a, b) => a.key.localeCompare(b.key));
+}
+
+function buildLlmErrorTaxonomy() {
+  const stats = getLlmCallStats();
+  let timeout = 0;
+  let truncation = 0;
+  let parseFail = 0;
+  let other = 0;
+  let totalCalls = 0;
+  for (const s of stats) {
+    totalCalls += s.total;
+    timeout += s.errorCategories.timeout;
+    parseFail += s.errorCategories.parse_fail;
+    other += s.errorCategories.other;
+    truncation += s.truncations + s.errorCategories.truncation;
+  }
+  const totalClassified = timeout + truncation + parseFail + other;
+  return {
+    totalCalls,
+    totalClassified,
+    timeout: { count: timeout, rate: totalClassified > 0 ? timeout / totalClassified : 0 },
+    truncation: { count: truncation, rate: totalClassified > 0 ? truncation / totalClassified : 0 },
+    parseFail: { count: parseFail, rate: totalClassified > 0 ? parseFail / totalClassified : 0 },
+    other: { count: other, rate: totalClassified > 0 ? other / totalClassified : 0 },
+    byKind: stats
+  };
+}
+
 export async function GET(request: Request) {
   const user = await getCurrentUser();
   if (!user || user.role !== "admin") {
@@ -388,6 +721,14 @@ export async function GET(request: Request) {
     model: readEnvFlag("LLM_MODEL") ? process.env.LLM_MODEL : null
   };
   const tokenUsage = computeTokenUsageStats(windowedSpecSessions, cutoffMs);
+  const llmResponseTime = computeLlmResponseTime(windowedSpecSessions, cutoffMs);
+  const fallbackRate = computeFallbackRate(windowedSpecSessions, cutoffMs);
+  const stepKpis = computeStepKpis(windowedSpecSessions, cutoffMs, fallbackRate, llmResponseTime);
+  const trends = {
+    byCourse: computeTrendSeries(windowedSpecSessions, cutoffMs, "course"),
+    byClass: computeTrendSeries(windowedSpecSessions, cutoffMs, "class")
+  };
+  const llmErrorTaxonomy = buildLlmErrorTaxonomy();
 
   return NextResponse.json({
     llm,
@@ -413,8 +754,11 @@ export async function GET(request: Request) {
       }))
     },
     timeWindow: selectedWindow,
-    llmResponseTime: computeLlmResponseTime(windowedSpecSessions, cutoffMs),
-    fallbackRate: computeFallbackRate(windowedSpecSessions, cutoffMs),
+    llmResponseTime,
+    fallbackRate,
+    stepKpis,
+    trends,
+    llmErrorTaxonomy,
     artifactHealth: computeArtifactHealth(windowedSpecSessions),
     tokenUsage,
     generatedAt: new Date().toISOString()
