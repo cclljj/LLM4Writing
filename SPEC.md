@@ -1463,7 +1463,7 @@ Continuation 策略：
 
 ### 10.1 API Rate Limiting
 
-所有 `/api/*` 路由在 `middleware.ts` 中以 in-process sliding window 限速。
+所有 `/api/*` 路由在 `proxy.ts` 中以 in-process sliding window 限速。
 
 | 路徑前綴 | 上限 | 視窗 |
 |---|---|---|

@@ -18,8 +18,36 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  quality-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Unit tests
+        run: npm run test
+
+      - name: Build validation
+        run: npm run build
+
+      - name: E2E tests
+        run: npm run test:e2e
+
   preview:
     if: github.event_name == 'pull_request'
+    needs: quality-gate
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -57,6 +85,7 @@ jobs:
 
   production:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    needs: quality-gate
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

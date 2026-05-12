@@ -156,6 +156,12 @@ npx --yes vercel --prod
 
 CI workflow: [`.github/workflows/vercel-deploy.yml`](./.github/workflows/vercel-deploy.yml)
 
+Quality gate（PR 與 `main` push）：
+- `npm run test`
+- `npm run build`
+- `npm run test:e2e`
+- 以上任一失敗時，部署 job 不會執行
+
 ## Documentation Index
 
 - Spec: [`SPEC.md`](./SPEC.md)

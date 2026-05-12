@@ -1,6 +1,6 @@
 /**
  * Security tests for:
- * - Issue #218: API rate limiting (middleware sliding window)
+ * - Issue #218: API rate limiting (proxy sliding window)
  * - Issue #219: Cookie SameSite=strict
  */
 import test from "node:test";
@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 
 // ---------------------------------------------------------------------------
 // Inline the rate limit logic so we can test it without spinning up the server.
-// This mirrors the implementation in middleware.ts exactly.
+// This mirrors the implementation in proxy.ts exactly.
 // ---------------------------------------------------------------------------
 
 type RateLimitRule = { pattern: RegExp; max: number; windowMs: number };
@@ -175,19 +175,19 @@ test("logout route: cookie sameSite attribute is 'strict'", async () => {
   assert.ok(strictMatches >= 2, `logout route should set sameSite strict on both cookies, found ${strictMatches}`);
 });
 
-test("middleware: matcher includes /api/:path*", async () => {
+test("proxy: matcher includes /api/:path*", async () => {
   const { readFileSync } = await import("node:fs");
   const { resolve, dirname } = await import("node:path");
   const { fileURLToPath } = await import("node:url");
 
   const thisDir = dirname(fileURLToPath(import.meta.url));
-  const mw = readFileSync(resolve(thisDir, "../middleware.ts"), "utf8");
+  const proxySrc = readFileSync(resolve(thisDir, "../proxy.ts"), "utf8");
 
-  assert.ok(mw.includes('"/api/:path*"') || mw.includes("'/api/:path*'"),
-    "middleware matcher should include /api/:path*");
+  assert.ok(proxySrc.includes('"/api/:path*"') || proxySrc.includes("'/api/:path*'"),
+    "proxy matcher should include /api/:path*");
 });
 
-test("middleware: returns 429 JSON shape", () => {
+test("proxy: returns 429 JSON shape", () => {
   // Verify the shape of the 429 response body is correct
   const body = { error: "rate_limit_exceeded", retryAfterSeconds: 45 };
   assert.equal(body.error, "rate_limit_exceeded");
