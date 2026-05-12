@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
   const qualitySignalsBeforeSend = JSON.stringify(session.qualitySignals ?? {});
 
   try {
-    markUserOnline(session.id, user.username);
+    await markUserOnline(session.id, user.username);
     const userStep = session.personalSteps?.[user.username] ?? session.currentStep;
     const updated = await sendStudentMessage(session, user.username, payload.text, userStep, {
       onBeforeGroupAi: async (snapshot) => {

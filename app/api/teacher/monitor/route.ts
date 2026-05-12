@@ -49,7 +49,7 @@ function buildMessagesWithOpenings(session: SessionState): ChatMessage[] {
   return withOpenings;
 }
 
-function buildMonitorSessionPayload(
+async function buildMonitorSessionPayload(
   session: SessionState,
   activity: { school?: string; classNumber?: string } | undefined,
   detail: "summary" | "full"
@@ -76,6 +76,8 @@ function buildMonitorSessionPayload(
     })
   );
 
+  const onlineUsers = await getOnlineUsers(session.id);
+
   return {
     sessionId: session.id,
     activityId: session.activityId,
@@ -86,7 +88,7 @@ function buildMonitorSessionPayload(
     groupName: session.groupName,
     participants: session.participants,
     joinedUsers: session.joinedUsers ?? [],
-    onlineUsers: getOnlineUsers(session.id),
+    onlineUsers,
     currentStep: session.currentStep,
     personalSteps: session.personalSteps ?? {},
     messages: messagesWithOpenings,
@@ -135,14 +137,17 @@ export async function GET(request: NextRequest) {
   const visibleActivityIds = new Set(visibleActivities.map((activity) => activity.id));
 
   const sessions = await listSessions();
-  const visibleSessions = sessions
+  const scopedSessions = sessions
     .filter((s) => s.workflow === "spec10" && Boolean(s.activityId) && visibleActivityIds.has(s.activityId!))
     .filter((s) => (requestedActivityId ? s.activityId === requestedActivityId : true))
     .filter((s) => {
       const activity = activityMap.get(s.activityId!);
       return Boolean(activity && isSessionInActivityGroupScope(s, activity));
-    })
-    .map((s) => buildMonitorSessionPayload(s, activityMap.get(s.activityId!), detail));
+    });
+
+  const visibleSessions = await Promise.all(
+    scopedSessions.map((s) => buildMonitorSessionPayload(s, activityMap.get(s.activityId!), detail))
+  );
 
   if (requestedSessionId) {
     const session = visibleSessions.find((item) => item.sessionId === requestedSessionId);

@@ -138,14 +138,14 @@ test("#223: markUserOnline / getOnlineUsers work with sessionId signature", asyn
   const { markUserOnline, getOnlineUsers } = await import("../src/lib/session-presence.js");
 
   const sessionId = "test-session-etag-" + Math.random();
-  markUserOnline(sessionId, "alice");
-  const online = getOnlineUsers(sessionId);
+  await markUserOnline(sessionId, "alice");
+  const online = await getOnlineUsers(sessionId);
   assert.ok(online.includes("alice"), "alice should be online after markUserOnline");
 });
 
 test("#223: getOnlineUsers returns empty for unknown session", async () => {
   const { getOnlineUsers } = await import("../src/lib/session-presence.js");
-  const online = getOnlineUsers("non-existent-session-" + Math.random());
+  const online = await getOnlineUsers("non-existent-session-" + Math.random());
   assert.deepEqual(online, []);
 });
 
@@ -154,10 +154,10 @@ test("#223: getOnlineUsers respects window — expired entries excluded", async 
 
   const sessionId = "test-window-" + Math.random();
   const pastIso = new Date(Date.now() - 60_000).toISOString(); // 60s ago
-  markUserOnline(sessionId, "bob", pastIso);
+  await markUserOnline(sessionId, "bob", pastIso);
 
   // With default 45s window, bob should NOT be online
-  const online = getOnlineUsers(sessionId);
+  const online = await getOnlineUsers(sessionId);
   assert.ok(!online.includes("bob"), "expired presence entry should not appear in getOnlineUsers");
 });
 
@@ -165,7 +165,7 @@ test("#223: markUserOnline does not mutate any session object", async () => {
   const { markUserOnline } = await import("../src/lib/session-presence.js");
 
   const fakeSession = { id: "s1", onlineUsersLastSeen: {} as Record<string, string> };
-  markUserOnline(fakeSession.id, "charlie");
+  await markUserOnline(fakeSession.id, "charlie");
 
   // Session object must be unchanged
   assert.deepEqual(fakeSession.onlineUsersLastSeen, {});

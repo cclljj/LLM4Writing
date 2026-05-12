@@ -61,10 +61,10 @@ export async function GET(request: Request, context: { params: Promise<{ session
   const { session, updatedAt } = meta;
   const etag = `"${updatedAt}"`;
 
-  // Mark presence in the in-process map (does NOT touch session payload or updated_at)
+  // Mark presence as side-effect only (does NOT touch session payload or updated_at)
   const user = await getCurrentUser();
   if (user?.role === "student" && session.participants.includes(user.username)) {
-    markUserOnline(session.id, user.username);
+    await markUserOnline(session.id, user.username);
   }
 
   // ETag check — only after presence is recorded (presence is side-effect only)

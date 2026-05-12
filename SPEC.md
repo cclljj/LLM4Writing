@@ -131,6 +131,22 @@ LLM 上下文規則：
 - Step5+ 不得混入其他學生的個人訊息。
 - 上下文需以最近訊息數與字數上限裁切，避免 prompt 過長。
 
+### 2.7 分散式執行期狀態（Rate Limit / Presence）
+
+為支援正式上線多副本部署，`rate limit` 與 `presence` 採「Upstash Redis 優先，memory fallback」雙模式：
+
+| 功能 | 主要路徑 | Redis key 範例 | fallback |
+|---|---|---|---|
+| API rate limit | `src/lib/rate-limit.ts` | `ratelimit:<rule>:<ip>:<bucket>` | `Map` sliding window |
+| session presence | `src/lib/session-presence.ts` | `presence:<sessionId>:<username>`、`presence:<sessionId>:users` | `Map<sessionId, Map<username, iso>>` |
+
+Upstash 啟用條件：
+
+- `UPSTASH_REDIS_REST_URL`
+- `UPSTASH_REDIS_REST_TOKEN`
+
+任一缺失、或 Redis 暫時錯誤/逾時時，會自動 fallback 到 in-memory，不中斷課程流程。
+
 ## 3. 權限與資料邊界
 
 ### 3.1 基本原則
@@ -1117,7 +1133,7 @@ Error:
 - 支援 conditional GET。
 - 回應包含 `ETag: "updated_at"`。
 - 若 `If-None-Match` 相符，回傳 304 無 body。
-- Presence 為 in-process 側記，不寫入 session payload。
+- Presence 為 side-effect 側記，不寫入 session payload；預設走 Redis（未配置或失敗時 fallback memory）。
 
 #### `POST /api/chat/send`
 
@@ -1463,7 +1479,7 @@ Continuation 策略：
 
 ### 10.1 API Rate Limiting
 
-所有 `/api/*` 路由在 `proxy.ts` 中以 in-process sliding window 限速。
+所有 `/api/*` 路由在 `proxy.ts` 中統一走 `src/lib/rate-limit.ts` 限速，預設使用 Upstash Redis，失敗時 fallback in-memory。
 
 | 路徑前綴 | 上限 | 視窗 |
 |---|---|---|
@@ -1484,10 +1500,18 @@ Retry-After: <秒數>
 
 注意：
 
-- 狀態儲存於 process memory `Map`，不跨 Edge 副本共享。
+- Upstash 可用時，限速狀態跨副本共享。
+- Upstash 未設定或短暫故障時，退回 process memory `Map`（僅單副本一致）。
 - IP 從 `x-forwarded-for` 第一個值或 `x-real-ip` 取得。
 
-### 10.2 Session Cookie
+### 10.2 Session Presence
+
+- presence 更新由 `markUserOnline(sessionId, username)` 寫入。
+- Upstash 可用時，以 TTL key + users set 維護線上名單，支援跨副本一致。
+- Redis 失敗時 fallback 到 in-memory map，避免影響學生互動流程。
+- presence 僅作即時監看用途，不回寫 session payload，也不影響 `updated_at` / `ETag`。
+
+### 10.3 Session Cookie
 
 | 屬性 | 值 |
 |---|---|
@@ -1522,9 +1546,9 @@ Retry-After: <秒數>
 1. 無 DB 環境下，domain 依賴 `.data/domain-state.json`；檔案不可寫或被清空會回預設。
 2. 群組隨機分配採前端簡單亂數，不含 seed，無法保證可重現。
 3. Prompt 變更需改檔案並重新部署，不支援線上即時編輯。
-4. Rate limiting 為 in-process，不跨 Edge 副本共享。
+4. 若未配置 Upstash（或 Redis 故障），rate limiting 會 fallback in-memory，跨副本一致性會下降。
 5. `/api/teacher/monitor` 分頁目前為應用層分頁；大規模部署需改 DB 層查詢。
-6. Presence 為 in-process Map，不持久化也不跨副本共享，重啟後重置。
+6. Presence 本質為短生命週期狀態；即使使用 Redis，也不做長期持久化，TTL 到期或服務重啟後會自然重建。
 
 ## 13. 資料庫遷移與維運
 

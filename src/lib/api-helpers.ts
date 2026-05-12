@@ -37,6 +37,6 @@ export async function requireStudentInSession(
   if (!session.participants.includes(user.username)) {
     return NextResponse.json({ error: "not_participant" }, { status: 403 });
   }
-  markUserOnline(session.id, user.username);
+  await markUserOnline(session.id, user.username);
   return { user, session };
 }
