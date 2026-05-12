@@ -60,7 +60,7 @@ function computeLlmResponseTime(
   const byStep: Record<string, number[]> = {};
   for (const session of sessions) {
     const messages = session.messages;
-    let lastStudentByStep: Record<number, string | null> = {};
+    const lastStudentByStep: Record<number, string | null> = {};
     for (const m of messages) {
       const atMs = new Date(m.at).getTime();
       if (!Number.isFinite(atMs) || atMs < cutoffMs) continue;

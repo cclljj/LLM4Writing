@@ -13,7 +13,7 @@ export function isDatabaseEnabled(): boolean {
   return Boolean(getDatabaseUrl());
 }
 
-export function useTransactionPooler(url?: string): boolean {
+export function isTransactionPooler(url?: string): boolean {
   const explicitMode = readEnv("SUPABASE_POOL_MODE");
   if (explicitMode === "transaction") return true;
   if (explicitMode === "session") return false;
@@ -29,7 +29,7 @@ export function getPostgresClientOptions(url: string): {
   idle_timeout: number;
   connect_timeout: number;
 } {
-  const transactionPooler = useTransactionPooler(url);
+  const transactionPooler = isTransactionPooler(url);
   return {
     // Supabase transaction pooler does not support prepared statements.
     prepare: !transactionPooler,
