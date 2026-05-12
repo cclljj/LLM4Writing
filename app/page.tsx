@@ -30,9 +30,17 @@ export default function HomePage() {
   return (
     <main id="top" className="home-main">
       <section className="home-hero">
-        <div>
+        <div className="home-hero-copy">
+          <div className="home-chip-row">
+            <span className="home-chip">10-Step Learning Flow</span>
+            <span className="home-chip">Teacher Dashboard</span>
+            <span className="home-chip">Evidence-Based Writing</span>
+          </div>
           <p className="home-kicker">LLM4Writing</p>
-          <h1>用 AI 引導每一位學生，完成更有品質的寫作學習</h1>
+          <h1>
+            讓 AI 成為課堂中的
+            <span className="home-title-accent">寫作引導老師</span>
+          </h1>
           <p className="home-lead">
             LLM4Writing 提供完整的分步引導、討論互動與學習歷程追蹤，協助學生從審題到總結，循序完成一篇有結構、有觀點的作品。
           </p>
@@ -40,8 +48,9 @@ export default function HomePage() {
             現在可直接在首頁登入，登入後系統會依你的身分自動導向對應頁面。
           </p>
         </div>
-        <div className="home-hero-panel card">
+        <div className="home-hero-panel card home-login-card">
           <h2>立即登入</h2>
+          <p className="home-login-sub">使用學校或系統管理單位提供的帳號密碼登入。</p>
           <form onSubmit={handleLogin}>
             <label>帳號</label>
             <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="請輸入帳號" />
@@ -82,13 +91,23 @@ export default function HomePage() {
         </article>
       </section>
 
-      <section className="card">
-        <h2>系統入口</h2>
-        <div className="row">
-          <div className="col card">
-            <h3>單一登入入口</h3>
-            <p>學生、教師與管理員使用同一個登入入口，登入後將自動導向你的工作頁面。</p>
-            <a href="#top">請使用上方登入表單進入</a>
+      <section className="card home-flow">
+        <h2>教學流程全景</h2>
+        <div className="home-flow-grid">
+          <div className="home-flow-item">
+            <span className="home-flow-step">STEP 1-4</span>
+            <h3>引導討論與結構建構</h3>
+            <p>從審題、蒐集資料到論點生成與對比修正，建立共同寫作基礎。</p>
+          </div>
+          <div className="home-flow-item">
+            <span className="home-flow-step">STEP 5-8</span>
+            <h3>個人草稿與 AI 回饋</h3>
+            <p>產出摘要、完成初稿、獲得 AI 建議，再進行修改潤飾。</p>
+          </div>
+          <div className="home-flow-item">
+            <span className="home-flow-step">STEP 9-10</span>
+            <h3>反思與總結</h3>
+            <p>完成個人反思與總結報告，形成可追蹤的學習成長紀錄。</p>
           </div>
         </div>
       </section>

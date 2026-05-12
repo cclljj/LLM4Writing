@@ -272,27 +272,92 @@ a {
 
 .home-main {
   max-width: 1120px;
+  padding-top: 28px;
 }
 
 .home-hero {
   display: grid;
   grid-template-columns: 1.2fr 0.8fr;
-  gap: 16px;
+  gap: 20px;
   align-items: stretch;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
+}
+
+.home-hero-copy {
+  position: relative;
+  padding: 20px 22px;
+  border-radius: 18px;
+  border: 1px solid #dbe7ff;
+  background:
+    radial-gradient(circle at 85% 12%, rgba(59, 130, 246, 0.18) 0%, rgba(59, 130, 246, 0) 46%),
+    linear-gradient(160deg, #ffffff 0%, #f1f7ff 68%, #eef4ff 100%);
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.08);
+}
+
+.home-chip-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.home-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid #c9dbff;
+  background: #edf4ff;
+  color: #1d4ed8;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  padding: 4px 10px;
 }
 
 .home-kicker {
   margin: 0 0 6px;
-  color: #0369a1;
-  font-size: 0.8rem;
+  color: #075985;
+  font-size: 0.84rem;
   font-weight: 800;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.09em;
+}
+
+.home-hero-copy h1 {
+  margin: 0;
+  font-size: clamp(1.9rem, 3.6vw, 2.8rem);
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  font-family: "Noto Serif TC", "Iansui", "BiauKai TC", serif;
+}
+
+.home-title-accent {
+  display: block;
+  margin-top: 4px;
+  color: #1d4ed8;
+  font-size: 0.95em;
 }
 
 .home-lead {
   color: #334155;
-  max-width: 64ch;
+  max-width: 66ch;
+  font-size: 1.02rem;
+  line-height: 1.72;
+}
+
+.home-login-card {
+  border-radius: 18px;
+  border-color: #cfe0ff;
+  background: linear-gradient(180deg, #ffffff 0%, #f4f8ff 100%);
+}
+
+.home-login-card h2 {
+  margin-bottom: 8px;
+}
+
+.home-login-sub {
+  margin: 0 0 12px;
+  color: #475569;
+  font-size: 0.9rem;
 }
 
 .home-cta-row {
@@ -338,12 +403,59 @@ a {
 .home-grid-3 {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.home-grid-3 .card {
+  border-radius: 14px;
+  border-color: #d9e4f8;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+}
+
+.home-flow {
+  border-color: #d7e3ff;
+  background: linear-gradient(180deg, #f8fbff 0%, #eef4ff 100%);
+}
+
+.home-flow-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
+}
+
+.home-flow-item {
+  border: 1px solid #d9e4f8;
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 12px;
+}
+
+.home-flow-item h3 {
+  margin: 6px 0;
+  font-size: 1rem;
+}
+
+.home-flow-item p {
+  margin: 0;
+  color: #475569;
+  line-height: 1.55;
+}
+
+.home-flow-step {
+  display: inline-block;
+  border-radius: 999px;
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 3px 8px;
 }
 
 .home-footer {
   margin-top: 18px;
   background: #f8fafc;
+  border-color: #d7dee8;
 }
 
 .home-footer p {
@@ -361,6 +473,10 @@ a {
   }
 
   .home-grid-3 {
+    grid-template-columns: 1fr;
+  }
+
+  .home-flow-grid {
     grid-template-columns: 1fr;
   }
 
