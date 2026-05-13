@@ -30,7 +30,9 @@ export type CourseImplementationPdfInput = {
   metric: PdfStudentMetric;
   starLabel: string;
   starRationales: string[];
-  snippets: PdfMessage[];
+  timelineMessages: PdfMessage[];
+  step3SubmittedOutline: string;
+  step4RevisedOutline: string;
   generatedAtIso: string;
 };
 
@@ -101,12 +103,6 @@ function stepName(step: number): string {
   return names[step] ?? "";
 }
 
-function buildSnippetLine(snippet: PdfMessage): string {
-  const title = `Step ${snippet.step}${stepName(snippet.step) ? ` ${stepName(snippet.step)}` : ""} / ${formatRole(snippet.role)}`;
-  const body = sanitize(snippet.text).slice(0, 140);
-  return `${title}\n${body}`;
-}
-
 export async function generateCourseImplementationPdf(input: CourseImplementationPdfInput): Promise<Blob> {
   const doc = new jsPDF({ unit: "pt", format: "a4" });
   const pageWidth = doc.internal.pageSize.getWidth();
@@ -167,6 +163,54 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
     }
   }
 
+  function writeParagraph(text: string, indent = 0): void {
+    const lines = doc.splitTextToSize(text, contentWidth - indent) as string[];
+    ensureSpace(lines.length + 1);
+    doc.text(lines, marginX + indent, y);
+    y += lines.length * lineHeight;
+  }
+
+  function writeMessageTimeline(messages: PdfMessage[]): void {
+    ensureSpace(3);
+    y += 6;
+    doc.setFontSize(13);
+    doc.text("完整互動歷程（依系統順序）", marginX, y);
+    y += 18;
+    doc.setFontSize(11);
+
+    if (messages.length === 0) {
+      writeParagraph("目前沒有可輸出的互動紀錄。");
+      return;
+    }
+
+    for (let i = 0; i < messages.length; i += 1) {
+      const msg = messages[i]!;
+      const seq = String(i + 1).padStart(3, "0");
+      const header = `[${seq}] Step ${msg.step}${stepName(msg.step) ? ` ${stepName(msg.step)}` : ""} / ${formatRole(msg.role)} / ${new Date(msg.at).toLocaleString("zh-TW")}`;
+      const body = sanitize(msg.text);
+
+      const headerLines = doc.splitTextToSize(header, contentWidth) as string[];
+      const bodyLines = doc.splitTextToSize(body || "（空白）", contentWidth - 10) as string[];
+      ensureSpace(headerLines.length + bodyLines.length + 2);
+      doc.text(headerLines, marginX, y);
+      y += headerLines.length * lineHeight;
+      doc.text(bodyLines, marginX + 10, y);
+      y += bodyLines.length * lineHeight + 6;
+    }
+  }
+
+  function writeOutlineSection(title: string, content: string): void {
+    const trimmed = sanitize(content);
+    if (!trimmed) return;
+    ensureSpace(3);
+    y += 6;
+    doc.setFontSize(13);
+    doc.text(title, marginX, y);
+    y += 18;
+    doc.setFontSize(11);
+    writeParagraph(trimmed);
+  }
+
   writeTitle("課程實施報告 PDF v1（學生個人）");
 
   writeLabelValue("產出時間", new Date(input.generatedAtIso).toLocaleString("zh-TW"));
@@ -189,15 +233,16 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
 
   writeSection("星等依據", input.starRationales);
 
-  const snippetRows =
-    input.snippets.length > 0
-      ? input.snippets.map(buildSnippetLine)
-      : ["目前無可節錄的代表互動片段（可能尚未有個人互動紀錄）。"];
-  writeSection("代表互動片段", snippetRows);
+  writeOutlineSection("步驟三完成結構樹（全文）", input.step3SubmittedOutline);
+  if (sanitize(input.step4RevisedOutline) && sanitize(input.step4RevisedOutline) !== sanitize(input.step3SubmittedOutline)) {
+    writeOutlineSection("步驟四修正後結構樹（全文）", input.step4RevisedOutline);
+  }
+
+  writeMessageTimeline(input.timelineMessages);
 
   writeSection("版本註記", [
-    "本檔為課程實施報告 PDF v1，提供教學現場快速檢視與研究摘要引用。",
-    "若需完整逐字紀錄與附件，請搭配管理端課程紀錄頁面交叉檢視。",
+    "本檔為課程實施報告 PDF v1（完整歷程版），內容依系統中出現順序輸出。",
+    "若後續新增圖表/附件，將於 v2 擴充。",
   ]);
 
   return doc.output("blob");

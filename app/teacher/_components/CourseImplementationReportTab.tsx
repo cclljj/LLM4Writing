@@ -351,9 +351,8 @@ export default function CourseImplementationReportTab({
         return false;
       });
 
-      const snippets = scopedMessages
+      const timelineMessages = scopedMessages
         .filter((message) => Boolean(message.text?.trim()))
-        .slice(0, 8)
         .map((message) => ({
           role: message.role,
           step: message.step,
@@ -380,7 +379,9 @@ export default function CourseImplementationReportTab({
         },
         starLabel: renderStars(metric.stars),
         starRationales: buildStarRationales(metric),
-        snippets,
+        timelineMessages,
+        step3SubmittedOutline: data.userStep3SubmittedOutline ?? "",
+        step4RevisedOutline: data.userOutline ?? "",
         generatedAtIso: new Date().toISOString(),
       });
 
