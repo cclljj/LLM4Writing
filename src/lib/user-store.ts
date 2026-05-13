@@ -1,3 +1,4 @@
+import bcrypt from "bcryptjs";
 import postgres, { Sql } from "postgres";
 import { UserAccount } from "@/src/lib/types";
 import { getDatabaseUrl, getPostgresClientOptions, isDatabaseEnabled } from "@/src/lib/db-config";
@@ -6,6 +7,7 @@ type StoredUser = UserAccount & { password: string };
 type MemoryUserStore = Map<string, StoredUser>;
 
 const KEY = "__llm4writing_users__";
+const BCRYPT_ROUNDS = 12;
 
 const defaultUsers: StoredUser[] = [
   { username: "admin", name: "System Admin", school: "Demo High", role: "admin", password: "admin123" },
@@ -52,7 +54,7 @@ function getMemoryStore(): MemoryUserStore {
   const globalScope = globalThis as unknown as Record<string, MemoryUserStore | undefined>;
   if (!globalScope[KEY]) {
     const seeded = new Map<string, StoredUser>();
-    defaultUsers.forEach((user) => seeded.set(user.username, { ...user }));
+    defaultUsers.forEach((user) => seeded.set(user.username, { ...user, password: hashPasswordSync(user.password) }));
     globalScope[KEY] = seeded;
   }
   return globalScope[KEY] as MemoryUserStore;
@@ -122,10 +124,11 @@ async function ensureUserTable(): Promise<void> {
       // Use ON CONFLICT DO NOTHING so existing data is never overwritten.
       for (const user of defaultUsers) {
         const { password, ...payload } = user;
+        const passwordHash = await hashPassword(password);
         try {
           await sql`
             INSERT INTO llm4writing_users (username, payload, password)
-            VALUES (${user.username}, ${JSON.stringify(payload)}::jsonb, ${password})
+            VALUES (${user.username}, ${JSON.stringify(payload)}::jsonb, ${passwordHash})
             ON CONFLICT (username) DO NOTHING
           `;
         } catch (error) {
@@ -145,8 +148,35 @@ async function ensureUserTable(): Promise<void> {
 }
 
 function stripPassword(user: StoredUser): UserAccount {
-  const { password: _password, ...safe } = user;
-  return safe;
+  const safe: Partial<StoredUser> = { ...user };
+  delete safe.password;
+  return safe as UserAccount;
+}
+
+function isPasswordHash(value: string): boolean {
+  return /^\$2[aby]\$\d{2}\$/.test(value);
+}
+
+function hashPasswordSync(password: string): string {
+  return bcrypt.hashSync(password, BCRYPT_ROUNDS);
+}
+
+async function hashPassword(password: string): Promise<string> {
+  return bcrypt.hash(password, BCRYPT_ROUNDS);
+}
+
+async function verifyPasswordAndUpgradeStatus(
+  storedPassword: string,
+  candidatePassword: string
+): Promise<{ ok: boolean; needsUpgrade: boolean }> {
+  if (isPasswordHash(storedPassword)) {
+    return { ok: await bcrypt.compare(candidatePassword, storedPassword), needsUpgrade: false };
+  }
+
+  return {
+    ok: storedPassword === candidatePassword,
+    needsUpgrade: storedPassword === candidatePassword
+  };
 }
 
 function normalizePayload(payload: unknown, fallbackUsername?: string): UserAccount {
@@ -219,7 +249,13 @@ export async function getUserStore(username: string): Promise<UserAccount | unde
 export async function validateUserCredentialStore(username: string, password: string): Promise<UserAccount | undefined> {
   if (!isDatabaseEnabled()) {
     const row = getMemoryStore().get(username);
-    if (!row || row.password !== password) return undefined;
+    if (!row) return undefined;
+    const verification = await verifyPasswordAndUpgradeStatus(row.password, password);
+    if (!verification.ok) return undefined;
+    if (verification.needsUpgrade) {
+      row.password = await hashPassword(password);
+      getMemoryStore().set(username, row);
+    }
     return stripPassword(row);
   }
 
@@ -235,15 +271,27 @@ export async function validateUserCredentialStore(username: string, password: st
   });
 
   const row = rows[0];
-  if (!row || row.password !== password) return undefined;
+  if (!row) return undefined;
+  const verification = await verifyPasswordAndUpgradeStatus(row.password, password);
+  if (!verification.ok) return undefined;
+  if (verification.needsUpgrade) {
+    const sql = getSqlClient();
+    await sql`
+      UPDATE llm4writing_users
+      SET password = ${await hashPassword(password)}, updated_at = NOW()
+      WHERE username = ${username}
+    `;
+  }
   return normalizePayload(row.payload, username);
 }
 
 export async function resetUserPasswordStore(username: string, newPassword: string): Promise<boolean> {
+  const passwordHash = await hashPassword(newPassword);
+
   if (!isDatabaseEnabled()) {
     const existing = getMemoryStore().get(username);
     if (!existing) return false;
-    existing.password = newPassword;
+    existing.password = passwordHash;
     getMemoryStore().set(username, existing);
     return true;
   }
@@ -252,7 +300,7 @@ export async function resetUserPasswordStore(username: string, newPassword: stri
   const sql = getSqlClient();
   const result = await sql`
     UPDATE llm4writing_users
-    SET password = ${newPassword}, updated_at = NOW()
+    SET password = ${passwordHash}, updated_at = NOW()
     WHERE username = ${username}
   `;
 
@@ -297,9 +345,10 @@ export async function createUserStore(input: {
     ownerTeacherUsername: input.role === "student" ? input.ownerTeacherUsername : undefined,
     classNumber: input.role === "student" ? input.classNumber : undefined
   };
+  const passwordHash = await hashPassword(input.password);
 
   if (!isDatabaseEnabled()) {
-    getMemoryStore().set(input.username, { ...safePayload, password: input.password });
+    getMemoryStore().set(input.username, { ...safePayload, password: passwordHash });
     return { ok: true };
   }
 
@@ -307,7 +356,7 @@ export async function createUserStore(input: {
   const sql = getSqlClient();
   await sql`
     INSERT INTO llm4writing_users (username, payload, password)
-    VALUES (${input.username}, ${JSON.stringify(safePayload)}::jsonb, ${input.password})
+    VALUES (${input.username}, ${JSON.stringify(safePayload)}::jsonb, ${passwordHash})
   `;
 
   return { ok: true };
@@ -363,9 +412,11 @@ export async function updateUserStore(
   if (!isDatabaseEnabled()) {
     const existingRaw = getMemoryStore().get(username);
     if (!existingRaw) return { ok: false, error: "user_not_found" };
+    const passwordHash =
+      patch.password !== undefined && patch.password.length > 0 ? await hashPassword(patch.password) : existingRaw.password;
     getMemoryStore().set(username, {
       ...nextPayload,
-      password: patch.password ?? existingRaw.password
+      password: passwordHash
     });
     return { ok: true };
   }
@@ -373,10 +424,11 @@ export async function updateUserStore(
   await ensureUserTable();
   const sql = getSqlClient();
   if (patch.password !== undefined && patch.password.length > 0) {
+    const passwordHash = await hashPassword(patch.password);
     await sql`
       UPDATE llm4writing_users
       SET payload = ${JSON.stringify(nextPayload)}::jsonb,
-          password = ${patch.password},
+          password = ${passwordHash},
           updated_at = NOW()
       WHERE username = ${username}
     `;

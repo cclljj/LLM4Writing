@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { AUTH_COOKIE_ROLE, AUTH_COOKIE_USER, validateCredential } from "@/src/lib/auth";
+import {
+  AUTH_COOKIE_ROLE,
+  AUTH_COOKIE_SESSION,
+  AUTH_COOKIE_USER,
+  AUTH_SESSION_MAX_AGE,
+  createAuthSessionToken,
+  validateCredential
+} from "@/src/lib/auth";
 
 function safeErrorDetail(error: unknown): string {
   if (!error) return "unknown";
@@ -28,19 +35,29 @@ export async function POST(request: NextRequest) {
       user,
       redirectTo: user.role === "student" ? "/student" : user.role === "admin" ? "/admin" : "/teacher"
     });
-    response.cookies.set(AUTH_COOKIE_USER, user.username, {
+    const sessionToken = await createAuthSessionToken(user);
+    const cookieSecure = process.env.NODE_ENV === "production";
+    response.cookies.set(AUTH_COOKIE_SESSION, sessionToken, {
       httpOnly: true,
       sameSite: "strict",
-      secure: process.env.NODE_ENV == "production",
+      secure: cookieSecure,
       path: "/",
-      maxAge: 60 * 60 * 12
+      maxAge: AUTH_SESSION_MAX_AGE
     });
-    response.cookies.set(AUTH_COOKIE_ROLE, user.role, {
+    // Clear legacy unsigned cookies so role is no longer client-controlled.
+    response.cookies.set(AUTH_COOKIE_USER, "", {
       httpOnly: true,
       sameSite: "strict",
-      secure: process.env.NODE_ENV == "production",
+      secure: cookieSecure,
       path: "/",
-      maxAge: 60 * 60 * 12
+      maxAge: 0
+    });
+    response.cookies.set(AUTH_COOKIE_ROLE, "", {
+      httpOnly: true,
+      sameSite: "strict",
+      secure: cookieSecure,
+      path: "/",
+      maxAge: 0
     });
 
     return response;

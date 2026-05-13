@@ -1,14 +1,16 @@
 import { cookies } from "next/headers";
-import { AUTH_COOKIE_ROLE, AUTH_COOKIE_USER, AuthRole, AuthUser } from "@/src/lib/auth";
+import { AUTH_COOKIE_SESSION, AuthUser, verifyAuthSessionToken } from "@/src/lib/auth";
+import { getUserStore } from "@/src/lib/user-store";
 
 export async function getCurrentUser(): Promise<AuthUser | null> {
   const store = await cookies();
-  const username = store.get(AUTH_COOKIE_USER)?.value;
-  const roleValue = store.get(AUTH_COOKIE_ROLE)?.value;
+  const token = store.get(AUTH_COOKIE_SESSION)?.value;
+  if (!token) return null;
 
-  if (!username || (roleValue !== "student" && roleValue !== "teacher" && roleValue !== "admin")) {
-    return null;
-  }
+  const tokenUser = await verifyAuthSessionToken(token);
+  if (!tokenUser) return null;
 
-  return { username, role: roleValue as AuthRole };
+  const currentUser = await getUserStore(tokenUser.username);
+  if (!currentUser || currentUser.role !== tokenUser.role) return null;
+  return { username: currentUser.username, role: currentUser.role };
 }

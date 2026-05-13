@@ -2,6 +2,7 @@
  * Security tests for:
  * - Issue #218: API rate limiting (proxy sliding window)
  * - Issue #219: Cookie SameSite=strict
+ * - Issue #322: Signed auth session cookie, password hashing, and security headers
  */
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -154,7 +155,7 @@ test("login route: cookie sameSite attribute is 'strict'", async () => {
   const strictMatches = (loginRoute.match(/sameSite:\s*["']strict["']/g) ?? []).length;
 
   assert.equal(laxMatches, 0, "No cookie should use sameSite: lax in login route");
-  assert.ok(strictMatches >= 2, `At least 2 cookies should use sameSite: strict, found ${strictMatches}`);
+  assert.ok(strictMatches >= 3, `Session and legacy-clearing cookies should use sameSite: strict, found ${strictMatches}`);
 });
 
 test("logout route: cookie sameSite attribute is 'strict'", async () => {
@@ -172,7 +173,90 @@ test("logout route: cookie sameSite attribute is 'strict'", async () => {
   assert.equal(laxMatches, 0, "logout route should not use sameSite: lax");
 
   const strictMatches = (logoutRoute.match(/sameSite:\s*["']strict["']/g) ?? []).length;
-  assert.ok(strictMatches >= 2, `logout route should set sameSite strict on both cookies, found ${strictMatches}`);
+  assert.ok(strictMatches >= 3, `logout route should clear session and legacy cookies with sameSite strict, found ${strictMatches}`);
+});
+
+test("login route: sets signed session cookie and clears legacy role cookies", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { resolve, dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+
+  const thisDir = dirname(fileURLToPath(import.meta.url));
+  const loginRoute = readFileSync(resolve(thisDir, "../app/api/auth/login/route.ts"), "utf8");
+
+  assert.ok(loginRoute.includes("AUTH_COOKIE_SESSION"), "login should set the signed session cookie");
+  assert.ok(loginRoute.includes("createAuthSessionToken"), "login should create a signed auth session token");
+  assert.ok(loginRoute.includes("AUTH_COOKIE_ROLE"), "login should explicitly clear the legacy role cookie");
+  assert.equal(loginRoute.includes("AUTH_COOKIE_ROLE, user.role"), false, "login must not write a client-controlled role cookie");
+});
+
+test("auth server: validates signed session and reloads user role from store", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { resolve, dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+
+  const thisDir = dirname(fileURLToPath(import.meta.url));
+  const authServer = readFileSync(resolve(thisDir, "../src/lib/auth-server.ts"), "utf8");
+
+  assert.ok(authServer.includes("verifyAuthSessionToken"), "auth server should validate the signed token");
+  assert.ok(authServer.includes("getUserStore"), "auth server should reload the current user from the user store");
+  assert.ok(
+    authServer.includes("currentUser.role !== tokenUser.role"),
+    "auth server should reject tokens whose role no longer matches the stored user"
+  );
+});
+
+test("user store: hashes passwords and migrates legacy plaintext on successful login", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { resolve, dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+
+  const thisDir = dirname(fileURLToPath(import.meta.url));
+  const userStore = readFileSync(resolve(thisDir, "../src/lib/user-store.ts"), "utf8");
+
+  assert.ok(userStore.includes("bcrypt"), "user store should use bcrypt hashing");
+  assert.ok(userStore.includes("hashPassword"), "user store should hash newly stored passwords");
+  assert.ok(userStore.includes("needsUpgrade"), "user store should detect legacy plaintext passwords for migration");
+  assert.ok(userStore.includes("bcrypt.compare"), "user store should verify hashed passwords with bcrypt.compare");
+});
+
+test("next config: defines baseline security headers and CSP", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { resolve, dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+
+  const thisDir = dirname(fileURLToPath(import.meta.url));
+  const nextConfig = readFileSync(resolve(thisDir, "../next.config.mjs"), "utf8");
+
+  assert.ok(nextConfig.includes("Content-Security-Policy"));
+  assert.ok(nextConfig.includes("frame-ancestors 'none'"));
+  assert.ok(nextConfig.includes("X-Frame-Options"));
+  assert.ok(nextConfig.includes("X-Content-Type-Options"));
+  assert.ok(nextConfig.includes("Referrer-Policy"));
+  assert.ok(nextConfig.includes("Permissions-Policy"));
+  assert.ok(nextConfig.includes("Strict-Transport-Security"));
+});
+
+test("auth session token: verifies valid token and rejects tampered role", async () => {
+  process.env.AUTH_SECRET = "test-auth-secret-for-session-token";
+  const { createAuthSessionToken, verifyAuthSessionToken } = await import("../src/lib/auth");
+
+  const token = await createAuthSessionToken({ username: "student", role: "student" });
+  assert.deepEqual(await verifyAuthSessionToken(token), { username: "student", role: "student" });
+
+  const [version, encodedPayload, signature] = token.split(".");
+  assert.ok(version && encodedPayload && signature);
+
+  const payload = JSON.parse(Buffer.from(encodedPayload.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8")) as {
+    username: string;
+    role: string;
+  };
+  const tamperedPayload = Buffer.from(JSON.stringify({ ...payload, role: "admin" }))
+    .toString("base64url")
+    .replace(/=+$/g, "");
+  const tamperedToken = `${version}.${tamperedPayload}.${signature}`;
+
+  assert.equal(await verifyAuthSessionToken(tamperedToken), null);
 });
 
 test("proxy: matcher includes /api/:path*", async () => {

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { AUTH_COOKIE_ROLE, AUTH_COOKIE_USER } from "@/src/lib/auth";
+import { AUTH_COOKIE_SESSION, verifyAuthSessionToken } from "@/src/lib/auth";
 import { checkRateLimit } from "@/src/lib/rate-limit";
 
 function getClientIp(req: NextRequest): string {
@@ -50,9 +50,10 @@ export async function proxy(request: NextRequest) {
   }
 
   // Auth guard for page routes
-  const username = request.cookies.get(AUTH_COOKIE_USER)?.value;
-  const role = request.cookies.get(AUTH_COOKIE_ROLE)?.value;
-  const isAuthed = Boolean(username) && (role === "student" || role === "teacher" || role === "admin");
+  const sessionToken = request.cookies.get(AUTH_COOKIE_SESSION)?.value ?? "";
+  const authedUser = sessionToken ? await verifyAuthSessionToken(sessionToken) : null;
+  const role = authedUser?.role;
+  const isAuthed = Boolean(authedUser);
 
   if (pathname === "/login" && isAuthed) {
     const url = request.nextUrl.clone();

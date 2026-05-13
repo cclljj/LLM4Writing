@@ -69,6 +69,12 @@ npm run build
 - `POSTGRES_URL` / `DATABASE_URL`（相容 fallback）
 - `SUPABASE_POOL_MODE=transaction|session`（可選）
 
+### Security
+
+- `AUTH_SECRET` - production 必填，用於簽章登入 session cookie
+
+系統登入只信任 server 簽章的 `llm4w_session` cookie；密碼會以 bcrypt hash 儲存，舊明文密碼會在使用者成功登入時自動升級。
+
 ## Project Structure
 
 ```text
