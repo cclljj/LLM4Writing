@@ -77,8 +77,14 @@ function renderStars(stars: number): string {
   return "★".repeat(safe) + "☆".repeat(5 - safe);
 }
 
-function getStepsFromMessages(messages: PersonalMessage[]): number[] {
-  return Array.from(new Set(messages.map((m) => m.step))).sort((a, b) => a - b);
+function getStepsFromMessages(
+  messages: PersonalMessage[],
+  options?: { includeStep3?: boolean; includeStep4?: boolean }
+): number[] {
+  const set = new Set(messages.map((m) => m.step));
+  if (options?.includeStep3) set.add(3);
+  if (options?.includeStep4) set.add(4);
+  return Array.from(set).sort((a, b) => a - b);
 }
 
 function buildStarRationales(metric: StudentReportMetric): string[] {
@@ -421,8 +427,10 @@ export default function CourseImplementationReportTab({
       })
     : personalMessages;
 
-  const personalSteps = getStepsFromMessages(scopedPersonalMessages);
-  const hasStep4Revised = Boolean(userOutline && userOutline !== userStep3SubmittedOutline);
+  const personalSteps = getStepsFromMessages(scopedPersonalMessages, {
+    includeStep3: Boolean(userStep3SubmittedOutline),
+    includeStep4: Boolean(userOutline),
+  });
 
   return (
     <>
@@ -619,7 +627,7 @@ export default function CourseImplementationReportTab({
                   </div>
                 ) : null;
 
-                const step4Block = step === 4 && hasStep4Revised ? (
+                const step4Block = step === 4 && userOutline ? (
                   <div style={{ borderTop: "2px solid #cbd5e1", padding: "12px 0", marginTop: 4 }}>
                     <strong style={{ fontSize: 13, color: "#334155" }}>步驟四對比修正後結構樹</strong>
                     <OutlineSvg mermaidText={userOutline} label="步驟四對比修正後" />

@@ -150,7 +150,10 @@ export default function StudentCourseHistoryPage() {
 
   const historySteps = useMemo(() => {
     if (!history) return [] as number[];
-    return Array.from(new Set(history.latestSession.messages.map((m) => m.step))).sort((a, b) => a - b);
+    const steps = new Set(history.latestSession.messages.map((m) => m.step));
+    if (history.latestWork.step3SubmittedOutline) steps.add(3);
+    if (history.latestWork.step4Outline) steps.add(4);
+    return Array.from(steps).sort((a, b) => a - b);
   }, [history]);
 
   useEffect(() => {
