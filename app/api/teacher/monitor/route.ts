@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/src/lib/auth-server";
 import { getAllActivities, hydrateDomainState } from "@/src/lib/activity-store";
-import { listSessions } from "@/src/lib/store";
+import { getSession, listMonitorSessionsByActivityId, listSessions } from "@/src/lib/store";
 import { getUsersVisibleToTeacherStore, listUsersStore } from "@/src/lib/user-store";
 import { getOnlineUsers } from "@/src/lib/session-presence";
 import { isSessionInActivityGroupScope } from "@/src/lib/monitor-session-scope";
@@ -136,27 +136,46 @@ export async function GET(request: NextRequest) {
   const activityMap = new Map(visibleActivities.map((activity) => [activity.id, activity]));
   const visibleActivityIds = new Set(visibleActivities.map((activity) => activity.id));
 
+  if (requestedSessionId) {
+    const session = await getSession(requestedSessionId);
+    const activity = session?.activityId ? activityMap.get(session.activityId) : undefined;
+    const isVisible =
+      Boolean(session) &&
+      session!.workflow === "spec10" &&
+      Boolean(session!.activityId) &&
+      visibleActivityIds.has(session!.activityId!) &&
+      (!requestedActivityId || session!.activityId === requestedActivityId) &&
+      Boolean(activity && isSessionInActivityGroupScope(session!, activity));
+    if (!session || !activity || !isVisible) return NextResponse.json({ error: "session_not_found" }, { status: 404 });
+    return NextResponse.json({ session: await buildMonitorSessionPayload(session, activity, detail) });
+  }
+
+  if (requestedActivityId) {
+    const activity = activityMap.get(requestedActivityId);
+    if (!activity || !visibleActivityIds.has(requestedActivityId)) {
+      return NextResponse.json({ sessions: [], total: 0, limit, offset });
+    }
+
+    const { sessions, total } = await listMonitorSessionsByActivityId(requestedActivityId, { limit, offset });
+    const scopedSessions = sessions.filter((s) => isSessionInActivityGroupScope(s, activity));
+    const visibleSessions = await Promise.all(
+      scopedSessions.map((s) => buildMonitorSessionPayload(s, activity, detail))
+    );
+    return NextResponse.json({ sessions: visibleSessions, total, limit, offset });
+  }
+
   const sessions = await listSessions();
   const scopedSessions = sessions
     .filter((s) => s.workflow === "spec10" && Boolean(s.activityId) && visibleActivityIds.has(s.activityId!))
-    .filter((s) => (requestedActivityId ? s.activityId === requestedActivityId : true))
     .filter((s) => {
       const activity = activityMap.get(s.activityId!);
       return Boolean(activity && isSessionInActivityGroupScope(s, activity));
     });
-
-  const visibleSessions = await Promise.all(
-    scopedSessions.map((s) => buildMonitorSessionPayload(s, activityMap.get(s.activityId!), detail))
+  const total = scopedSessions.length;
+  const paginatedSessions = scopedSessions.slice(offset, offset + limit);
+  const paginated = await Promise.all(
+    paginatedSessions.map((s) => buildMonitorSessionPayload(s, activityMap.get(s.activityId!), detail))
   );
-
-  if (requestedSessionId) {
-    const session = visibleSessions.find((item) => item.sessionId === requestedSessionId);
-    if (!session) return NextResponse.json({ error: "session_not_found" }, { status: 404 });
-    return NextResponse.json({ session });
-  }
-
-  const total = visibleSessions.length;
-  const paginated = visibleSessions.slice(offset, offset + limit);
 
   return NextResponse.json({ sessions: paginated, total, limit, offset });
 }

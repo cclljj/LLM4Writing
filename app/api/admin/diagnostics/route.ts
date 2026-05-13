@@ -6,12 +6,28 @@ import { findActivity } from "@/src/lib/activity-store";
 import { getLlmCallStats } from "@/src/lib/llm-observability";
 import type { SessionState } from "@/src/lib/types";
 type DiagnosticsWindow = "24h" | "7d" | "14d" | "30d";
+type DiagnosticsPayload = Record<string, unknown>;
+type DiagnosticsCacheEntry = {
+  expiresAt: number;
+  payload: DiagnosticsPayload;
+};
+
+const DIAGNOSTICS_CACHE_KEY = "__llm4writing_admin_diagnostics_cache__";
+const DIAGNOSTICS_CACHE_TTL_MS = 60_000;
 const WINDOW_MS: Record<DiagnosticsWindow, number> = {
   "24h": 24 * 60 * 60 * 1000,
   "7d": 7 * 24 * 60 * 60 * 1000,
   "14d": 14 * 24 * 60 * 60 * 1000,
   "30d": 30 * 24 * 60 * 60 * 1000
 };
+
+function getDiagnosticsCache(): Map<string, DiagnosticsCacheEntry> {
+  const globalScope = globalThis as unknown as Record<string, Map<string, DiagnosticsCacheEntry> | undefined>;
+  if (!globalScope[DIAGNOSTICS_CACHE_KEY]) {
+    globalScope[DIAGNOSTICS_CACHE_KEY] = new Map<string, DiagnosticsCacheEntry>();
+  }
+  return globalScope[DIAGNOSTICS_CACHE_KEY] as Map<string, DiagnosticsCacheEntry>;
+}
 
 function readEnvFlag(name: string): boolean {
   const value = process.env[name];
@@ -667,21 +683,9 @@ function buildLlmErrorTaxonomy() {
   };
 }
 
-export async function GET(request: Request) {
-  const user = await getCurrentUser();
-  if (!user || user.role !== "admin") {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
-
+async function buildDiagnosticsPayload(selectedWindow: DiagnosticsWindow, nowMs: number): Promise<DiagnosticsPayload> {
   const config = systemPromptConfig as Record<string, unknown>;
   const sessions = await listSessions();
-  const requestUrl = new URL(request.url);
-  const windowParam = requestUrl.searchParams.get("window");
-  const selectedWindow: DiagnosticsWindow =
-    windowParam === "24h" || windowParam === "7d" || windowParam === "14d" || windowParam === "30d"
-      ? windowParam
-      : "7d";
-  const nowMs = Date.now();
   const cutoffMs = nowMs - WINDOW_MS[selectedWindow];
   const specSessions = sessions.filter((session) => session.workflow === "spec10");
   const windowedSpecSessions = specSessions.filter((session) => hasRecentActivity(session, cutoffMs));
@@ -730,7 +734,7 @@ export async function GET(request: Request) {
   };
   const llmErrorTaxonomy = buildLlmErrorTaxonomy();
 
-  return NextResponse.json({
+  return {
     llm,
     promptConfig: {
       hasSystemPrompt: typeof config.systemPrompt === "string" && config.systemPrompt.trim().length > 0,
@@ -761,6 +765,31 @@ export async function GET(request: Request) {
     llmErrorTaxonomy,
     artifactHealth: computeArtifactHealth(windowedSpecSessions),
     tokenUsage,
-    generatedAt: new Date().toISOString()
-  });
+    generatedAt: new Date(nowMs).toISOString()
+  };
+}
+
+export async function GET(request: Request) {
+  const user = await getCurrentUser();
+  if (!user || user.role !== "admin") {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
+
+  const requestUrl = new URL(request.url);
+  const windowParam = requestUrl.searchParams.get("window");
+  const selectedWindow: DiagnosticsWindow =
+    windowParam === "24h" || windowParam === "7d" || windowParam === "14d" || windowParam === "30d"
+      ? windowParam
+      : "7d";
+  const nowMs = Date.now();
+  const cacheKey = `diagnostics:${selectedWindow}`;
+  const cache = getDiagnosticsCache();
+  const cached = cache.get(cacheKey);
+  if (cached && cached.expiresAt > nowMs) {
+    return NextResponse.json(cached.payload, { headers: { "X-Diagnostics-Cache": "hit" } });
+  }
+
+  const payload = await buildDiagnosticsPayload(selectedWindow, nowMs);
+  cache.set(cacheKey, { payload, expiresAt: nowMs + DIAGNOSTICS_CACHE_TTL_MS });
+  return NextResponse.json(payload, { headers: { "X-Diagnostics-Cache": "miss" } });
 }

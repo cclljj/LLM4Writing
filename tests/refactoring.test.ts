@@ -4,6 +4,7 @@
  * - Issue #221: current_step DB column + store enhancements (memory mode)
  * - Issue #222: Pagination in monitor/activities
  * - Issue #223: ETag / presence decoupling
+ * - Issue #323: DB-level teacher monitor pagination and diagnostics cache
  */
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -64,6 +65,10 @@ test("#221: store.ts exposes getSessionWithMeta and countSessions exports", asyn
   assert.ok(typeof storeModule.getSessionWithMeta === "function", "getSessionWithMeta must be exported");
   assert.ok(typeof storeModule.countSessions === "function", "countSessions must be exported");
   assert.ok(typeof storeModule.listSessions === "function", "listSessions must be exported");
+  assert.ok(
+    typeof storeModule.listMonitorSessionsByActivityId === "function",
+    "listMonitorSessionsByActivityId must be exported for activity-scoped monitor pagination"
+  );
 });
 
 test("#221: store.ts CREATE TABLE includes current_step column in ALTER", async () => {
@@ -116,6 +121,51 @@ test("#222: monitor route source includes limit/offset and total fields", async 
   assert.ok(src.includes("limit"), "monitor route must handle limit");
   assert.ok(src.includes("offset"), "monitor route must handle offset");
   assert.ok(src.includes("total"), "monitor route must return total");
+});
+
+test("#323: store.ts persists session summary columns for monitor queries", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { resolve, dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const thisDir = dirname(fileURLToPath(import.meta.url));
+
+  const src = readFileSync(resolve(thisDir, "../src/lib/store.ts"), "utf8");
+  for (const column of ["workflow", "activity_id", "group_id", "message_count", "last_message_at", "participant_count"]) {
+    assert.ok(src.includes(column), `store.ts must define and write ${column}`);
+  }
+  assert.ok(src.includes("idx_llm4writing_sessions_workflow_activity_updated"), "store.ts must index workflow/activity monitor scans");
+  assert.ok(src.includes("workflow = EXCLUDED.workflow"), "saveSession must sync workflow summary on UPSERT");
+  assert.ok(src.includes("activity_id = EXCLUDED.activity_id"), "saveSession must sync activity_id summary on UPSERT");
+});
+
+test("#323: teacher monitor uses activity-scoped DB pagination path", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { resolve, dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const thisDir = dirname(fileURLToPath(import.meta.url));
+
+  const routeSrc = readFileSync(resolve(thisDir, "../app/api/teacher/monitor/route.ts"), "utf8");
+  const storeSrc = readFileSync(resolve(thisDir, "../src/lib/store.ts"), "utf8");
+
+  assert.ok(routeSrc.includes("listMonitorSessionsByActivityId"), "monitor route must call the activity-scoped store query");
+  assert.ok(routeSrc.includes("requestedActivityId"), "monitor route must branch on activityId");
+  assert.ok(storeSrc.includes("WHERE (workflow = 'spec10'"), "store query must filter workflow in SQL");
+  assert.ok(storeSrc.includes("activity_id = ${trimmedActivityId}"), "store query must filter activity_id in SQL");
+  assert.ok(storeSrc.includes("ORDER BY updated_at DESC"), "store query must sort in SQL");
+  assert.ok(storeSrc.includes("LIMIT ${limit} OFFSET ${offset}"), "store query must paginate in SQL");
+});
+
+test("#323: admin diagnostics route uses short TTL cache", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { resolve, dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const thisDir = dirname(fileURLToPath(import.meta.url));
+
+  const src = readFileSync(resolve(thisDir, "../app/api/admin/diagnostics/route.ts"), "utf8");
+  assert.ok(src.includes("DIAGNOSTICS_CACHE_TTL_MS"), "diagnostics route must define a TTL");
+  assert.ok(src.includes("getDiagnosticsCache"), "diagnostics route must use a process cache");
+  assert.ok(src.includes("X-Diagnostics-Cache"), "diagnostics route should expose cache hit/miss for verification");
+  assert.ok(src.includes("buildDiagnosticsPayload"), "diagnostics payload building should be separated from request/cache handling");
 });
 
 test("#222: activities route source includes limit/offset and total fields", async () => {
