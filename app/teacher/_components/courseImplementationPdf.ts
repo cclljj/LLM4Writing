@@ -411,7 +411,7 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
 
     const step3Outline = sanitize(input.step3SubmittedOutline);
     const step4Outline = sanitize(input.step4RevisedOutline);
-    const hasStep4Outline = step4Outline.length > 0 && step4Outline !== step3Outline;
+    const hasStep4Outline = step4Outline.length > 0;
 
     let currentStep = -1;
     let insertedStep3 = false;
