@@ -241,6 +241,7 @@ test("#319: course implementation PDF builder includes required v1 sections", as
   assert.ok(src.includes("學生摘要"), "PDF must include student summary section");
   assert.ok(src.includes("步驟進度與產出指標"), "PDF must include step progress section");
   assert.ok(src.includes("星等依據"), "PDF must include star rationale section");
-  assert.ok(src.includes("完整互動歷程（依系統順序）"), "PDF must include full ordered interaction timeline section");
-  assert.ok(src.includes("步驟三完成結構樹（全文）"), "PDF must include step3 outline full text section");
+  assert.ok(src.includes("完整互動歷程（依系統順序"), "PDF must include full ordered interaction timeline section");
+  assert.ok(src.includes("步驟三完成結構樹（圖形）"), "PDF must include step3 outline graphical section");
+  assert.ok(src.includes("renderMarkdown"), "PDF should render message content in markdown layout");
 });
