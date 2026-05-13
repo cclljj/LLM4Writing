@@ -9,7 +9,7 @@
 
 LLM4Writing 是一個以 **Next.js App Router + Serverless API** 為核心的 AI 寫作教學系統，支援學生端（10 步驟寫作流程）與教師端（課程管理、分組、進度監控）。
 
-目前 `main` 分支為唯一持續維護版本，系統行為以 [`SPEC.md`](./SPEC.md) 為準。
+目前 `main` 分支為唯一持續維護版本，系統行為以 [`docs/SPEC.md`](./docs/SPEC.md) 為準。
 
 ## Features
 
@@ -78,7 +78,7 @@ src/lib/            engine, workflow helpers, LLM parsing, store, auth, types
 src/config/         prompt config and step openings
 scripts/            migration/utility scripts
 tests/              Node workflow tests and Playwright E2E tests
-SPEC.md             implementation spec (source of truth)
+docs/SPEC.md        implementation spec (source of truth)
 ```
 
 ## Main Pages
@@ -164,7 +164,7 @@ Quality gate（PR 與 `main` push）：
 
 ## Documentation Index
 
-- Spec: [`SPEC.md`](./SPEC.md)
+- Spec: [`docs/SPEC.md`](./docs/SPEC.md)
 - Security policy: [`SECURITY.md`](./SECURITY.md)
 - Task workflow: [`TASK.md`](./TASK.md)
 - Supabase migration: [`SUPABASE_MIGRATION.md`](./SUPABASE_MIGRATION.md)
@@ -173,7 +173,7 @@ Quality gate（PR 與 `main` push）：
 ## Collaboration Rules
 
 - 需求先開 Issue 再實作
-- 功能變更需檢查並同步 `SPEC.md`
+- 功能變更需檢查並同步 `docs/SPEC.md`
 - PR/Issue 模板位於 `.github/`
 
 ## Test Accounts
