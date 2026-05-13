@@ -245,5 +245,7 @@ test("#319: course implementation PDF builder includes required v1 sections", as
   assert.ok(src.includes("步驟三完成結構樹（圖形）"), "PDF must include step3 outline graphical section");
   assert.ok(src.includes("步驟四修正後結構樹（圖形）"), "PDF must include step4 outline graphical section");
   assert.ok(!src.includes("step4Outline !== step3Outline"), "step4 outline should not be hidden when text matches step3");
+  assert.ok(src.includes("node.x * graphScale"), "outline graph coordinates should scale with graph width");
+  assert.ok(src.includes("insertOutlineAnchor"), "timeline should insert step outline anchors when step messages are missing");
   assert.ok(src.includes("renderMarkdown"), "PDF should render message content in markdown layout");
 });

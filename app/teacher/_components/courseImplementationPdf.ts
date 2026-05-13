@@ -339,8 +339,10 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
     setDrawColor(COLORS.sectionStroke);
     doc.roundedRect(PAGE.marginX, y - 6, contentWidth, graphH + 12, 8, 8, "FD");
 
-    const nodeW = 130 * graphScale;
-    const nodeH = 80 * graphScale;
+    const baseNodeW = 130;
+    const baseNodeH = 80;
+    const nodeW = baseNodeW * graphScale;
+    const nodeH = baseNodeH * graphScale;
     const centerX = nodeW / 2;
     const edgeY = nodeH / 2;
 
@@ -353,25 +355,31 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
       .forEach((node) => {
         const parent = node.parentId ? nodeMap.get(node.parentId) : null;
         if (!parent) return;
+        const parentX = parent.x * graphScale;
+        const parentY = parent.y * graphScale;
+        const nodeX = node.x * graphScale;
+        const nodeY = node.y * graphScale;
         doc.line(
-          boxX + (parent.x + centerX),
-          y + (parent.y + edgeY),
-          boxX + (node.x + centerX),
-          y + node.y
+          boxX + (parentX + centerX),
+          y + (parentY + edgeY),
+          boxX + (nodeX + centerX),
+          y + nodeY
         );
       });
 
     preview.nodes.forEach((node) => {
+      const sx = node.x * graphScale;
+      const sy = node.y * graphScale;
       setFillColor(COLORS.nodeFill);
       setDrawColor(COLORS.nodeStroke);
-      doc.roundedRect(boxX + node.x, y + node.y, nodeW, nodeH, 8, 8, "FD");
+      doc.roundedRect(boxX + sx, y + sy, nodeW, nodeH, 8, 8, "FD");
 
       const textMaxWidth = nodeW - 12;
       const lines = doc.splitTextToSize(stripInlineMarkdown(node.text), textMaxWidth) as string[];
       const clipped = lines.length > 4 ? [...lines.slice(0, 3), `${lines[3]}...`] : lines;
       doc.setFontSize(Math.max(8, 11 * graphScale));
       setTextColor(COLORS.title);
-      doc.text(clipped, boxX + node.x + 6, y + node.y + 16);
+      doc.text(clipped, boxX + sx + 6, y + sy + 16);
       setTextColor(COLORS.text);
     });
 
@@ -413,33 +421,65 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
     const step4Outline = sanitize(input.step4RevisedOutline);
     const hasStep4Outline = step4Outline.length > 0;
 
+    type TimelineItem = { type: "message"; msg: PdfMessage } | { type: "outline"; step: 3 | 4 };
+    const timelineItems: TimelineItem[] = messages.map((msg) => ({ type: "message", msg }));
+    const hasStep3Message = messages.some((msg) => msg.step === 3);
+    const hasStep4Message = messages.some((msg) => msg.step === 4);
+
+    const insertOutlineAnchor = (step: 3 | 4): void => {
+      const targetIndex = timelineItems.findIndex((item) => item.type === "message" && item.msg.step > step);
+      const anchor: TimelineItem = { type: "outline", step };
+      if (targetIndex < 0) timelineItems.push(anchor);
+      else timelineItems.splice(targetIndex, 0, anchor);
+    };
+
+    if (step3Outline && !hasStep3Message) insertOutlineAnchor(3);
+    if (hasStep4Outline && !hasStep4Message) insertOutlineAnchor(4);
+
     let currentStep = -1;
     let insertedStep3 = false;
     let insertedStep4 = false;
+    let messageIndex = 0;
 
-    for (let i = 0; i < messages.length; i += 1) {
-      const msg = messages[i]!;
-      if (msg.step !== currentStep) {
-        currentStep = msg.step;
+    for (let i = 0; i < timelineItems.length; i += 1) {
+      const item = timelineItems[i]!;
+      const step = item.type === "outline" ? item.step : item.msg.step;
+      if (step !== currentStep) {
+        currentStep = step;
         ensureSpacePx(34);
         setFillColor([226, 232, 240]);
         doc.roundedRect(PAGE.marginX, y - 4, contentWidth, 24, 5, 5, "F");
         doc.setFontSize(11);
         setTextColor(COLORS.title);
-        doc.text(`Step ${msg.step}${stepName(msg.step) ? ` - ${stepName(msg.step)}` : ""}`, PAGE.marginX + 8, y + 12);
+        doc.text(`Step ${step}${stepName(step) ? ` - ${stepName(step)}` : ""}`, PAGE.marginX + 8, y + 12);
         setTextColor(COLORS.text);
         y += 30;
 
-        if (msg.step === 3 && step3Outline && !insertedStep3) {
+        if (step === 3 && step3Outline && !insertedStep3) {
           drawOutlineGraph(3, step3Outline);
           insertedStep3 = true;
         }
-        if (msg.step === 4 && hasStep4Outline && !insertedStep4) {
+        if (step === 4 && hasStep4Outline && !insertedStep4) {
           drawOutlineGraph(4, step4Outline);
           insertedStep4 = true;
         }
       }
-      drawMessageCard(msg, i + 1);
+
+      if (item.type === "outline") {
+        if (step === 3 && step3Outline && !insertedStep3) {
+          drawOutlineGraph(3, step3Outline);
+          insertedStep3 = true;
+        }
+        if (step === 4 && hasStep4Outline && !insertedStep4) {
+          drawOutlineGraph(4, step4Outline);
+          insertedStep4 = true;
+        }
+        continue;
+      }
+
+      const msg = item.msg;
+      drawMessageCard(msg, messageIndex + 1);
+      messageIndex += 1;
     }
 
     // Fallback placement in case outlines exist but step messages are absent.
