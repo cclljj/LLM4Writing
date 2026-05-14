@@ -261,6 +261,7 @@ export default function StudentPage() {
     if (!session || !loginUser) return;
     const ownStep = session.personalSteps?.[loginUser] ?? session.currentStep;
     const justEnteredStep6 = lastOwnStepRef.current !== 6 && ownStep === 6;
+    const justEnteredStep8 = lastOwnStepRef.current !== 8 && ownStep === 8;
     if (ownStep === 6 && (justEnteredStep6 || !draftText)) {
       const latestDraft = session.draftStep6[loginUser] ?? "";
       setDraftText(latestDraft);
@@ -271,16 +272,22 @@ export default function StudentPage() {
     }
     if (ownStep === 8) {
       const latestDraft = session.draftStep8[loginUser] ?? session.draftStep6[loginUser] ?? "";
-      setDraftText(latestDraft);
-      setSavedDraft8Text(latestDraft);
-      setDraftSaveError("");
-      setLastDraftSavedAt(null);
+      const hasUnsavedLocalStep8Edit = draftText !== savedDraft8Text;
+      const shouldHydrateStep8Draft =
+        justEnteredStep8 ||
+        (!hasUnsavedLocalStep8Edit && (draftText.length === 0 || latestDraft !== draftText));
+      if (shouldHydrateStep8Draft) {
+        setDraftText(latestDraft);
+        setSavedDraft8Text(latestDraft);
+        setDraftSaveError("");
+        setLastDraftSavedAt(null);
+      }
     }
     if (!refUser && session.participants.length > 0) {
       setRefUser((session.participants.find((user) => user !== loginUser) ?? session.participants[0])!);
     }
     lastOwnStepRef.current = ownStep;
-  }, [session?.id, session?.currentStep, session?.personalSteps, loginUser]);
+  }, [draftText, loginUser, refUser, savedDraft8Text, session?.currentStep, session?.id, session?.personalSteps, session?.participants, session?.draftStep6, session?.draftStep8]);
 
   useEffect(() => {
     const ownStep = session && loginUser ? session.personalSteps?.[loginUser] ?? session.currentStep : 1;

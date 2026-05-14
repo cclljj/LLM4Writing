@@ -5,6 +5,7 @@
  * - Issue #222: Pagination in monitor/activities
  * - Issue #223: ETag / presence decoupling
  * - Issue #323: DB-level teacher monitor pagination and diagnostics cache
+ * - Issue #324: Step8 draft hydration should not overwrite unsaved local edits
  */
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -166,6 +167,53 @@ test("#323: admin diagnostics route uses short TTL cache", async () => {
   assert.ok(src.includes("getDiagnosticsCache"), "diagnostics route must use a process cache");
   assert.ok(src.includes("X-Diagnostics-Cache"), "diagnostics route should expose cache hit/miss for verification");
   assert.ok(src.includes("buildDiagnosticsPayload"), "diagnostics payload building should be separated from request/cache handling");
+});
+
+test("#324: student Step8 draft hydration guards unsaved local edits", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { resolve, dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const thisDir = dirname(fileURLToPath(import.meta.url));
+
+  const src = readFileSync(resolve(thisDir, "../app/student/page.tsx"), "utf8");
+  assert.ok(src.includes("hasUnsavedLocalStep8Edit"), "student page should compute local dirty state for Step8");
+  assert.ok(src.includes("shouldHydrateStep8Draft"), "student page should gate Step8 hydration");
+  assert.ok(src.includes("justEnteredStep8"), "student page should hydrate on Step8 enter transition");
+  assert.ok(
+    src.includes("latestDraft = session.draftStep8[loginUser] ?? session.draftStep6[loginUser] ?? \"\""),
+    "Step8 hydration should still preserve fallback order draftStep8 -> draftStep6"
+  );
+});
+
+test("#324: hydration decision keeps unsaved local Step8 edits", () => {
+  function shouldHydrateStep8Draft(args: {
+    justEnteredStep8: boolean;
+    hasUnsavedLocalStep8Edit: boolean;
+    draftText: string;
+    latestDraft: string;
+  }): boolean {
+    const { justEnteredStep8, hasUnsavedLocalStep8Edit, draftText, latestDraft } = args;
+    return justEnteredStep8 || (!hasUnsavedLocalStep8Edit && (draftText.length === 0 || latestDraft !== draftText));
+  }
+
+  assert.equal(
+    shouldHydrateStep8Draft({
+      justEnteredStep8: false,
+      hasUnsavedLocalStep8Edit: true,
+      draftText: "local unsaved text",
+      latestDraft: "older server text"
+    }),
+    false
+  );
+  assert.equal(
+    shouldHydrateStep8Draft({
+      justEnteredStep8: true,
+      hasUnsavedLocalStep8Edit: true,
+      draftText: "local unsaved text",
+      latestDraft: "server text"
+    }),
+    true
+  );
 });
 
 test("#222: activities route source includes limit/offset and total fields", async () => {
