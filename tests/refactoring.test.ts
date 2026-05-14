@@ -347,3 +347,18 @@ test("#319: course implementation PDF builder includes required v1 sections", as
   assert.ok(src.includes("insertOutlineAnchor"), "timeline should insert step outline anchors when step messages are missing");
   assert.ok(src.includes("renderMarkdown"), "PDF should render message content in markdown layout");
 });
+
+test("#326: step3 complete route enforces depth-3+ outline edit validation", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { resolve, dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const thisDir = dirname(fileURLToPath(import.meta.url));
+
+  const routeSrc = readFileSync(resolve(thisDir, "../app/api/session/step3/complete/route.ts"), "utf8");
+  const helperSrc = readFileSync(resolve(thisDir, "../src/lib/step3-outline-validation.ts"), "utf8");
+
+  assert.ok(routeSrc.includes("validateStep3OutlineCompletion"), "step3 complete route should call Step3 outline validator");
+  assert.ok(routeSrc.includes("step3_outline_depth3_not_edited"), "step3 complete route should return a specific validation error");
+  assert.ok(helperSrc.includes("minEditableDepth = 3"), "validator should default to depth-3 rule");
+  assert.ok(helperSrc.includes("targetNodes.length > 0 && unchangedNodeIds.length === 0"), "all target nodes must be changed");
+});

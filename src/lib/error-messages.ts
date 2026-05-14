@@ -21,6 +21,8 @@ const errorMessages: Record<string, string> = {
   send_failed: "答案送出失敗。建議：請檢查內容後再送一次。",
   session_not_found: "找不到這個課程討論紀錄。建議：請重新進入課程，或請教師確認課程狀態。",
   step3_stream_failed: "Step 3 AI 回覆暫時失敗。建議：請稍後再送一次問題。",
+  step3_default_outline_unavailable: "目前無法載入結構樹範本。建議：請重新整理，或請老師確認課程設定。",
+  step3_outline_depth3_not_edited: "請先把第三層（含）以後的節點都修改成你自己的內容，再按完成。",
   step5_auto_advance_failed: "摘要完成後自動切換失敗。建議：請重新整理頁面，或請老師協助切換。",
   step6_complete_failed: "初稿送出失敗。建議：請依提示補強文章後再試。",
   step6_suggest_failed: "AI 修改建議暫時無法產生。建議：請稍後再試，或先自行修改文章。",

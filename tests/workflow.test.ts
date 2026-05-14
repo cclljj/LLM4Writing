@@ -14,6 +14,7 @@ import {
   splitAiFeedbackAndQuestion
 } from "../src/lib/llm-response";
 import { getStructureTreeNodePermissions } from "../src/lib/structure-tree-permissions";
+import { validateStep3OutlineCompletion } from "../src/lib/step3-outline-validation";
 import { buildStudentNextAction } from "../src/lib/student-next-action";
 import { buildStep1Question, buildStep2Question } from "../src/lib/workflow-questions";
 import { advanceStep1Or2SubstepAfterAi, getNextSubstepKeyAfterCompletion, handleStep1Or2Group, recoverStalledStep1Or2AiWait } from "../src/lib/workflow-step1-2";
@@ -221,6 +222,50 @@ test("structure tree node permissions lock first and second levels", () => {
     canDelete: true,
     canEditText: true
   });
+});
+
+test("Step3 completion validation requires all depth-3+ default nodes to be edited", () => {
+  const defaultOutline = `
+graph TD
+  A["題目"]
+  A --> B["本論"]
+  B --> C["論點一"]
+  B --> D["論點二"]
+  C --> E["例子"]
+`.trim();
+
+  const unchangedSubmission = defaultOutline;
+  const changedDepth2Only = `
+graph TD
+  A["題目"]
+  A --> B["本論（已改）"]
+  B --> C["論點一"]
+  B --> D["論點二"]
+  C --> E["例子"]
+`.trim();
+  const changedAllDepth3Plus = `
+graph TD
+  A["題目"]
+  A --> B["本論"]
+  B --> C["我方主張一"]
+  B --> D["我方主張二"]
+  C --> E["生活中的具體例子"]
+`.trim();
+
+  const r1 = validateStep3OutlineCompletion(defaultOutline, unchangedSubmission, 3);
+  assert.equal(r1.ok, false);
+  assert.equal(r1.requiredNodeCount, 3);
+  assert.equal(r1.changedNodeCount, 0);
+
+  const r2 = validateStep3OutlineCompletion(defaultOutline, changedDepth2Only, 3);
+  assert.equal(r2.ok, false);
+  assert.equal(r2.requiredNodeCount, 3);
+  assert.equal(r2.changedNodeCount, 0);
+
+  const r3 = validateStep3OutlineCompletion(defaultOutline, changedAllDepth3Plus, 3);
+  assert.equal(r3.ok, true);
+  assert.equal(r3.requiredNodeCount, 3);
+  assert.equal(r3.changedNodeCount, 3);
 });
 
 test("outline sync guard blocks stale polling while autosave is catching up", () => {
