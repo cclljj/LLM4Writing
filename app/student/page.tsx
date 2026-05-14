@@ -162,6 +162,7 @@ export default function StudentPage() {
   const [session, setSession] = useState<SessionState | null>(null);
   const [text, setText] = useState("");
   const [error, setError] = useState("");
+  const [step3CompleteHint, setStep3CompleteHint] = useState("");
   const [draftText, setDraftText] = useState("");
   const [step9Answers, setStep9Answers] = useState(["", "", "", ""]);
   const [refUser, setRefUser] = useState("");
@@ -335,6 +336,12 @@ export default function StudentPage() {
   useEffect(() => {
     if (currentStep !== 9) return;
     setStep9Answers(["", "", "", ""]);
+  }, [currentStep, session?.id]);
+
+  useEffect(() => {
+    if (currentStep !== 3) {
+      setStep3CompleteHint("");
+    }
   }, [currentStep, session?.id]);
 
   const sortedMessages = useMemo(
@@ -849,6 +856,7 @@ export default function StudentPage() {
 
   async function handleOutlineSave(mermaid: string) {
     outlineMermaidRef.current = mermaid;
+    setStep3CompleteHint("");
     await saveArtifact("outline", mermaid);
   }
 
@@ -865,7 +873,14 @@ export default function StudentPage() {
       body: JSON.stringify({ sessionId: session.id, outline: mermaid })
     });
     const data = await response.json();
-    if (!response.ok) { setError(formatUserError(data.error ?? "complete_step3_failed")); return; }
+    if (!response.ok) {
+      if (data?.error === "step3_outline_depth3_not_edited") {
+        setStep3CompleteHint("尚未完成：請先確實編輯第三層（含）以後的所有節點內容，再按「完成結構樹」。");
+      }
+      setError(formatUserError(data.error ?? "complete_step3_failed"));
+      return;
+    }
+    setStep3CompleteHint("");
     applySessionSafely(data);
   }
 
@@ -1378,6 +1393,7 @@ export default function StudentPage() {
                 onComplete={completeOutlineTree}
                 completeLabel="完成結構樹"
                 completeDisabled={step3CompletedByMe}
+                completeHint={step3CompleteHint}
                 completedMessage={
                   step3CompletedByMe
                     ? (waitingStep3Members ? "你已完成結構樹，等待其他同學完成..." : "你已完成結構樹，可等待老師切換下一步。")

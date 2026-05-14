@@ -356,9 +356,12 @@ test("#326: step3 complete route enforces depth-3+ outline edit validation", asy
 
   const routeSrc = readFileSync(resolve(thisDir, "../app/api/session/step3/complete/route.ts"), "utf8");
   const helperSrc = readFileSync(resolve(thisDir, "../src/lib/step3-outline-validation.ts"), "utf8");
+  const studentSrc = readFileSync(resolve(thisDir, "../app/student/page.tsx"), "utf8");
 
   assert.ok(routeSrc.includes("validateStep3OutlineCompletion"), "step3 complete route should call Step3 outline validator");
   assert.ok(routeSrc.includes("step3_outline_depth3_not_edited"), "step3 complete route should return a specific validation error");
   assert.ok(helperSrc.includes("minEditableDepth = 3"), "validator should default to depth-3 rule");
   assert.ok(helperSrc.includes("targetNodes.length > 0 && unchangedNodeIds.length === 0"), "all target nodes must be changed");
+  assert.ok(studentSrc.includes("setStep3CompleteHint"), "student page should keep an inline hint state for Step3 completion failure");
+  assert.ok(studentSrc.includes('completeHint={step3CompleteHint}'), "student Step3 outline editor should render the inline completion hint");
 });

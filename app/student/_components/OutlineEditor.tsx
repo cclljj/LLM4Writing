@@ -46,6 +46,7 @@ type OutlineEditorProps = {
   completeLabel?: string;
   completeDisabled?: boolean;
   completedMessage?: string;
+  completeHint?: string;
 };
 
 export default function OutlineEditor({
@@ -57,6 +58,7 @@ export default function OutlineEditor({
   completeLabel = "完成",
   completeDisabled = false,
   completedMessage,
+  completeHint,
 }: OutlineEditorProps) {
   const [outlineNodes, setOutlineNodes] = useState<OutlineNode[]>(makeDefaultOutlineNodes);
   const [outlineDirty, setOutlineDirty] = useState(false);
@@ -421,12 +423,19 @@ export default function OutlineEditor({
       </div>
 
       {onComplete ? (
-        <div className="row" style={{ marginTop: 10, gap: 10 }}>
-          <div style={{ width: 180 }}>
-            <button type="button" className="secondary" onClick={handleComplete} disabled={completeDisabled}>
-              {completeLabel}
-            </button>
+        <div style={{ marginTop: 10 }}>
+          <div className="row" style={{ gap: 10 }}>
+            <div style={{ width: 180 }}>
+              <button type="button" className="secondary" onClick={handleComplete} disabled={completeDisabled}>
+                {completeLabel}
+              </button>
+            </div>
           </div>
+          {completeHint ? (
+            <small style={{ display: "block", marginTop: 8, color: "#b91c1c" }}>
+              {completeHint}
+            </small>
+          ) : null}
         </div>
       ) : null}
 
