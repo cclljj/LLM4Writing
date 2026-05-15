@@ -365,3 +365,18 @@ test("#326: step3 complete route enforces depth-3+ outline edit validation", asy
   assert.ok(studentSrc.includes("setStep3CompleteHint"), "student page should keep an inline hint state for Step3 completion failure");
   assert.ok(studentSrc.includes('completeHint={step3CompleteHint}'), "student Step3 outline editor should render the inline completion hint");
 });
+
+test("#327: open class creation avoids id collision after deletions", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { resolve, dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const thisDir = dirname(fileURLToPath(import.meta.url));
+
+  const storeSrc = readFileSync(resolve(thisDir, "../src/lib/activity-store.ts"), "utf8");
+  assert.ok(storeSrc.includes("computeNextOpenClassId"), "activity-store should provide deterministic next open class id helper");
+  assert.ok(
+    storeSrc.includes("computeNextOpenClassId(openClasses.map((openClass) => openClass.id))"),
+    "upsertOpenClass should use max-sequence-based id generation"
+  );
+  assert.ok(!storeSrc.includes("openClasses.length + 1"), "open class id generation should not reuse length+1");
+});

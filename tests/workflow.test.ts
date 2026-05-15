@@ -16,6 +16,7 @@ import {
 import { getStructureTreeNodePermissions } from "../src/lib/structure-tree-permissions";
 import { validateStep3OutlineCompletion } from "../src/lib/step3-outline-validation";
 import { buildStudentNextAction } from "../src/lib/student-next-action";
+import { computeNextOpenClassId } from "../src/lib/activity-store";
 import { buildStep1Question, buildStep2Question } from "../src/lib/workflow-questions";
 import { advanceStep1Or2SubstepAfterAi, getNextSubstepKeyAfterCompletion, handleStep1Or2Group, recoverStalledStep1Or2AiWait } from "../src/lib/workflow-step1-2";
 
@@ -266,6 +267,13 @@ graph TD
   assert.equal(r3.ok, true);
   assert.equal(r3.requiredNodeCount, 3);
   assert.equal(r3.changedNodeCount, 3);
+});
+
+test("open class id generation uses max existing sequence to avoid overwrite after deletions", () => {
+  assert.equal(computeNextOpenClassId([]), "oc-001");
+  assert.equal(computeNextOpenClassId(["oc-001", "oc-002"]), "oc-003");
+  assert.equal(computeNextOpenClassId(["oc-001", "oc-003"]), "oc-004");
+  assert.equal(computeNextOpenClassId(["oc-009", "legacy", "oc-010"]), "oc-011");
 });
 
 test("outline sync guard blocks stale polling while autosave is catching up", () => {

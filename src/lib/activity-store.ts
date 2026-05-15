@@ -32,6 +32,16 @@ export type OpenClassView = OpenClassTask & {
   essayGenre: string;
 };
 
+export function computeNextOpenClassId(existingIds: string[]): string {
+  const maxId = existingIds.reduce((max, id) => {
+    const match = /^oc-(\d+)$/.exec(id.trim());
+    if (!match) return max;
+    const parsed = Number.parseInt(match[1] ?? "0", 10);
+    return Number.isFinite(parsed) ? Math.max(max, parsed) : max;
+  }, 0);
+  return `oc-${String(maxId + 1).padStart(3, "0")}`;
+}
+
 type DomainState = {
   users: UserAccount[];
   userPasswords: Record<string, string>;
@@ -684,7 +694,7 @@ export function upsertOpenClass(input: {
   }
 
   const created: OpenClassTask = {
-    id: `oc-${String(openClasses.length + 1).padStart(3, "0")}`,
+    id: computeNextOpenClassId(openClasses.map((openClass) => openClass.id)),
     school: input.school,
     classNumber: input.classNumber,
     essayId: input.essayId,

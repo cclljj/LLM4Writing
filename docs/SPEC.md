@@ -1439,6 +1439,7 @@ Request:
 - 權限：teacher/admin。
 - GET：admin 看全部，teacher 僅看可見班級任務。
 - POST 欄位：`id? classNumber essayId durationMinutes supplemental school?`。
+- 新增任務 ID 需以現有 `oc-###` 最大序號 + 1 生成，不可使用清單長度推算，避免刪除後重複 ID 造成舊任務被覆蓋。
 - teacher 僅可對可見班級操作。
 - 停用主題不可建立新任務（`essay_disabled`）。
 - 既有任務若已綁定停用主題，仍可維持與編輯。
