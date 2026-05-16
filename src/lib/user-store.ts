@@ -8,10 +8,11 @@ type MemoryUserStore = Map<string, StoredUser>;
 
 const KEY = "__llm4writing_users__";
 const BCRYPT_ROUNDS = 12;
+const DEFAULT_SESSION_VERSION = 1;
 
 const defaultUsers: StoredUser[] = [
-  { username: "admin", name: "System Admin", school: "Demo High", role: "admin", password: "admin123" },
-  { username: "teacher", name: "Teacher One", school: "Demo High", role: "teacher", password: "teacher123" },
+  { username: "admin", name: "System Admin", school: "Demo High", role: "admin", password: "admin123", sessionVersion: 1 },
+  { username: "teacher", name: "Teacher One", school: "Demo High", role: "teacher", password: "teacher123", sessionVersion: 1 },
   {
     username: "student",
     name: "Student One",
@@ -19,7 +20,8 @@ const defaultUsers: StoredUser[] = [
     role: "student",
     ownerTeacherUsername: "teacher",
     classNumber: "701",
-    password: "student123"
+    password: "student123",
+    sessionVersion: 1
   },
   {
     username: "s1",
@@ -28,7 +30,8 @@ const defaultUsers: StoredUser[] = [
     role: "student",
     ownerTeacherUsername: "teacher",
     classNumber: "701",
-    password: "student123"
+    password: "student123",
+    sessionVersion: 1
   },
   {
     username: "s2",
@@ -37,7 +40,8 @@ const defaultUsers: StoredUser[] = [
     role: "student",
     ownerTeacherUsername: "teacher",
     classNumber: "701",
-    password: "student123"
+    password: "student123",
+    sessionVersion: 1
   },
   {
     username: "s3",
@@ -46,7 +50,8 @@ const defaultUsers: StoredUser[] = [
     role: "student",
     ownerTeacherUsername: "teacher",
     classNumber: "702",
-    password: "student123"
+    password: "student123",
+    sessionVersion: 1
   }
 ];
 
@@ -150,11 +155,18 @@ async function ensureUserTable(): Promise<void> {
 function stripPassword(user: StoredUser): UserAccount {
   const safe: Partial<StoredUser> = { ...user };
   delete safe.password;
+  safe.sessionVersion = normalizeSessionVersion(user.sessionVersion);
   return safe as UserAccount;
 }
 
 function isPasswordHash(value: string): boolean {
   return /^\$2[aby]\$\d{2}\$/.test(value);
+}
+
+function normalizeSessionVersion(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return DEFAULT_SESSION_VERSION;
+  const asInt = Math.trunc(value);
+  return asInt > 0 ? asInt : DEFAULT_SESSION_VERSION;
 }
 
 function hashPasswordSync(password: string): string {
@@ -206,7 +218,8 @@ function normalizePayload(payload: unknown, fallbackUsername?: string): UserAcco
   return {
     ...((candidate as unknown) as Partial<UserAccount>),
     username,
-    ...(role ? { role } : {})
+    ...(role ? { role } : {}),
+    sessionVersion: normalizeSessionVersion(candidate.sessionVersion)
   } as UserAccount;
 }
 
@@ -292,19 +305,35 @@ export async function resetUserPasswordStore(username: string, newPassword: stri
     const existing = getMemoryStore().get(username);
     if (!existing) return false;
     existing.password = passwordHash;
+    existing.sessionVersion = normalizeSessionVersion(existing.sessionVersion) + 1;
     getMemoryStore().set(username, existing);
     return true;
   }
 
   await ensureUserTable();
   const sql = getSqlClient();
-  const result = await sql`
+  const rows = await sql<{ payload: unknown }[]>`
+    SELECT payload
+    FROM llm4writing_users
+    WHERE username = ${username}
+    LIMIT 1
+  `;
+  const row = rows[0];
+  if (!row) return false;
+  const currentPayload = normalizePayload(row.payload, username);
+  const nextPayload: UserAccount = {
+    ...currentPayload,
+    username,
+    sessionVersion: normalizeSessionVersion(currentPayload.sessionVersion) + 1
+  };
+  await sql`
     UPDATE llm4writing_users
-    SET password = ${passwordHash}, updated_at = NOW()
+    SET payload = ${JSON.stringify(nextPayload)}::jsonb,
+        password = ${passwordHash},
+        updated_at = NOW()
     WHERE username = ${username}
   `;
-
-  return (result.count ?? 0) > 0;
+  return true;
 }
 
 export async function createUserStore(input: {
@@ -343,7 +372,8 @@ export async function createUserStore(input: {
     school: input.school,
     role: input.role,
     ownerTeacherUsername: input.role === "student" ? input.ownerTeacherUsername : undefined,
-    classNumber: input.role === "student" ? input.classNumber : undefined
+    classNumber: input.role === "student" ? input.classNumber : undefined,
+    sessionVersion: DEFAULT_SESSION_VERSION
   };
   const passwordHash = await hashPassword(input.password);
 
@@ -408,6 +438,10 @@ export async function updateUserStore(
     ownerTeacherUsername: nextRole === "student" ? nextOwnerTeacherUsername : undefined,
     classNumber: nextRole === "student" ? nextClassNumber : undefined
   };
+  const currentVersion = normalizeSessionVersion(existing.sessionVersion);
+  const shouldRevokeExistingSessions =
+    (patch.password !== undefined && patch.password.length > 0) || (patch.role !== undefined && patch.role !== existing.role);
+  nextPayload.sessionVersion = shouldRevokeExistingSessions ? currentVersion + 1 : currentVersion;
 
   if (!isDatabaseEnabled()) {
     const existingRaw = getMemoryStore().get(username);

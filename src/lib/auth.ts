@@ -7,9 +7,14 @@ export interface AuthUser {
   role: AuthRole;
 }
 
+export interface AuthSessionClaims extends AuthUser {
+  sessionVersion: number;
+}
+
 type AuthTokenPayload = {
   username: string;
   role: AuthRole;
+  sessionVersion: number;
   exp: number;
   nonce: string;
 };
@@ -17,13 +22,23 @@ type AuthTokenPayload = {
 const AUTH_TOKEN_VERSION = "v1";
 const AUTH_SESSION_TTL_SECONDS = 60 * 60 * 12;
 
-export async function validateCredential(username: string, password: string): Promise<AuthUser | undefined> {
+function normalizeSessionVersion(input: unknown): number {
+  if (typeof input !== "number" || !Number.isFinite(input)) return 1;
+  const asInt = Math.trunc(input);
+  return asInt > 0 ? asInt : 1;
+}
+
+export async function validateCredential(username: string, password: string): Promise<AuthSessionClaims | undefined> {
   const user = await validateUserCredentialStore(username, password);
   if (!user) {
     return undefined;
   }
 
-  return { username: user.username, role: user.role };
+  return {
+    username: user.username,
+    role: user.role,
+    sessionVersion: normalizeSessionVersion(user.sessionVersion)
+  };
 }
 
 function getAuthSecret(): string {
@@ -79,10 +94,11 @@ function isAuthRole(role: unknown): role is AuthRole {
   return role === "student" || role === "teacher" || role === "admin";
 }
 
-export async function createAuthSessionToken(user: AuthUser, nowMs = Date.now()): Promise<string> {
+export async function createAuthSessionToken(user: AuthSessionClaims, nowMs = Date.now()): Promise<string> {
   const payload: AuthTokenPayload = {
     username: user.username,
     role: user.role,
+    sessionVersion: normalizeSessionVersion(user.sessionVersion),
     exp: Math.floor(nowMs / 1000) + AUTH_SESSION_TTL_SECONDS,
     nonce: crypto.randomUUID()
   };
@@ -91,7 +107,7 @@ export async function createAuthSessionToken(user: AuthUser, nowMs = Date.now())
   return `${AUTH_TOKEN_VERSION}.${encoded}.${signature}`;
 }
 
-export async function verifyAuthSessionToken(token: string, nowMs = Date.now()): Promise<AuthUser | null> {
+export async function verifyAuthSessionToken(token: string, nowMs = Date.now()): Promise<AuthSessionClaims | null> {
   const [version, encoded, signature, extra] = token.split(".");
   if (version !== AUTH_TOKEN_VERSION || !encoded || !signature || extra !== undefined) return null;
 
@@ -106,8 +122,13 @@ export async function verifyAuthSessionToken(token: string, nowMs = Date.now()):
   }
 
   if (!payload.username || !isAuthRole(payload.role)) return null;
+  if (!Number.isFinite(payload.sessionVersion)) return null;
   if (!Number.isFinite(payload.exp) || payload.exp! <= Math.floor(nowMs / 1000)) return null;
-  return { username: payload.username, role: payload.role };
+  return {
+    username: payload.username,
+    role: payload.role,
+    sessionVersion: normalizeSessionVersion(payload.sessionVersion)
+  };
 }
 
 export const AUTH_COOKIE_SESSION = "llm4w_session";

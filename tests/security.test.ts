@@ -204,6 +204,10 @@ test("auth server: validates signed session and reloads user role from store", a
     authServer.includes("currentUser.role !== tokenUser.role"),
     "auth server should reject tokens whose role no longer matches the stored user"
   );
+  assert.ok(
+    authServer.includes("currentSessionVersion !== tokenUser.sessionVersion"),
+    "auth server should reject tokens with stale session version"
+  );
 });
 
 test("user store: hashes passwords and migrates legacy plaintext on successful login", async () => {
@@ -218,6 +222,8 @@ test("user store: hashes passwords and migrates legacy plaintext on successful l
   assert.ok(userStore.includes("hashPassword"), "user store should hash newly stored passwords");
   assert.ok(userStore.includes("needsUpgrade"), "user store should detect legacy plaintext passwords for migration");
   assert.ok(userStore.includes("bcrypt.compare"), "user store should verify hashed passwords with bcrypt.compare");
+  assert.ok(userStore.includes("sessionVersion"), "user store should persist sessionVersion for revocable sessions");
+  assert.ok(userStore.includes("sessionVersion) + 1"), "password/role mutations should bump session version");
 });
 
 test("next config: defines baseline security headers and CSP", async () => {
@@ -241,8 +247,8 @@ test("auth session token: verifies valid token and rejects tampered role", async
   process.env.AUTH_SECRET = "test-auth-secret-for-session-token";
   const { createAuthSessionToken, verifyAuthSessionToken } = await import("../src/lib/auth");
 
-  const token = await createAuthSessionToken({ username: "student", role: "student" });
-  assert.deepEqual(await verifyAuthSessionToken(token), { username: "student", role: "student" });
+  const token = await createAuthSessionToken({ username: "student", role: "student", sessionVersion: 1 });
+  assert.deepEqual(await verifyAuthSessionToken(token), { username: "student", role: "student", sessionVersion: 1 });
 
   const [version, encodedPayload, signature] = token.split(".");
   assert.ok(version && encodedPayload && signature);
@@ -259,6 +265,17 @@ test("auth session token: verifies valid token and rejects tampered role", async
   assert.equal(await verifyAuthSessionToken(tamperedToken), null);
 });
 
+test("auth session token: rejects malformed payload/signature token", async () => {
+  process.env.AUTH_SECRET = "test-auth-secret-for-session-token";
+  const { verifyAuthSessionToken } = await import("../src/lib/auth");
+
+  const payload = Buffer.from(JSON.stringify({ username: "student", role: "student", exp: Math.floor(Date.now() / 1000) + 60 }))
+    .toString("base64url")
+    .replace(/=+$/g, "");
+  const fakeToken = `v1.${payload}.invalid`;
+  assert.equal(await verifyAuthSessionToken(fakeToken), null);
+});
+
 test("proxy: matcher includes /api/:path*", async () => {
   const { readFileSync } = await import("node:fs");
   const { resolve, dirname } = await import("node:path");
@@ -269,6 +286,20 @@ test("proxy: matcher includes /api/:path*", async () => {
 
   assert.ok(proxySrc.includes('"/api/:path*"') || proxySrc.includes("'/api/:path*'"),
     "proxy matcher should include /api/:path*");
+});
+
+test("proxy: enforces origin checks for mutating admin/teacher/session APIs", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { resolve, dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+
+  const thisDir = dirname(fileURLToPath(import.meta.url));
+  const proxySrc = readFileSync(resolve(thisDir, "../proxy.ts"), "utf8");
+
+  assert.ok(proxySrc.includes("ORIGIN_GUARDED_API_PREFIXES"));
+  assert.ok(proxySrc.includes("validateStateChangeOrigin"));
+  assert.ok(proxySrc.includes("missing_origin"));
+  assert.ok(proxySrc.includes("invalid_origin"));
 });
 
 test("proxy: returns 429 JSON shape", () => {

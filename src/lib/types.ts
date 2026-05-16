@@ -165,4 +165,5 @@ export interface UserAccount {
   role: "student" | "teacher" | "admin";
   ownerTeacherUsername?: string;
   classNumber?: string;
+  sessionVersion?: number;
 }

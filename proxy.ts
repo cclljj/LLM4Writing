@@ -26,6 +26,50 @@ function isAdminPath(pathname: string): boolean {
   return pathname === "/admin" || pathname.startsWith("/admin/");
 }
 
+const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+const ORIGIN_GUARDED_API_PREFIXES = ["/api/admin/", "/api/teacher/", "/api/session/"];
+
+function isOriginGuardedApiPath(pathname: string): boolean {
+  return ORIGIN_GUARDED_API_PREFIXES.some((prefix) => pathname === prefix.slice(0, -1) || pathname.startsWith(prefix));
+}
+
+function getExpectedOrigin(request: NextRequest): string | null {
+  const forwardedProto = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
+  const forwardedHost = request.headers.get("x-forwarded-host")?.split(",")[0]?.trim();
+  const host = forwardedHost || request.headers.get("host") || request.nextUrl.host;
+  if (!host) return null;
+  const protocol = forwardedProto || request.nextUrl.protocol.replace(":", "");
+  if (!protocol) return null;
+  return `${protocol.toLowerCase()}://${host.toLowerCase()}`;
+}
+
+function isSameOrigin(value: string, expectedOrigin: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return `${parsed.protocol}//${parsed.host}`.toLowerCase() === expectedOrigin;
+  } catch {
+    return false;
+  }
+}
+
+function validateStateChangeOrigin(request: NextRequest): { ok: true } | { ok: false; error: "missing_origin" | "invalid_origin" } {
+  const expectedOrigin = getExpectedOrigin(request);
+  if (!expectedOrigin) return { ok: false, error: "invalid_origin" };
+
+  const origin = request.headers.get("origin")?.trim();
+  if (origin) {
+    return isSameOrigin(origin, expectedOrigin) ? { ok: true } : { ok: false, error: "invalid_origin" };
+  }
+
+  // Fallback for environments that only attach Referer on same-origin requests.
+  const referer = request.headers.get("referer")?.trim();
+  if (referer) {
+    return isSameOrigin(referer, expectedOrigin) ? { ok: true } : { ok: false, error: "invalid_origin" };
+  }
+
+  return { ok: false, error: "missing_origin" };
+}
+
 // ---------------------------------------------------------------------------
 // Proxy
 // ---------------------------------------------------------------------------
@@ -46,6 +90,14 @@ export async function proxy(request: NextRequest) {
         }
       );
     }
+
+    if (MUTATING_METHODS.has(request.method.toUpperCase()) && isOriginGuardedApiPath(pathname)) {
+      const originValidation = validateStateChangeOrigin(request);
+      if (!originValidation.ok) {
+        return NextResponse.json({ error: originValidation.error }, { status: 403 });
+      }
+    }
+
     return NextResponse.next();
   }
 

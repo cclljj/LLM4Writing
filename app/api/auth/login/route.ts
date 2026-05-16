@@ -25,17 +25,18 @@ export async function POST(request: NextRequest) {
     const username = (body.username ?? "").trim();
     const password = body.password ?? "";
 
-    const user = await validateCredential(username, password);
-    if (!user) {
+    const claims = await validateCredential(username, password);
+    if (!claims) {
       return NextResponse.json({ error: "invalid_credentials" }, { status: 401 });
     }
+    const user = { username: claims.username, role: claims.role };
 
     const response = NextResponse.json({
       ok: true,
       user,
       redirectTo: user.role === "student" ? "/student" : user.role === "admin" ? "/admin" : "/teacher"
     });
-    const sessionToken = await createAuthSessionToken(user);
+    const sessionToken = await createAuthSessionToken(claims);
     const cookieSecure = process.env.NODE_ENV === "production";
     response.cookies.set(AUTH_COOKIE_SESSION, sessionToken, {
       httpOnly: true,

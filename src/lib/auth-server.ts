@@ -12,5 +12,10 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
 
   const currentUser = await getUserStore(tokenUser.username);
   if (!currentUser || currentUser.role !== tokenUser.role) return null;
+  const currentSessionVersion =
+    typeof currentUser.sessionVersion === "number" && Number.isFinite(currentUser.sessionVersion)
+      ? Math.max(1, Math.trunc(currentUser.sessionVersion))
+      : 1;
+  if (currentSessionVersion !== tokenUser.sessionVersion) return null;
   return { username: currentUser.username, role: currentUser.role };
 }
