@@ -5,6 +5,7 @@ import { isLlmConfigured, llmChatCompletionText, LlmChatMessage } from "@/src/li
 import { buildStudentCourseContext } from "@/src/lib/llm-context";
 import { extractCurrentSystemQuestion, normalizeForCompare, validateStudentAnswer, validateStudentAnswerSimple } from "@/src/lib/answer-validation";
 import { recordRejectedAnswerSignal } from "@/src/lib/learning-diagnostics";
+import { recordLearningEvent } from "@/src/lib/store";
 import {
   hasFormalLlmQualityRisk,
   parseStructuredStepAiResponse,
@@ -296,7 +297,13 @@ async function generateAiTextWithRetry(
   messages: LlmChatMessage[],
   temperature: number,
   maxTokens: number,
-  options: { attempts?: number; timeoutMs?: number; continueOnTruncation?: boolean; continuationMaxRounds?: number } = {}
+  options: {
+    attempts?: number;
+    timeoutMs?: number;
+    continueOnTruncation?: boolean;
+    continuationMaxRounds?: number;
+    telemetry?: { sessionId?: string; activityId?: string; step?: number; label?: string };
+  } = {}
 ): Promise<string> {
   let lastError: unknown;
   const attempts = options.attempts ?? 3;
@@ -308,7 +315,8 @@ async function generateAiTextWithRetry(
         maxTokens,
         timeoutMs: options.timeoutMs,
         continueOnTruncation: options.continueOnTruncation,
-        continuationMaxRounds: options.continuationMaxRounds
+        continuationMaxRounds: options.continuationMaxRounds,
+        telemetry: options.telemetry
       });
     } catch (error) {
       lastError = error;
@@ -464,7 +472,8 @@ async function generateStep12Feedback(
       const raw = await generateAiTextWithRetry(baseMessages, 0.5, 700, {
         attempts: 1,
         timeoutMs: 25_000,
-        continuationMaxRounds: 2
+        continuationMaxRounds: 2,
+        telemetry: { sessionId: session.id, activityId: session.activityId, step, label: "step12_feedback" }
       });
       const normalized = sanitizeStep12Feedback(raw);
       if (!isStep12FeedbackQualityRisk(normalized)) {
@@ -538,7 +547,8 @@ async function generateStep12NextQuestion(
       const raw = await generateAiTextWithRetry(baseMessages, 0.4, 320, {
         attempts: 1,
         timeoutMs: 20_000,
-        continuationMaxRounds: 1
+        continuationMaxRounds: 1,
+        telemetry: { sessionId: session.id, activityId: session.activityId, step, label: "step12_next_question" }
       });
       const parsed = parseStructuredStepAiResponse(raw) ?? splitAiFeedbackAndQuestion(raw);
       const nextQuestion = compactWhitespace(parsed.nextQuestion ?? "");
@@ -661,6 +671,7 @@ async function generateAiTextForStep(
     return await generateAiTextWithRetry(messages, 0.6, maxTokensByStep, {
       continueOnTruncation: !shortStep,
       continuationMaxRounds,
+      telemetry: { sessionId: session.id, activityId: session.activityId, step, label: "step_ai_reply" },
       ...retryOptions
     });
   } catch {
@@ -683,7 +694,12 @@ async function generateLegacyAiText(session: SessionState, step: number, context
     { role: "user", content: `目前 Phase${step}。學生訊息：${contextText}` }
   ];
   try {
-    return await llmChatCompletionText({ messages, temperature: 0.6, maxTokens: 400 });
+    return await llmChatCompletionText({
+      messages,
+      temperature: 0.6,
+      maxTokens: 400,
+      telemetry: { sessionId: session.id, activityId: session.activityId, step, label: "legacy_phase_reply" }
+    });
   } catch {
     return fallback;
   }
@@ -787,7 +803,10 @@ async function generateStep5SummaryForUser(session: SessionState, userId: string
   const { messages, fallback } = buildStep5LlmInput(session, userId);
   if (!isLlmConfigured()) return fallback;
   try {
-    const raw = await generateAiTextWithRetry(messages, 0.6, 1200, { continuationMaxRounds: 4 });
+    const raw = await generateAiTextWithRetry(messages, 0.6, 1200, {
+      continuationMaxRounds: 4,
+      telemetry: { sessionId: session.id, activityId: session.activityId, step: 5, label: "step5_summary" }
+    });
     const first = normalizeStep5Summary(normalizeFormalLlmText(raw, { fallback }));
     if (!hasFormalLlmQualityRisk(first)) return first;
 
@@ -802,7 +821,7 @@ async function generateStep5SummaryForUser(session: SessionState, userId: string
       ],
       0.5,
       1400,
-      { continuationMaxRounds: 5 }
+      { continuationMaxRounds: 5, telemetry: { sessionId: session.id, activityId: session.activityId, step: 5, label: "step5_summary_retry" } }
     );
     return normalizeStep5Summary(normalizeFormalLlmText(retryRaw, { fallback }));
   } catch {
@@ -847,7 +866,10 @@ async function generateStep10Report(session: SessionState, userId: string): Prom
     return fallback;
   }
   try {
-    const raw = await generateAiTextWithRetry(messages, 0.6, 900, { continuationMaxRounds: 4 });
+    const raw = await generateAiTextWithRetry(messages, 0.6, 900, {
+      continuationMaxRounds: 4,
+      telemetry: { sessionId: session.id, activityId: session.activityId, step: 10, label: "step10_report" }
+    });
     const first = normalizeFormalLlmText(raw, { fallback });
     if (!hasFormalLlmQualityRisk(first)) return first;
 
@@ -862,7 +884,7 @@ async function generateStep10Report(session: SessionState, userId: string): Prom
       ],
       0.5,
       1200,
-      { continuationMaxRounds: 5 }
+      { continuationMaxRounds: 5, telemetry: { sessionId: session.id, activityId: session.activityId, step: 10, label: "step10_report_retry" } }
     );
     return normalizeFormalLlmText(retryRaw, { fallback });
   } catch {
@@ -1059,7 +1081,16 @@ export async function sendStudentMessage(
       : validateStudentAnswer(session, userId, step, text);
   if (validationError) {
     const rejectionScope = step === 1 || step === 2 ? getCurrentGroupGateKey(session, step as 1 | 2) : `step-${step}`;
-    recordRejectedAnswerSignal(session, userId, rejectionScope, now());
+    const rejectedAt = now();
+    recordRejectedAnswerSignal(session, userId, rejectionScope, rejectedAt);
+    void recordLearningEvent({
+      sessionId: session.id,
+      activityId: session.activityId,
+      step,
+      kind: "student_rejection",
+      fallbackUsed: false,
+      createdAt: rejectedAt
+    }).catch(() => undefined);
     throw new Error(validationError);
   }
 
@@ -1131,6 +1162,8 @@ export async function sendStudentMessage(
           );
         }
 
+        const roundCompletedAt = now();
+        const roundLatencyMs = Date.now() - startedAt;
         appendStep12RoundLog(result.session, {
           currentStep: step,
           currentSubStep: completedGateKey,
@@ -1140,9 +1173,38 @@ export async function sendStudentMessage(
           llmAttemptCountFeedback: feedbackResult.llmAttempts,
           llmAttemptCountQuestion,
           usedFallback: feedbackResult.usedFallback || questionUsedFallback,
-          latencyMs: Date.now() - startedAt,
-          at: now()
+          latencyMs: roundLatencyMs,
+          at: roundCompletedAt
         });
+        void recordLearningEvent({
+          sessionId: result.session.id,
+          activityId: result.session.activityId,
+          step,
+          kind: "step12_round",
+          latencyMs: roundLatencyMs,
+          fallbackUsed: feedbackResult.usedFallback || questionUsedFallback,
+          createdAt: roundCompletedAt
+        }).catch(() => undefined);
+        if (feedbackResult.usedFallback) {
+          void recordLearningEvent({
+            sessionId: result.session.id,
+            activityId: result.session.activityId,
+            step,
+            kind: "step12_feedback",
+            fallbackUsed: true,
+            createdAt: roundCompletedAt
+          }).catch(() => undefined);
+        }
+        if (questionUsedFallback) {
+          void recordLearningEvent({
+            sessionId: result.session.id,
+            activityId: result.session.activityId,
+            step,
+            kind: "step12_next_question",
+            fallbackUsed: true,
+            createdAt: roundCompletedAt
+          }).catch(() => undefined);
+        }
       } finally {
         if (result.session.step12RoundState?.inFlightGateKey === roundKey) {
           result.session.step12RoundState.inFlightGateKey = undefined;

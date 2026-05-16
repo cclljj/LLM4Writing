@@ -493,7 +493,7 @@ export default function AdminPromptDiagnostics() {
             <hr style={{ border: 0, borderTop: "1px solid #e2e8f0", margin: "14px 0" }} />
             <h4 style={{ marginBottom: 6 }}>LLM 錯誤分類（timeout / truncation / parse fail）</h4>
             <small style={{ display: "block", marginBottom: 8, color: "#64748b" }}>
-              來源：執行期 LLM 呼叫觀測。`truncation` 包含回覆被長度截斷但後續續寫成功的事件。
+              來源：持久化事件表（`llm_events` / `learning_events`）。`truncation` 包含回覆被長度截斷但後續續寫成功的事件。
             </small>
             <div style={{ display: "flex", gap: 20, flexWrap: "wrap", marginBottom: 10 }}>
               <div>

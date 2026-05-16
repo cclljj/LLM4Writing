@@ -29,6 +29,28 @@ export class SessionVersionConflictError extends Error {
   }
 }
 
+export type PersistedEventKind =
+  | "llm_chat"
+  | "llm_stream"
+  | "step12_feedback"
+  | "step12_next_question"
+  | "step12_round"
+  | "student_rejection"
+  | "fallback";
+
+export type PersistedErrorCategory = "timeout" | "truncation" | "parse_fail" | "other";
+
+export type PersistedEventInput = {
+  sessionId?: string;
+  activityId?: string;
+  step?: number;
+  kind: PersistedEventKind | string;
+  latencyMs?: number;
+  fallbackUsed?: boolean;
+  errorCategory?: PersistedErrorCategory;
+  createdAt?: string;
+};
+
 function getMemoryStore(): MemoryStore {
   const globalScope = globalThis as unknown as Record<string, MemoryStore | undefined>;
   if (!globalScope[KEY]) {
@@ -339,6 +361,81 @@ async function ensureSessionTable(): Promise<void> {
         ON llm4writing_session_events (session_id, event_type, at)
       `;
       await sql`
+        CREATE TABLE IF NOT EXISTS llm4writing_session_participants (
+          session_id TEXT NOT NULL REFERENCES llm4writing_sessions(id) ON DELETE CASCADE,
+          username TEXT NOT NULL,
+          activity_id TEXT,
+          workflow TEXT,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (session_id, username)
+        )
+      `;
+      await sql`
+        CREATE INDEX IF NOT EXISTS idx_llm4writing_session_participants_user_activity_created
+        ON llm4writing_session_participants (username, activity_id, created_at DESC)
+      `;
+      await sql`
+        CREATE INDEX IF NOT EXISTS idx_llm4writing_session_participants_activity_created
+        ON llm4writing_session_participants (activity_id, created_at DESC)
+      `;
+      await sql`
+        CREATE TABLE IF NOT EXISTS llm4writing_llm_events (
+          id BIGSERIAL PRIMARY KEY,
+          session_id TEXT,
+          activity_id TEXT,
+          step INTEGER,
+          kind TEXT NOT NULL,
+          latency_ms INTEGER,
+          fallback_used BOOLEAN NOT NULL DEFAULT FALSE,
+          error_category TEXT,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `;
+      await sql`
+        CREATE INDEX IF NOT EXISTS idx_llm4writing_llm_events_created
+        ON llm4writing_llm_events (created_at DESC)
+      `;
+      await sql`
+        CREATE INDEX IF NOT EXISTS idx_llm4writing_llm_events_activity_step_created
+        ON llm4writing_llm_events (activity_id, step, created_at DESC)
+      `;
+      await sql`
+        CREATE TABLE IF NOT EXISTS llm4writing_learning_events (
+          id BIGSERIAL PRIMARY KEY,
+          session_id TEXT,
+          activity_id TEXT,
+          step INTEGER,
+          kind TEXT NOT NULL,
+          latency_ms INTEGER,
+          fallback_used BOOLEAN NOT NULL DEFAULT FALSE,
+          error_category TEXT,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `;
+      await sql`
+        CREATE INDEX IF NOT EXISTS idx_llm4writing_learning_events_created
+        ON llm4writing_learning_events (created_at DESC)
+      `;
+      await sql`
+        CREATE INDEX IF NOT EXISTS idx_llm4writing_learning_events_activity_step_created
+        ON llm4writing_learning_events (activity_id, step, created_at DESC)
+      `;
+      await sql`
+        INSERT INTO llm4writing_session_participants (session_id, username, activity_id, workflow, created_at)
+        SELECT
+          s.id,
+          participant.username,
+          COALESCE(s.activity_id, s.payload->>'activityId'),
+          COALESCE(s.workflow, s.payload->>'workflow'),
+          COALESCE(s.updated_at, s.created_at, NOW())
+        FROM llm4writing_sessions s
+        CROSS JOIN LATERAL jsonb_array_elements_text(COALESCE(s.payload->'participants', '[]'::jsonb)) AS participant(username)
+        ON CONFLICT (session_id, username) DO UPDATE
+        SET
+          activity_id = EXCLUDED.activity_id,
+          workflow = EXCLUDED.workflow
+      `;
+      await sql`
         UPDATE llm4writing_sessions
         SET
           workflow = COALESCE(workflow, payload->>'workflow'),
@@ -402,6 +499,18 @@ type EventRow = {
   event_type: string;
   payload: unknown;
   at: string;
+};
+
+export type PersistedEventRow = {
+  id: string;
+  session_id: string | null;
+  activity_id: string | null;
+  step: number | null;
+  kind: string;
+  latency_ms: number | null;
+  fallback_used: boolean;
+  error_category: string | null;
+  created_at: Date;
 };
 
 type SessionPartsById = Record<string, {
@@ -490,6 +599,20 @@ async function replaceSessionSplitRows(sql: Sql | TransactionSql, session: Sessi
     }));
     await sql`INSERT INTO llm4writing_session_events ${sql(rows)}`;
   }
+}
+
+async function replaceSessionParticipantRows(sql: Sql | TransactionSql, session: SessionState): Promise<void> {
+  await sql`DELETE FROM llm4writing_session_participants WHERE session_id = ${session.id}`;
+  const participants = Array.from(new Set((session.participants ?? []).map((value) => value.trim()).filter(Boolean)));
+  if (participants.length === 0) return;
+  const rows = participants.map((username) => ({
+    session_id: session.id,
+    username,
+    activity_id: session.activityId ?? null,
+    workflow: session.workflow ?? null,
+    created_at: session.createdAt
+  }));
+  await sql`INSERT INTO llm4writing_session_participants ${sql(rows)}`;
 }
 
 function mergeLegacyPayloadParts(session: SessionState, parts: SessionPartsById[string]): SessionPartsById[string] {
@@ -633,6 +756,7 @@ export async function saveSession(session: SessionState): Promise<SessionState> 
             RETURNING version, updated_at
           `;
           await replaceSessionSplitRows(sql, candidate);
+          await replaceSessionParticipantRows(sql, candidate);
           return {
             version: insertedRows[0]?.version ?? 1,
             updatedAt: insertedRows[0]?.updated_at?.toISOString() ?? new Date().toISOString()
@@ -662,6 +786,7 @@ export async function saveSession(session: SessionState): Promise<SessionState> 
           RETURNING version, updated_at
         `;
         await replaceSessionSplitRows(sql, candidate);
+        await replaceSessionParticipantRows(sql, candidate);
         return {
           version: updatedRows[0]?.version ?? existing.version + 1,
           updatedAt: updatedRows[0]?.updated_at?.toISOString() ?? new Date().toISOString()
@@ -884,6 +1009,176 @@ export async function deleteSessionsByActivityId(activityId: string): Promise<nu
     RETURNING id
   `;
   return rows.length;
+}
+
+function normalizeEventLatency(latencyMs: number | undefined): number | null {
+  if (typeof latencyMs !== "number" || !Number.isFinite(latencyMs)) return null;
+  if (latencyMs < 0) return 0;
+  return Math.round(latencyMs);
+}
+
+function normalizeEventStep(step: number | undefined): number | null {
+  if (typeof step !== "number" || !Number.isFinite(step)) return null;
+  return Math.max(0, Math.round(step));
+}
+
+function normalizeEventCreatedAt(createdAt?: string): string {
+  if (!createdAt) return new Date().toISOString();
+  const parsed = new Date(createdAt);
+  if (!Number.isFinite(parsed.getTime())) return new Date().toISOString();
+  return parsed.toISOString();
+}
+
+export async function recordLlmEvent(input: PersistedEventInput): Promise<void> {
+  const createdAt = normalizeEventCreatedAt(input.createdAt);
+  if (!isDatabaseEnabled()) return;
+  await ensureSessionTable();
+  const sql = getSqlClient();
+  await sql`
+    INSERT INTO llm4writing_llm_events (
+      session_id,
+      activity_id,
+      step,
+      kind,
+      latency_ms,
+      fallback_used,
+      error_category,
+      created_at
+    )
+    VALUES (
+      ${input.sessionId ?? null},
+      ${input.activityId ?? null},
+      ${normalizeEventStep(input.step)},
+      ${input.kind},
+      ${normalizeEventLatency(input.latencyMs)},
+      ${Boolean(input.fallbackUsed)},
+      ${input.errorCategory ?? null},
+      ${createdAt}::timestamptz
+    )
+  `;
+}
+
+export async function recordLearningEvent(input: PersistedEventInput): Promise<void> {
+  const createdAt = normalizeEventCreatedAt(input.createdAt);
+  if (!isDatabaseEnabled()) return;
+  await ensureSessionTable();
+  const sql = getSqlClient();
+  await sql`
+    INSERT INTO llm4writing_learning_events (
+      session_id,
+      activity_id,
+      step,
+      kind,
+      latency_ms,
+      fallback_used,
+      error_category,
+      created_at
+    )
+    VALUES (
+      ${input.sessionId ?? null},
+      ${input.activityId ?? null},
+      ${normalizeEventStep(input.step)},
+      ${input.kind},
+      ${normalizeEventLatency(input.latencyMs)},
+      ${Boolean(input.fallbackUsed)},
+      ${input.errorCategory ?? null},
+      ${createdAt}::timestamptz
+    )
+  `;
+}
+
+export async function listLlmEventsSince(cutoffIso: string): Promise<PersistedEventRow[]> {
+  if (!isDatabaseEnabled()) return [];
+  await ensureSessionTable();
+  const sql = getSqlClient();
+  return sql<PersistedEventRow[]>`
+    SELECT id::text, session_id, activity_id, step, kind, latency_ms, fallback_used, error_category, created_at
+    FROM llm4writing_llm_events
+    WHERE created_at >= ${cutoffIso}::timestamptz
+    ORDER BY created_at ASC
+  `;
+}
+
+export async function listLearningEventsSince(cutoffIso: string): Promise<PersistedEventRow[]> {
+  if (!isDatabaseEnabled()) return [];
+  await ensureSessionTable();
+  const sql = getSqlClient();
+  return sql<PersistedEventRow[]>`
+    SELECT id::text, session_id, activity_id, step, kind, latency_ms, fallback_used, error_category, created_at
+    FROM llm4writing_learning_events
+    WHERE created_at >= ${cutoffIso}::timestamptz
+    ORDER BY created_at ASC
+  `;
+}
+
+export async function listSessionsByParticipant(
+  username: string,
+  opts?: { activityId?: string; workflow?: string; limit?: number; offset?: number }
+): Promise<SessionState[]> {
+  const trimmedUsername = username.trim();
+  if (!trimmedUsername) return [];
+
+  const activityId = opts?.activityId?.trim();
+  const workflow = opts?.workflow?.trim();
+  const limit = typeof opts?.limit === "number" && opts.limit > 0 ? opts.limit : undefined;
+  const offset = typeof opts?.offset === "number" && opts.offset >= 0 ? opts.offset : 0;
+
+  if (!isDatabaseEnabled()) {
+    return Array.from(getMemoryStore().values())
+      .filter((session) => session.participants.includes(trimmedUsername))
+      .filter((session) => (activityId ? session.activityId === activityId : true))
+      .filter((session) => (workflow ? session.workflow === workflow : true))
+      .sort((a, b) => {
+        const aLast = memoryUpdatedAt.get(a.id) ?? a.messages.at(-1)?.at ?? a.createdAt;
+        const bLast = memoryUpdatedAt.get(b.id) ?? b.messages.at(-1)?.at ?? b.createdAt;
+        return bLast.localeCompare(aLast);
+      })
+      .slice(offset, limit !== undefined ? offset + limit : undefined)
+      .map((session) =>
+        attachSessionStoreMeta(
+          session,
+          memoryVersion.get(session.id) ?? 1,
+          memoryUpdatedAt.get(session.id) ?? session.createdAt
+        )
+      );
+  }
+
+  await ensureSessionTable();
+  const sql = getSqlClient();
+  const rows =
+    limit !== undefined
+      ? await sql<{ id: string; payload: unknown; updated_at: Date; version: number }[]>`
+          SELECT s.id, s.payload, s.updated_at, s.version
+          FROM llm4writing_session_participants p
+          INNER JOIN llm4writing_sessions s ON s.id = p.session_id
+          WHERE p.username = ${trimmedUsername}
+            AND (${activityId ?? null}::text IS NULL OR p.activity_id = ${activityId ?? null})
+            AND (${workflow ?? null}::text IS NULL OR p.workflow = ${workflow ?? null})
+          ORDER BY s.updated_at DESC
+          LIMIT ${limit} OFFSET ${offset}
+        `
+      : await sql<{ id: string; payload: unknown; updated_at: Date; version: number }[]>`
+          SELECT s.id, s.payload, s.updated_at, s.version
+          FROM llm4writing_session_participants p
+          INNER JOIN llm4writing_sessions s ON s.id = p.session_id
+          WHERE p.username = ${trimmedUsername}
+            AND (${activityId ?? null}::text IS NULL OR p.activity_id = ${activityId ?? null})
+            AND (${workflow ?? null}::text IS NULL OR p.workflow = ${workflow ?? null})
+          ORDER BY s.updated_at DESC
+          OFFSET ${offset}
+        `;
+
+  const sessionIds = rows.map((row) => row.id);
+  const partsById = await fetchSessionPartsByIds(sql, sessionIds);
+  return rows
+    .map((row) => {
+      const core = normalizeSessionPayload(row.payload);
+      if (!core) return undefined;
+      const mergedParts = mergeLegacyPayloadParts(core, partsById[row.id] ?? defaultSessionParts());
+      const rebuilt = mergeSessionParts(buildSessionCorePayload(core) as SessionCorePayload, mergedParts);
+      return attachSessionStoreMeta(rebuilt, row.version ?? 1, row.updated_at.toISOString());
+    })
+    .filter((item): item is SessionState => Boolean(item));
 }
 
 export function getStorageMode(): "postgres" | "memory" {

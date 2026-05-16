@@ -1,7 +1,15 @@
 import "server-only";
+import { AsyncLocalStorage } from "node:async_hooks";
+import { recordLlmEvent, PersistedErrorCategory } from "@/src/lib/store";
 
 export type LlmCallKind = "chat" | "stream";
 export type LlmErrorCategory = "timeout" | "truncation" | "parse_fail" | "other";
+export type LlmEventContext = {
+  sessionId?: string;
+  activityId?: string;
+  step?: number;
+  label?: string;
+};
 
 type LlmCallBucket = {
   total: number;
@@ -12,6 +20,7 @@ type LlmCallBucket = {
 };
 
 const RING_BUFFER_SIZE = 300;
+const llmEventContextStorage = new AsyncLocalStorage<LlmEventContext>();
 
 const stats: Record<LlmCallKind, LlmCallBucket> = {
   chat: {
@@ -70,12 +79,17 @@ export function classifyLlmError(error: unknown): LlmErrorCategory {
   return "other";
 }
 
+export function withLlmEventContext<T>(context: LlmEventContext, fn: () => Promise<T>): Promise<T> {
+  return llmEventContextStorage.run(context, fn);
+}
+
 export function recordLlmCall(input: {
   kind: LlmCallKind;
   durationMs: number;
   errorCategory?: LlmErrorCategory;
   hadTruncation?: boolean;
 }): void {
+  const context = llmEventContextStorage.getStore();
   const bucket = stats[input.kind];
   bucket.total += 1;
   pushDuration(bucket, input.durationMs);
@@ -86,6 +100,15 @@ export function recordLlmCall(input: {
     bucket.errors += 1;
     bucket.errorCategories[input.errorCategory] += 1;
   }
+  void recordLlmEvent({
+    sessionId: context?.sessionId,
+    activityId: context?.activityId,
+    step: context?.step,
+    kind: input.kind === "chat" ? "llm_chat" : "llm_stream",
+    latencyMs: input.durationMs,
+    fallbackUsed: false,
+    errorCategory: (input.errorCategory ?? (input.hadTruncation ? "truncation" : undefined)) as PersistedErrorCategory | undefined
+  }).catch(() => undefined);
 }
 
 export type LlmCallStatsSummary = {

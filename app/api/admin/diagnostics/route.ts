@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/src/lib/auth-server";
 import systemPromptConfig from "@/src/config/system-prompt-config.json";
-import { listSessions } from "@/src/lib/store";
+import { listLearningEventsSince, listLlmEventsSince, listSessions, type PersistedEventRow } from "@/src/lib/store";
 import { findActivity } from "@/src/lib/activity-store";
 import { getLlmCallStats } from "@/src/lib/llm-observability";
 import type { SessionState } from "@/src/lib/types";
@@ -53,6 +53,13 @@ function median(values: number[]): number {
   const sorted = [...values].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
   return sorted.length % 2 === 0 ? (sorted[mid - 1]! + sorted[mid]!) / 2 : sorted[mid]!;
+}
+
+function percentile(values: number[], p: number): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const idx = Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length));
+  return sorted[idx]!;
 }
 
 function estimateTokensFromText(text: string): number {
@@ -374,6 +381,89 @@ function parseStepFromScope(scope: string): string | null {
   return /^\d+$/.test(first) ? first : null;
 }
 
+function parseStepFromEvent(event: Pick<PersistedEventRow, "step" | "kind">): string | null {
+  if (typeof event.step === "number" && Number.isFinite(event.step)) {
+    return String(Math.max(0, Math.round(event.step)));
+  }
+  const matched = event.kind.match(/(?:step[-_]?)(\d+)/i);
+  if (matched?.[1]) return matched[1];
+  return null;
+}
+
+function computeRejectedByStepFromLearningEvents(events: PersistedEventRow[]): Record<string, number> {
+  const byStep: Record<string, number> = {};
+  for (const event of events) {
+    if (event.kind !== "student_rejection") continue;
+    const stepKey = parseStepFromEvent(event);
+    if (!stepKey) continue;
+    byStep[stepKey] = (byStep[stepKey] ?? 0) + 1;
+  }
+  return byStep;
+}
+
+function computeFallbackRateFromLearningEvents(events: PersistedEventRow[]): {
+  byStep: Record<string, { totalAi: number; fallbacks: number; rate: number }>;
+  overall: { totalAi: number; fallbacks: number; rate: number };
+} {
+  const responseKinds = new Set(["step12_round", "step3_response", "step6_suggest", "step7_feedback", "step10_report"]);
+  const byStep: Record<string, { totalAi: number; fallbacks: number }> = {};
+  let totalAi = 0;
+  let fallbacks = 0;
+  for (const event of events) {
+    if (!responseKinds.has(event.kind)) continue;
+    const stepKey = parseStepFromEvent(event);
+    if (!stepKey) continue;
+    totalAi += 1;
+    const bucket = byStep[stepKey] ?? (byStep[stepKey] = { totalAi: 0, fallbacks: 0 });
+    bucket.totalAi += 1;
+    if (event.fallback_used) {
+      fallbacks += 1;
+      bucket.fallbacks += 1;
+    }
+  }
+  const withRate: Record<string, { totalAi: number; fallbacks: number; rate: number }> = {};
+  for (const [step, bucket] of Object.entries(byStep)) {
+    withRate[step] = {
+      totalAi: bucket.totalAi,
+      fallbacks: bucket.fallbacks,
+      rate: bucket.totalAi > 0 ? bucket.fallbacks / bucket.totalAi : 0
+    };
+  }
+  return {
+    byStep: withRate,
+    overall: {
+      totalAi,
+      fallbacks,
+      rate: totalAi > 0 ? fallbacks / totalAi : 0
+    }
+  };
+}
+
+function computeLlmResponseTimeFromLearningEvents(
+  events: PersistedEventRow[]
+): Record<string, { median: number; avg: number; samples: number }> {
+  const responseKinds = new Set(["step12_round", "step3_response", "step6_suggest", "step7_feedback", "step10_report"]);
+  const byStep: Record<string, number[]> = {};
+  for (const event of events) {
+    if (!responseKinds.has(event.kind)) continue;
+    const stepKey = parseStepFromEvent(event);
+    if (!stepKey) continue;
+    const latency = event.latency_ms;
+    if (typeof latency !== "number" || !Number.isFinite(latency) || latency <= 0) continue;
+    (byStep[stepKey] ??= []).push(latency);
+  }
+  const result: Record<string, { median: number; avg: number; samples: number }> = {};
+  for (const [step, durations] of Object.entries(byStep)) {
+    const avg = durations.reduce((sum, value) => sum + value, 0) / durations.length;
+    result[step] = {
+      median: Math.round(median(durations)),
+      avg: Math.round(avg),
+      samples: durations.length
+    };
+  }
+  return result;
+}
+
 function computeRejectedByStep(sessions: SessionState[], cutoffMs: number): Record<string, number> {
   const byStep: Record<string, number> = {};
   for (const session of sessions) {
@@ -410,7 +500,11 @@ function computeStepKpis(
   sessions: SessionState[],
   cutoffMs: number,
   fallbackRate: ReturnType<typeof computeFallbackRate>,
-  llmResponseTime: ReturnType<typeof computeLlmResponseTime>
+  llmResponseTime: ReturnType<typeof computeLlmResponseTime>,
+  overrides?: {
+    rejectedByStep?: Record<string, number>;
+    acceptedByStep?: Record<string, number>;
+  }
 ): Record<
   string,
   {
@@ -426,8 +520,8 @@ function computeStepKpis(
     waitSamples: number;
   }
 > {
-  const rejectedByStep = computeRejectedByStep(sessions, cutoffMs);
-  const acceptedByStep = computeAcceptedByStep(sessions, cutoffMs);
+  const rejectedByStep = overrides?.rejectedByStep ?? computeRejectedByStep(sessions, cutoffMs);
+  const acceptedByStep = overrides?.acceptedByStep ?? computeAcceptedByStep(sessions, cutoffMs);
   const stepKeys = new Set<string>([
     ...Object.keys(fallbackRate.byStep),
     ...Object.keys(rejectedByStep),
@@ -657,7 +751,186 @@ function computeTrendSeries(
     .sort((a, b) => a.key.localeCompare(b.key));
 }
 
-function buildLlmErrorTaxonomy() {
+function computeTrendSeriesFromLearningEvents(
+  events: PersistedEventRow[],
+  dimension: TrendDimension
+): TrendSeries[] {
+  const responseKinds = new Set(["step12_round", "step3_response", "step6_suggest", "step7_feedback", "step10_report"]);
+  const byGroupDay = new Map<string, TrendMutableBucket>();
+  const metaMap = new Map<string, TrendMeta>();
+
+  for (const event of events) {
+    const activityId = event.activity_id ?? "";
+    const activity = activityId ? findActivity(activityId) : undefined;
+    const school = activity?.school ?? "—";
+    const classNumber = activity?.classNumber ?? "—";
+    const activityTitle = activity?.title ?? activityId ?? "未命名課程";
+    const key =
+      dimension === "class"
+        ? `${school}::${classNumber}`
+        : `${school}::${classNumber}::${activityTitle}`;
+    const meta: TrendMeta = {
+      key,
+      school,
+      classNumber,
+      activityTitle: dimension === "class" ? "全部課程" : activityTitle
+    };
+    metaMap.set(key, meta);
+
+    const day = dayKeyFromIso(event.created_at.toISOString());
+    if (!day) continue;
+    const dayKey = `${key}::${day}`;
+    const bucket = byGroupDay.get(dayKey) ?? {
+      totalAi: 0,
+      successes: 0,
+      fallbacks: 0,
+      acceptedAnswers: 0,
+      rejectedAnswers: 0,
+      waitTotalMs: 0,
+      waitSamples: 0
+    };
+
+    if (event.kind === "student_rejection") {
+      bucket.rejectedAnswers += 1;
+    } else if (responseKinds.has(event.kind)) {
+      bucket.totalAi += 1;
+      if (event.fallback_used) bucket.fallbacks += 1;
+      else bucket.successes += 1;
+      if (typeof event.latency_ms === "number" && Number.isFinite(event.latency_ms) && event.latency_ms > 0) {
+        bucket.waitTotalMs += event.latency_ms;
+        bucket.waitSamples += 1;
+      }
+    } else {
+      continue;
+    }
+    byGroupDay.set(dayKey, bucket);
+  }
+
+  const pointsByGroup = new Map<string, TrendPoint[]>();
+  for (const [groupDayKey, bucket] of byGroupDay.entries()) {
+    const splitAt = groupDayKey.lastIndexOf("::");
+    if (splitAt < 0) continue;
+    const groupKey = groupDayKey.slice(0, splitAt);
+    const day = groupDayKey.slice(splitAt + 2);
+    const points = pointsByGroup.get(groupKey) ?? [];
+    points.push({
+      date: day,
+      totalAi: bucket.totalAi,
+      successes: bucket.successes,
+      fallbacks: bucket.fallbacks,
+      acceptedAnswers: bucket.acceptedAnswers,
+      rejectedAnswers: bucket.rejectedAnswers,
+      waitSamples: bucket.waitSamples,
+      avgWaitMs: bucket.waitSamples > 0 ? Math.round(bucket.waitTotalMs / bucket.waitSamples) : 0,
+      successRate: bucket.totalAi > 0 ? bucket.successes / bucket.totalAi : 0,
+      fallbackRate: bucket.totalAi > 0 ? bucket.fallbacks / bucket.totalAi : 0,
+      refusalRate:
+        bucket.acceptedAnswers + bucket.rejectedAnswers > 0
+          ? bucket.rejectedAnswers / (bucket.acceptedAnswers + bucket.rejectedAnswers)
+          : 0
+    });
+    pointsByGroup.set(groupKey, points);
+  }
+
+  return Array.from(pointsByGroup.entries())
+    .map(([groupKey, points]) => {
+      const meta = metaMap.get(groupKey);
+      return {
+        key: groupKey,
+        school: meta?.school ?? "—",
+        classNumber: meta?.classNumber ?? "—",
+        activityTitle: meta?.activityTitle ?? "未命名課程",
+        points: points.sort((a, b) => a.date.localeCompare(b.date))
+      };
+    })
+    .sort((a, b) => a.key.localeCompare(b.key));
+}
+
+function buildLlmErrorTaxonomy(llmEvents?: PersistedEventRow[]) {
+  if (llmEvents && llmEvents.length > 0) {
+    const byKindMap = new Map<"chat" | "stream", {
+      kind: "chat" | "stream";
+      total: number;
+      errors: number;
+      truncations: number;
+      durations: number[];
+      errorCategories: { timeout: number; truncation: number; parse_fail: number; other: number };
+    }>();
+    const ensureBucket = (kind: "chat" | "stream") => {
+      const existing = byKindMap.get(kind);
+      if (existing) return existing;
+      const created = {
+        kind,
+        total: 0,
+        errors: 0,
+        truncations: 0,
+        durations: [] as number[],
+        errorCategories: { timeout: 0, truncation: 0, parse_fail: 0, other: 0 }
+      };
+      byKindMap.set(kind, created);
+      return created;
+    };
+
+    for (const event of llmEvents) {
+      const kind = event.kind.includes("stream") ? "stream" : "chat";
+      const bucket = ensureBucket(kind);
+      bucket.total += 1;
+      if (typeof event.latency_ms === "number" && Number.isFinite(event.latency_ms) && event.latency_ms >= 0) {
+        bucket.durations.push(event.latency_ms);
+      }
+      if (event.error_category) {
+        bucket.errors += 1;
+        if (event.error_category === "timeout") bucket.errorCategories.timeout += 1;
+        else if (event.error_category === "truncation") {
+          bucket.errorCategories.truncation += 1;
+          bucket.truncations += 1;
+        } else if (event.error_category === "parse_fail") bucket.errorCategories.parse_fail += 1;
+        else bucket.errorCategories.other += 1;
+      }
+    }
+
+    const byKind = Array.from(byKindMap.values()).map((bucket) => {
+      const sorted = [...bucket.durations].sort((a, b) => a - b);
+      const avg = sorted.length > 0 ? Math.round(sorted.reduce((sum, value) => sum + value, 0) / sorted.length) : 0;
+      return {
+        kind: bucket.kind,
+        total: bucket.total,
+        errors: bucket.errors,
+        errorRate: bucket.total > 0 ? bucket.errors / bucket.total : 0,
+        truncations: bucket.truncations,
+        truncationRate: bucket.total > 0 ? bucket.truncations / bucket.total : 0,
+        avgMs: avg,
+        medianMs: Math.round(median(sorted)),
+        p95Ms: Math.round(percentile(sorted, 95)),
+        sampleSize: sorted.length,
+        errorCategories: bucket.errorCategories
+      };
+    });
+
+    let timeout = 0;
+    let truncation = 0;
+    let parseFail = 0;
+    let other = 0;
+    let totalCalls = 0;
+    for (const s of byKind) {
+      totalCalls += s.total;
+      timeout += s.errorCategories.timeout;
+      parseFail += s.errorCategories.parse_fail;
+      other += s.errorCategories.other;
+      truncation += s.truncations + s.errorCategories.truncation;
+    }
+    const totalClassified = timeout + truncation + parseFail + other;
+    return {
+      totalCalls,
+      totalClassified,
+      timeout: { count: timeout, rate: totalClassified > 0 ? timeout / totalClassified : 0 },
+      truncation: { count: truncation, rate: totalClassified > 0 ? truncation / totalClassified : 0 },
+      parseFail: { count: parseFail, rate: totalClassified > 0 ? parseFail / totalClassified : 0 },
+      other: { count: other, rate: totalClassified > 0 ? other / totalClassified : 0 },
+      byKind
+    };
+  }
+
   const stats = getLlmCallStats();
   let timeout = 0;
   let truncation = 0;
@@ -685,8 +958,13 @@ function buildLlmErrorTaxonomy() {
 
 async function buildDiagnosticsPayload(selectedWindow: DiagnosticsWindow, nowMs: number): Promise<DiagnosticsPayload> {
   const config = systemPromptConfig as Record<string, unknown>;
-  const sessions = await listSessions();
   const cutoffMs = nowMs - WINDOW_MS[selectedWindow];
+  const cutoffIso = new Date(cutoffMs).toISOString();
+  const [sessions, llmEvents, learningEvents] = await Promise.all([
+    listSessions(),
+    listLlmEventsSince(cutoffIso),
+    listLearningEventsSince(cutoffIso)
+  ]);
   const specSessions = sessions.filter((session) => session.workflow === "spec10");
   const windowedSpecSessions = specSessions.filter((session) => hasRecentActivity(session, cutoffMs));
   const recentSessions = windowedSpecSessions
@@ -725,14 +1003,25 @@ async function buildDiagnosticsPayload(selectedWindow: DiagnosticsWindow, nowMs:
     model: readEnvFlag("LLM_MODEL") ? process.env.LLM_MODEL : null
   };
   const tokenUsage = computeTokenUsageStats(windowedSpecSessions, cutoffMs);
-  const llmResponseTime = computeLlmResponseTime(windowedSpecSessions, cutoffMs);
-  const fallbackRate = computeFallbackRate(windowedSpecSessions, cutoffMs);
-  const stepKpis = computeStepKpis(windowedSpecSessions, cutoffMs, fallbackRate, llmResponseTime);
+  const hasEventMetrics = learningEvents.length > 0;
+  const llmResponseTime = hasEventMetrics
+    ? computeLlmResponseTimeFromLearningEvents(learningEvents)
+    : computeLlmResponseTime(windowedSpecSessions, cutoffMs);
+  const fallbackRate = hasEventMetrics
+    ? computeFallbackRateFromLearningEvents(learningEvents)
+    : computeFallbackRate(windowedSpecSessions, cutoffMs);
+  const stepKpis = computeStepKpis(windowedSpecSessions, cutoffMs, fallbackRate, llmResponseTime, {
+    rejectedByStep: hasEventMetrics ? computeRejectedByStepFromLearningEvents(learningEvents) : undefined
+  });
   const trends = {
-    byCourse: computeTrendSeries(windowedSpecSessions, cutoffMs, "course"),
-    byClass: computeTrendSeries(windowedSpecSessions, cutoffMs, "class")
+    byCourse: hasEventMetrics
+      ? computeTrendSeriesFromLearningEvents(learningEvents, "course")
+      : computeTrendSeries(windowedSpecSessions, cutoffMs, "course"),
+    byClass: hasEventMetrics
+      ? computeTrendSeriesFromLearningEvents(learningEvents, "class")
+      : computeTrendSeries(windowedSpecSessions, cutoffMs, "class")
   };
-  const llmErrorTaxonomy = buildLlmErrorTaxonomy();
+  const llmErrorTaxonomy = buildLlmErrorTaxonomy(llmEvents);
 
   return {
     llm,

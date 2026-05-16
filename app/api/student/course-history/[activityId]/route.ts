@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/src/lib/auth-server";
 import { getAllActivities, hydrateDomainState } from "@/src/lib/activity-store";
-import { listSessions } from "@/src/lib/store";
+import { listSessionsByParticipant } from "@/src/lib/store";
 
 export async function GET(_: Request, context: { params: Promise<{ activityId: string }> }) {
   const user = await getCurrentUser();
@@ -20,10 +20,10 @@ export async function GET(_: Request, context: { params: Promise<{ activityId: s
     return NextResponse.json({ error: "activity_not_found" }, { status: 404 });
   }
 
-  const sessions = (await listSessions())
-    .filter((session) => session.workflow === "spec10")
-    .filter((session) => session.activityId === activityId)
-    .filter((session) => session.participants.includes(user.username))
+  const sessions = (await listSessionsByParticipant(user.username, {
+    workflow: "spec10",
+    activityId
+  }))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
   if (sessions.length === 0) {

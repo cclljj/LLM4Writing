@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { saveSession } from "@/src/lib/store";
+import { recordLearningEvent, saveSession } from "@/src/lib/store";
 import {
   isLlmConfigured,
   llmChatCompletionText,
@@ -10,14 +10,19 @@ import { requireStudentInSession } from "@/src/lib/api-helpers";
 import { buildStep10LlmInput, recordStep10Report } from "@/src/lib/engine";
 import { recordStreamingCall } from "@/src/lib/llm-stats";
 
-async function generateStep10ReportText(messages: LlmChatMessage[], fallback: string): Promise<string> {
+async function generateStep10ReportText(
+  messages: LlmChatMessage[],
+  fallback: string,
+  telemetry: { sessionId?: string; activityId?: string; step?: number; label?: string }
+): Promise<string> {
   const firstRaw = await llmChatCompletionText({
     messages,
     temperature: 0.6,
     maxTokens: 1400,
     timeoutMs: 60_000,
     continueOnTruncation: true,
-    continuationMaxRounds: 4
+    continuationMaxRounds: 4,
+    telemetry
   });
   const first = normalizeFormalLlmText(firstRaw, { fallback });
   if (!hasFormalLlmQualityRisk(first)) return first;
@@ -34,7 +39,8 @@ async function generateStep10ReportText(messages: LlmChatMessage[], fallback: st
     maxTokens: 1600,
     timeoutMs: 75_000,
     continueOnTruncation: true,
-    continuationMaxRounds: 5
+    continuationMaxRounds: 5,
+    telemetry: { ...telemetry, label: `${telemetry.label ?? "step10_stream"}:retry` }
   });
   return normalizeFormalLlmText(retryRaw, { fallback });
 }
@@ -77,6 +83,7 @@ export async function POST(request: NextRequest) {
 
       const startedAt = Date.now();
       let errored = false;
+      let usedFallback = false;
       try {
         if (existing) {
           // Idempotent: client retried after report already saved.
@@ -91,9 +98,22 @@ export async function POST(request: NextRequest) {
         if (!isLlmConfigured()) {
           send({ type: "chunk", text: fallback });
           collected.push(fallback);
+          usedFallback = true;
+          void recordLearningEvent({
+            sessionId: session.id,
+            activityId: session.activityId,
+            step: 10,
+            kind: "fallback",
+            fallbackUsed: true
+          }).catch(() => undefined);
         } else {
           try {
-            const normalized = await generateStep10ReportText(messages, fallback);
+            const normalized = await generateStep10ReportText(messages, fallback, {
+              sessionId: session.id,
+              activityId: session.activityId,
+              step: 10,
+              label: "step10_stream"
+            });
             collected.push(normalized);
             const chunkSize = 120;
             for (let i = 0; i < normalized.length; i += chunkSize) {
@@ -103,6 +123,14 @@ export async function POST(request: NextRequest) {
             if (collected.length === 0) {
               collected.push(fallback);
               send({ type: "chunk", text: fallback });
+              usedFallback = true;
+              void recordLearningEvent({
+                sessionId: session.id,
+                activityId: session.activityId,
+                step: 10,
+                kind: "fallback",
+                fallbackUsed: true
+              }).catch(() => undefined);
             }
           }
         }
@@ -110,6 +138,14 @@ export async function POST(request: NextRequest) {
         const report = normalizeFormalLlmText(collected.join(""), { fallback });
         recordStep10Report(session, user.username, report);
         await saveSession(session);
+        void recordLearningEvent({
+          sessionId: session.id,
+          activityId: session.activityId,
+          step: 10,
+          kind: "step10_report",
+          latencyMs: Date.now() - startedAt,
+          fallbackUsed: usedFallback
+        }).catch(() => undefined);
         send({ type: "done", session });
       } catch (err) {
         errored = true;

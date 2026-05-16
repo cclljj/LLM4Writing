@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/src/lib/auth-server";
-import { listSessions } from "@/src/lib/store";
+import { listSessionsByParticipant } from "@/src/lib/store";
 
 export async function GET(request: NextRequest) {
   const user = await getCurrentUser();
@@ -9,11 +9,11 @@ export async function GET(request: NextRequest) {
   }
 
   const activityId = request.nextUrl.searchParams.get("activityId") ?? "";
-  const sessions = await listSessions();
+  const sessions = await listSessionsByParticipant(user.username, {
+    activityId: activityId.trim() || undefined
+  });
 
   const history = sessions
-    .filter((session) => session.participants.includes(user.username))
-    .filter((session) => (activityId ? session.activityId === activityId : true))
     .map((session) => ({
       sessionId: session.id,
       activityId: session.activityId,

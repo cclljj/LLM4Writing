@@ -170,6 +170,50 @@ test("#323: admin diagnostics route uses short TTL cache", async () => {
   assert.ok(src.includes("buildDiagnosticsPayload"), "diagnostics payload building should be separated from request/cache handling");
 });
 
+test("#329: store defines persisted event tables and participant index", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { resolve, dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const thisDir = dirname(fileURLToPath(import.meta.url));
+
+  const src = readFileSync(resolve(thisDir, "../src/lib/store.ts"), "utf8");
+  assert.ok(src.includes("llm4writing_llm_events"), "store.ts must create llm4writing_llm_events");
+  assert.ok(src.includes("llm4writing_learning_events"), "store.ts must create llm4writing_learning_events");
+  assert.ok(src.includes("llm4writing_session_participants"), "store.ts must create llm4writing_session_participants");
+  assert.ok(src.includes("recordLlmEvent"), "store.ts must export recordLlmEvent");
+  assert.ok(src.includes("recordLearningEvent"), "store.ts must export recordLearningEvent");
+  assert.ok(src.includes("listSessionsByParticipant"), "store.ts must export participant-scoped session query");
+});
+
+test("#329: student APIs use participant-scoped DB query path", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { resolve, dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const thisDir = dirname(fileURLToPath(import.meta.url));
+
+  const overview = readFileSync(resolve(thisDir, "../app/api/student/overview/route.ts"), "utf8");
+  const history = readFileSync(resolve(thisDir, "../app/api/student/history/route.ts"), "utf8");
+  const courseHistory = readFileSync(resolve(thisDir, "../app/api/student/course-history/[activityId]/route.ts"), "utf8");
+
+  for (const src of [overview, history, courseHistory]) {
+    assert.ok(src.includes("listSessionsByParticipant"), "route must use participant-scoped store query");
+  }
+  assert.ok(!history.includes("listSessions }"), "history route should not import listSessions");
+});
+
+test("#329: diagnostics route reads persisted event tables", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { resolve, dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const thisDir = dirname(fileURLToPath(import.meta.url));
+
+  const src = readFileSync(resolve(thisDir, "../app/api/admin/diagnostics/route.ts"), "utf8");
+  assert.ok(src.includes("listLlmEventsSince"), "diagnostics route should read llm event rows");
+  assert.ok(src.includes("listLearningEventsSince"), "diagnostics route should read learning event rows");
+  assert.ok(src.includes("computeFallbackRateFromLearningEvents"), "diagnostics should support persisted fallback metrics");
+  assert.ok(src.includes("computeTrendSeriesFromLearningEvents"), "diagnostics should support persisted trend metrics");
+});
+
 test("#324: student Step8 draft hydration guards unsaved local edits", async () => {
   const { readFileSync } = await import("node:fs");
   const { resolve, dirname } = await import("node:path");

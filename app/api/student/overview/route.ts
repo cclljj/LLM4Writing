@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/src/lib/auth-server";
 import { getAllActivities, hydrateDomainState } from "@/src/lib/activity-store";
-import { listSessions } from "@/src/lib/store";
+import { listSessionsByParticipant } from "@/src/lib/store";
 import { getUserStore } from "@/src/lib/user-store";
 
 export async function GET() {
@@ -41,10 +41,7 @@ export async function GET() {
   const activeCourses = classCourses.filter((activity) => activity.courseStatus === "in_progress");
   const pausedCourses = classCourses.filter((activity) => activity.courseStatus === "paused");
 
-  const sessions = await listSessions();
-  const ownSessions = sessions
-    .filter((session) => session.workflow === "spec10")
-    .filter((session) => session.participants.includes(user.username))
+  const ownSessions = (await listSessionsByParticipant(user.username, { workflow: "spec10" }))
     .filter((session) => Boolean(session.activityId));
 
   const byActivity = new Map<string, { lastAt: string; lastStep: number; lastSessionId: string; count: number }>();

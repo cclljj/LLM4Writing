@@ -1,6 +1,6 @@
 import "server-only";
 import { isTruncatedFinishReason, pickAssistantTextResult } from "@/src/lib/llm-openai-response";
-import { classifyLlmError, recordLlmCall } from "@/src/lib/llm-observability";
+import { classifyLlmError, recordLlmCall, withLlmEventContext, type LlmEventContext } from "@/src/lib/llm-observability";
 
 export type LlmChatMessage = {
   role: "system" | "user" | "assistant";
@@ -38,7 +38,9 @@ export async function llmChatCompletionText(input: {
   timeoutMs?: number;
   continueOnTruncation?: boolean;
   continuationMaxRounds?: number;
+  telemetry?: LlmEventContext;
 }): Promise<string> {
+  return withLlmEventContext(input.telemetry ?? {}, async () => {
   const startedAt = Date.now();
   const cfg = getLlmConfig();
   if (!cfg) {
@@ -126,6 +128,7 @@ export async function llmChatCompletionText(input: {
   } finally {
     clearTimeout(timeout);
   }
+  });
 }
 
 /**
@@ -142,6 +145,7 @@ export async function* llmChatCompletionStream(input: {
   temperature?: number;
   maxTokens?: number;
   timeoutMs?: number;
+  telemetry?: LlmEventContext;
 }): AsyncGenerator<string, void, unknown> {
   const startedAt = Date.now();
   const cfg = getLlmConfig();

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
-import { saveSession } from "@/src/lib/store";
+import { recordLearningEvent, saveSession } from "@/src/lib/store";
 import {
   isLlmConfigured,
   llmChatCompletionText,
@@ -81,7 +81,15 @@ export async function POST(request: NextRequest) {
 
   const validationError = validateStudentAnswer(session, user.username, 3, studentText);
   if (validationError) {
-    recordRejectedAnswerSignal(session, user.username, "step-3", nowIso());
+    const rejectedAt = nowIso();
+    recordRejectedAnswerSignal(session, user.username, "step-3", rejectedAt);
+    void recordLearningEvent({
+      sessionId: session.id,
+      activityId: session.activityId,
+      step: 3,
+      kind: "student_rejection",
+      createdAt: rejectedAt
+    }).catch(() => undefined);
     await saveSession(session).catch(() => undefined);
     return NextResponse.json({ error: validationError }, { status: 400 });
   }
@@ -112,11 +120,20 @@ export async function POST(request: NextRequest) {
 
       const startedAt = Date.now();
       let errored = false;
+      let usedFallback = false;
       const collected: string[] = [];
       try {
         if (!isLlmConfigured()) {
           collected.push(FALLBACK_STEP3);
           send({ type: "chunk", text: FALLBACK_STEP3 });
+          usedFallback = true;
+          void recordLearningEvent({
+            sessionId: session.id,
+            activityId: session.activityId,
+            step: 3,
+            kind: "fallback",
+            fallbackUsed: true
+          }).catch(() => undefined);
         } else {
           const messages = buildStep3Messages(
             session.promptConfig?.systemPrompt,
@@ -133,7 +150,8 @@ export async function POST(request: NextRequest) {
               maxTokens: 800,
               timeoutMs: 60_000,
               continueOnTruncation: true,
-              continuationMaxRounds: 4
+              continuationMaxRounds: 4,
+              telemetry: { sessionId: session.id, activityId: session.activityId, step: 3, label: "step3_stream" }
             });
             if (fullText.trim()) {
               const normalized = fullText.trim();
@@ -147,6 +165,14 @@ export async function POST(request: NextRequest) {
             if (collected.length === 0) {
               collected.push(FALLBACK_STEP3);
               send({ type: "chunk", text: FALLBACK_STEP3 });
+              usedFallback = true;
+              void recordLearningEvent({
+                sessionId: session.id,
+                activityId: session.activityId,
+                step: 3,
+                kind: "fallback",
+                fallbackUsed: true
+              }).catch(() => undefined);
             }
           }
         }
@@ -154,6 +180,14 @@ export async function POST(request: NextRequest) {
         const aiText = sanitizeStudentFacingText(collected.join(""));
         session.messages.push(makeMessage("ai", 3, aiText, user.username));
         await saveSession(session);
+        void recordLearningEvent({
+          sessionId: session.id,
+          activityId: session.activityId,
+          step: 3,
+          kind: "step3_response",
+          latencyMs: Date.now() - startedAt,
+          fallbackUsed: usedFallback
+        }).catch(() => undefined);
         send({ type: "done", session });
       } catch (err) {
         errored = true;

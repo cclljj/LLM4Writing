@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { recordArtifactUpdateSignal } from "@/src/lib/learning-diagnostics";
-import { saveSession } from "@/src/lib/store";
+import { recordLearningEvent, saveSession } from "@/src/lib/store";
 import {
   isLlmConfigured,
   llmChatCompletionText,
@@ -45,14 +45,18 @@ function buildStep7Messages(stepPrompt: string | undefined, essay: string): LlmC
 const FALLBACK_FEEDBACK =
   "AI 分析回饋：已收到你的文章。建議優先檢查主題句是否明確、段落是否對應論點、例證是否足夠具體，最後再強化結語收束。";
 
-async function generateStep7FeedbackText(messages: LlmChatMessage[]): Promise<string> {
+async function generateStep7FeedbackText(
+  messages: LlmChatMessage[],
+  telemetry: { sessionId?: string; activityId?: string; step?: number; label?: string }
+): Promise<string> {
   const firstRaw = await llmChatCompletionText({
     messages,
     temperature: 0.5,
     maxTokens: 1400,
     timeoutMs: 60_000,
     continueOnTruncation: true,
-    continuationMaxRounds: 4
+    continuationMaxRounds: 4,
+    telemetry
   });
   const first = normalizeFormalLlmText(firstRaw, { fallback: FALLBACK_FEEDBACK });
   if (!hasFormalLlmQualityRisk(first)) return first;
@@ -69,7 +73,8 @@ async function generateStep7FeedbackText(messages: LlmChatMessage[]): Promise<st
     maxTokens: 1600,
     timeoutMs: 75_000,
     continueOnTruncation: true,
-    continuationMaxRounds: 5
+    continuationMaxRounds: 5,
+    telemetry: { ...telemetry, label: `${telemetry.label ?? "step7_complete"}:retry` }
   });
   return normalizeFormalLlmText(retryRaw, { fallback: FALLBACK_FEEDBACK });
 }
@@ -106,15 +111,29 @@ export async function POST(request: NextRequest) {
 
       const startedAt = Date.now();
       let errored = false;
+      let usedFallback = false;
       const collected: string[] = [];
       try {
         if (!isLlmConfigured()) {
           send({ type: "chunk", text: FALLBACK_FEEDBACK });
           collected.push(FALLBACK_FEEDBACK);
+          usedFallback = true;
+          void recordLearningEvent({
+            sessionId: session.id,
+            activityId: session.activityId,
+            step: 7,
+            kind: "fallback",
+            fallbackUsed: true
+          }).catch(() => undefined);
         } else {
           const messages = buildStep7Messages(session.promptConfig?.stepPrompts?.["7"], finalDraft);
           try {
-            const normalized = await generateStep7FeedbackText(messages);
+            const normalized = await generateStep7FeedbackText(messages, {
+              sessionId: session.id,
+              activityId: session.activityId,
+              step: 7,
+              label: "step7_complete"
+            });
             collected.push(normalized);
             const chunkSize = 120;
             for (let i = 0; i < normalized.length; i += chunkSize) {
@@ -124,6 +143,14 @@ export async function POST(request: NextRequest) {
             if (collected.length === 0) {
               collected.push(FALLBACK_FEEDBACK);
               send({ type: "chunk", text: FALLBACK_FEEDBACK });
+              usedFallback = true;
+              void recordLearningEvent({
+                sessionId: session.id,
+                activityId: session.activityId,
+                step: 7,
+                kind: "fallback",
+                fallbackUsed: true
+              }).catch(() => undefined);
             }
           }
         }
@@ -134,6 +161,14 @@ export async function POST(request: NextRequest) {
         session.personalSteps = session.personalSteps ?? {};
         session.personalSteps[user.username] = 8;
         await saveSession(session);
+        void recordLearningEvent({
+          sessionId: session.id,
+          activityId: session.activityId,
+          step: 7,
+          kind: "step7_feedback",
+          latencyMs: Date.now() - startedAt,
+          fallbackUsed: usedFallback
+        }).catch(() => undefined);
         send({ type: "done", session });
       } catch (err) {
         errored = true;

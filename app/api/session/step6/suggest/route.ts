@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { recordArtifactUpdateSignal } from "@/src/lib/learning-diagnostics";
-import { saveSession } from "@/src/lib/store";
+import { recordLearningEvent, saveSession } from "@/src/lib/store";
 import {
   isLlmConfigured,
   llmChatCompletionText,
@@ -77,14 +77,18 @@ function pickBetterStep6Suggestion(a: string, b: string): string {
   return a.length >= b.length ? a : b;
 }
 
-async function generateStep6SuggestionText(messages: LlmChatMessage[]): Promise<string> {
+async function generateStep6SuggestionText(
+  messages: LlmChatMessage[],
+  telemetry: { sessionId?: string; activityId?: string; step?: number; label?: string }
+): Promise<string> {
   const firstRaw = await llmChatCompletionText({
     messages,
     temperature: 0.6,
     maxTokens: 1800,
     timeoutMs: 75_000,
     continueOnTruncation: true,
-    continuationMaxRounds: 6
+    continuationMaxRounds: 6,
+    telemetry
   });
   const firstNormalized = normalizeStep6SuggestionText(firstRaw);
   if (!hasStep6SuggestionQualityRisk(firstNormalized)) return firstNormalized;
@@ -102,7 +106,8 @@ async function generateStep6SuggestionText(messages: LlmChatMessage[]): Promise<
     maxTokens: 2200,
     timeoutMs: 90_000,
     continueOnTruncation: true,
-    continuationMaxRounds: 7
+    continuationMaxRounds: 7,
+    telemetry: { ...telemetry, label: `${telemetry.label ?? "step6_suggest"}:retry` }
   });
   const retryNormalized = normalizeStep6SuggestionText(retryRaw);
   return pickBetterStep6Suggestion(firstNormalized, retryNormalized);
@@ -142,11 +147,20 @@ export async function POST(request: NextRequest) {
 
       const startedAt = Date.now();
       let errored = false;
+      let usedFallback = false;
       const collected: string[] = [];
       try {
         if (!isLlmConfigured()) {
           send({ type: "chunk", text: FALLBACK_SUGGESTION });
           collected.push(FALLBACK_SUGGESTION);
+          usedFallback = true;
+          void recordLearningEvent({
+            sessionId: session.id,
+            activityId: session.activityId,
+            step: 6,
+            kind: "fallback",
+            fallbackUsed: true
+          }).catch(() => undefined);
         } else {
           const messages = buildSuggestMessages(
             session.promptConfig?.stepPrompts?.["6"],
@@ -155,7 +169,12 @@ export async function POST(request: NextRequest) {
             crossStepContext
           );
           try {
-            const normalized = await generateStep6SuggestionText(messages);
+            const normalized = await generateStep6SuggestionText(messages, {
+              sessionId: session.id,
+              activityId: session.activityId,
+              step: 6,
+              label: "step6_suggest"
+            });
             collected.push(normalized);
             const chunkSize = 120;
             for (let i = 0; i < normalized.length; i += chunkSize) {
@@ -165,6 +184,14 @@ export async function POST(request: NextRequest) {
             if (collected.length === 0) {
               collected.push(FALLBACK_SUGGESTION);
               send({ type: "chunk", text: FALLBACK_SUGGESTION });
+              usedFallback = true;
+              void recordLearningEvent({
+                sessionId: session.id,
+                activityId: session.activityId,
+                step: 6,
+                kind: "fallback",
+                fallbackUsed: true
+              }).catch(() => undefined);
             }
           }
         }
@@ -183,6 +210,14 @@ export async function POST(request: NextRequest) {
         session.messages.push(makeMessage("ai", 6, logText, user.username));
 
         await saveSession(session);
+        void recordLearningEvent({
+          sessionId: session.id,
+          activityId: session.activityId,
+          step: 6,
+          kind: "step6_suggest",
+          latencyMs: Date.now() - startedAt,
+          fallbackUsed: usedFallback
+        }).catch(() => undefined);
         send({ type: "done", session });
       } catch (err) {
         errored = true;
