@@ -83,15 +83,16 @@ test("#221: store.ts CREATE TABLE includes current_step column in ALTER", async 
   assert.ok(src.includes("ADD COLUMN IF NOT EXISTS"), "store.ts must use ADD COLUMN IF NOT EXISTS for safe migration");
 });
 
-test("#221: saveSession writes current_step in UPSERT", async () => {
+test("#221: saveSession writes session summary columns in transactional update path", async () => {
   const { readFileSync } = await import("node:fs");
   const { resolve, dirname } = await import("node:path");
   const { fileURLToPath } = await import("node:url");
   const thisDir = dirname(fileURLToPath(import.meta.url));
 
   const src = readFileSync(resolve(thisDir, "../src/lib/store.ts"), "utf8");
-  // UPSERT should set current_step = EXCLUDED.current_step or similar
-  assert.ok(src.includes("current_step = EXCLUDED.current_step"), "saveSession must sync current_step on UPSERT");
+  assert.ok(src.includes("client.begin"), "saveSession should use transaction boundary");
+  assert.ok(src.includes("FOR UPDATE"), "saveSession should lock row for concurrent writes");
+  assert.ok(src.includes("current_step = ${summary.currentStep}"), "saveSession must sync current_step in update path");
 });
 
 // ---------------------------------------------------------------------------
@@ -135,8 +136,8 @@ test("#323: store.ts persists session summary columns for monitor queries", asyn
     assert.ok(src.includes(column), `store.ts must define and write ${column}`);
   }
   assert.ok(src.includes("idx_llm4writing_sessions_workflow_activity_updated"), "store.ts must index workflow/activity monitor scans");
-  assert.ok(src.includes("workflow = EXCLUDED.workflow"), "saveSession must sync workflow summary on UPSERT");
-  assert.ok(src.includes("activity_id = EXCLUDED.activity_id"), "saveSession must sync activity_id summary on UPSERT");
+  assert.ok(src.includes("workflow = ${summary.workflow}"), "saveSession must sync workflow summary in update path");
+  assert.ok(src.includes("activity_id = ${summary.activityId}"), "saveSession must sync activity_id summary in update path");
 });
 
 test("#323: teacher monitor uses activity-scoped DB pagination path", async () => {
@@ -379,4 +380,24 @@ test("#327: open class creation avoids id collision after deletions", async () =
     "upsertOpenClass should use max-sequence-based id generation"
   );
   assert.ok(!storeSrc.includes("openClasses.length + 1"), "open class id generation should not reuse length+1");
+});
+
+test("#328: store.ts defines split session tables and version conflict handling", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { resolve, dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const thisDir = dirname(fileURLToPath(import.meta.url));
+
+  const storeSrc = readFileSync(resolve(thisDir, "../src/lib/store.ts"), "utf8");
+  for (const marker of [
+    "llm4writing_session_messages",
+    "llm4writing_session_artifacts",
+    "llm4writing_session_reports",
+    "llm4writing_session_events"
+  ]) {
+    assert.ok(storeSrc.includes(marker), `store.ts should manage split table ${marker}`);
+  }
+  assert.ok(storeSrc.includes("ADD COLUMN IF NOT EXISTS version"), "store.ts should add version column");
+  assert.ok(storeSrc.includes("SessionVersionConflictError"), "store.ts should expose version conflict handling");
+  assert.ok(storeSrc.includes("mergeSessionStates"), "store.ts should merge stale writes on conflict retry");
 });

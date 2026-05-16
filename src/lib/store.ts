@@ -1,9 +1,10 @@
 import { cache } from "react";
-import postgres, { Sql } from "postgres";
-import { SessionState } from "@/src/lib/types";
+import postgres, { Sql, TransactionSql } from "postgres";
+import { ChatMessage, SessionState, Step12RoundLog } from "@/src/lib/types";
 import { getDatabaseUrl, getPostgresClientOptions, isDatabaseEnabled } from "@/src/lib/db-config";
 
 type MemoryStore = Map<string, SessionState>;
+type SessionCorePayload = Omit<SessionState, "messages" | "outlines" | "step3SubmittedOutlines" | "draftStep6" | "draftStep8" | "reports" | "step12RoundLogs">;
 type SessionSummaryColumns = {
   workflow: string | null;
   activityId: string | null;
@@ -17,6 +18,16 @@ type SessionSummaryColumns = {
 const KEY = "__llm4writing_sessions__";
 // Side-map tracking updatedAt for memory mode (ephemeral, not persisted)
 const memoryUpdatedAt = new Map<string, string>();
+const memoryVersion = new Map<string, number>();
+const STORE_VERSION_FIELD = "__storeVersion";
+const STORE_UPDATED_AT_FIELD = "__storeUpdatedAt";
+
+export class SessionVersionConflictError extends Error {
+  constructor(message = "session_version_conflict") {
+    super(message);
+    this.name = "SessionVersionConflictError";
+  }
+}
 
 function getMemoryStore(): MemoryStore {
   const globalScope = globalThis as unknown as Record<string, MemoryStore | undefined>;
@@ -55,6 +66,66 @@ function normalizeSessionPayload(payload: unknown): SessionState | undefined {
   return undefined;
 }
 
+function attachSessionStoreMeta(session: SessionState, version: number, updatedAt: string): SessionState {
+  Object.defineProperty(session, STORE_VERSION_FIELD, {
+    value: version,
+    writable: true,
+    configurable: true,
+    enumerable: false
+  });
+  Object.defineProperty(session, STORE_UPDATED_AT_FIELD, {
+    value: updatedAt,
+    writable: true,
+    configurable: true,
+    enumerable: false
+  });
+  return session;
+}
+
+function readSessionStoreVersion(session: SessionState): number | undefined {
+  const value = (session as SessionState & Record<string, unknown>)[STORE_VERSION_FIELD];
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function normalizeStep12RoundLogs(input: unknown): Step12RoundLog[] {
+  if (!Array.isArray(input)) return [];
+  return input
+    .filter((item): item is Step12RoundLog => Boolean(item && typeof item === "object"))
+    .map((item) => ({ ...item }));
+}
+
+function createEmptyReports() {
+  return { step5: {}, step7: {}, step10: {} } as SessionState["reports"];
+}
+
+function buildSessionCorePayload(session: SessionState): SessionCorePayload {
+  const { messages: _messages, outlines: _outlines, step3SubmittedOutlines: _step3SubmittedOutlines, draftStep6: _draftStep6, draftStep8: _draftStep8, reports: _reports, step12RoundLogs: _step12RoundLogs, ...rest } = session;
+  return {
+    ...rest
+  };
+}
+
+function mergeSessionParts(core: SessionCorePayload, parts: {
+  messages: ChatMessage[];
+  outlines: Record<string, string>;
+  step3SubmittedOutlines: Record<string, string>;
+  draftStep6: Record<string, string>;
+  draftStep8: Record<string, string>;
+  reports: SessionState["reports"];
+  step12RoundLogs: Step12RoundLog[];
+}): SessionState {
+  return {
+    ...core,
+    messages: parts.messages,
+    outlines: parts.outlines,
+    step3SubmittedOutlines: parts.step3SubmittedOutlines,
+    draftStep6: parts.draftStep6,
+    draftStep8: parts.draftStep8,
+    reports: parts.reports,
+    step12RoundLogs: parts.step12RoundLogs
+  };
+}
+
 function buildSessionSummaryColumns(session: SessionState): SessionSummaryColumns {
   const lastMessage = session.messages.at(-1);
   return {
@@ -65,6 +136,109 @@ function buildSessionSummaryColumns(session: SessionState): SessionSummaryColumn
     messageCount: session.messages.length,
     lastMessageAt: lastMessage?.at ?? session.createdAt ?? null,
     participantCount: session.participants.length
+  };
+}
+
+function uniqueByMessageId(messages: ChatMessage[]): ChatMessage[] {
+  const map = new Map<string, ChatMessage>();
+  for (const message of messages) {
+    if (!message?.id) continue;
+    if (!map.has(message.id)) {
+      map.set(message.id, message);
+    }
+  }
+  return Array.from(map.values()).sort((a, b) => a.at.localeCompare(b.at));
+}
+
+function mergeStringRecord(base: Record<string, string> | undefined, incoming: Record<string, string> | undefined): Record<string, string> {
+  return { ...(base ?? {}), ...(incoming ?? {}) };
+}
+
+function mergeStringArrayRecord(base: Record<string, string[]> | undefined, incoming: Record<string, string[]> | undefined): Record<string, string[]> {
+  const merged: Record<string, string[]> = {};
+  const keys = new Set<string>([...Object.keys(base ?? {}), ...Object.keys(incoming ?? {})]);
+  for (const key of keys) {
+    const values = [...(base?.[key] ?? []), ...(incoming?.[key] ?? [])];
+    merged[key] = Array.from(new Set(values));
+  }
+  return merged;
+}
+
+function mergeNumberRecord(base: Record<string, number> | undefined, incoming: Record<string, number> | undefined): Record<string, number> {
+  const merged: Record<string, number> = {};
+  const keys = new Set<string>([...Object.keys(base ?? {}), ...Object.keys(incoming ?? {})]);
+  for (const key of keys) {
+    merged[key] = Math.max(base?.[key] ?? Number.NEGATIVE_INFINITY, incoming?.[key] ?? Number.NEGATIVE_INFINITY);
+    if (!Number.isFinite(merged[key])) merged[key] = 0;
+  }
+  return merged;
+}
+
+function mergeIsoRecord(base: Record<string, string> | undefined, incoming: Record<string, string> | undefined): Record<string, string> {
+  const merged: Record<string, string> = {};
+  const keys = new Set<string>([...Object.keys(base ?? {}), ...Object.keys(incoming ?? {})]);
+  for (const key of keys) {
+    const left = base?.[key];
+    const right = incoming?.[key];
+    if (!left) merged[key] = right ?? "";
+    else if (!right) merged[key] = left;
+    else merged[key] = left >= right ? left : right;
+    if (!merged[key]) delete merged[key];
+  }
+  return merged;
+}
+
+function mergeStep12RoundLogs(base: Step12RoundLog[] | undefined, incoming: Step12RoundLog[] | undefined): Step12RoundLog[] {
+  const all = [...(base ?? []), ...(incoming ?? [])];
+  const seen = new Set<string>();
+  const merged: Step12RoundLog[] = [];
+  for (const item of all.sort((a, b) => a.at.localeCompare(b.at))) {
+    const key = `${item.at}|${item.currentStep}|${item.currentSubStep}|${item.nextSubStep}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(item);
+  }
+  if (merged.length > 60) return merged.slice(merged.length - 60);
+  return merged;
+}
+
+function mergeReports(base: SessionState["reports"], incoming: SessionState["reports"]): SessionState["reports"] {
+  return {
+    step5: mergeStringRecord(base.step5, incoming.step5),
+    step7: mergeStringRecord(base.step7, incoming.step7),
+    step10: mergeStringRecord(base.step10, incoming.step10)
+  };
+}
+
+function mergeSessionStates(latest: SessionState, incoming: SessionState): SessionState {
+  return {
+    ...latest,
+    ...incoming,
+    currentStep: Math.max(latest.currentStep, incoming.currentStep),
+    participants: Array.from(new Set([...(latest.participants ?? []), ...(incoming.participants ?? [])])),
+    personalSteps: { ...(latest.personalSteps ?? {}), ...(incoming.personalSteps ?? {}) },
+    joinedUsers: Array.from(new Set([...(latest.joinedUsers ?? []), ...(incoming.joinedUsers ?? [])])),
+    onlineUsersLastSeen: { ...(latest.onlineUsersLastSeen ?? {}), ...(incoming.onlineUsersLastSeen ?? {}) },
+    messages: uniqueByMessageId([...(latest.messages ?? []), ...(incoming.messages ?? [])]),
+    groupGate: mergeStringArrayRecord(latest.groupGate, incoming.groupGate),
+    reflectionIndex: { ...(latest.reflectionIndex ?? {}), ...(incoming.reflectionIndex ?? {}) },
+    promptConfig: incoming.promptConfig ?? latest.promptConfig,
+    stepState: { ...(latest.stepState ?? {}), ...(incoming.stepState ?? {}) },
+    outlines: mergeStringRecord(latest.outlines, incoming.outlines),
+    step3SubmittedOutlines: mergeStringRecord(latest.step3SubmittedOutlines ?? {}, incoming.step3SubmittedOutlines ?? {}),
+    draftStep6: mergeStringRecord(latest.draftStep6, incoming.draftStep6),
+    draftStep8: mergeStringRecord(latest.draftStep8, incoming.draftStep8),
+    reports: mergeReports(latest.reports ?? createEmptyReports(), incoming.reports ?? createEmptyReports()),
+    qualitySignals: {
+      rejectedAnswerCounts: mergeNumberRecord(latest.qualitySignals?.rejectedAnswerCounts, incoming.qualitySignals?.rejectedAnswerCounts),
+      rejectedAnswerLastAt: mergeIsoRecord(latest.qualitySignals?.rejectedAnswerLastAt, incoming.qualitySignals?.rejectedAnswerLastAt)
+    },
+    artifactSignals: {
+      outlineUpdatedAt: mergeIsoRecord(latest.artifactSignals?.outlineUpdatedAt, incoming.artifactSignals?.outlineUpdatedAt),
+      draftStep6UpdatedAt: mergeIsoRecord(latest.artifactSignals?.draftStep6UpdatedAt, incoming.artifactSignals?.draftStep6UpdatedAt),
+      draftStep8UpdatedAt: mergeIsoRecord(latest.artifactSignals?.draftStep8UpdatedAt, incoming.artifactSignals?.draftStep8UpdatedAt)
+    },
+    step12RoundLogs: mergeStep12RoundLogs(latest.step12RoundLogs, incoming.step12RoundLogs)
   };
 }
 
@@ -80,6 +254,7 @@ async function ensureSessionTable(): Promise<void> {
         CREATE TABLE IF NOT EXISTS llm4writing_sessions (
           id TEXT PRIMARY KEY,
           payload JSONB NOT NULL,
+          version BIGINT NOT NULL DEFAULT 1,
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )
@@ -89,6 +264,10 @@ async function ensureSessionTable(): Promise<void> {
       await sql`
         ALTER TABLE llm4writing_sessions
         ADD COLUMN IF NOT EXISTS current_step INTEGER
+      `;
+      await sql`
+        ALTER TABLE llm4writing_sessions
+        ADD COLUMN IF NOT EXISTS version BIGINT NOT NULL DEFAULT 1
       `;
       await sql`
         ALTER TABLE llm4writing_sessions
@@ -106,6 +285,58 @@ async function ensureSessionTable(): Promise<void> {
       await sql`
         CREATE INDEX IF NOT EXISTS idx_llm4writing_sessions_workflow_activity_updated
         ON llm4writing_sessions (workflow, activity_id, updated_at DESC)
+      `;
+      await sql`
+        CREATE TABLE IF NOT EXISTS llm4writing_session_messages (
+          session_id TEXT NOT NULL REFERENCES llm4writing_sessions(id) ON DELETE CASCADE,
+          message_id TEXT NOT NULL,
+          idx INTEGER NOT NULL,
+          role TEXT NOT NULL,
+          user_id TEXT,
+          step INTEGER NOT NULL,
+          text TEXT NOT NULL,
+          at TEXT NOT NULL,
+          PRIMARY KEY (session_id, message_id)
+        )
+      `;
+      await sql`
+        CREATE INDEX IF NOT EXISTS idx_llm4writing_session_messages_session_idx
+        ON llm4writing_session_messages (session_id, idx)
+      `;
+      await sql`
+        CREATE TABLE IF NOT EXISTS llm4writing_session_artifacts (
+          session_id TEXT NOT NULL REFERENCES llm4writing_sessions(id) ON DELETE CASCADE,
+          user_id TEXT NOT NULL,
+          outline TEXT NOT NULL DEFAULT '',
+          step3_submitted_outline TEXT NOT NULL DEFAULT '',
+          draft_step6 TEXT NOT NULL DEFAULT '',
+          draft_step8 TEXT NOT NULL DEFAULT '',
+          PRIMARY KEY (session_id, user_id)
+        )
+      `;
+      await sql`
+        CREATE TABLE IF NOT EXISTS llm4writing_session_reports (
+          session_id TEXT NOT NULL REFERENCES llm4writing_sessions(id) ON DELETE CASCADE,
+          user_id TEXT NOT NULL,
+          step5_report TEXT NOT NULL DEFAULT '',
+          step7_report TEXT NOT NULL DEFAULT '',
+          step10_report TEXT NOT NULL DEFAULT '',
+          PRIMARY KEY (session_id, user_id)
+        )
+      `;
+      await sql`
+        CREATE TABLE IF NOT EXISTS llm4writing_session_events (
+          session_id TEXT NOT NULL REFERENCES llm4writing_sessions(id) ON DELETE CASCADE,
+          event_type TEXT NOT NULL,
+          event_key TEXT NOT NULL,
+          payload JSONB NOT NULL,
+          at TEXT NOT NULL,
+          PRIMARY KEY (session_id, event_type, event_key)
+        )
+      `;
+      await sql`
+        CREATE INDEX IF NOT EXISTS idx_llm4writing_session_events_session_type_at
+        ON llm4writing_session_events (session_id, event_type, at)
       `;
       await sql`
         UPDATE llm4writing_sessions
@@ -138,59 +369,325 @@ async function ensureSessionTable(): Promise<void> {
   await initPromise;
 }
 
+type MessageRow = {
+  session_id: string;
+  message_id: string;
+  idx: number;
+  role: string;
+  user_id: string | null;
+  step: number;
+  text: string;
+  at: string;
+};
+
+type ArtifactRow = {
+  session_id: string;
+  user_id: string;
+  outline: string;
+  step3_submitted_outline: string;
+  draft_step6: string;
+  draft_step8: string;
+};
+
+type ReportRow = {
+  session_id: string;
+  user_id: string;
+  step5_report: string;
+  step7_report: string;
+  step10_report: string;
+};
+
+type EventRow = {
+  session_id: string;
+  event_type: string;
+  payload: unknown;
+  at: string;
+};
+
+type SessionPartsById = Record<string, {
+  messages: ChatMessage[];
+  outlines: Record<string, string>;
+  step3SubmittedOutlines: Record<string, string>;
+  draftStep6: Record<string, string>;
+  draftStep8: Record<string, string>;
+  reports: SessionState["reports"];
+  step12RoundLogs: Step12RoundLog[];
+}>;
+
+function defaultSessionParts(): SessionPartsById[string] {
+  return {
+    messages: [],
+    outlines: {},
+    step3SubmittedOutlines: {},
+    draftStep6: {},
+    draftStep8: {},
+    reports: createEmptyReports(),
+    step12RoundLogs: []
+  };
+}
+
+async function replaceSessionSplitRows(sql: Sql | TransactionSql, session: SessionState): Promise<void> {
+  await sql`DELETE FROM llm4writing_session_messages WHERE session_id = ${session.id}`;
+  if (session.messages.length > 0) {
+    const rows = session.messages.map((message, idx) => ({
+      session_id: session.id,
+      message_id: message.id,
+      idx,
+      role: message.role,
+      user_id: message.userId ?? null,
+      step: message.step,
+      text: message.text,
+      at: message.at
+    }));
+    await sql`INSERT INTO llm4writing_session_messages ${sql(rows)}`;
+  }
+
+  await sql`DELETE FROM llm4writing_session_artifacts WHERE session_id = ${session.id}`;
+  const artifactUsers = new Set<string>([
+    ...Object.keys(session.outlines ?? {}),
+    ...Object.keys(session.step3SubmittedOutlines ?? {}),
+    ...Object.keys(session.draftStep6 ?? {}),
+    ...Object.keys(session.draftStep8 ?? {})
+  ]);
+  if (artifactUsers.size > 0) {
+    const rows = Array.from(artifactUsers).map((userId) => ({
+      session_id: session.id,
+      user_id: userId,
+      outline: session.outlines?.[userId] ?? "",
+      step3_submitted_outline: session.step3SubmittedOutlines?.[userId] ?? "",
+      draft_step6: session.draftStep6?.[userId] ?? "",
+      draft_step8: session.draftStep8?.[userId] ?? ""
+    }));
+    await sql`INSERT INTO llm4writing_session_artifacts ${sql(rows)}`;
+  }
+
+  await sql`DELETE FROM llm4writing_session_reports WHERE session_id = ${session.id}`;
+  const reportUsers = new Set<string>([
+    ...Object.keys(session.reports?.step5 ?? {}),
+    ...Object.keys(session.reports?.step7 ?? {}),
+    ...Object.keys(session.reports?.step10 ?? {})
+  ]);
+  if (reportUsers.size > 0) {
+    const rows = Array.from(reportUsers).map((userId) => ({
+      session_id: session.id,
+      user_id: userId,
+      step5_report: session.reports?.step5?.[userId] ?? "",
+      step7_report: session.reports?.step7?.[userId] ?? "",
+      step10_report: session.reports?.step10?.[userId] ?? ""
+    }));
+    await sql`INSERT INTO llm4writing_session_reports ${sql(rows)}`;
+  }
+
+  await sql`DELETE FROM llm4writing_session_events WHERE session_id = ${session.id} AND event_type = 'step12_round_log'`;
+  const logs = normalizeStep12RoundLogs(session.step12RoundLogs);
+  if (logs.length > 0) {
+    const rows = logs.map((log, idx) => ({
+      session_id: session.id,
+      event_type: "step12_round_log",
+      event_key: `${idx}:${log.at}`,
+      payload: JSON.stringify(log),
+      at: log.at
+    }));
+    await sql`INSERT INTO llm4writing_session_events ${sql(rows)}`;
+  }
+}
+
+function mergeLegacyPayloadParts(session: SessionState, parts: SessionPartsById[string]): SessionPartsById[string] {
+  return {
+    messages: parts.messages.length > 0 ? parts.messages : (session.messages ?? []),
+    outlines: Object.keys(parts.outlines).length > 0 ? parts.outlines : (session.outlines ?? {}),
+    step3SubmittedOutlines: Object.keys(parts.step3SubmittedOutlines).length > 0
+      ? parts.step3SubmittedOutlines
+      : (session.step3SubmittedOutlines ?? {}),
+    draftStep6: Object.keys(parts.draftStep6).length > 0 ? parts.draftStep6 : (session.draftStep6 ?? {}),
+    draftStep8: Object.keys(parts.draftStep8).length > 0 ? parts.draftStep8 : (session.draftStep8 ?? {}),
+    reports:
+      Object.keys(parts.reports.step5).length > 0 ||
+      Object.keys(parts.reports.step7).length > 0 ||
+      Object.keys(parts.reports.step10).length > 0
+        ? parts.reports
+        : (session.reports ?? createEmptyReports()),
+    step12RoundLogs: parts.step12RoundLogs.length > 0 ? parts.step12RoundLogs : normalizeStep12RoundLogs(session.step12RoundLogs)
+  };
+}
+
+async function fetchSessionPartsByIds(sql: Sql | TransactionSql, sessionIds: string[]): Promise<SessionPartsById> {
+  const result: SessionPartsById = {};
+  if (sessionIds.length === 0) return result;
+  for (const id of sessionIds) result[id] = defaultSessionParts();
+
+  const messageRows = await sql<MessageRow[]>`
+    SELECT session_id, message_id, idx, role, user_id, step, text, at
+    FROM llm4writing_session_messages
+    WHERE session_id IN ${sql(sessionIds)}
+    ORDER BY session_id ASC, idx ASC
+  `;
+  for (const row of messageRows) {
+    result[row.session_id] ??= defaultSessionParts();
+    result[row.session_id].messages.push({
+      id: row.message_id,
+      role: (row.role as ChatMessage["role"]) ?? "system",
+      userId: row.user_id ?? undefined,
+      text: row.text,
+      at: row.at,
+      step: row.step
+    });
+  }
+
+  const artifactRows = await sql<ArtifactRow[]>`
+    SELECT session_id, user_id, outline, step3_submitted_outline, draft_step6, draft_step8
+    FROM llm4writing_session_artifacts
+    WHERE session_id IN ${sql(sessionIds)}
+  `;
+  for (const row of artifactRows) {
+    result[row.session_id] ??= defaultSessionParts();
+    if (row.outline) result[row.session_id].outlines[row.user_id] = row.outline;
+    if (row.step3_submitted_outline) result[row.session_id].step3SubmittedOutlines[row.user_id] = row.step3_submitted_outline;
+    if (row.draft_step6) result[row.session_id].draftStep6[row.user_id] = row.draft_step6;
+    if (row.draft_step8) result[row.session_id].draftStep8[row.user_id] = row.draft_step8;
+  }
+
+  const reportRows = await sql<ReportRow[]>`
+    SELECT session_id, user_id, step5_report, step7_report, step10_report
+    FROM llm4writing_session_reports
+    WHERE session_id IN ${sql(sessionIds)}
+  `;
+  for (const row of reportRows) {
+    result[row.session_id] ??= defaultSessionParts();
+    if (row.step5_report) result[row.session_id].reports.step5[row.user_id] = row.step5_report;
+    if (row.step7_report) result[row.session_id].reports.step7[row.user_id] = row.step7_report;
+    if (row.step10_report) result[row.session_id].reports.step10[row.user_id] = row.step10_report;
+  }
+
+  const eventRows = await sql<EventRow[]>`
+    SELECT session_id, event_type, payload, at
+    FROM llm4writing_session_events
+    WHERE session_id IN ${sql(sessionIds)} AND event_type = 'step12_round_log'
+    ORDER BY session_id ASC, at ASC
+  `;
+  for (const row of eventRows) {
+    result[row.session_id] ??= defaultSessionParts();
+    if (row.event_type !== "step12_round_log") continue;
+    const payload = typeof row.payload === "string" ? JSON.parse(row.payload) : row.payload;
+    if (payload && typeof payload === "object") {
+      result[row.session_id].step12RoundLogs.push(payload as Step12RoundLog);
+    }
+  }
+
+  return result;
+}
+
 export async function saveSession(session: SessionState): Promise<SessionState> {
   if (!isDatabaseEnabled()) {
     getMemoryStore().set(session.id, session);
-    memoryUpdatedAt.set(session.id, new Date().toISOString());
-    return session;
+    const nextVersion = (memoryVersion.get(session.id) ?? 0) + 1;
+    const nextUpdatedAt = new Date().toISOString();
+    memoryVersion.set(session.id, nextVersion);
+    memoryUpdatedAt.set(session.id, nextUpdatedAt);
+    return attachSessionStoreMeta(session, nextVersion, nextUpdatedAt);
   }
 
   await ensureSessionTable();
-  const sql = getSqlClient();
-  const summary = buildSessionSummaryColumns(session);
+  const client = getSqlClient();
+  let expectedVersion = readSessionStoreVersion(session);
+  let candidate = session;
 
-  await sql`
-    INSERT INTO llm4writing_sessions (
-      id,
-      payload,
-      current_step,
-      workflow,
-      activity_id,
-      group_id,
-      message_count,
-      last_message_at,
-      participant_count
-    )
-    VALUES (
-      ${session.id},
-      ${JSON.stringify(session)}::jsonb,
-      ${summary.currentStep},
-      ${summary.workflow},
-      ${summary.activityId},
-      ${summary.groupId},
-      ${summary.messageCount},
-      ${summary.lastMessageAt},
-      ${summary.participantCount}
-    )
-    ON CONFLICT (id)
-    DO UPDATE SET
-      payload = EXCLUDED.payload,
-      current_step = EXCLUDED.current_step,
-      workflow = EXCLUDED.workflow,
-      activity_id = EXCLUDED.activity_id,
-      group_id = EXCLUDED.group_id,
-      message_count = EXCLUDED.message_count,
-      last_message_at = EXCLUDED.last_message_at,
-      participant_count = EXCLUDED.participant_count,
-      updated_at = NOW()
-  `;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const result = await client.begin(async (sql) => {
+        const existingRows = await sql<{ version: number; payload: unknown; updated_at: Date }[]>`
+          SELECT version, payload, updated_at
+          FROM llm4writing_sessions
+          WHERE id = ${candidate.id}
+          FOR UPDATE
+        `;
+        const existing = existingRows[0];
+        if (!existing) {
+          const summary = buildSessionSummaryColumns(candidate);
+          const corePayload = buildSessionCorePayload(candidate);
+          const insertedRows = await sql<{ version: number; updated_at: Date }[]>`
+            INSERT INTO llm4writing_sessions (
+              id,
+              payload,
+              version,
+              current_step,
+              workflow,
+              activity_id,
+              group_id,
+              message_count,
+              last_message_at,
+              participant_count
+            )
+            VALUES (
+              ${candidate.id},
+              ${JSON.stringify(corePayload)}::jsonb,
+              1,
+              ${summary.currentStep},
+              ${summary.workflow},
+              ${summary.activityId},
+              ${summary.groupId},
+              ${summary.messageCount},
+              ${summary.lastMessageAt},
+              ${summary.participantCount}
+            )
+            RETURNING version, updated_at
+          `;
+          await replaceSessionSplitRows(sql, candidate);
+          return {
+            version: insertedRows[0]?.version ?? 1,
+            updatedAt: insertedRows[0]?.updated_at?.toISOString() ?? new Date().toISOString()
+          };
+        }
 
-  return session;
+        if (typeof expectedVersion === "number" && existing.version !== expectedVersion) {
+          throw new SessionVersionConflictError();
+        }
+
+        const summary = buildSessionSummaryColumns(candidate);
+        const corePayload = buildSessionCorePayload(candidate);
+        const updatedRows = await sql<{ version: number; updated_at: Date }[]>`
+          UPDATE llm4writing_sessions
+          SET
+            payload = ${JSON.stringify(corePayload)}::jsonb,
+            current_step = ${summary.currentStep},
+            workflow = ${summary.workflow},
+            activity_id = ${summary.activityId},
+            group_id = ${summary.groupId},
+            message_count = ${summary.messageCount},
+            last_message_at = ${summary.lastMessageAt},
+            participant_count = ${summary.participantCount},
+            version = version + 1,
+            updated_at = NOW()
+          WHERE id = ${candidate.id}
+          RETURNING version, updated_at
+        `;
+        await replaceSessionSplitRows(sql, candidate);
+        return {
+          version: updatedRows[0]?.version ?? existing.version + 1,
+          updatedAt: updatedRows[0]?.updated_at?.toISOString() ?? new Date().toISOString()
+        };
+      });
+      return attachSessionStoreMeta(candidate, result.version, result.updatedAt);
+    } catch (error) {
+      if (!(error instanceof SessionVersionConflictError) || attempt > 0) {
+        throw error;
+      }
+      const latest = await getSession(candidate.id);
+      if (!latest) {
+        throw error;
+      }
+      candidate = mergeSessionStates(latest, candidate);
+      expectedVersion = readSessionStoreVersion(latest);
+    }
+  }
+
+  return candidate;
 }
 
 export type SessionWithMeta = {
   session: SessionState;
   updatedAt: string;
+  version: number;
 };
 
 /** Like getSession but also returns the DB-level updatedAt for ETag computation.
@@ -200,23 +697,30 @@ export const getSessionWithMeta = cache(async (sessionId: string): Promise<Sessi
   if (!isDatabaseEnabled()) {
     const session = getMemoryStore().get(sessionId);
     if (!session) return undefined;
-    return { session, updatedAt: memoryUpdatedAt.get(sessionId) ?? session.createdAt };
+    const version = memoryVersion.get(sessionId) ?? 1;
+    const updatedAt = memoryUpdatedAt.get(sessionId) ?? session.createdAt;
+    return { session: attachSessionStoreMeta(session, version, updatedAt), updatedAt, version };
   }
 
   await ensureSessionTable();
   const sql = getSqlClient();
 
-  const rows = await sql<{ payload: unknown; updated_at: Date }[]>`
-    SELECT payload, updated_at
+  const rows = await sql<{ payload: unknown; updated_at: Date; version: number }[]>`
+    SELECT payload, updated_at, version
     FROM llm4writing_sessions
     WHERE id = ${sessionId}
     LIMIT 1
   `;
 
   if (!rows[0]) return undefined;
-  const session = normalizeSessionPayload(rows[0].payload);
-  if (!session) return undefined;
-  return { session, updatedAt: rows[0].updated_at.toISOString() };
+  const core = normalizeSessionPayload(rows[0].payload);
+  if (!core) return undefined;
+  const partsMap = await fetchSessionPartsByIds(sql, [sessionId]);
+  const mergedParts = mergeLegacyPayloadParts(core, partsMap[sessionId] ?? defaultSessionParts());
+  const session = mergeSessionParts(buildSessionCorePayload(core) as SessionCorePayload, mergedParts);
+  const updatedAt = rows[0].updated_at.toISOString();
+  const version = rows[0].version ?? 1;
+  return { session: attachSessionStoreMeta(session, version, updatedAt), updatedAt, version };
 });
 
 export async function getSession(sessionId: string): Promise<SessionState | undefined> {
@@ -229,32 +733,55 @@ export async function listSessions(opts?: { limit?: number; offset?: number }): 
 
   if (!isDatabaseEnabled()) {
     const all = Array.from(getMemoryStore().values());
-    return limit !== undefined ? all.slice(offset, offset + limit) : all.slice(offset);
+    const sliced = limit !== undefined ? all.slice(offset, offset + limit) : all.slice(offset);
+    return sliced.map((session) =>
+      attachSessionStoreMeta(
+        session,
+        memoryVersion.get(session.id) ?? 1,
+        memoryUpdatedAt.get(session.id) ?? session.createdAt
+      )
+    );
   }
 
   await ensureSessionTable();
   const sql = getSqlClient();
 
   if (limit !== undefined) {
-    const rows = await sql<{ payload: unknown }[]>`
-      SELECT payload
+    const rows = await sql<{ id: string; payload: unknown; updated_at: Date; version: number }[]>`
+      SELECT id, payload, updated_at, version
       FROM llm4writing_sessions
       ORDER BY updated_at DESC
       LIMIT ${limit} OFFSET ${offset}
     `;
+    const sessionIds = rows.map((row) => row.id);
+    const partsById = await fetchSessionPartsByIds(sql, sessionIds);
     return rows
-      .map((row) => normalizeSessionPayload(row.payload))
+      .map((row) => {
+        const core = normalizeSessionPayload(row.payload);
+        if (!core) return undefined;
+        const mergedParts = mergeLegacyPayloadParts(core, partsById[row.id] ?? defaultSessionParts());
+        const rebuilt = mergeSessionParts(buildSessionCorePayload(core) as SessionCorePayload, mergedParts);
+        return attachSessionStoreMeta(rebuilt, row.version ?? 1, row.updated_at.toISOString());
+      })
       .filter((item): item is SessionState => Boolean(item));
   }
 
-  const rows = await sql<{ payload: unknown }[]>`
-    SELECT payload
+  const rows = await sql<{ id: string; payload: unknown; updated_at: Date; version: number }[]>`
+    SELECT id, payload, updated_at, version
     FROM llm4writing_sessions
     ORDER BY updated_at DESC
     OFFSET ${offset}
   `;
+  const sessionIds = rows.map((row) => row.id);
+  const partsById = await fetchSessionPartsByIds(sql, sessionIds);
   return rows
-    .map((row) => normalizeSessionPayload(row.payload))
+    .map((row) => {
+      const core = normalizeSessionPayload(row.payload);
+      if (!core) return undefined;
+      const mergedParts = mergeLegacyPayloadParts(core, partsById[row.id] ?? defaultSessionParts());
+      const rebuilt = mergeSessionParts(buildSessionCorePayload(core) as SessionCorePayload, mergedParts);
+      return attachSessionStoreMeta(rebuilt, row.version ?? 1, row.updated_at.toISOString());
+    })
     .filter((item): item is SessionState => Boolean(item));
 }
 
@@ -278,13 +805,22 @@ export async function listMonitorSessionsByActivityId(
         const bLast = memoryUpdatedAt.get(b.id) ?? b.messages.at(-1)?.at ?? b.createdAt;
         return bLast.localeCompare(aLast);
       });
-    return { sessions: scoped.slice(offset, offset + limit), total: scoped.length };
+    return {
+      sessions: scoped.slice(offset, offset + limit).map((session) =>
+        attachSessionStoreMeta(
+          session,
+          memoryVersion.get(session.id) ?? 1,
+          memoryUpdatedAt.get(session.id) ?? session.createdAt
+        )
+      ),
+      total: scoped.length
+    };
   }
 
   await ensureSessionTable();
   const sql = getSqlClient();
-  const rows = await sql<{ payload: unknown }[]>`
-    SELECT payload
+  const rows = await sql<{ id: string; payload: unknown; updated_at: Date; version: number }[]>`
+    SELECT id, payload, updated_at, version
     FROM llm4writing_sessions
     WHERE (workflow = 'spec10' OR (workflow IS NULL AND payload->>'workflow' = 'spec10'))
       AND (activity_id = ${trimmedActivityId} OR (activity_id IS NULL AND payload->>'activityId' = ${trimmedActivityId}))
@@ -298,9 +834,17 @@ export async function listMonitorSessionsByActivityId(
       AND (activity_id = ${trimmedActivityId} OR (activity_id IS NULL AND payload->>'activityId' = ${trimmedActivityId}))
   `;
 
+  const sessionIds = rows.map((row) => row.id);
+  const partsById = await fetchSessionPartsByIds(sql, sessionIds);
   return {
     sessions: rows
-      .map((row) => normalizeSessionPayload(row.payload))
+      .map((row) => {
+        const core = normalizeSessionPayload(row.payload);
+        if (!core) return undefined;
+        const mergedParts = mergeLegacyPayloadParts(core, partsById[row.id] ?? defaultSessionParts());
+        const rebuilt = mergeSessionParts(buildSessionCorePayload(core) as SessionCorePayload, mergedParts);
+        return attachSessionStoreMeta(rebuilt, row.version ?? 1, row.updated_at.toISOString());
+      })
       .filter((item): item is SessionState => Boolean(item)),
     total: parseInt(countRows[0]?.count ?? "0", 10)
   };
