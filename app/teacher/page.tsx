@@ -6,6 +6,7 @@ import AdminPromptDiagnostics from "./_components/AdminPromptDiagnostics";
 import StudentAccountTab from "./_components/StudentAccountTab";
 import LearningMonitorTab from "./_components/LearningMonitorTab";
 import CourseManagementTab from "./_components/CourseManagementTab";
+import AdminAuditLogPanel from "./_components/AdminAuditLogPanel";
 import OutlineSvg from "@/app/_components/OutlineSvg";
 import { formatUserError } from "@/src/lib/error-messages";
 import { ActivityRow, EssayRow, MonitorSession, OpenClassRow, UserRow } from "./_components/types";
@@ -28,7 +29,7 @@ export default function TeacherPage() {
   const [loginName, setLoginName] = useState("");
   const [loginSchool, setLoginSchool] = useState("");
   const [loginRole, setLoginRole] = useState<"teacher" | "admin">("teacher");
-  const [tab, setTab] = useState<"system" | "learning" | "course" | "diagnostics">("system");
+  const [tab, setTab] = useState<"system" | "learning" | "course" | "diagnostics" | "audit">("system");
   const [users, setUsers] = useState<UserRow[]>([]);
   const [essays, setEssays] = useState<EssayRow[]>([]);
   const [openClasses, setOpenClasses] = useState<OpenClassRow[]>([]);
@@ -169,6 +170,11 @@ export default function TeacherPage() {
             <button type="button" className={tab === "diagnostics" ? "" : "secondary"} onClick={() => setTab("diagnostics")}>診斷面板</button>
           </div>
         ) : null}
+        {isAdminConsole ? (
+          <div style={{ width: 180 }}>
+            <button type="button" className={tab === "audit" ? "" : "secondary"} onClick={() => setTab("audit")}>操作紀錄</button>
+          </div>
+        ) : null}
       </div>
 
       {tab === "system" ? (
@@ -217,6 +223,10 @@ export default function TeacherPage() {
 
       {tab === "diagnostics" && isAdminConsole ? (
         <AdminPromptDiagnostics />
+      ) : null}
+
+      {tab === "audit" && isAdminConsole ? (
+        <AdminAuditLogPanel />
       ) : null}
     </main>
   );

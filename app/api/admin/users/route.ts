@@ -12,6 +12,7 @@ import {
   resetUserPasswordStore,
   updateUserStore
 } from "@/src/lib/user-store";
+import { recordAuditLog } from "@/src/lib/audit-log-store";
 
 type ManageRole = "student" | "teacher" | "admin";
 
@@ -72,6 +73,14 @@ export async function POST(request: NextRequest) {
     if (!ok) {
       return NextResponse.json({ error: "user_not_found" }, { status: 404 });
     }
+    void recordAuditLog({
+      actorUsername: requester.username,
+      actorRole: requester.role,
+      action: "user_reset_password",
+      targetType: "user",
+      targetId: body.username,
+      targetLabel: body.username
+    }).catch(() => undefined);
     return NextResponse.json({ ok: true });
   }
 

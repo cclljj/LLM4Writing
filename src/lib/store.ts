@@ -88,6 +88,44 @@ function normalizeSessionPayload(payload: unknown): SessionState | undefined {
   return undefined;
 }
 
+function asRecord(input: unknown): Record<string, unknown> {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return {};
+  return input as Record<string, unknown>;
+}
+
+function asStringArray(input: unknown): string[] {
+  if (!Array.isArray(input)) return [];
+  return input.filter((value): value is string => typeof value === "string" && value.trim().length > 0);
+}
+
+function asNumberRecord(input: unknown): Record<string, number> {
+  const source = asRecord(input);
+  const result: Record<string, number> = {};
+  for (const [key, value] of Object.entries(source)) {
+    const num = typeof value === "number" ? value : Number(value);
+    if (Number.isFinite(num)) result[key] = num;
+  }
+  return result;
+}
+
+function asStringRecord(input: unknown): Record<string, string> {
+  const source = asRecord(input);
+  const result: Record<string, string> = {};
+  for (const [key, value] of Object.entries(source)) {
+    if (typeof value === "string" && value.trim().length > 0) result[key] = value;
+  }
+  return result;
+}
+
+function asStringArrayRecord(input: unknown): Record<string, string[]> {
+  const source = asRecord(input);
+  const result: Record<string, string[]> = {};
+  for (const [key, value] of Object.entries(source)) {
+    result[key] = asStringArray(value);
+  }
+  return result;
+}
+
 function attachSessionStoreMeta(session: SessionState, version: number, updatedAt: string): SessionState {
   Object.defineProperty(session, STORE_VERSION_FIELD, {
     value: version,
@@ -511,6 +549,86 @@ export type PersistedEventRow = {
   fallback_used: boolean;
   error_category: string | null;
   created_at: Date;
+};
+
+export type MonitorSessionSummary = {
+  sessionId: string;
+  activityId?: string;
+  activityTitle?: string;
+  groupId?: string;
+  groupName?: string;
+  participants: string[];
+  joinedUsers: string[];
+  currentStep: number;
+  personalSteps: Record<string, number>;
+  groupGate: Record<string, string[]>;
+  stepState: {
+    step1Substep: number;
+    step2Substep: number;
+    step1Substep3Question?: number;
+    step1Substep4Question?: number;
+    step2Substep1Question?: number;
+  };
+  reflectionIndex: Record<string, number>;
+  qualitySignals: {
+    rejectedAnswerCounts?: Record<string, number>;
+    rejectedAnswerLastAt?: Record<string, string>;
+  };
+  artifactSignals: {
+    outlineUpdatedAt?: Record<string, string>;
+    draftStep6UpdatedAt?: Record<string, string>;
+    draftStep8UpdatedAt?: Record<string, string>;
+  };
+  messageCount: number;
+  lastMessageAt: string | null;
+  studentMessageStats: Record<string, { count: number; lastMessageAt: string | null }>;
+  artifactDiagnostics: {
+    step3OutlineChars: Record<string, number>;
+    draftStep6Chars: Record<string, number>;
+  };
+  stepReadyHints: {
+    step1Ready: boolean;
+    step2Ready: boolean;
+  };
+};
+
+type MonitorSummaryBaseRow = {
+  id: string;
+  activity_id: string | null;
+  activity_title: string | null;
+  group_id: string | null;
+  group_name: string | null;
+  current_step: number | null;
+  message_count: number | null;
+  last_message_at: Date | null;
+  participants_json: unknown;
+  joined_users_json: unknown;
+  personal_steps_json: unknown;
+  group_gate_json: unknown;
+  step_state_json: unknown;
+  reflection_index_json: unknown;
+  quality_signals_json: unknown;
+  artifact_signals_json: unknown;
+};
+
+type MonitorStudentMessageAggRow = {
+  session_id: string;
+  user_id: string;
+  cnt: string;
+  last_at: string | null;
+};
+
+type MonitorArtifactAggRow = {
+  session_id: string;
+  user_id: string;
+  outline_len: number;
+  draft6_len: number;
+};
+
+type MonitorStepReadyAggRow = {
+  session_id: string;
+  step1_ready: boolean;
+  step2_ready: boolean;
 };
 
 type SessionPartsById = Record<string, {
@@ -971,6 +1089,205 @@ export async function listMonitorSessionsByActivityId(
         return attachSessionStoreMeta(rebuilt, row.version ?? 1, row.updated_at.toISOString());
       })
       .filter((item): item is SessionState => Boolean(item)),
+    total: parseInt(countRows[0]?.count ?? "0", 10)
+  };
+}
+
+export async function listMonitorSessionSummariesByActivityId(
+  activityId: string,
+  opts?: { limit?: number; offset?: number }
+): Promise<{ sessions: MonitorSessionSummary[]; total: number }> {
+  const trimmedActivityId = activityId.trim();
+  const limit = typeof opts?.limit === "number" && opts.limit > 0 ? opts.limit : 50;
+  const offset = typeof opts?.offset === "number" && opts.offset >= 0 ? opts.offset : 0;
+
+  if (!trimmedActivityId) {
+    return { sessions: [], total: 0 };
+  }
+
+  if (!isDatabaseEnabled()) {
+    const scoped = Array.from(getMemoryStore().values())
+      .filter((session) => session.workflow === "spec10" && session.activityId === trimmedActivityId)
+      .sort((a, b) => {
+        const aLast = memoryUpdatedAt.get(a.id) ?? a.messages.at(-1)?.at ?? a.createdAt;
+        const bLast = memoryUpdatedAt.get(b.id) ?? b.messages.at(-1)?.at ?? b.createdAt;
+        return bLast.localeCompare(aLast);
+      });
+    const sessions = scoped.slice(offset, offset + limit).map((session) => {
+      const studentMessageStats: Record<string, { count: number; lastMessageAt: string | null }> = {};
+      session.participants.forEach((participant) => {
+        const own = session.messages.filter((message) => message.role === "student" && message.userId === participant);
+        studentMessageStats[participant] = {
+          count: own.length,
+          lastMessageAt: own.at(-1)?.at ?? null
+        };
+      });
+      return {
+        sessionId: session.id,
+        activityId: session.activityId,
+        activityTitle: session.activityTitle,
+        groupId: session.groupId,
+        groupName: session.groupName,
+        participants: session.participants,
+        joinedUsers: session.joinedUsers ?? [],
+        currentStep: session.currentStep,
+        personalSteps: session.personalSteps ?? {},
+        groupGate: session.groupGate ?? {},
+        stepState: session.stepState ?? { step1Substep: 1, step2Substep: 1 },
+        reflectionIndex: session.reflectionIndex ?? {},
+        qualitySignals: session.qualitySignals ?? { rejectedAnswerCounts: {}, rejectedAnswerLastAt: {} },
+        artifactSignals: session.artifactSignals ?? { outlineUpdatedAt: {}, draftStep6UpdatedAt: {}, draftStep8UpdatedAt: {} },
+        messageCount: session.messages.length,
+        lastMessageAt: session.messages.at(-1)?.at ?? session.createdAt ?? null,
+        studentMessageStats,
+        artifactDiagnostics: {
+          step3OutlineChars: Object.fromEntries(
+            Object.entries(session.outlines ?? {}).map(([userId, outline]) => [userId, outline.length])
+          ),
+          draftStep6Chars: Object.fromEntries(
+            Object.entries(session.draftStep6 ?? {}).map(([userId, draft]) => [userId, draft.length])
+          )
+        },
+        stepReadyHints: {
+          step1Ready: session.messages.some(
+            (message) => message.step === 1 && message.role === "system" && message.text.includes("步驟 1 子步驟已完成，等待教師切換下一步")
+          ),
+          step2Ready: session.messages.some(
+            (message) => message.step === 2 && message.role === "system" && message.text.includes("步驟 2 子步驟已完成，等待教師切換下一步")
+          )
+        }
+      };
+    });
+    return { sessions, total: scoped.length };
+  }
+
+  await ensureSessionTable();
+  const sql = getSqlClient();
+  const rows = await sql<MonitorSummaryBaseRow[]>`
+    SELECT
+      id,
+      activity_id,
+      group_id,
+      current_step,
+      message_count,
+      last_message_at,
+      COALESCE(payload->>'activityTitle', payload->>'activityId') AS activity_title,
+      COALESCE(payload->>'groupName', payload->>'groupId') AS group_name,
+      COALESCE(payload->'participants', '[]'::jsonb) AS participants_json,
+      COALESCE(payload->'joinedUsers', '[]'::jsonb) AS joined_users_json,
+      COALESCE(payload->'personalSteps', '{}'::jsonb) AS personal_steps_json,
+      COALESCE(payload->'groupGate', '{}'::jsonb) AS group_gate_json,
+      COALESCE(payload->'stepState', '{}'::jsonb) AS step_state_json,
+      COALESCE(payload->'reflectionIndex', '{}'::jsonb) AS reflection_index_json,
+      COALESCE(payload->'qualitySignals', '{}'::jsonb) AS quality_signals_json,
+      COALESCE(payload->'artifactSignals', '{}'::jsonb) AS artifact_signals_json
+    FROM llm4writing_sessions
+    WHERE (workflow = 'spec10' OR (workflow IS NULL AND payload->>'workflow' = 'spec10'))
+      AND (activity_id = ${trimmedActivityId} OR (activity_id IS NULL AND payload->>'activityId' = ${trimmedActivityId}))
+    ORDER BY updated_at DESC
+    LIMIT ${limit} OFFSET ${offset}
+  `;
+  const countRows = await sql<{ count: string }[]>`
+    SELECT COUNT(*)::text AS count
+    FROM llm4writing_sessions
+    WHERE (workflow = 'spec10' OR (workflow IS NULL AND payload->>'workflow' = 'spec10'))
+      AND (activity_id = ${trimmedActivityId} OR (activity_id IS NULL AND payload->>'activityId' = ${trimmedActivityId}))
+  `;
+
+  const sessionIds = rows.map((row) => row.id);
+  const studentMessageStatsMap = new Map<string, Record<string, { count: number; lastMessageAt: string | null }>>();
+  const artifactDiagnosticsMap = new Map<string, { step3OutlineChars: Record<string, number>; draftStep6Chars: Record<string, number> }>();
+  const stepReadyHintsMap = new Map<string, { step1Ready: boolean; step2Ready: boolean }>();
+
+  if (sessionIds.length > 0) {
+    const messageAggRows = await sql<MonitorStudentMessageAggRow[]>`
+      SELECT session_id, user_id, COUNT(*)::text AS cnt, MAX(at) AS last_at
+      FROM llm4writing_session_messages
+      WHERE session_id IN ${sql(sessionIds)}
+        AND role = 'student'
+        AND user_id IS NOT NULL
+      GROUP BY session_id, user_id
+    `;
+    for (const row of messageAggRows) {
+      const bucket = studentMessageStatsMap.get(row.session_id) ?? {};
+      bucket[row.user_id] = {
+        count: parseInt(row.cnt, 10) || 0,
+        lastMessageAt: row.last_at ?? null
+      };
+      studentMessageStatsMap.set(row.session_id, bucket);
+    }
+
+    const artifactAggRows = await sql<MonitorArtifactAggRow[]>`
+      SELECT session_id, user_id, LENGTH(outline) AS outline_len, LENGTH(draft_step6) AS draft6_len
+      FROM llm4writing_session_artifacts
+      WHERE session_id IN ${sql(sessionIds)}
+    `;
+    for (const row of artifactAggRows) {
+      const bucket = artifactDiagnosticsMap.get(row.session_id) ?? { step3OutlineChars: {}, draftStep6Chars: {} };
+      bucket.step3OutlineChars[row.user_id] = Math.max(0, row.outline_len ?? 0);
+      bucket.draftStep6Chars[row.user_id] = Math.max(0, row.draft6_len ?? 0);
+      artifactDiagnosticsMap.set(row.session_id, bucket);
+    }
+
+    const readyAggRows = await sql<MonitorStepReadyAggRow[]>`
+      SELECT
+        session_id,
+        BOOL_OR(step = 1 AND role = 'system' AND text LIKE '%步驟 1 子步驟已完成，等待教師切換下一步%') AS step1_ready,
+        BOOL_OR(step = 2 AND role = 'system' AND text LIKE '%步驟 2 子步驟已完成，等待教師切換下一步%') AS step2_ready
+      FROM llm4writing_session_messages
+      WHERE session_id IN ${sql(sessionIds)}
+      GROUP BY session_id
+    `;
+    for (const row of readyAggRows) {
+      stepReadyHintsMap.set(row.session_id, {
+        step1Ready: Boolean(row.step1_ready),
+        step2Ready: Boolean(row.step2_ready)
+      });
+    }
+  }
+
+  const sessions: MonitorSessionSummary[] = rows.map((row) => {
+    const stepStateRaw = asRecord(row.step_state_json);
+    const stepState: MonitorSessionSummary["stepState"] = {
+      step1Substep: Math.max(1, Number(stepStateRaw.step1Substep ?? 1) || 1),
+      step2Substep: Math.max(1, Number(stepStateRaw.step2Substep ?? 1) || 1)
+    };
+    if (Number.isFinite(Number(stepStateRaw.step1Substep3Question))) stepState.step1Substep3Question = Number(stepStateRaw.step1Substep3Question);
+    if (Number.isFinite(Number(stepStateRaw.step1Substep4Question))) stepState.step1Substep4Question = Number(stepStateRaw.step1Substep4Question);
+    if (Number.isFinite(Number(stepStateRaw.step2Substep1Question))) stepState.step2Substep1Question = Number(stepStateRaw.step2Substep1Question);
+
+    return {
+      sessionId: row.id,
+      activityId: row.activity_id ?? undefined,
+      activityTitle: row.activity_title ?? undefined,
+      groupId: row.group_id ?? undefined,
+      groupName: row.group_name ?? undefined,
+      participants: asStringArray(row.participants_json),
+      joinedUsers: asStringArray(row.joined_users_json),
+      currentStep: row.current_step ?? 1,
+      personalSteps: asNumberRecord(row.personal_steps_json),
+      groupGate: asStringArrayRecord(row.group_gate_json),
+      stepState,
+      reflectionIndex: asNumberRecord(row.reflection_index_json),
+      qualitySignals: {
+        rejectedAnswerCounts: asNumberRecord(asRecord(row.quality_signals_json).rejectedAnswerCounts),
+        rejectedAnswerLastAt: asStringRecord(asRecord(row.quality_signals_json).rejectedAnswerLastAt)
+      },
+      artifactSignals: {
+        outlineUpdatedAt: asStringRecord(asRecord(row.artifact_signals_json).outlineUpdatedAt),
+        draftStep6UpdatedAt: asStringRecord(asRecord(row.artifact_signals_json).draftStep6UpdatedAt),
+        draftStep8UpdatedAt: asStringRecord(asRecord(row.artifact_signals_json).draftStep8UpdatedAt)
+      },
+      messageCount: row.message_count ?? 0,
+      lastMessageAt: row.last_message_at?.toISOString() ?? null,
+      studentMessageStats: studentMessageStatsMap.get(row.id) ?? {},
+      artifactDiagnostics: artifactDiagnosticsMap.get(row.id) ?? { step3OutlineChars: {}, draftStep6Chars: {} },
+      stepReadyHints: stepReadyHintsMap.get(row.id) ?? { step1Ready: false, step2Ready: false }
+    };
+  });
+
+  return {
+    sessions,
     total: parseInt(countRows[0]?.count ?? "0", 10)
   };
 }

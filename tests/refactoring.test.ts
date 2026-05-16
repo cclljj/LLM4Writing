@@ -149,7 +149,7 @@ test("#323: teacher monitor uses activity-scoped DB pagination path", async () =
   const routeSrc = readFileSync(resolve(thisDir, "../app/api/teacher/monitor/route.ts"), "utf8");
   const storeSrc = readFileSync(resolve(thisDir, "../src/lib/store.ts"), "utf8");
 
-  assert.ok(routeSrc.includes("listMonitorSessionsByActivityId"), "monitor route must call the activity-scoped store query");
+  assert.ok(routeSrc.includes("listMonitorSessionSummariesByActivityId"), "monitor route must call the activity-scoped summary store query");
   assert.ok(routeSrc.includes("requestedActivityId"), "monitor route must branch on activityId");
   assert.ok(storeSrc.includes("WHERE (workflow = 'spec10'"), "store query must filter workflow in SQL");
   assert.ok(storeSrc.includes("activity_id = ${trimmedActivityId}"), "store query must filter activity_id in SQL");
@@ -212,6 +212,42 @@ test("#329: diagnostics route reads persisted event tables", async () => {
   assert.ok(src.includes("listLearningEventsSince"), "diagnostics route should read learning event rows");
   assert.ok(src.includes("computeFallbackRateFromLearningEvents"), "diagnostics should support persisted fallback metrics");
   assert.ok(src.includes("computeTrendSeriesFromLearningEvents"), "diagnostics should support persisted trend metrics");
+});
+
+test("#330: monitor route uses summary-only DB path for activity list", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { resolve, dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const thisDir = dirname(fileURLToPath(import.meta.url));
+
+  const routeSrc = readFileSync(resolve(thisDir, "../app/api/teacher/monitor/route.ts"), "utf8");
+  const storeSrc = readFileSync(resolve(thisDir, "../src/lib/store.ts"), "utf8");
+  assert.ok(routeSrc.includes("listMonitorSessionSummariesByActivityId"), "monitor route should use summary query path");
+  assert.ok(storeSrc.includes("export async function listMonitorSessionSummariesByActivityId"), "store should expose monitor summary query");
+  assert.ok(storeSrc.includes("participants_json"), "summary query should select minimal JSON fields");
+});
+
+test("#330: audit logs are persisted and exposed to admin UI", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { resolve, dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const thisDir = dirname(fileURLToPath(import.meta.url));
+
+  const auditStore = readFileSync(resolve(thisDir, "../src/lib/audit-log-store.ts"), "utf8");
+  const auditRoute = readFileSync(resolve(thisDir, "../app/api/admin/audit-logs/route.ts"), "utf8");
+  const teacherPage = readFileSync(resolve(thisDir, "../app/teacher/page.tsx"), "utf8");
+  const usersRoute = readFileSync(resolve(thisDir, "../app/api/admin/users/route.ts"), "utf8");
+  const openclassesRoute = readFileSync(resolve(thisDir, "../app/api/admin/openclasses/route.ts"), "utf8");
+  const activitiesRoute = readFileSync(resolve(thisDir, "../app/api/admin/activities/route.ts"), "utf8");
+  const stepRoute = readFileSync(resolve(thisDir, "../app/api/teacher/step/route.ts"), "utf8");
+
+  assert.ok(auditStore.includes("llm4writing_audit_logs"), "audit log store should define durable table");
+  assert.ok(auditRoute.includes("listAuditLogs"), "admin audit API should query audit logs");
+  assert.ok(teacherPage.includes("操作紀錄"), "admin UI should expose audit log tab");
+  assert.ok(usersRoute.includes("user_reset_password"), "reset password action should be audited");
+  assert.ok(openclassesRoute.includes("openclass_create"), "create task action should be audited");
+  assert.ok(activitiesRoute.includes("activity_delete"), "delete course action should be audited");
+  assert.ok(stepRoute.includes("teacher_step_switch"), "switch step action should be audited");
 });
 
 test("#324: student Step8 draft hydration guards unsaved local edits", async () => {

@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/src/lib/auth-server";
 import { getAllActivities, hydrateDomainState } from "@/src/lib/activity-store";
-import { getSession, listMonitorSessionsByActivityId, listSessions } from "@/src/lib/store";
+import { getSession, listMonitorSessionSummariesByActivityId, listSessions } from "@/src/lib/store";
 import { getUsersVisibleToTeacherStore, listUsersStore } from "@/src/lib/user-store";
 import { getOnlineUsers } from "@/src/lib/session-presence";
 import { isSessionInActivityGroupScope } from "@/src/lib/monitor-session-scope";
 import { ChatMessage, SessionState } from "@/src/lib/types";
+import type { MonitorSessionSummary } from "@/src/lib/store";
 
 function normalizeText(text: string): string {
   return text.replace(/\r\n/g, "\n").trim();
@@ -111,6 +112,44 @@ async function buildMonitorSessionPayload(
   };
 }
 
+async function buildMonitorSessionSummaryPayload(
+  session: MonitorSessionSummary,
+  activity: { school?: string; classNumber?: string } | undefined
+) {
+  const onlineUsers = await getOnlineUsers(session.sessionId);
+  return {
+    sessionId: session.sessionId,
+    activityId: session.activityId,
+    activityTitle: session.activityTitle,
+    school: activity?.school ?? "",
+    classNumber: activity?.classNumber ?? "",
+    groupId: session.groupId,
+    groupName: session.groupName,
+    participants: session.participants,
+    joinedUsers: session.joinedUsers,
+    onlineUsers,
+    currentStep: session.currentStep,
+    personalSteps: session.personalSteps,
+    groupGate: session.groupGate,
+    stepState: session.stepState,
+    reflectionIndex: session.reflectionIndex,
+    qualitySignals: session.qualitySignals,
+    artifactDiagnostics: {
+      step3OutlineChars: session.artifactDiagnostics.step3OutlineChars,
+      step3OutlineUpdatedAt: session.artifactSignals.outlineUpdatedAt ?? {},
+      draftStep6Chars: session.artifactDiagnostics.draftStep6Chars,
+      draftStep6UpdatedAt: session.artifactSignals.draftStep6UpdatedAt ?? {}
+    },
+    stepReadyHints: session.stepReadyHints,
+    messages: [],
+    outlines: {},
+    step3SubmittedOutlines: {},
+    messageCount: session.messageCount,
+    lastMessageAt: session.lastMessageAt,
+    studentMessageStats: session.studentMessageStats
+  };
+}
+
 export async function GET(request: NextRequest) {
   const user = await getCurrentUser();
   if (!user || (user.role !== "teacher" && user.role !== "admin")) {
@@ -156,11 +195,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ sessions: [], total: 0, limit, offset });
     }
 
-    const { sessions, total } = await listMonitorSessionsByActivityId(requestedActivityId, { limit, offset });
+    const { sessions, total } = await listMonitorSessionSummariesByActivityId(requestedActivityId, { limit, offset });
     const scopedSessions = sessions.filter((s) => isSessionInActivityGroupScope(s, activity));
-    const visibleSessions = await Promise.all(
-      scopedSessions.map((s) => buildMonitorSessionPayload(s, activity, detail))
-    );
+    const visibleSessions = await Promise.all(scopedSessions.map((s) => buildMonitorSessionSummaryPayload(s, activity)));
     return NextResponse.json({ sessions: visibleSessions, total, limit, offset });
   }
 

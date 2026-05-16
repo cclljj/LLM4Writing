@@ -9,6 +9,7 @@ import {
 } from "@/src/lib/activity-store";
 import { getUsersVisibleToTeacherStore, listUsersStore } from "@/src/lib/user-store";
 import { deleteSessionsByActivityId, listSessions } from "@/src/lib/store";
+import { recordAuditLog } from "@/src/lib/audit-log-store";
 
 export async function GET() {
   const user = await getCurrentUser();
@@ -95,5 +96,16 @@ export async function DELETE(request: Request) {
   }
   await flushDomainState();
   const removedSessions = await deleteSessionsByActivityId(activityId);
+  void recordAuditLog({
+    actorUsername: user.username,
+    actorRole: user.role,
+    action: "activity_delete",
+    targetType: "activity",
+    targetId: activityId,
+    targetLabel: activityId,
+    details: {
+      removedSessions
+    }
+  }).catch(() => undefined);
   return NextResponse.json({ ok: true, removedSessions });
 }

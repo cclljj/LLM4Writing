@@ -8,6 +8,7 @@ import {
 } from "@/src/lib/activity-store";
 import { getUserStore, getUsersVisibleToTeacherStore, listUsersStore } from "@/src/lib/user-store";
 import { listSessions } from "@/src/lib/store";
+import { recordAuditLog } from "@/src/lib/audit-log-store";
 
 /**
  * Returns a Set of activityIds that already have at least one student message (#254).
@@ -142,6 +143,19 @@ export async function POST(request: NextRequest) {
   }
 
   await flushDomainState();
+
+  void recordAuditLog({
+    actorUsername: user.username,
+    actorRole: user.role,
+    action: "openclass_create",
+    targetType: "activity",
+    targetId: saved.saved.id,
+    targetLabel: `${saved.saved.school}/${saved.saved.classNumber}/${saved.saved.essayId}`,
+    details: {
+      durationMinutes: saved.saved.durationMinutes,
+      ownerTeacherUsername: saved.saved.ownerTeacherUsername ?? ""
+    }
+  }).catch(() => undefined);
 
   return NextResponse.json({ saved: saved.saved });
 }
