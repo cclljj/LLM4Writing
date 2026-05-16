@@ -90,6 +90,24 @@ test("step1/2 simple validation accepts earnest 3C-related answer and still bloc
   );
 });
 
+test("step1 substeps 1-1/1-2 accept concise requirement-fitting answers", () => {
+  const step11 = baseSession({
+    currentStep: 1,
+    stepState: { step1Substep: 1, step2Substep: 1, step1Substep3Question: 1, step1Substep4Question: 1, step2Substep1Question: 1 },
+    messages: [makeMessage({ role: "system", step: 1, text: "請問這篇文章是什麼文體？" })]
+  });
+  assert.equal(validateStudentAnswerSimple(step11, "s1", 1, "記敘文"), null);
+  assert.match(validateStudentAnswerSimple(step11, "s1", 1, "我覺得可以") ?? "", /回答文章文體/);
+
+  const step12 = baseSession({
+    currentStep: 1,
+    stepState: { step1Substep: 2, step2Substep: 1, step1Substep3Question: 1, step1Substep4Question: 1, step2Substep1Question: 1 },
+    messages: [makeMessage({ role: "system", step: 1, text: "請找出三個關鍵字。" })]
+  });
+  assert.equal(validateStudentAnswerSimple(step12, "s1", 1, "勇氣、責任、尊重"), null);
+  assert.match(validateStudentAnswerSimple(step12, "s1", 1, "勇氣、責任") ?? "", /至少 3 個關鍵字/);
+});
+
 test("LLM parser prefers structured JSON and still supports legacy marker parsing", () => {
   const structured = splitAiFeedbackAndQuestion('{"feedback":"大家都有提出想法。","nextQuestion":"請選一個最重要的理由說明。"}');
   assert.equal(structured.feedbackText, "大家都有提出想法。");

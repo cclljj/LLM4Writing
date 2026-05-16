@@ -130,6 +130,31 @@ const SIMPLE_HINT_MIN_LEN = 12;
 const SIMPLE_EXPLANATION_MARKERS = ["因為", "所以", "例如", "像是", "代表", "因此", "顯示", "說明", "比較", "影響"];
 const CJK_STOP_CHARS = new Set(["的", "了", "是", "在", "有", "和", "與", "及", "或", "你", "我", "他", "她", "它", "們", "請", "這", "那", "把", "就", "都", "很", "再", "更", "嗎", "呢", "吧", "啊"]);
 const SIMPLE_GENERIC_RELEVANCE_TERMS = ["題目", "重點", "關鍵", "想法", "觀點", "理由", "例子", "經驗", "情況", "情境", "條件", "標準", "定義", "範圍"];
+const GENRE_RESPONSE_MARKERS = /(文體|記敘文|敘事文|抒情文|議論文|論說文|說明文|散文|故事文|寫景文)/u;
+
+function isStep1Substep(session: SessionState, substep: 1 | 2): boolean {
+  return session.currentStep === 1 && (session.stepState?.step1Substep ?? 1) === substep;
+}
+
+function validateStep11Or12ByRequirement(session: SessionState, question: string, answer: string): string | null {
+  if (isStep1Substep(session, 1)) {
+    if (!GENRE_RESPONSE_MARKERS.test(answer)) {
+      return "這題重點是回答文章文體，請直接寫出你判斷的文體（例如：記敘文、議論文等）。";
+    }
+    return null;
+  }
+
+  if (isStep1Substep(session, 2)) {
+    const requiredCount = detectRequiredItemCount(question) ?? 3;
+    const providedCount = countAnswerItems(answer);
+    if (providedCount < requiredCount) {
+      return `這題需要至少 ${requiredCount} 個關鍵字，你目前提供了 ${providedCount} 個，請補齊後再送出。`;
+    }
+    return null;
+  }
+
+  return null;
+}
 
 function extractQuestionKeywordsForSimple(question: string): string[] {
   const latinOrDigit = (question.match(/[A-Za-z0-9]+/g) ?? [])
@@ -201,8 +226,21 @@ export function validateStudentAnswerSimple(session: SessionState, userId: strin
   if (!trimmed) {
     return "請先輸入你的回答，再送出。";
   }
-  if (trimmed.length < SIMPLE_RELEVANCE_MIN_LEN) {
-    return `你的回答目前偏短，請至少寫到 ${SIMPLE_RELEVANCE_MIN_LEN} 字，並補上一個清楚的理由、分類或例子。`;
+  const question = extractCurrentSystemQuestion(session, step, userId);
+  if (question) {
+    const normalizedQuestion = normalizeForCompare(question);
+    const normalizedAnswer = normalizeForCompare(trimmed);
+    if (normalizedAnswer && normalizedQuestion && normalizedAnswer === normalizedQuestion) {
+      return "你目前貼上的是題目本身，請用自己的話回答題目。";
+    }
+    if (
+      normalizedAnswer &&
+      normalizedQuestion &&
+      normalizedQuestion.includes(normalizedAnswer) &&
+      normalizedAnswer.length / Math.max(normalizedQuestion.length, 1) >= 0.7
+    ) {
+      return "你的內容和題目文字太接近，請用自己的想法重新回答。";
+    }
   }
   if (looksLikeRandomToken(trimmed)) {
     return "你的回答看起來像隨機字串，請依題目內容用完整文字作答。";
@@ -210,8 +248,22 @@ export function validateStudentAnswerSimple(session: SessionState, userId: strin
   if (isLowEffortAnswer(trimmed)) {
     return "看起來這次回覆比較像敷衍作答，請依題目要求認真嘗試回答。";
   }
-  const question = extractCurrentSystemQuestion(session, step, userId);
+  if (trimmed.length < SIMPLE_RELEVANCE_MIN_LEN) {
+    // Step1 1-1 / 1-2 often require concise responses; evaluate by requirement-fit first.
+    if (question) {
+      const requirementError = validateStep11Or12ByRequirement(session, question, trimmed);
+      if (requirementError !== null || isStep1Substep(session, 1) || isStep1Substep(session, 2)) {
+        return requirementError;
+      }
+    }
+    return `你的回答目前偏短，請至少寫到 ${SIMPLE_RELEVANCE_MIN_LEN} 字，並補上一個清楚的理由、分類或例子。`;
+  }
   if (!question) return null;
+  const requirementError = validateStep11Or12ByRequirement(session, question, trimmed);
+  if (requirementError) return requirementError;
+  if (isStep1Substep(session, 1) || isStep1Substep(session, 2)) {
+    return null;
+  }
   const hasSemanticStructure = hasGeneralSemanticAnswerStructure(trimmed);
   const hasQuestionRelation = hasSimpleRelevance(question, trimmed);
   const hasWeakGenericRelation = hasGenericWeakRelevance(trimmed);
