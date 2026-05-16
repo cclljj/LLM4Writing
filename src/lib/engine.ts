@@ -362,6 +362,8 @@ function buildStep12StepContext(session: SessionState, step: 1 | 2, userId: stri
 function isStep12FeedbackQualityRisk(text: string): boolean {
   const trimmed = text.trim();
   if (!trimmed) return true;
+  if (/^已收到大家的回覆[，、].*請繼續下一題[。！!]?$/.test(trimmed)) return true;
+  if (/^已收到.*回覆.*整理得很好.*下一題/.test(trimmed)) return true;
   if (/```|^\{+|\}+$/m.test(trimmed)) return true;
   if (/"feedback"|nextQuestion|\"question\"|json/i.test(trimmed)) return true;
   if (/[？?]/.test(trimmed)) return true;
@@ -374,10 +376,10 @@ function isStep12FeedbackQualityRisk(text: string): boolean {
   return hasFormalLlmQualityRisk(trimmed);
 }
 
-function sanitizeStep12Feedback(raw: string): string {
+function sanitizeStep12Feedback(raw: string, fallbackText: string): string {
   const parsed = parseStructuredStepAiResponse(raw);
   const feedback = parsed?.feedbackText ?? splitAiFeedbackAndQuestion(raw).feedbackText ?? raw;
-  const normalized = normalizeFormalLlmText(feedback, { fallback: "已收到大家的回覆，請繼續下一題。" });
+  const normalized = normalizeFormalLlmText(feedback, { fallback: fallbackText });
   return normalized
     .replace(/^```(?:json)?/i, "")
     .replace(/```$/i, "")
@@ -385,6 +387,37 @@ function sanitizeStep12Feedback(raw: string): string {
     .replace(/\s*\}$/, "")
     .replace(/^"+|"+$/g, "")
     .trim();
+}
+
+function buildStep12FallbackFeedback(session: SessionState, step: 1 | 2, substepKey: string): string {
+  const recentStudentTexts = session.messages
+    .filter((message) => message.step === step && message.role === "student")
+    .slice(-4)
+    .map((message) => message.text.trim())
+    .filter((text) => text.length > 0);
+  const latestStudentSnippet =
+    recentStudentTexts.length > 0
+      ? recentStudentTexts[recentStudentTexts.length - 1]!.slice(0, 60)
+      : "";
+
+  const substepFeedbackMap: Record<string, string> = {
+    "1-3-1": "你們已開始用例子界定題目關鍵詞，方向正確。下一輪請把例子對應到關鍵詞的判準說清楚，避免只描述情境。",
+    "1-3-2": "你們已嘗試釐清關鍵詞範圍，進展很好。下一輪請明確對照「哪些算、哪些不算」並各補一個短例，讓判準更一致。",
+    "1-3-3": "你們已提出初步判斷，已看到共識雛形。下一輪請補上判斷理由，說明你們為什麼把該情況歸類為算或不算。",
+    "1-4-1": "你們正在把前面的討論收斂成核心主張，方向正確。請把主張寫成一句完整句，避免出現多個並列觀點。",
+    "1-4-2": "你們已提出主張草稿。下一輪請再指出主張要解決的核心問題，讓立場與目的更清楚。",
+    "1-4-3": "你們已接近最終主張。請再精煉句子，保留一個最核心觀點，讓讀者一看就能掌握立場。",
+    "2-1-1": "你們已開始找可用例子，方向正確。下一輪請優先選擇最能支持主張、且細節清楚的例子。",
+    "2-1-2": "你們已提出候選例子。下一輪請補上選擇理由，說明這個例子如何直接支持你們的主張。",
+    "2-1-3": "你們已指出例子與主張的連結。下一輪請再把「最有力的那個細節」說清楚，讓論證更集中。",
+    "2-2": "你們已補充部分例子內容。下一輪請把時間、人物、事件與結果交代完整，並明確連回主張句。",
+    "2-3": "你們已從例子推進到原因分析，進展很好。下一輪請補上一段因果鏈，從事件到深層原因要有清楚推論。",
+    "2-4": "你們已完成原因整理。下一輪請再確認案例與立場的一致性，讓整體論證更完整。"
+  };
+
+  const base = substepFeedbackMap[substepKey] ?? "你們已完成本輪回覆。下一輪請把理由與例子的連結說得更具體，讓論證更完整。";
+  if (!latestStudentSnippet) return base;
+  return `${base} 你們剛才提到「${latestStudentSnippet}」，這是可延伸的重點，建議沿著這個重點補強論證。`;
 }
 
 function isStep12QuestionQualityRisk(text: string): boolean {
@@ -436,8 +469,8 @@ async function generateStep12Feedback(
   step: 1 | 2,
   userId: string
 ): Promise<{ feedbackText: string; source: "llm" | "fallback"; llmAttempts: number; usedFallback: boolean }> {
-  const fallback = "已收到大家的回覆，整理得很好，請繼續下一題。";
   const context = buildStep12StepContext(session, step, userId);
+  const fallback = buildStep12FallbackFeedback(session, step, context.currentSubstepKey);
   const stepPrompt = session.promptConfig.stepPrompts[String(step)] ?? "";
   const systemParts = [session.promptConfig.systemPrompt ?? "", stepPrompt, `目前子步驟：${context.currentSubstepKey}`]
     .filter(Boolean)
@@ -448,6 +481,8 @@ async function generateStep12Feedback(
       content:
         `${systemParts}\n\n` +
         '你現在只負責「回饋」，禁止提出下一題或任何問句。' +
+        '回饋必須包含：1) 先肯定本輪進展；2) 指出下一輪要補強的具體點。' +
+        '禁止輸出空泛句（例如「已收到大家的回覆，整理得很好，請繼續下一題」或同義句）。' +
         '請只輸出 JSON：{"feedback":"..."}，不要輸出其他文字。'
     },
     {
@@ -475,7 +510,7 @@ async function generateStep12Feedback(
         continuationMaxRounds: 2,
         telemetry: { sessionId: session.id, activityId: session.activityId, step, label: "step12_feedback" }
       });
-      const normalized = sanitizeStep12Feedback(raw);
+      const normalized = sanitizeStep12Feedback(raw, fallback);
       if (!isStep12FeedbackQualityRisk(normalized)) {
         return { feedbackText: normalized, source: "llm", llmAttempts, usedFallback: false };
       }
