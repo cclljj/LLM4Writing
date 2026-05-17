@@ -494,3 +494,16 @@ test("#328: store.ts defines split session tables and version conflict handling"
   assert.ok(storeSrc.includes("SessionVersionConflictError"), "store.ts should expose version conflict handling");
   assert.ok(storeSrc.includes("mergeSessionStates"), "store.ts should merge stale writes on conflict retry");
 });
+
+test("#333: step3 stream applies completeness quality gate and retry", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { resolve, dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const thisDir = dirname(fileURLToPath(import.meta.url));
+
+  const src = readFileSync(resolve(thisDir, "../app/api/session/step3/stream/route.ts"), "utf8");
+  assert.ok(src.includes("generateStep3ReplyText"), "step3 stream should use dedicated response generation helper");
+  assert.ok(src.includes("hasFormalLlmQualityRisk"), "step3 stream should include quality-risk check");
+  assert.ok(src.includes('label: `${telemetry.label ?? "step3_stream"}:retry`'), "step3 stream should emit retry telemetry label");
+  assert.ok(src.includes("你的上一則回覆可能不完整"), "step3 stream retry prompt should request complete output");
+});

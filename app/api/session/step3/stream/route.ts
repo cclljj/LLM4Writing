@@ -7,7 +7,7 @@ import {
   type LlmChatMessage
 } from "@/src/lib/llm-client";
 import { buildStudentCourseContext } from "@/src/lib/llm-context";
-import { sanitizeStudentFacingText } from "@/src/lib/llm-response";
+import { hasFormalLlmQualityRisk, normalizeFormalLlmText, sanitizeStudentFacingText } from "@/src/lib/llm-response";
 import { recordRejectedAnswerSignal } from "@/src/lib/learning-diagnostics";
 import { requireStudentInSession } from "@/src/lib/api-helpers";
 import { validateStudentAnswer } from "@/src/lib/answer-validation";
@@ -62,6 +62,42 @@ function buildStep3Messages(
 
 const FALLBACK_STEP3 =
   "AI 回覆：已收到你的想法。請先整理一個清楚主張，並列出 2 到 3 個支持重點，把它們放進結構樹節點。";
+
+async function generateStep3ReplyText(
+  messages: LlmChatMessage[],
+  fallback: string,
+  telemetry: { sessionId?: string; activityId?: string; step?: number; label?: string }
+): Promise<string> {
+  const firstRaw = await llmChatCompletionText({
+    messages,
+    temperature: 0.6,
+    maxTokens: 900,
+    timeoutMs: 60_000,
+    continueOnTruncation: true,
+    continuationMaxRounds: 5,
+    telemetry
+  });
+  const first = normalizeFormalLlmText(firstRaw, { fallback });
+  if (!hasFormalLlmQualityRisk(first)) return first;
+
+  const retryRaw = await llmChatCompletionText({
+    messages: [
+      ...messages,
+      {
+        role: "user",
+        content:
+          "你的上一則回覆可能不完整。請重新輸出完整、自然且連貫的 Step 3 回覆：不要重複段落、不要提到截斷或續寫過程，每句話要完整收尾。"
+      }
+    ],
+    temperature: 0.5,
+    maxTokens: 1100,
+    timeoutMs: 75_000,
+    continueOnTruncation: true,
+    continuationMaxRounds: 6,
+    telemetry: { ...telemetry, label: `${telemetry.label ?? "step3_stream"}:retry` }
+  });
+  return normalizeFormalLlmText(retryRaw, { fallback });
+}
 
 export async function POST(request: NextRequest) {
   const body = (await request.json()) as { sessionId?: string; text?: string };
@@ -144,17 +180,13 @@ export async function POST(request: NextRequest) {
             studentText
           );
           try {
-            const fullText = await llmChatCompletionText({
-              messages,
-              temperature: 0.6,
-              maxTokens: 800,
-              timeoutMs: 60_000,
-              continueOnTruncation: true,
-              continuationMaxRounds: 4,
-              telemetry: { sessionId: session.id, activityId: session.activityId, step: 3, label: "step3_stream" }
+            const normalized = await generateStep3ReplyText(messages, FALLBACK_STEP3, {
+              sessionId: session.id,
+              activityId: session.activityId,
+              step: 3,
+              label: "step3_stream"
             });
-            if (fullText.trim()) {
-              const normalized = fullText.trim();
+            if (normalized.trim()) {
               collected.push(normalized);
               const chunkSize = 120;
               for (let i = 0; i < normalized.length; i += chunkSize) {
@@ -177,7 +209,9 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        const aiText = sanitizeStudentFacingText(collected.join(""));
+        const aiText = sanitizeStudentFacingText(
+          normalizeFormalLlmText(collected.join(""), { fallback: FALLBACK_STEP3 })
+        );
         session.messages.push(makeMessage("ai", 3, aiText, user.username));
         await saveSession(session);
         void recordLearningEvent({

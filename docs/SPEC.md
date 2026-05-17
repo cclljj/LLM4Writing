@@ -570,7 +570,7 @@ Step6「完成文章撰寫」額外前後端驗證（#235）：
 
 | 功能 | Endpoint | 行為 |
 |---|---|---|
-| Step3 AI 回覆 | `/api/session/step3/stream` | 先以截斷續寫模式取得完整回覆，再以 SSE 分段回傳；完成後寫入學生訊息與 AI 回覆（#268） |
+| Step3 AI 回覆 | `/api/session/step3/stream` | 先以截斷續寫模式取得完整回覆，再以 SSE 分段回傳；Step3 回覆需套用完整度品質閘門（重複句段、截斷殘留、不完整收尾），若偵測風險需自動重生一次後再輸出；完成後寫入學生訊息與 AI 回覆（#268, #333） |
 | Step6 AI 修改建議 | `/api/session/step6/suggest` | 先以截斷續寫模式取得完整建議，再以 SSE 分段回傳，`Step68Panel` 即時顯示（#238） |
 | Step7 分析回饋 | `/api/session/step6/complete` | 先以截斷續寫模式取得完整回饋，再以 SSE 分段回傳；Step6 完成時顯示 Step7 preview（#240） |
 | Step10 總結報告 | `/api/session/step10/stream` | 先以截斷續寫模式取得完整報告，再以 SSE 分段回傳；完成後寫入 report 與 AI 訊息（#241） |
@@ -1283,6 +1283,7 @@ Request:
 - 權限：student 且需為 session participant。
 - 僅允許在學生個人 Step3 呼叫。
 - 以 SSE streaming 回傳 AI 回覆 chunk。
+- Step3 回覆需先做完整度品質檢查：若偵測重複句段、截斷殘留或不完整結尾，需自動重生一次並輸出較完整版本。
 - 完成時後端需寫入學生提問與 AI 回覆，並在 `done` event 回傳最新 session。
 - 失敗時需回傳可讀 fallback 或 `error` event，不得讓前端無限 loading。
 

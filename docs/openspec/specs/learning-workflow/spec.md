@@ -168,6 +168,12 @@ The system SHALL stream Step3, Step6 suggestion, Step7 preview, and Step10 repor
 - **WHEN** the endpoint handles the failure
 - **THEN** the student receives a readable fallback or error event and the frontend does not stay in infinite loading
 
+#### Scenario: Step3 completeness guard
+
+- **GIVEN** a Step3 response still looks incomplete after truncation-continuation stitching
+- **WHEN** the server detects quality risk such as truncation residue, duplicated stitched lines, or incomplete ending
+- **THEN** the server regenerates once with a stronger completeness instruction before streaming the final output to the student
+
 ### Requirement: Student UI Continuity
 
 The student UI SHALL keep course progress, previous-step review, next-action guidance, save status, and polling behavior coherent with the student's current workflow state.
@@ -183,4 +189,3 @@ The student UI SHALL keep course progress, previous-step review, next-action gui
 - **GIVEN** a student is in Step5 or later
 - **WHEN** the progress rail and course cards render
 - **THEN** they use the student's personal step when available instead of only the group session step
-

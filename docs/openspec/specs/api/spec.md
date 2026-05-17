@@ -112,6 +112,12 @@ The system SHALL use a consistent SSE event contract for step streaming endpoint
 - **WHEN** final state is ready
 - **THEN** it sends `data: {"type":"done","session":{...}}`
 
+#### Scenario: Step3 streaming completeness retry
+
+- **GIVEN** `POST /api/session/step3/stream` receives an LLM response with truncation-like quality risk
+- **WHEN** the server validates the assembled response before chunk emission
+- **THEN** it performs one regeneration attempt with stricter completeness instruction and streams the improved full reply
+
 #### Scenario: Streaming error
 
 - **GIVEN** a streaming endpoint cannot complete normally
