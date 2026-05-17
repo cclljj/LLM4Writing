@@ -197,6 +197,12 @@ The student UI SHALL keep course progress, previous-step review, next-action gui
 - **WHEN** the progress rail and course cards render
 - **THEN** they use the student's personal step when available instead of only the group session step
 
+#### Scenario: History view hides not-yet-reached step artifacts
+
+- **GIVEN** a student has not reached Step4 yet
+- **WHEN** course history is rendered
+- **THEN** Step4 outline artifacts are not shown from default template data
+
 #### Scenario: Question-bank line-break markers are rendered as line breaks
 
 - **GIVEN** a student-visible message contains `<br>` or `<br/>` markers from question-bank content

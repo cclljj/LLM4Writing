@@ -1209,6 +1209,7 @@ Error:
 - `latestSession`: 最近一次參與 session，含 `personalStep`、小組名稱、組員與完整訊息。
 - `latestWork`
 - `latestWork` 至少包含 `outline`、`step3SubmittedOutline`、`step4Outline`、`draftStep6`、`draftStep8`、`step7Report`、`step10Report`。
+- `latestWork.step4Outline` 僅能在該學生個人步驟已達 Step4（含）後回傳；未達 Step4 不得因預設結構樹而提前顯示 Step4 內容。
 - `sessions`
 - session 掃描需先以 participant index 篩選 `username + activityId + workflow=spec10`。
 - 若 participant index 回空，需啟用 legacy 相容 fallback（payload participants / 學生訊息回補）以避免已完成課程在歷史頁消失。

@@ -62,6 +62,12 @@ The system SHALL expose student course discovery, joining, and history APIs scop
 - **WHEN** the student has participation records for that activity
 - **THEN** the response includes viewer, activity, summary, latest session, latest work, and sessions
 
+#### Scenario: Course history does not expose future-step artifacts early
+
+- **GIVEN** a student's latest personal step is before Step4
+- **WHEN** `GET /api/student/course-history/[activityId]` returns `latestWork`
+- **THEN** Step4 outline content is not exposed from default template data before the student reaches Step4
+
 #### Scenario: Legacy participation recovery
 
 - **GIVEN** participant-index rows are missing for a student's historical sessions

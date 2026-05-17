@@ -31,6 +31,7 @@ export async function GET(_: Request, context: { params: Promise<{ activityId: s
   }
 
   const latest = sessions[0]!;
+  const latestPersonalStep = latest.personalSteps?.[user.username] ?? latest.currentStep;
   const ownMessages = latest.messages.filter((message) => message.userId === user.username);
   const totalMessages = sessions.reduce((sum, session) => sum + session.messages.filter((m) => m.userId === user.username).length, 0);
   const maxStepReached = sessions.reduce(
@@ -61,7 +62,7 @@ export async function GET(_: Request, context: { params: Promise<{ activityId: s
     },
     latestSession: {
       sessionId: latest.id,
-      personalStep: latest.personalSteps?.[user.username] ?? latest.currentStep,
+      personalStep: latestPersonalStep,
       groupName: latest.groupName ?? "",
       participants: latest.participants,
       messages: latest.messages
@@ -69,7 +70,7 @@ export async function GET(_: Request, context: { params: Promise<{ activityId: s
     latestWork: {
       outline: latest.outlines[user.username] ?? "",
       step3SubmittedOutline: latest.step3SubmittedOutlines?.[user.username] ?? "",
-      step4Outline: latest.outlines[user.username] ?? "",
+      step4Outline: latestPersonalStep >= 4 ? (latest.outlines[user.username] ?? "") : "",
       draftStep6: latest.draftStep6[user.username] ?? "",
       draftStep8: latest.draftStep8[user.username] ?? "",
       step7Report: latest.reports.step7[user.username] ?? "",
