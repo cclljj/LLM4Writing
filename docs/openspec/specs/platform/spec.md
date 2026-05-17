@@ -98,6 +98,16 @@ The system SHALL call a remote OpenAI-compatible LLM only when `LLM_URL`, `LLM_K
 - **WHEN** a learning step needs AI output
 - **THEN** the app returns a student-readable fallback and does not leave the workflow permanently blocked
 
+### Requirement: LLM Context Assembly Efficiency
+
+The system SHALL reduce duplicated context-assembly work for repeated LLM calls in the same active session window.
+
+#### Scenario: Short-window repeated context access
+
+- **GIVEN** the same session, same student, and same target step request equivalent learning context repeatedly within a short time window
+- **WHEN** the server builds student course context for LLM prompts
+- **THEN** it reuses a short-TTL in-memory cached context instead of recomputing the full context payload each time
+
 ### Requirement: Student-Visible Text Hygiene
 
 The system MUST sanitize AI-generated text before showing it to students.

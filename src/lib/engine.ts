@@ -963,7 +963,9 @@ async function finalizeStep9ForUser(
 export async function reconcileCompletedStep9Users(session: SessionState): Promise<boolean> {
   normalizeSessionRuntimeShape(session);
   const step9Questions = getStep9Questions(session);
+  const STEP10_RECONCILE_CONCURRENCY = 3;
   let changed = false;
+  const needsReportUsers: string[] = [];
   for (const participant of session.participants) {
     const userStep = session.personalSteps?.[participant] ?? session.currentStep;
     const answeredCount = session.reflectionIndex?.[participant] ?? 0;
@@ -971,11 +973,25 @@ export async function reconcileCompletedStep9Users(session: SessionState): Promi
 
     const hasStep10Report = Boolean(session.reports.step10?.[participant]?.trim());
     if (!hasStep10Report) {
-      await finalizeStep9ForUser(session, participant);
+      session.personalSteps![participant] = 10;
+      needsReportUsers.push(participant);
     } else {
       session.personalSteps![participant] = 10;
     }
     changed = true;
+  }
+
+  if (needsReportUsers.length > 0) {
+    const reports = await mapWithConcurrency(
+      needsReportUsers,
+      STEP10_RECONCILE_CONCURRENCY,
+      async (userId) => sanitizeStudentFacingText(await generateStep10Report(session, userId))
+    );
+    needsReportUsers.forEach((userId, index) => {
+      const step10Report = reports[index]!;
+      session.reports.step10[userId] = step10Report;
+      session.messages.push(makeMessage({ role: "ai", userId, step: 10, text: step10Report }));
+    });
   }
   return changed;
 }

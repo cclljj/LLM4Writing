@@ -137,6 +137,12 @@ The system SHALL use personal pacing from Step5 onward.
 - **WHEN** one student completes Step5, Step6, Step8, or Step9
 - **THEN** that student's `personalSteps[username]` advances without requiring every group member to advance at the same time
 
+#### Scenario: Step9 completion reconciliation runs with bounded concurrency
+
+- **GIVEN** multiple students in the same session have completed all Step9 reflection questions and still need Step10 report generation
+- **WHEN** the backend reconciles completed Step9 users
+- **THEN** it advances eligible students to Step10 and generates missing Step10 reports with bounded concurrency instead of strictly serial per-student processing
+
 #### Scenario: Personal context isolation
 
 - **GIVEN** a Step5+ LLM call is generated for one student
