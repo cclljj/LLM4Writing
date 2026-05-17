@@ -181,6 +181,12 @@ The system SHALL expose admin/course management APIs with role-sensitive visibil
 - **WHEN** the migration executes
 - **THEN** the backend runs idempotent session-store schema bootstrap/migration and returns critical table existence status
 
+#### Scenario: Admin fallback report export
+
+- **GIVEN** an admin calls `GET /api/admin/diagnostics/fallback-report?window=12h`
+- **WHEN** persisted learning events are available
+- **THEN** the API returns event-backed fallback metrics including overall, by-step, by-kind, and by-hour breakdowns
+
 #### Scenario: Open class creation
 
 - **GIVEN** a teacher or admin calls `POST /api/admin/openclasses`

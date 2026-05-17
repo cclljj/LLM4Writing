@@ -1472,6 +1472,13 @@ Request:
 - `storage.fallbackMetricsSource`（`persisted_learning_events` 或 `estimated_from_ai_messages`）。
 - 若事件表缺失或事件不足，需在 `storage.warnings` 提示目前 fallback 指標為估算值。
 
+#### `GET /api/admin/diagnostics/fallback-report`
+
+- 權限：僅 `admin`。
+- 參數：`window` 支援 `2h`、`12h`、`24h`、`7d`（預設 `12h`）。
+- 資料來源：`llm4writing_learning_events`（event-backed）。
+- 回傳：`overall`、`byStep`、`byKind`、`byHour` fallback 指標，供快速對位近期異常時段。
+
 #### `POST /api/admin/maintenance/store-migrate`
 
 - 權限：僅 `admin`。

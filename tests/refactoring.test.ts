@@ -430,6 +430,21 @@ test("#338: admin store migration route exists and is admin-protected", async ()
   assert.ok(src.includes("getSessionStoreTableHealth"), "migration route must return table-health summary");
 });
 
+test("#341: admin fallback report route exists and is admin-protected", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { resolve, dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const thisDir = dirname(fileURLToPath(import.meta.url));
+
+  const src = readFileSync(resolve(thisDir, "../app/api/admin/diagnostics/fallback-report/route.ts"), "utf8");
+  assert.ok(src.includes("user.role !== \"admin\""), "fallback report route must enforce admin-only access");
+  assert.ok(src.includes("listLearningEventsSince"), "fallback report route must read persisted learning events");
+  assert.ok(src.includes("source: \"persisted_learning_events\""), "fallback report route must identify event-backed source");
+  assert.ok(src.includes("byStep"), "fallback report route must include by-step metrics");
+  assert.ok(src.includes("byKind"), "fallback report route must include by-kind metrics");
+  assert.ok(src.includes("byHour"), "fallback report route must include by-hour metrics");
+});
+
 test("#319: course implementation report replaces download placeholder with PDF generation flow", async () => {
   const { readFileSync } = await import("node:fs");
   const { resolve, dirname } = await import("node:path");
