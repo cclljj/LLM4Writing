@@ -126,6 +126,12 @@ The classroom dashboard SHALL show all sessions for the selected course and prio
 - **WHEN** the dashboard renders current progress
 - **THEN** it shows the minimum personal step and Step5-10 distribution counts
 
+#### Scenario: Step3 advance gate uses joined members first
+
+- **GIVEN** a Step3 session has assigned participants but not all assigned users have actually joined the session
+- **WHEN** the dashboard evaluates whether the group is ready to advance
+- **THEN** it checks `3-complete` against joined members first (and falls back to full participants only when joined-member data is unavailable)
+
 #### Scenario: Scoped loading
 
 - **GIVEN** one dashboard action is processing
@@ -207,4 +213,3 @@ The admin console SHALL provide a recent operation log grouped for review.
 - **GIVEN** a user creates a course, deletes an activity, resets a password, or switches a step
 - **WHEN** the operation succeeds
 - **THEN** an audit log entry is written with the corresponding action and target context
-

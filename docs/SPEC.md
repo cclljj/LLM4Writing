@@ -964,6 +964,7 @@ Loading 規則（#270）：
 卡關偵測由 `src/lib/learning-diagnostics.ts` 支援：
 
 - `getStepAdvanceHint(session).ready` 為 true 時標示可推進並提供一鍵推進。
+- Step3 的可推進判定需優先使用 `joinedUsers`（已實際加入課程者）作為 gate 成員；若 `joinedUsers` 為空才回退 `participants`，避免未進場名單造成教師端無法推進。
 - 目前 group gate 有未完成組員且最後事件距今 >= 10 分鐘，標示高風險。
 - 有未完成組員但未達高風險門檻，標示留意。
 - 無未完成組員但最後事件距今 >= 10 分鐘，標示留意。

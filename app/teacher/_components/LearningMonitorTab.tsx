@@ -798,14 +798,17 @@ export default function LearningMonitorTab({
     }
 
     if (step === 3) {
+      const completedUsers = session.groupGate?.["3-complete"] ?? [];
+      const joinedMembers = (session.joinedUsers ?? []).filter((user) => session.participants.includes(user));
+      const step3GateMembers = joinedMembers.length > 0 ? joinedMembers : session.participants;
       const ready =
-        session.participants.length > 0 &&
-        session.participants.every((participant) => (session.groupGate?.["3-complete"] ?? []).includes(participant));
+        step3GateMembers.length > 0 &&
+        step3GateMembers.every((participant) => completedUsers.includes(participant));
       return ready
         ? { ready: true, text: `步驟 ${step} 已收齊完成條件，建議切換到 Step ${nextStep}。`, nextStep }
         : {
             ready: false,
-            text: "步驟 3 尚未全員完成結構樹。"
+            text: "步驟 3 尚未收齊已加入成員的完成結構樹回報。"
           };
     }
 
