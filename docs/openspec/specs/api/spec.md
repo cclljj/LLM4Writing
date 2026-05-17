@@ -62,6 +62,12 @@ The system SHALL expose student course discovery, joining, and history APIs scop
 - **WHEN** the student has participation records for that activity
 - **THEN** the response includes viewer, activity, summary, latest session, latest work, and sessions
 
+#### Scenario: Legacy participation recovery
+
+- **GIVEN** participant-index rows are missing for a student's historical sessions
+- **WHEN** student overview or history endpoints query participation records
+- **THEN** the API still returns participated courses by using compatibility fallback evidence from payload participants or student messages
+
 ### Requirement: Session And Chat APIs
 
 The system SHALL expose session read, chat, artifact, and step-specific mutation APIs that enforce participant and step constraints.
@@ -167,4 +173,3 @@ The system SHALL expose admin/course management APIs with role-sensitive visibil
 - **GIVEN** a teacher or admin submits user CSV data
 - **WHEN** the CSV does not use `classnumber` as the first column or has an invalid column count
 - **THEN** the API rejects the import
-

@@ -1485,9 +1485,66 @@ export async function listSessionsByParticipant(
           OFFSET ${offset}
         `;
 
-  const sessionIds = rows.map((row) => row.id);
+  // Backward-compatible DB fallback:
+  // Some legacy rows may miss participant-index entries even though payload/messages
+  // indicate the student has participated. When index query returns empty, fallback
+  // to a direct session scan scoped to this user.
+  const recoveredRows =
+    rows.length > 0
+      ? rows
+      : limit !== undefined
+        ? await sql<{ id: string; payload: unknown; updated_at: Date; version: number }[]>`
+            SELECT s.id, s.payload, s.updated_at, s.version
+            FROM llm4writing_sessions s
+            WHERE (
+              COALESCE(s.payload->'participants', '[]'::jsonb) ? ${trimmedUsername}
+              OR EXISTS (
+                SELECT 1
+                FROM llm4writing_session_messages m
+                WHERE m.session_id = s.id
+                  AND m.role = 'student'
+                  AND m.user_id = ${trimmedUsername}
+              )
+              OR EXISTS (
+                SELECT 1
+                FROM jsonb_array_elements(COALESCE(s.payload->'messages', '[]'::jsonb)) AS msg
+                WHERE msg->>'role' = 'student'
+                  AND msg->>'userId' = ${trimmedUsername}
+              )
+            )
+              AND (${activityId ?? null}::text IS NULL OR COALESCE(s.activity_id, s.payload->>'activityId') = ${activityId ?? null})
+              AND (${workflow ?? null}::text IS NULL OR COALESCE(s.workflow, s.payload->>'workflow') = ${workflow ?? null})
+            ORDER BY s.updated_at DESC
+            LIMIT ${limit} OFFSET ${offset}
+          `
+        : await sql<{ id: string; payload: unknown; updated_at: Date; version: number }[]>`
+            SELECT s.id, s.payload, s.updated_at, s.version
+            FROM llm4writing_sessions s
+            WHERE (
+              COALESCE(s.payload->'participants', '[]'::jsonb) ? ${trimmedUsername}
+              OR EXISTS (
+                SELECT 1
+                FROM llm4writing_session_messages m
+                WHERE m.session_id = s.id
+                  AND m.role = 'student'
+                  AND m.user_id = ${trimmedUsername}
+              )
+              OR EXISTS (
+                SELECT 1
+                FROM jsonb_array_elements(COALESCE(s.payload->'messages', '[]'::jsonb)) AS msg
+                WHERE msg->>'role' = 'student'
+                  AND msg->>'userId' = ${trimmedUsername}
+              )
+            )
+              AND (${activityId ?? null}::text IS NULL OR COALESCE(s.activity_id, s.payload->>'activityId') = ${activityId ?? null})
+              AND (${workflow ?? null}::text IS NULL OR COALESCE(s.workflow, s.payload->>'workflow') = ${workflow ?? null})
+            ORDER BY s.updated_at DESC
+            OFFSET ${offset}
+          `;
+
+  const sessionIds = recoveredRows.map((row) => row.id);
   const partsById = await fetchSessionPartsByIds(sql, sessionIds);
-  return rows
+  return recoveredRows
     .map((row) => {
       const core = normalizeSessionPayload(row.payload);
       if (!core) return undefined;

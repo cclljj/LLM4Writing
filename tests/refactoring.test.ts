@@ -185,6 +185,19 @@ test("#329: store defines persisted event tables and participant index", async (
   assert.ok(src.includes("listSessionsByParticipant"), "store.ts must export participant-scoped session query");
 });
 
+test("#332: participant query has DB fallback for legacy rows missing participant index", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { resolve, dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const thisDir = dirname(fileURLToPath(import.meta.url));
+
+  const src = readFileSync(resolve(thisDir, "../src/lib/store.ts"), "utf8");
+  assert.ok(src.includes("rows.length > 0"), "store.ts should keep primary participant-index query first");
+  assert.ok(src.includes("COALESCE(s.payload->'participants', '[]'::jsonb) ? ${trimmedUsername}"), "fallback should include payload participants lookup");
+  assert.ok(src.includes("FROM llm4writing_session_messages m"), "fallback should include student message table lookup");
+  assert.ok(src.includes("jsonb_array_elements(COALESCE(s.payload->'messages', '[]'::jsonb))"), "fallback should include legacy payload messages lookup");
+});
+
 test("#329: student APIs use participant-scoped DB query path", async () => {
   const { readFileSync } = await import("node:fs");
   const { resolve, dirname } = await import("node:path");

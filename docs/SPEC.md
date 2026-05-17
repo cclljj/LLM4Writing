@@ -1161,7 +1161,8 @@ Error:
 - `activeCourses`
 - `pausedCourses`
 - `participatedCourses`
-- 參與課程與歷程查詢需走 DB 層 participant index（`llm4writing_session_participants`），不可先 `listSessions()` 再應用層過濾。
+- 參與課程與歷程查詢需以 DB 層 participant index（`llm4writing_session_participants`）為主要查詢路徑，不可先 `listSessions()` 再應用層過濾。
+- 若 participant index 查不到資料，需啟用 legacy 相容 fallback：允許從 session payload `participants` 與學生訊息（split message table 或 payload `messages`）回補該學生參與紀錄，避免舊資料遺漏。
 
 #### `POST /api/student/join`
 
@@ -1191,7 +1192,8 @@ Error:
 #### `GET /api/student/history?activityId=...`
 
 - 回傳該 student 參與過的 sessions，可選 activity 過濾。
-- 查詢需使用 participant index（`session_id + username + activity_id`）後再回補 session payload。
+- 查詢需優先使用 participant index（`session_id + username + activity_id`）後再回補 session payload。
+- 若 participant index 回空，需啟用 legacy 相容 fallback（payload participants / 學生訊息回補）以避免歷史課程紀錄漏失。
 
 #### `GET /api/student/course-history/[activityId]`
 
@@ -1205,6 +1207,7 @@ Error:
 - `latestWork` 至少包含 `outline`、`step3SubmittedOutline`、`step4Outline`、`draftStep6`、`draftStep8`、`step7Report`、`step10Report`。
 - `sessions`
 - session 掃描需先以 participant index 篩選 `username + activityId + workflow=spec10`。
+- 若 participant index 回空，需啟用 legacy 相容 fallback（payload participants / 學生訊息回補）以避免已完成課程在歷史頁消失。
 
 錯誤：
 

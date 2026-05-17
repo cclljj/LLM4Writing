@@ -60,6 +60,12 @@ The system MUST preserve session core payload, messages, artifacts, reports, eve
 - **WHEN** PostgreSQL is enabled
 - **THEN** the system uses the participant index instead of scanning every session payload in application memory
 
+#### Scenario: Participant index compatibility fallback
+
+- **GIVEN** legacy sessions exist but participant-index rows are missing or incomplete
+- **WHEN** a participant-scoped query returns no rows from the index path
+- **THEN** the system falls back to payload participants and student-message evidence to recover participation history
+
 ### Requirement: Prompt Configuration Source
 
 The system SHALL load prompt configuration from `src/config/system-prompt-config.json` and SHALL NOT allow prompt configuration writes through the UI or API.
@@ -123,4 +129,3 @@ The system MUST preserve the core invariants documented by the implementation sp
 - **GIVEN** a teacher views monitor summaries
 - **WHEN** Step6 or Step8 artifacts are included in diagnostics
 - **THEN** the monitor exposes summary diagnostics and not full draft text
-
