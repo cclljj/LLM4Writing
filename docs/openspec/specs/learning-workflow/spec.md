@@ -196,3 +196,9 @@ The student UI SHALL keep course progress, previous-step review, next-action gui
 - **GIVEN** a student is in Step5 or later
 - **WHEN** the progress rail and course cards render
 - **THEN** they use the student's personal step when available instead of only the group session step
+
+#### Scenario: Question-bank line-break markers are rendered as line breaks
+
+- **GIVEN** a student-visible message contains `<br>` or `<br/>` markers from question-bank content
+- **WHEN** the message is rendered in student views
+- **THEN** those markers are interpreted as line breaks and are not shown as literal text
