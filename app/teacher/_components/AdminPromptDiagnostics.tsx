@@ -39,6 +39,7 @@ type DiagnosticsPayload = {
     postgresUrlPresent: boolean;
     databaseUrlPresent: boolean;
     configuredSourceCount: number;
+    runtimeHost: string | null;
   };
   storage: {
     tableHealth: {
@@ -314,6 +315,8 @@ export default function AdminPromptDiagnostics() {
                 <small>
                   DB URL：SUPABASE={data.db.supabaseDbUrlPresent ? "Y" : "N"} / POSTGRES={data.db.postgresUrlPresent ? "Y" : "N"} / DATABASE={data.db.databaseUrlPresent ? "Y" : "N"}
                 </small>
+                <br />
+                <small>DB Host：{data.db.runtimeHost ?? "N/A"}</small>
               </div>
               <div className="col card" style={{ marginBottom: 0 }}>
                 <h3>Prompt 設定檢查</h3>

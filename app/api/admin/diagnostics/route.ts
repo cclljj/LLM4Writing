@@ -10,7 +10,7 @@ import {
 } from "@/src/lib/store";
 import { findActivity } from "@/src/lib/activity-store";
 import { getLlmCallStats } from "@/src/lib/llm-observability";
-import { isDatabaseEnabled } from "@/src/lib/db-config";
+import { getDatabaseHost, isDatabaseEnabled } from "@/src/lib/db-config";
 import type { SessionState } from "@/src/lib/types";
 type DiagnosticsWindow = "24h" | "7d" | "14d" | "30d";
 type DiagnosticsPayload = Record<string, unknown>;
@@ -1021,7 +1021,8 @@ async function buildDiagnosticsPayload(selectedWindow: DiagnosticsWindow, nowMs:
   const db = {
     configured: isDatabaseEnabled(),
     ...dbEnv,
-    configuredSourceCount: countTruthy([dbEnv.supabaseDbUrlPresent, dbEnv.postgresUrlPresent, dbEnv.databaseUrlPresent])
+    configuredSourceCount: countTruthy([dbEnv.supabaseDbUrlPresent, dbEnv.postgresUrlPresent, dbEnv.databaseUrlPresent]),
+    runtimeHost: getDatabaseHost()
   };
   const tableHealth = await getSessionStoreTableHealth();
   const tokenUsage = computeTokenUsageStats(windowedSpecSessions, cutoffMs);

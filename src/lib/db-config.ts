@@ -13,6 +13,17 @@ export function isDatabaseEnabled(): boolean {
   return Boolean(getDatabaseUrl());
 }
 
+export function getDatabaseHost(): string | null {
+  const url = getDatabaseUrl();
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname || null;
+  } catch {
+    return null;
+  }
+}
+
 export function isTransactionPooler(url?: string): boolean {
   const explicitMode = readEnv("SUPABASE_POOL_MODE");
   if (explicitMode === "transaction") return true;
