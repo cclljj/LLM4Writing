@@ -1,0 +1,22 @@
+schema: spec-driven
+
+context: |
+  Product: LLM4Writing, an AI-assisted writing instruction platform.
+  Stack: Next.js 16 App Router, React 19, TypeScript 5, PostgreSQL with memory/file fallback, Vercel deployment.
+  Canonical implementation spec: docs/SPEC.md.
+  OpenSpec location: docs/openspec/.
+  Core roles: student, teacher, admin.
+  Core workflow: spec10, a 10-step writing learning process with group gates in Step1/2 and personal pacing from Step5 onward.
+
+rules:
+  specs:
+    - Use behavior-first requirements with SHALL or MUST.
+    - Include at least one GIVEN/WHEN/THEN scenario for each requirement.
+    - Keep implementation details out unless they define a durable public contract or invariant.
+    - Keep docs/SPEC.md and affected docs/openspec/specs/**/spec.md files aligned in behavior-changing changes.
+  proposal:
+    - State whether docs/SPEC.md must be updated.
+    - Identify affected OpenSpec domains.
+  tasks:
+    - Include verification steps, usually npm run test and npm run build when behavior or contracts change.
+
