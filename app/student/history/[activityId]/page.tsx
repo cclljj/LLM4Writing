@@ -84,7 +84,8 @@ export default function StudentCourseHistoryPage() {
   const activityId = useMemo(() => String(params?.activityId ?? ""), [params?.activityId]);
 
   const renderMessageHtml = (text: string): string => {
-    const lines = text.split(/\r?\n/);
+    const normalizedText = text.replace(/<br\s*\/?>/gi, "\n");
+    const lines = normalizedText.split(/\r?\n/);
     const htmlParts: string[] = [];
     let listBuffer: string[] = [];
 
