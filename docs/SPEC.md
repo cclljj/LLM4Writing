@@ -1466,6 +1466,17 @@ Request:
 - 拒答率：優先使用 `learning_events(kind=student_rejection)`，並搭配學生已送出訊息估算分母。
 - 等待時間：優先使用 `learning_events.latency_ms`；無事件時回退 `student -> ai` 同步驟訊息對估算。
 - LLM 錯誤分類：優先使用 `llm4writing_llm_events.error_category`（跨重啟持久化）；無事件時回退 `llm-observability` 記憶體統計。
+- 回傳需包含 DB 與觀測健康訊號：
+- `db.configured` 與 `SUPABASE_DB_URL / POSTGRES_URL / DATABASE_URL` 各自 presence。
+- `storage.tableHealth`（含 `llm4writing_llm_events`、`llm4writing_learning_events` 是否存在）。
+- `storage.fallbackMetricsSource`（`persisted_learning_events` 或 `estimated_from_ai_messages`）。
+- 若事件表缺失或事件不足，需在 `storage.warnings` 提示目前 fallback 指標為估算值。
+
+#### `POST /api/admin/maintenance/store-migrate`
+
+- 權限：僅 `admin`。
+- 行為：強制執行 session store schema bootstrap/migration（idempotent）。
+- 回傳：`ok`、`migratedAt`、`databaseEnabled` 與關鍵表存在狀態（含 `llm4writing_llm_events`、`llm4writing_learning_events`）。
 
 #### `GET /api/admin/audit-logs`
 

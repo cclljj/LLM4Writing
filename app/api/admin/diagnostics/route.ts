@@ -1,9 +1,16 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/src/lib/auth-server";
 import systemPromptConfig from "@/src/config/system-prompt-config.json";
-import { listLearningEventsSince, listLlmEventsSince, listSessions, type PersistedEventRow } from "@/src/lib/store";
+import {
+  getSessionStoreTableHealth,
+  listLearningEventsSince,
+  listLlmEventsSince,
+  listSessions,
+  type PersistedEventRow
+} from "@/src/lib/store";
 import { findActivity } from "@/src/lib/activity-store";
 import { getLlmCallStats } from "@/src/lib/llm-observability";
+import { isDatabaseEnabled } from "@/src/lib/db-config";
 import type { SessionState } from "@/src/lib/types";
 type DiagnosticsWindow = "24h" | "7d" | "14d" | "30d";
 type DiagnosticsPayload = Record<string, unknown>;
@@ -32,6 +39,10 @@ function getDiagnosticsCache(): Map<string, DiagnosticsCacheEntry> {
 function readEnvFlag(name: string): boolean {
   const value = process.env[name];
   return typeof value === "string" && value.trim().length > 0;
+}
+
+function countTruthy(values: boolean[]): number {
+  return values.reduce((sum, value) => sum + (value ? 1 : 0), 0);
 }
 
 function countRecord(value: unknown): number {
@@ -1002,8 +1013,20 @@ async function buildDiagnosticsPayload(selectedWindow: DiagnosticsWindow, nowMs:
     modelPresent: readEnvFlag("LLM_MODEL"),
     model: readEnvFlag("LLM_MODEL") ? process.env.LLM_MODEL : null
   };
+  const dbEnv = {
+    supabaseDbUrlPresent: readEnvFlag("SUPABASE_DB_URL"),
+    postgresUrlPresent: readEnvFlag("POSTGRES_URL"),
+    databaseUrlPresent: readEnvFlag("DATABASE_URL")
+  };
+  const db = {
+    configured: isDatabaseEnabled(),
+    ...dbEnv,
+    configuredSourceCount: countTruthy([dbEnv.supabaseDbUrlPresent, dbEnv.postgresUrlPresent, dbEnv.databaseUrlPresent])
+  };
+  const tableHealth = await getSessionStoreTableHealth();
   const tokenUsage = computeTokenUsageStats(windowedSpecSessions, cutoffMs);
   const hasEventMetrics = learningEvents.length > 0;
+  const fallbackMetricsSource = hasEventMetrics ? "persisted_learning_events" : "estimated_from_ai_messages";
   const llmResponseTime = hasEventMetrics
     ? computeLlmResponseTimeFromLearningEvents(learningEvents)
     : computeLlmResponseTime(windowedSpecSessions, cutoffMs);
@@ -1025,6 +1048,22 @@ async function buildDiagnosticsPayload(selectedWindow: DiagnosticsWindow, nowMs:
 
   return {
     llm,
+    db,
+    storage: {
+      tableHealth,
+      fallbackMetricsSource,
+      eventMetricsCoverage: {
+        llmEvents: llmEvents.length,
+        learningEvents: learningEvents.length
+      },
+      warnings: [
+        ...(!db.configured ? ["database_not_configured_missing_SUPABASE_DB_URL_POSTGRES_URL_DATABASE_URL"] : []),
+        ...(db.configuredSourceCount > 1 ? ["database_url_multi_source_present"] : []),
+        ...(!tableHealth.tables.llm4writing_llm_events ? ["missing_table_llm4writing_llm_events"] : []),
+        ...(!tableHealth.tables.llm4writing_learning_events ? ["missing_table_llm4writing_learning_events"] : []),
+        ...(!hasEventMetrics ? ["learning_events_unavailable_using_estimation"] : [])
+      ]
+    },
     promptConfig: {
       hasSystemPrompt: typeof config.systemPrompt === "string" && config.systemPrompt.trim().length > 0,
       stepPrompts: countRecord(config.stepPrompts),

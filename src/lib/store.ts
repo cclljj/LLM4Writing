@@ -302,7 +302,7 @@ function mergeSessionStates(latest: SessionState, incoming: SessionState): Sessi
   };
 }
 
-async function ensureSessionTable(): Promise<void> {
+export async function ensureSessionTable(): Promise<void> {
   if (!isDatabaseEnabled()) {
     return;
   }
@@ -502,6 +502,58 @@ async function ensureSessionTable(): Promise<void> {
   }
 
   await initPromise;
+}
+
+export async function getSessionStoreTableHealth(): Promise<{
+  databaseEnabled: boolean;
+  tables: Record<string, boolean>;
+}> {
+  if (!isDatabaseEnabled()) {
+    return {
+      databaseEnabled: false,
+      tables: {
+        llm4writing_sessions: false,
+        llm4writing_session_messages: false,
+        llm4writing_session_artifacts: false,
+        llm4writing_session_reports: false,
+        llm4writing_session_events: false,
+        llm4writing_session_participants: false,
+        llm4writing_llm_events: false,
+        llm4writing_learning_events: false
+      }
+    };
+  }
+  await ensureSessionTable();
+  const sql = getSqlClient();
+  const rows = await sql<{ table_name: string }[]>`
+    SELECT table_name
+    FROM information_schema.tables
+    WHERE table_schema = 'public'
+      AND table_name IN (
+        'llm4writing_sessions',
+        'llm4writing_session_messages',
+        'llm4writing_session_artifacts',
+        'llm4writing_session_reports',
+        'llm4writing_session_events',
+        'llm4writing_session_participants',
+        'llm4writing_llm_events',
+        'llm4writing_learning_events'
+      )
+  `;
+  const present = new Set(rows.map((row) => row.table_name));
+  return {
+    databaseEnabled: true,
+    tables: {
+      llm4writing_sessions: present.has("llm4writing_sessions"),
+      llm4writing_session_messages: present.has("llm4writing_session_messages"),
+      llm4writing_session_artifacts: present.has("llm4writing_session_artifacts"),
+      llm4writing_session_reports: present.has("llm4writing_session_reports"),
+      llm4writing_session_events: present.has("llm4writing_session_events"),
+      llm4writing_session_participants: present.has("llm4writing_session_participants"),
+      llm4writing_llm_events: present.has("llm4writing_llm_events"),
+      llm4writing_learning_events: present.has("llm4writing_learning_events")
+    }
+  };
 }
 
 type MessageRow = {

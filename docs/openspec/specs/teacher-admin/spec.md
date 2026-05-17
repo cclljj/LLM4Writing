@@ -204,6 +204,19 @@ The admin console SHALL provide Prompt/LLM diagnostics, KPI trends, and non-sens
 - **WHEN** the admin views diagnostics
 - **THEN** secret values such as `LLM_KEY` and database URLs are not returned or displayed
 
+#### Scenario: Diagnostics source and DB health visibility
+
+- **GIVEN** an admin opens diagnostics
+- **WHEN** the panel renders runtime health
+- **THEN** it shows DB-env presence status, critical table health, and whether fallback metrics are event-backed or message-estimated
+- **AND** warnings are shown when event tables are missing or event coverage is insufficient
+
+#### Scenario: Run store migration from diagnostics
+
+- **GIVEN** an admin detects missing critical tables in diagnostics
+- **WHEN** the admin triggers store migration from the UI
+- **THEN** the system calls the admin migration API and updates diagnostics after completion
+
 ### Requirement: Audit Log
 
 The admin console SHALL provide a recent operation log grouped for review.

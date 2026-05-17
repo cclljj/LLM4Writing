@@ -33,6 +33,25 @@ type DiagnosticsPayload = {
     modelPresent: boolean;
     model: string | null;
   };
+  db: {
+    configured: boolean;
+    supabaseDbUrlPresent: boolean;
+    postgresUrlPresent: boolean;
+    databaseUrlPresent: boolean;
+    configuredSourceCount: number;
+  };
+  storage: {
+    tableHealth: {
+      databaseEnabled: boolean;
+      tables: Record<string, boolean>;
+    };
+    fallbackMetricsSource: "persisted_learning_events" | "estimated_from_ai_messages";
+    eventMetricsCoverage: {
+      llmEvents: number;
+      learningEvents: number;
+    };
+    warnings: string[];
+  };
   promptConfig: {
     hasSystemPrompt: boolean;
     stepPrompts: number;
@@ -197,6 +216,7 @@ export default function AdminPromptDiagnostics() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [timeWindow, setTimeWindow] = useState<DiagnosticsWindow>("7d");
+  const [migrationMessage, setMigrationMessage] = useState("");
 
   async function loadDiagnostics(window: DiagnosticsWindow = timeWindow) {
     setLoading(true);
@@ -221,6 +241,22 @@ export default function AdminPromptDiagnostics() {
   useEffect(() => {
     loadDiagnostics(timeWindow).catch(() => undefined);
   }, [timeWindow]);
+
+  async function runStoreMigration() {
+    setMigrationMessage("執行中...");
+    try {
+      const response = await fetch("/api/admin/maintenance/store-migrate", { method: "POST" });
+      const payload = await response.json();
+      if (!response.ok || !payload?.ok) {
+        setMigrationMessage(`失敗：${payload?.error ?? "store_migration_failed"}`);
+        return;
+      }
+      setMigrationMessage("完成：資料表已檢查/建立");
+      await loadDiagnostics(timeWindow);
+    } catch (err) {
+      setMigrationMessage(`失敗：${err instanceof Error ? err.message : "store_migration_failed"}`);
+    }
+  }
 
   return (
     <div data-testid="admin-prompt-diagnostics">
@@ -273,6 +309,11 @@ export default function AdminPromptDiagnostics() {
                 <small>LLM_URL：{data.llm.urlPresent ? "已設定" : "缺少"}</small><br />
                 <small>LLM_KEY：{data.llm.keyPresent ? "已設定" : "缺少"}</small><br />
                 <small>LLM_MODEL：{data.llm.modelPresent ? data.llm.model ?? "已設定" : "缺少"}</small>
+                <br />
+                <small>DB 設定：{data.db.configured ? "已啟用" : "未啟用"}</small><br />
+                <small>
+                  DB URL：SUPABASE={data.db.supabaseDbUrlPresent ? "Y" : "N"} / POSTGRES={data.db.postgresUrlPresent ? "Y" : "N"} / DATABASE={data.db.databaseUrlPresent ? "Y" : "N"}
+                </small>
               </div>
               <div className="col card" style={{ marginBottom: 0 }}>
                 <h3>Prompt 設定檢查</h3>
@@ -282,6 +323,25 @@ export default function AdminPromptDiagnostics() {
                 <small>stepOpenings：{data.promptConfig.stepOpenings}</small><br />
                 <small>writingTasks：{data.promptConfig.writingTasks}</small>
               </div>
+            </div>
+            <div className="card" style={{ marginBottom: 0, marginTop: 12 }}>
+              <h3>觀測資料來源</h3>
+              <button type="button" className="secondary" style={{ width: "auto", marginBottom: 8 }} onClick={() => runStoreMigration()}>
+                執行資料表 migration
+              </button>
+              {migrationMessage ? <div style={{ marginBottom: 8, fontSize: 13 }}>{migrationMessage}</div> : null}
+              <small>
+                fallback 指標來源：{data.storage.fallbackMetricsSource === "persisted_learning_events" ? "事件表（可信）" : "訊息估算（需注意）"}
+              </small><br />
+              <small>event coverage：learning={fmtNum(data.storage.eventMetricsCoverage.learningEvents)} / llm={fmtNum(data.storage.eventMetricsCoverage.llmEvents)}</small><br />
+              <small>critical tables：llm_events={data.storage.tableHealth.tables.llm4writing_llm_events ? "OK" : "MISSING"} / learning_events={data.storage.tableHealth.tables.llm4writing_learning_events ? "OK" : "MISSING"}</small>
+              {data.storage.warnings.length > 0 ? (
+                <div style={{ marginTop: 8, color: "#991b1b" }}>
+                  {data.storage.warnings.map((warning) => (
+                    <div key={warning}>- {warning}</div>
+                  ))}
+                </div>
+              ) : null}
             </div>
           </div>
 

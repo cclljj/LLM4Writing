@@ -168,6 +168,19 @@ The system SHALL expose admin/course management APIs with role-sensitive visibil
 - **WHEN** diagnostics are returned
 - **THEN** the response includes non-sensitive LLM, KPI, fallback, trend, and artifact health data and excludes secrets
 
+#### Scenario: Diagnostics source clarity
+
+- **GIVEN** an admin calls `GET /api/admin/diagnostics`
+- **WHEN** fallback and KPI metrics are computed
+- **THEN** the response explicitly indicates whether metrics come from persisted learning events or message-estimation fallback
+- **AND** includes warnings when critical event tables are missing or event coverage is insufficient
+
+#### Scenario: Admin store migration
+
+- **GIVEN** an admin calls `POST /api/admin/maintenance/store-migrate`
+- **WHEN** the migration executes
+- **THEN** the backend runs idempotent session-store schema bootstrap/migration and returns critical table existence status
+
 #### Scenario: Open class creation
 
 - **GIVEN** a teacher or admin calls `POST /api/admin/openclasses`
