@@ -789,12 +789,14 @@ export default function LearningMonitorTab({
 
     if (step === 4) {
       const completedUsers = session.groupGate?.["4-complete"] ?? [];
+      const joinedMembers = (session.joinedUsers ?? []).filter((user) => session.participants.includes(user));
+      const step4GateMembers = joinedMembers.length > 0 ? joinedMembers : session.participants;
       const ready =
-        session.participants.length > 0 &&
-        session.participants.every((participant) => completedUsers.includes(participant));
+        step4GateMembers.length > 0 &&
+        step4GateMembers.every((participant) => completedUsers.includes(participant));
       return ready
         ? { ready: true, text: "步驟 4 已全員確認完成，建議切換到 Step 5。", nextStep }
-        : { ready: false, text: "步驟 4 尚未全員確認完成。" };
+        : { ready: false, text: "步驟 4 尚未收齊已加入成員的完成確認。" };
     }
 
     if (step === 3) {

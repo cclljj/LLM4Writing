@@ -24,19 +24,26 @@ The system SHALL implement the `spec10` writing workflow as ten ordered steps wi
 
 ### Requirement: Step1 And Step2 Group Gate
 
-The system SHALL require all participants in the group to answer the current Step1/2 gate before AI feedback and the next question are produced.
+The system SHALL require all Step1/2 gate members to answer the current gate before AI feedback and the next question are produced.
+Gate members are resolved from joined members first and fall back to assigned participants when joined-member data is unavailable.
 
 #### Scenario: First student answers
 
 - **GIVEN** a Step1/2 gate is active for a group
-- **WHEN** one participant submits an answer before all participants have answered
+- **WHEN** one participant submits an answer before all gate members have answered
 - **THEN** the answer is recorded and that participant enters a waiting state
 
 #### Scenario: Last student answers
 
-- **GIVEN** every other participant has already answered the current Step1/2 gate
+- **GIVEN** every other gate member has already answered the current Step1/2 gate
 - **WHEN** the last participant submits a valid answer
 - **THEN** the system generates feedback first, then generates or selects the next question, and advances the gate in the same round
+
+#### Scenario: Joined-member gate priority
+
+- **GIVEN** assigned participants include users who have not joined the session yet
+- **WHEN** Step1/2 gate completion is evaluated
+- **THEN** the system checks completion against joined members first and does not block waiting for absent non-joined users
 
 #### Scenario: Group privacy before gate completion
 

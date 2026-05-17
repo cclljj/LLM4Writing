@@ -355,6 +355,35 @@ test("Step1/2 group gate waits for all participants before advancing", () => {
   assert.deepEqual(new Set(session.groupGate["1-1"]), new Set(["s1", "s2"]));
 });
 
+test("Step1/2 group gate prioritizes joined users and does not block on absent members", () => {
+  const session = baseSession({
+    participants: ["s1", "s2", "s3"],
+    joinedUsers: ["s1", "s2"]
+  });
+
+  const first = handleStep1Or2Group(session, "s1", "我先回答完整想法", makeMessage);
+  assert.equal(first.allResponded, false);
+
+  const second = handleStep1Or2Group(session, "s2", "我也回答完整想法", makeMessage);
+  assert.equal(second.allResponded, true);
+});
+
+test("Step1/2 group gate falls back to participants when joinedUsers is unavailable", () => {
+  const session = baseSession({
+    participants: ["s1", "s2", "s3"],
+    joinedUsers: []
+  });
+
+  const first = handleStep1Or2Group(session, "s1", "我先回答完整想法", makeMessage);
+  assert.equal(first.allResponded, false);
+
+  const second = handleStep1Or2Group(session, "s2", "我也回答完整想法", makeMessage);
+  assert.equal(second.allResponded, false);
+
+  const third = handleStep1Or2Group(session, "s3", "我最後回答完整想法", makeMessage);
+  assert.equal(third.allResponded, true);
+});
+
 test("Step1/2 advancement accepts resolved next question and still falls back when missing", () => {
   const session = baseSession({
     promptConfig: {

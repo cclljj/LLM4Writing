@@ -4,6 +4,11 @@ import { buildStep1Question, buildStep2Question, getCurrentGroupGateKey, pickQue
 
 export type MessageFactory = (input: Omit<ChatMessage, "id" | "at">) => ChatMessage;
 
+function getStep12GateMembers(session: SessionState): string[] {
+  const joinedMembers = (session.joinedUsers ?? []).filter((user) => session.participants.includes(user));
+  return joinedMembers.length > 0 ? joinedMembers : session.participants;
+}
+
 export function handleStep1Or2Group(
   session: SessionState,
   userId: string,
@@ -20,7 +25,8 @@ export function handleStep1Or2Group(
   responders.add(userId);
   session.groupGate[gateKey] = Array.from(responders);
 
-  const allResponded = session.participants.every((participant) => responders.has(participant));
+  const gateMembers = getStep12GateMembers(session);
+  const allResponded = gateMembers.length > 0 && gateMembers.every((participant) => responders.has(participant));
   if (!allResponded) {
     return { session, allResponded: false, substep };
   }
@@ -202,7 +208,8 @@ export function recoverStalledStep1Or2AiWait(
   const completedSubstep = step === 1 ? session.stepState.step1Substep : session.stepState.step2Substep;
   const gateKey = getCurrentGroupGateKey(session, step);
   const responders = session.groupGate[gateKey] ?? [];
-  const allResponded = session.participants.length > 0 && session.participants.every((participant) => responders.includes(participant));
+  const gateMembers = getStep12GateMembers(session);
+  const allResponded = gateMembers.length > 0 && gateMembers.every((participant) => responders.includes(participant));
   if (!allResponded) return false;
 
   const gateResponderMessages = session.messages

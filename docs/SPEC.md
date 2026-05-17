@@ -371,7 +371,8 @@ Artifact 類型：
 
 ### 5.2 Step1/2 子步驟與題目來源
 
-Step1 有 5 個子步驟，Step2 有 4 個子步驟。每個子步驟需所有 participants 都回覆至少一次，才會觸發 Step1/2 的兩段式處理（先回饋，再產生下一題）。
+Step1 有 5 個子步驟，Step2 有 4 個子步驟。每個子步驟需先收齊 gate 成員回覆，才會觸發 Step1/2 的兩段式處理（先回饋，再產生下一題）。
+Step1/2 gate 成員判定：優先使用 `joinedUsers`（已實際加入課程者）；若 `joinedUsers` 為空才回退 `participants`。
 
 Gate key 範例：
 
@@ -965,6 +966,7 @@ Loading 規則（#270）：
 
 - `getStepAdvanceHint(session).ready` 為 true 時標示可推進並提供一鍵推進。
 - Step3 的可推進判定需優先使用 `joinedUsers`（已實際加入課程者）作為 gate 成員；若 `joinedUsers` 為空才回退 `participants`，避免未進場名單造成教師端無法推進。
+- Step4 的可推進判定需比照 Step3：優先使用 `joinedUsers`（已實際加入課程者）作為 gate 成員；若 `joinedUsers` 為空才回退 `participants`，避免未進場名單造成教師端無法推進。
 - 目前 group gate 有未完成組員且最後事件距今 >= 10 分鐘，標示高風險。
 - 有未完成組員但未達高風險門檻，標示留意。
 - 無未完成組員但最後事件距今 >= 10 分鐘，標示留意。
@@ -1709,7 +1711,7 @@ Auth session 必須是 server 簽章 token，格式為 `v1.<payload>.<signature>
 2. teacher 的任務與分組操作必須受可見班級限制。
 3. 建立寫作任務時，班級與主題必須來自可選清單。
 4. Prompt 僅能來自 `src/config/system-prompt-config.json`，不可由 UI/API 寫入 DB。
-5. Step1/2 必須維持所有組員回覆才 AI 回覆的 group gate。
+5. Step1/2 必須維持 group gate 收齊才 AI 回覆；gate 成員優先為已加入課程的組員（`joinedUsers`），缺資料時回退 `participants`。
 6. Step5/7/10 必須是 non-interactive。
 7. student artifact 只能存到自己參與的 session。
 8. store 必須維持有 DB 用 DB、無 DB 用 memory/file fallback 的雙模式。

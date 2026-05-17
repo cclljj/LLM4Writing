@@ -132,6 +132,12 @@ The classroom dashboard SHALL show all sessions for the selected course and prio
 - **WHEN** the dashboard evaluates whether the group is ready to advance
 - **THEN** it checks `3-complete` against joined members first (and falls back to full participants only when joined-member data is unavailable)
 
+#### Scenario: Step4 advance gate uses joined members first
+
+- **GIVEN** a Step4 session has assigned participants but not all assigned users have actually joined the session
+- **WHEN** the dashboard evaluates whether the group is ready to advance
+- **THEN** it checks `4-complete` against joined members first (and falls back to full participants only when joined-member data is unavailable)
+
 #### Scenario: Scoped loading
 
 - **GIVEN** one dashboard action is processing
