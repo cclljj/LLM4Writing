@@ -404,6 +404,7 @@ Gate key 範例：
 2. 再產生下一題（question only，不輸出回饋）。
 - `PromptConfig.subStepPrompts` 中部分內容是給 LLM 的指示，不可直接顯示給學生。
 - `questionBanks` 主要來源為 `writingTasks[essayId].questionBanks`。
+- Step2 的 `2-4` 沒有 `subStepPrompts["2-4"]` 時，必須維持從 `questionBanks["2-4"]` 隨機抽題，不得改為依前一輪問答即時生成。
 - 題目缺失時必須使用短、安全、學生可讀的保底問句，不得回退成 prompt 原文。
 - gate 清空、子步驟推進、下一題寫入必須同輪完成，避免「全員已答但無下一題」卡住。
 
@@ -424,8 +425,10 @@ Step1/2 改為兩段式 prompt 組裝：
 
 1. 全域 `systemPrompt`
 2. 當前步驟 `stepPrompts[String(step)]`
-3. 目前子步驟 key 與「目前子步驟題目」
-4. 本步驟最近對話 + 跨步驟歷史節錄
+3. `step12FeedbackPrompts[String(step)]` 或 `step12FeedbackPrompts.default`
+4. 目前子步驟 key 與「目前子步驟題目」
+5. 若存在 `step12FeedbackFocusPrompts[currentSubstepKey]`，加入該子步驟回饋焦點
+6. 本步驟最近對話 + 跨步驟歷史節錄
 
 第二段（下一題）：
 
@@ -470,6 +473,7 @@ Step1/2 第二段（下一題）JSON 契約（僅當使用 `subStepPrompts[nextS
 - 後端先解析 JSON；若不是 JSON，仍相容舊格式「請回答以下問題」。
 - `nextQuestion` 顯示前需再做文字淨化：去除 code fence（如 ```json）與 JSON 殼層殘留；若仍為 JSON 結構樣式則視為無效題目並走 fallback。
 - `feedback` 顯示前也需做同級淨化與完整性檢查：若偵測 JSON 殘留（如 ` ```json{`、裸 `{`、欄位名殘留）或疑似截斷半句，視為無效回饋並重試/走 fallback。
+- Step2 後半段（`2-2`、`2-3`、`2-4`）回饋需具備基本內容深度：不可過短，且需呈現摘要、建議、補強方向、原因/例子/主張/素材/細節/說服力等有效教學訊號之一；不足時需重試/走 fallback。
 - 第一段與第二段都需有 timeout/retry/fallback，任一階段失敗不得造成流程卡住。
 - Step1/2 單次遠端 LLM 嘗試 timeout 約 20~25 秒，並允許有限續寫；優先避免邊界子題截斷。
 - 每輪完成後需記錄可觀測欄位：`currentStep/currentSubStep/nextSubStep/feedbackSource/questionSource/llmAttemptCountFeedback/llmAttemptCountQuestion/usedFallback/latencyMs`。

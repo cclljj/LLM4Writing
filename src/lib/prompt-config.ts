@@ -7,6 +7,8 @@ import { findActivity } from "@/src/lib/activity-store";
 type RawSystemPromptConfig = {
   systemPrompt?: string;
   stepPrompts?: Record<string, string>;
+  step12FeedbackPrompts?: Record<string, string>;
+  step12FeedbackFocusPrompts?: Record<string, string>;
   subStepPrompts?: Record<string, string>;
   subStepPrompts_fallbacks?: Record<string, string>;
   questionBanks?: Record<string, string[]>;
@@ -38,6 +40,8 @@ export function resolvePromptConfigForActivity(activityId: string): PromptConfig
     return {
       systemPrompt: undefined,
       stepPrompts: {},
+      step12FeedbackPrompts: {},
+      step12FeedbackFocusPrompts: {},
       subStepPrompts: {},
       subStepPromptsFallbacks: {},
       questionBanks: {},
@@ -48,6 +52,8 @@ export function resolvePromptConfigForActivity(activityId: string): PromptConfig
   const raw = systemPromptConfig as RawSystemPromptConfig;
   const systemPrompt = typeof raw.systemPrompt === "string" ? raw.systemPrompt : undefined;
   const stepPrompts = { ...(raw.stepPrompts ?? {}) };
+  const step12FeedbackPrompts = { ...(raw.step12FeedbackPrompts ?? {}) };
+  const step12FeedbackFocusPrompts = { ...(raw.step12FeedbackFocusPrompts ?? {}) };
   const subStepPrompts = { ...(raw.subStepPrompts ?? {}) };
   const subStepPromptsFallbacks = { ...(raw.subStepPrompts_fallbacks ?? {}) };
   const baseQuestionBanks = Object.fromEntries(
@@ -77,6 +83,8 @@ export function resolvePromptConfigForActivity(activityId: string): PromptConfig
   return {
     systemPrompt,
     stepPrompts,
+    step12FeedbackPrompts,
+    step12FeedbackFocusPrompts,
     subStepPrompts,
     subStepPromptsFallbacks,
     questionBanks: { ...baseQuestionBanks, ...scopedQuestionBanks },

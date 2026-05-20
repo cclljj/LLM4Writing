@@ -618,3 +618,37 @@ test("#347: step12 fallback events persist errorCategory for diagnostics", async
     "step12_round fallback event should persist fallback reason category"
   );
 });
+
+test("#348: Step1/2 feedback prompt is configurable from system prompt config", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { resolve, dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const thisDir = dirname(fileURLToPath(import.meta.url));
+
+  const configSrc = readFileSync(resolve(thisDir, "../src/config/system-prompt-config.json"), "utf8");
+  const config = JSON.parse(configSrc) as {
+    step12FeedbackPrompts?: Record<string, string>;
+    step12FeedbackFocusPrompts?: Record<string, string>;
+    subStepPrompts?: Record<string, string>;
+  };
+  const promptConfigSrc = readFileSync(resolve(thisDir, "../src/lib/prompt-config.ts"), "utf8");
+  const typeSrc = readFileSync(resolve(thisDir, "../src/lib/types.ts"), "utf8");
+  const engineSrc = readFileSync(resolve(thisDir, "../src/lib/engine.ts"), "utf8");
+
+  assert.ok(config.step12FeedbackPrompts, "system config should define Step1/2 feedback prompts");
+  assert.ok(config.step12FeedbackPrompts?.["2"], "system config should allow a Step2-specific feedback prompt");
+  assert.ok(configSrc.includes("重點摘要"), "configured feedback prompt should require summary content");
+  assert.ok(config.step12FeedbackFocusPrompts?.["2-2"], "system config should define Step2 2-2 feedback focus");
+  assert.ok(config.step12FeedbackFocusPrompts?.["2-3"], "system config should define Step2 2-3 feedback focus");
+  assert.ok(config.step12FeedbackFocusPrompts?.["2-4"], "system config should define Step2 2-4 feedback focus");
+  assert.equal(config.subStepPrompts?.["2-4"], undefined, "2-4 should remain question-bank driven, not LLM-generated from subStepPrompts");
+  assert.ok(promptConfigSrc.includes("step12FeedbackPrompts"), "prompt config loader should pass through feedback prompts");
+  assert.ok(promptConfigSrc.includes("step12FeedbackFocusPrompts"), "prompt config loader should pass through feedback focus prompts");
+  assert.ok(typeSrc.includes("step12FeedbackPrompts?"), "PromptConfig type should expose feedback prompts");
+  assert.ok(typeSrc.includes("step12FeedbackFocusPrompts?"), "PromptConfig type should expose feedback focus prompts");
+  assert.ok(engineSrc.includes("getStep12FeedbackPrompt"), "engine should read the configured feedback prompt");
+  assert.ok(engineSrc.includes("getStep12FeedbackFocusPrompt"), "engine should read configured substep feedback focus");
+  assert.ok(engineSrc.includes("本子步驟回饋焦點"), "engine should include substep-specific focus in feedback prompt");
+  assert.ok(engineSrc.includes("prompts[String(step)]?.trim() || prompts.default?.trim()"), "engine should prefer step-specific feedback prompt");
+  assert.ok(engineSrc.includes("[\"2-2\", \"2-3\", \"2-4\"].includes(substepKey)"), "Step2 late feedback should have stricter quality gate");
+});

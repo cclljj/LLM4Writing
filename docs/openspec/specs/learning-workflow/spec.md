@@ -39,6 +39,20 @@ Gate members are resolved from joined members first and fall back to assigned pa
 - **WHEN** the last participant submits a valid answer
 - **THEN** the system generates feedback first, then generates or selects the next question, and advances the gate in the same round
 
+#### Scenario: Configurable feedback prompt
+
+- **GIVEN** `step12FeedbackPrompts` is configured
+- **WHEN** Step1/2 feedback is generated
+- **THEN** the system uses the step-specific prompt when present, otherwise the default feedback prompt
+- **AND** it may add `step12FeedbackFocusPrompts[currentSubstepKey]` to guide substep-specific feedback without changing next-question source
+
+#### Scenario: Step2 late-substep feedback depth
+
+- **GIVEN** the current Step2 substep is `2-2`, `2-3`, or `2-4`
+- **WHEN** feedback is generated
+- **THEN** the feedback is checked for sufficient length and useful teaching signals such as summary, suggestion, strengthening direction, cause, example, claim, material, detail, or persuasiveness
+- **AND** insufficient feedback is retried or replaced by fallback
+
 #### Scenario: Joined-member gate priority
 
 - **GIVEN** assigned participants include users who have not joined the session yet
@@ -66,6 +80,13 @@ The system SHALL choose Step1/2 next questions from the configured prompt or que
 - **GIVEN** no substep prompt exists and `questionBanks[nextSubstepKey]` contains questions
 - **WHEN** the system advances to that substep
 - **THEN** it selects a question from the question bank without calling the LLM for question generation
+
+#### Scenario: Step2 2-4 remains question-bank driven
+
+- **GIVEN** Step2 advances to `2-4`
+- **WHEN** `subStepPrompts["2-4"]` is absent and `questionBanks["2-4"]` contains questions
+- **THEN** the next question is randomly selected from the question bank
+- **AND** the system does not generate the `2-4` question from the previous conversation
 
 #### Scenario: Safe fallback question
 

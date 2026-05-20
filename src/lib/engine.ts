@@ -99,6 +99,8 @@ export function createSession(payload: StartSessionPayload): SessionState {
     promptConfig:
       payload.promptConfig ?? {
         stepPrompts: {},
+        step12FeedbackPrompts: {},
+        step12FeedbackFocusPrompts: {},
         subStepPrompts: {},
         subStepPromptsFallbacks: {},
         questionBanks: {},
@@ -196,6 +198,8 @@ function normalizeSessionRuntimeShape(session: SessionState): void {
   if (!session.promptConfig || typeof session.promptConfig !== "object") {
     session.promptConfig = {
       stepPrompts: {},
+      step12FeedbackPrompts: {},
+      step12FeedbackFocusPrompts: {},
       subStepPrompts: {},
       subStepPromptsFallbacks: {},
       questionBanks: {},
@@ -208,6 +212,12 @@ function normalizeSessionRuntimeShape(session: SessionState): void {
   }
   if (!session.promptConfig.subStepPrompts || typeof session.promptConfig.subStepPrompts !== "object") {
     session.promptConfig.subStepPrompts = {};
+  }
+  if (!session.promptConfig.step12FeedbackPrompts || typeof session.promptConfig.step12FeedbackPrompts !== "object") {
+    session.promptConfig.step12FeedbackPrompts = {};
+  }
+  if (!session.promptConfig.step12FeedbackFocusPrompts || typeof session.promptConfig.step12FeedbackFocusPrompts !== "object") {
+    session.promptConfig.step12FeedbackFocusPrompts = {};
   }
   if (!session.promptConfig.subStepPromptsFallbacks || typeof session.promptConfig.subStepPromptsFallbacks !== "object") {
     session.promptConfig.subStepPromptsFallbacks = {};
@@ -367,7 +377,7 @@ function buildStep12StepContext(session: SessionState, step: 1 | 2, userId: stri
   return { essayTitle, currentSubstepKey, currentQuestion, sameStepRecent, crossStepContext };
 }
 
-function isStep12FeedbackQualityRisk(text: string): boolean {
+function isStep12FeedbackQualityRisk(text: string, step?: 1 | 2, substepKey?: string): boolean {
   const trimmed = text.trim();
   if (!trimmed) return true;
   if (/^已收到大家的回覆[，、].*請繼續下一題[。！!]?$/.test(trimmed)) return true;
@@ -381,6 +391,10 @@ function isStep12FeedbackQualityRisk(text: string): boolean {
   const end = trimmed.at(-1) ?? "";
   const completeEnding = /[。！？.!?」』]$/.test(end);
   if (!completeEnding && trimmed.length >= 12) return true;
+  if (step === 2 && substepKey && ["2-2", "2-3", "2-4"].includes(substepKey)) {
+    if (trimmed.length < 80) return true;
+    if (!/(重點|摘要|補強|建議|原因|例子|主張|素材|細節|說服力)/.test(trimmed)) return true;
+  }
   return hasFormalLlmQualityRisk(trimmed);
 }
 
@@ -472,6 +486,22 @@ function getStep12FallbackQuestion(session: SessionState, nextSubstepKey: string
   return getDefaultStep12FallbackQuestion(nextSubstepKey);
 }
 
+function getStep12FeedbackPrompt(session: SessionState, step: 1 | 2): string {
+  const prompts = session.promptConfig.step12FeedbackPrompts ?? {};
+  const configured = prompts[String(step)]?.trim() || prompts.default?.trim();
+  if (configured) return configured;
+  return [
+    "你現在只負責「回饋」，禁止提出下一題或任何問句。",
+    "回饋必須包含：1) 先肯定本輪進展；2) 指出下一輪要補強的具體點。",
+    "禁止輸出空泛句（例如「已收到大家的回覆，整理得很好，請繼續下一題」或同義句）。",
+    "請只輸出 JSON：{\"feedback\":\"...\"}，不要輸出其他文字。"
+  ].join("\n");
+}
+
+function getStep12FeedbackFocusPrompt(session: SessionState, substepKey: string): string {
+  return session.promptConfig.step12FeedbackFocusPrompts?.[substepKey]?.trim() ?? "";
+}
+
 async function generateStep12Feedback(
   session: SessionState,
   step: 1 | 2,
@@ -486,18 +516,18 @@ async function generateStep12Feedback(
   const context = buildStep12StepContext(session, step, userId);
   const fallback = buildStep12FallbackFeedback(session, step, context.currentSubstepKey);
   const stepPrompt = session.promptConfig.stepPrompts[String(step)] ?? "";
+  const feedbackPrompt = getStep12FeedbackPrompt(session, step);
+  const feedbackFocusPrompt = getStep12FeedbackFocusPrompt(session, context.currentSubstepKey);
   const systemParts = [session.promptConfig.systemPrompt ?? "", stepPrompt, `目前子步驟：${context.currentSubstepKey}`]
+    .filter(Boolean)
+    .join("\n\n");
+  const feedbackInstructions = [feedbackPrompt, feedbackFocusPrompt ? `本子步驟回饋焦點：${feedbackFocusPrompt}` : ""]
     .filter(Boolean)
     .join("\n\n");
   const baseMessages: LlmChatMessage[] = [
     {
       role: "system",
-      content:
-        `${systemParts}\n\n` +
-        '你現在只負責「回饋」，禁止提出下一題或任何問句。' +
-        '回饋必須包含：1) 先肯定本輪進展；2) 指出下一輪要補強的具體點。' +
-        '禁止輸出空泛句（例如「已收到大家的回覆，整理得很好，請繼續下一題」或同義句）。' +
-        '請只輸出 JSON：{"feedback":"..."}，不要輸出其他文字。'
+      content: `${systemParts}\n\n${feedbackInstructions}`
     },
     {
       role: "user",
@@ -532,7 +562,7 @@ async function generateStep12Feedback(
         telemetry: { sessionId: session.id, activityId: session.activityId, step, label: "step12_feedback" }
       });
       const normalized = sanitizeStep12Feedback(raw, fallback);
-      if (!isStep12FeedbackQualityRisk(normalized)) {
+      if (!isStep12FeedbackQualityRisk(normalized, step, context.currentSubstepKey)) {
         return { feedbackText: normalized, source: "llm", llmAttempts, usedFallback: false };
       }
       fallbackErrorCategory = fallbackErrorCategory ?? "other";
