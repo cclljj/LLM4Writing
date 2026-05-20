@@ -114,6 +114,19 @@ The system SHALL reduce duplicated context-assembly work for repeated LLM calls 
 - **WHEN** the server builds student course context for LLM prompts
 - **THEN** it reuses a short-TTL in-memory cached context instead of recomputing the full context payload each time
 
+#### Scenario: Layered context compression before LLM calls
+
+- **GIVEN** student course context contains long multi-step history
+- **WHEN** the server prepares context for an LLM prompt
+- **THEN** older conversation rounds are compressed into layered summary blocks (conclusions, disputes, unresolved points)
+- **AND** only recent rounds are preserved as raw text snippets
+
+#### Scenario: Dedup and noise-cleaning on context lines
+
+- **GIVEN** historical messages include repeated lines, courtesy filler, or formatting artifacts
+- **WHEN** context lines are assembled
+- **THEN** duplicate and low-information lines are reduced and formatting noise is cleaned before prompt submission
+
 ### Requirement: Student-Visible Text Hygiene
 
 The system MUST sanitize AI-generated text before showing it to students.

@@ -464,6 +464,21 @@ test("#344: Step10 uses chunked generation and token budgets are uplifted", asyn
   assert.ok(step10RouteSrc.includes("generateStep10ReportChunkedText"), "step10 streaming route should use chunked generator");
 });
 
+test("#345: llm context uses layered summary and dedup cleaning", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { resolve, dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const thisDir = dirname(fileURLToPath(import.meta.url));
+
+  const src = readFileSync(resolve(thisDir, "../src/lib/llm-context.ts"), "utf8");
+  assert.ok(src.includes("buildLayeredSummary"), "context builder should implement layered summary");
+  assert.ok(src.includes("[歷史摘要-結論]"), "layered summary should preserve conclusions");
+  assert.ok(src.includes("[歷史摘要-爭點]"), "layered summary should preserve disputes");
+  assert.ok(src.includes("[歷史摘要-未解事項]"), "layered summary should preserve unresolved points");
+  assert.ok(src.includes("pickUniqueSnippets"), "context builder should deduplicate repeated snippets");
+  assert.ok(src.includes("[近期原文]"), "context builder should keep recent raw lines");
+});
+
 test("#319: course implementation report replaces download placeholder with PDF generation flow", async () => {
   const { readFileSync } = await import("node:fs");
   const { resolve, dirname } = await import("node:path");
