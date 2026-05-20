@@ -205,6 +205,12 @@ The system SHALL expose admin/course management APIs with role-sensitive visibil
 - **WHEN** the student triggers reopen editing in Step3
 - **THEN** the backend removes that user from Step3 complete gate and marks reopen-editing state until the student completes Step3 again
 
+#### Scenario: Step3 readiness tolerates stale reopen markers
+
+- **GIVEN** a user has completed Step3 again but stale state leaves both `3-complete` and `3-reopen` markers
+- **WHEN** teacher dashboard evaluates Step3 advance readiness
+- **THEN** readiness prioritizes `3-complete` for that user to avoid false blocking
+
 #### Scenario: Admin store migration
 
 - **GIVEN** an admin calls `POST /api/admin/maintenance/store-migrate`

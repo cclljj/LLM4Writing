@@ -596,6 +596,7 @@ test("#334: teacher Step3 advance hint prioritizes joined users to avoid absent-
   assert.ok(src.includes("legacy sessions may miss the gate signal"), "Step3 hint should include backward-compatibility note for legacy gate signal");
   assert.ok(src.includes("completedUsers.add(participant)"), "Step3 hint should infer completion from submitted outlines");
   assert.ok(src.includes("3-reopen"), "Step3 hint should respect explicit reopen-editing marker");
+  assert.ok(src.includes("if (completedUsers?.has(participant)) return true;"), "Step3 hint should prioritize explicit complete gate when reopen marker is stale");
   assert.ok(src.includes("尚未收齊已加入成員的完成結構樹回報"), "Step3 hint should communicate joined-member gate status");
 });
 

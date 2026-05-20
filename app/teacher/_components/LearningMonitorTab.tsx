@@ -778,7 +778,12 @@ export default function LearningMonitorTab({
     return session.participants;
   }
 
-  function hasStep3CompletionEvidence(session: MonitorSession, participant: string): boolean {
+  function hasStep3CompletionEvidence(
+    session: MonitorSession,
+    participant: string,
+    completedUsers?: ReadonlySet<string>
+  ): boolean {
+    if (completedUsers?.has(participant)) return true;
     const reopenedUsers = new Set(session.groupGate?.["3-reopen"] ?? []);
     if (reopenedUsers.has(participant)) return false;
     const submitted = session.step3SubmittedOutlines?.[participant]?.trim() ?? "";
@@ -834,7 +839,7 @@ export default function LearningMonitorTab({
       // Backward-compatibility: legacy sessions may miss the gate signal even though
       // students already submitted Step3 snapshots before the newer gate logic landed.
       session.participants.forEach((participant) => {
-        if (hasStep3CompletionEvidence(session, participant)) completedUsers.add(participant);
+        if (hasStep3CompletionEvidence(session, participant, completedUsers)) completedUsers.add(participant);
       });
       const step3GateMembers = resolveStepGateMembers(session, "3-complete");
       const ready =

@@ -985,6 +985,7 @@ Loading 規則（#270）：
 - Step3 的可推進判定需向後相容舊資料：即使 `groupGate["3-complete"]` 缺漏，只要該成員存在 `step3SubmittedOutlines` 快照，也視為已完成 Step3 gate（用於教師端切換判斷）。
 - Step3 的可推進判定需再擴充舊資料證據來源：若 `step3SubmittedOutlines` 缺漏，但 `artifactDiagnostics.step3OutlineChars > 0` 或 `artifactDiagnostics.step3OutlineUpdatedAt` 存在，也視為該成員已提交 Step3 產物，避免摘要模式下無法推進。
 - 若成員存在 `groupGate["3-reopen"]`，即使有上述舊資料證據，也不得視為已完成；需等該成員再次送出完成才可計入 Step3 gate。
+- 衝突容錯：若同一成員同時存在 `groupGate["3-complete"]` 與 `groupGate["3-reopen"]`（例如舊資料/合併殘留），教師端可推進判定需以 `3-complete` 優先，避免已重新完成者被 stale reopen 標記誤擋。
 - Step4 的可推進判定需比照 Step3：優先使用 `joinedUsers`，若缺失則先回退到有互動紀錄的 active 成員（`studentMessageStats.count > 0`），最後才回退 `participants`，避免未進場名單造成教師端無法推進。
 - 目前 group gate 有未完成組員且最後事件距今 >= 10 分鐘，標示高風險。
 - 有未完成組員但未達高風險門檻，標示留意。
