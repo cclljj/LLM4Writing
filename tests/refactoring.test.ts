@@ -652,3 +652,17 @@ test("#348: Step1/2 feedback prompt is configurable from system prompt config", 
   assert.ok(engineSrc.includes("prompts[String(step)]?.trim() || prompts.default?.trim()"), "engine should prefer step-specific feedback prompt");
   assert.ok(engineSrc.includes("[\"2-2\", \"2-3\", \"2-4\"].includes(substepKey)"), "Step2 late feedback should have stricter quality gate");
 });
+
+test("#351: Step1-1 feedback includes genre mismatch correction context", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { resolve, dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const thisDir = dirname(fileURLToPath(import.meta.url));
+
+  const engineSrc = readFileSync(resolve(thisDir, "../src/lib/engine.ts"), "utf8");
+  assert.ok(engineSrc.includes("function buildStep11GenreCheckHint"), "engine should build Step1-1 genre-check hint");
+  assert.ok(engineSrc.includes("findActivity(session.activityId)"), "genre check should compare against activity configured genre");
+  assert.ok(engineSrc.includes("回饋要求：必須明確指出文體錯誤"), "genre mismatch hint should require explicit correction");
+  assert.ok(engineSrc.includes("if (step === 1 && substepKey === \"1-1\")"), "fallback feedback should handle Step1-1 correction");
+  assert.ok(engineSrc.includes("文體檢核補充"), "feedback generation should inject genre-check hint into LLM context");
+});

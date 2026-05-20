@@ -3,6 +3,7 @@ import { ChatMessage, SessionState, StartSessionPayload, Step12RoundLog } from "
 import { STEP_DEFINITIONS, getModeByStep, getStepName } from "@/src/lib/spec";
 import { isLlmConfigured, llmChatCompletionText, LlmChatMessage } from "@/src/lib/llm-client";
 import { buildStudentCourseContext } from "@/src/lib/llm-context";
+import { findActivity } from "@/src/lib/activity-store";
 import { extractCurrentSystemQuestion, normalizeForCompare, validateStudentAnswer, validateStudentAnswerSimple } from "@/src/lib/answer-validation";
 import { recordRejectedAnswerSignal } from "@/src/lib/learning-diagnostics";
 import { classifyLlmError } from "@/src/lib/llm-observability";
@@ -356,6 +357,7 @@ function buildStep12StepContext(session: SessionState, step: 1 | 2, userId: stri
   currentQuestion: string;
   sameStepRecent: string;
   crossStepContext: string;
+  step11GenreCheckHint: string;
 } {
   const currentSubstepKey = getCurrentSubstepKey(session, step) ?? `${step}-unknown`;
   const currentQuestion = extractCurrentSystemQuestion(session, step, userId) || "(尚無題目)";
@@ -374,7 +376,53 @@ function buildStep12StepContext(session: SessionState, step: 1 | 2, userId: stri
     maxChars: 13000,
     includeSystem: true
   });
-  return { essayTitle, currentSubstepKey, currentQuestion, sameStepRecent, crossStepContext };
+  const step11GenreCheckHint = buildStep11GenreCheckHint(session, currentSubstepKey);
+  return { essayTitle, currentSubstepKey, currentQuestion, sameStepRecent, crossStepContext, step11GenreCheckHint };
+}
+
+function resolveGenreLabel(text: string): string | null {
+  const normalized = normalizeForCompare(text);
+  if (!normalized) return null;
+  const genreMatchers: Array<{ label: string; aliases: string[] }> = [
+    { label: "議論文", aliases: ["議論文", "論說文"] },
+    { label: "記敘文", aliases: ["記敘文", "敘事文", "故事文"] },
+    { label: "說明文", aliases: ["說明文"] },
+    { label: "抒情文", aliases: ["抒情文"] }
+  ];
+  for (const genre of genreMatchers) {
+    if (genre.aliases.some((alias) => normalized.includes(normalizeForCompare(alias)))) {
+      return genre.label;
+    }
+  }
+  return null;
+}
+
+function buildStep11GenreCheckHint(session: SessionState, currentSubstepKey: string): string {
+  if (session.currentStep !== 1 || currentSubstepKey !== "1-1") return "";
+  const expectedGenreRaw = session.activityId ? findActivity(session.activityId)?.genre ?? "" : "";
+  const expectedGenre = resolveGenreLabel(expectedGenreRaw);
+  if (!expectedGenre) return "";
+
+  const gateResponses = session.messages
+    .filter((message) => message.step === 1 && message.role === "student")
+    .slice(-Math.max(session.participants.length, 1));
+  if (gateResponses.length === 0) return `文體檢核：本題正確文體是「${expectedGenre}」。請在回饋中提醒學生判準。`;
+
+  const studentGenres = gateResponses.map((message) => {
+    const guessed = resolveGenreLabel(message.text);
+    return `${message.userId ?? "unknown"}=${guessed ?? "未明確回答文體"}`;
+  });
+  const hasMismatch = gateResponses.some((message) => {
+    const guessed = resolveGenreLabel(message.text);
+    return guessed !== expectedGenre;
+  });
+  if (!hasMismatch) return `文體檢核：學生回答與題目文體一致（${expectedGenre}）。`;
+
+  return [
+    `文體檢核：本題正確文體是「${expectedGenre}」。`,
+    `學生本輪回答判讀：${studentGenres.join("；")}。`,
+    "回饋要求：必須明確指出文體錯誤、說明為何此題屬於正確文體，並要求學生下一輪改用正確文體判準思考。"
+  ].join("\n");
 }
 
 function isStep12FeedbackQualityRisk(text: string, step?: 1 | 2, substepKey?: string): boolean {
@@ -412,6 +460,13 @@ function sanitizeStep12Feedback(raw: string, fallbackText: string): string {
 }
 
 function buildStep12FallbackFeedback(session: SessionState, step: 1 | 2, substepKey: string): string {
+  if (step === 1 && substepKey === "1-1") {
+    const hint = buildStep11GenreCheckHint(session, substepKey);
+    const expected = (hint.match(/本題正確文體是「([^」]+)」/) ?? [])[1];
+    if (expected) {
+      return `你們有開始判斷文體，方向不錯。先校正一下：這一題的文體應是「${expected}」。請下一輪用「${expected}」的判準（寫作目的與表達方式）重新確認一次，再進入後續關鍵字討論。`;
+    }
+  }
   const recentStudentTexts = session.messages
     .filter((message) => message.step === step && message.role === "student")
     .slice(-4)
@@ -534,6 +589,7 @@ async function generateStep12Feedback(
       content:
         `作文題目：${context.essayTitle}\n` +
         `目前子步驟題目：${context.currentQuestion}\n\n` +
+        (context.step11GenreCheckHint ? `文體檢核補充：\n${context.step11GenreCheckHint}\n\n` : "") +
         `本步驟最近對話：\n${context.sameStepRecent || "(無)"}\n\n` +
         `課程歷史（節錄）：\n${context.crossStepContext || "(無)"}\n\n` +
         `目前事件：all members answered step ${step} substep ${context.currentSubstepKey}`

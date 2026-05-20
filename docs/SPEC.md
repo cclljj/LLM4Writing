@@ -429,6 +429,7 @@ Step1/2 改為兩段式 prompt 組裝：
 4. 目前子步驟 key 與「目前子步驟題目」
 5. 若存在 `step12FeedbackFocusPrompts[currentSubstepKey]`，加入該子步驟回饋焦點
 6. 本步驟最近對話 + 跨步驟歷史節錄
+7. Step `1-1` 需加入文體檢核補充：以活動設定文體（`activity.genre`）比對本輪學生回答；若不一致，回饋必須明確糾正
 
 第二段（下一題）：
 
@@ -474,6 +475,7 @@ Step1/2 第二段（下一題）JSON 契約（僅當使用 `subStepPrompts[nextS
 - `nextQuestion` 顯示前需再做文字淨化：去除 code fence（如 ```json）與 JSON 殼層殘留；若仍為 JSON 結構樣式則視為無效題目並走 fallback。
 - `feedback` 顯示前也需做同級淨化與完整性檢查：若偵測 JSON 殘留（如 ` ```json{`、裸 `{`、欄位名殘留）或疑似截斷半句，視為無效回饋並重試/走 fallback。
 - Step2 後半段（`2-2`、`2-3`、`2-4`）回饋需具備基本內容深度：不可過短，且需呈現摘要、建議、補強方向、原因/例子/主張/素材/細節/說服力等有效教學訊號之一；不足時需重試/走 fallback。
+- Step `1-1` 若學生回答文體與活動設定文體不一致，回饋必須包含：正確文體、錯誤說明、修正指引；不得直接略過糾正就進入 `1-2` 語境。
 - 第一段與第二段都需有 timeout/retry/fallback，任一階段失敗不得造成流程卡住。
 - Step1/2 單次遠端 LLM 嘗試 timeout 約 20~25 秒，並允許有限續寫；優先避免邊界子題截斷。
 - 每輪完成後需記錄可觀測欄位：`currentStep/currentSubStep/nextSubStep/feedbackSource/questionSource/llmAttemptCountFeedback/llmAttemptCountQuestion/usedFallback/latencyMs`。

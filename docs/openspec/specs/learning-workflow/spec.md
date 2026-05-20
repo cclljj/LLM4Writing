@@ -46,6 +46,13 @@ Gate members are resolved from joined members first and fall back to assigned pa
 - **THEN** the system uses the step-specific prompt when present, otherwise the default feedback prompt
 - **AND** it may add `step12FeedbackFocusPrompts[currentSubstepKey]` to guide substep-specific feedback without changing next-question source
 
+#### Scenario: Step1-1 genre mismatch correction
+
+- **GIVEN** Step `1-1` asks for writing genre and the activity has a configured genre
+- **WHEN** student responses in the current gate indicate a different genre than the configured one
+- **THEN** feedback explicitly states the correct genre and explains the mismatch
+- **AND** feedback asks students to re-anchor their thinking with the correct genre criteria before continuing to Step `1-2`
+
 #### Scenario: Step2 late-substep feedback depth
 
 - **GIVEN** the current Step2 substep is `2-2`, `2-3`, or `2-4`
