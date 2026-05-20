@@ -211,6 +211,12 @@ The admin console SHALL provide Prompt/LLM diagnostics, KPI trends, and non-sens
 - **THEN** it shows DB-env presence status, critical table health, and whether fallback metrics are event-backed or message-estimated
 - **AND** warnings are shown when event tables are missing or event coverage is insufficient
 
+#### Scenario: Recent fallback samples
+
+- **GIVEN** an admin investigates high fallback periods
+- **WHEN** diagnostics data is loaded
+- **THEN** the panel shows recent fallback samples with timestamp, step/kind, and matched LLM error-category hints when available
+
 #### Scenario: Run store migration from diagnostics
 
 - **GIVEN** an admin detects missing critical tables in diagnostics

@@ -401,6 +401,7 @@ test("#318: admin diagnostics route exposes step KPIs, trends, and LLM error tax
   assert.ok(src.includes("getSessionStoreTableHealth"), "diagnostics route must expose table health");
   assert.ok(src.includes("warnings"), "diagnostics route must expose warnings");
   assert.ok(src.includes("runtimeHost"), "diagnostics route must expose runtime DB host");
+  assert.ok(src.includes("recentFallbackSamples"), "diagnostics route must expose recent fallback samples");
 });
 
 test("#318: admin diagnostics UI renders new monitoring sections", async () => {
@@ -416,6 +417,7 @@ test("#318: admin diagnostics UI renders new monitoring sections", async () => {
   assert.ok(src.includes("觀測資料來源"), "UI must render observability source section");
   assert.ok(src.includes("執行資料表 migration"), "UI must include store migration trigger");
   assert.ok(src.includes("DB Host"), "UI must render runtime DB host");
+  assert.ok(src.includes("最近 fallback 樣本"), "UI must render recent fallback sample section");
 });
 
 test("#338: admin store migration route exists and is admin-protected", async () => {

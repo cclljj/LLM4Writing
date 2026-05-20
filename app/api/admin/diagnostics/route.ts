@@ -967,6 +967,45 @@ function buildLlmErrorTaxonomy(llmEvents?: PersistedEventRow[]) {
   };
 }
 
+function buildRecentFallbackSamples(
+  learningEvents: PersistedEventRow[],
+  llmEvents: PersistedEventRow[],
+  limit = 12
+): Array<{
+  at: string;
+  step: number | null;
+  kind: string;
+  sessionId: string | null;
+  activityId: string | null;
+  fallbackUsed: boolean;
+  matchedLlmErrorCategory: string | null;
+}> {
+  const fallbackEvents = learningEvents
+    .filter((event) => event.fallback_used)
+    .sort((a, b) => b.created_at.getTime() - a.created_at.getTime())
+    .slice(0, limit);
+
+  return fallbackEvents.map((fallbackEvent) => {
+    const matched = llmEvents.find((llmEvent) => {
+      if (!llmEvent.error_category) return false;
+      if (llmEvent.session_id && fallbackEvent.session_id && llmEvent.session_id !== fallbackEvent.session_id) return false;
+      if (typeof llmEvent.step === "number" && typeof fallbackEvent.step === "number" && llmEvent.step !== fallbackEvent.step) return false;
+      const diffMs = Math.abs(llmEvent.created_at.getTime() - fallbackEvent.created_at.getTime());
+      return diffMs <= 2 * 60 * 1000;
+    });
+
+    return {
+      at: fallbackEvent.created_at.toISOString(),
+      step: fallbackEvent.step ?? null,
+      kind: fallbackEvent.kind,
+      sessionId: fallbackEvent.session_id ?? null,
+      activityId: fallbackEvent.activity_id ?? null,
+      fallbackUsed: fallbackEvent.fallback_used,
+      matchedLlmErrorCategory: matched?.error_category ?? null
+    };
+  });
+}
+
 async function buildDiagnosticsPayload(selectedWindow: DiagnosticsWindow, nowMs: number): Promise<DiagnosticsPayload> {
   const config = systemPromptConfig as Record<string, unknown>;
   const cutoffMs = nowMs - WINDOW_MS[selectedWindow];
@@ -1046,6 +1085,7 @@ async function buildDiagnosticsPayload(selectedWindow: DiagnosticsWindow, nowMs:
       : computeTrendSeries(windowedSpecSessions, cutoffMs, "class")
   };
   const llmErrorTaxonomy = buildLlmErrorTaxonomy(llmEvents);
+  const recentFallbackSamples = buildRecentFallbackSamples(learningEvents, llmEvents);
 
   return {
     llm,
@@ -1092,6 +1132,7 @@ async function buildDiagnosticsPayload(selectedWindow: DiagnosticsWindow, nowMs:
     stepKpis,
     trends,
     llmErrorTaxonomy,
+    recentFallbackSamples,
     artifactHealth: computeArtifactHealth(windowedSpecSessions),
     tokenUsage,
     generatedAt: new Date(nowMs).toISOString()

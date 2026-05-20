@@ -168,6 +168,15 @@ type DiagnosticsPayload = {
       errorCategories: { timeout: number; truncation: number; parse_fail: number; other: number };
     }>;
   };
+  recentFallbackSamples: Array<{
+    at: string;
+    step: number | null;
+    kind: string;
+    sessionId: string | null;
+    activityId: string | null;
+    fallbackUsed: boolean;
+    matchedLlmErrorCategory: string | null;
+  }>;
   artifactHealth: {
     totalStudents: number;
     outline: ArtifactBucket;
@@ -610,6 +619,36 @@ export default function AdminPromptDiagnostics() {
                 </tbody>
               </table>
             </div>
+            <hr style={{ border: 0, borderTop: "1px solid #e2e8f0", margin: "14px 0" }} />
+            <h4 style={{ marginBottom: 6 }}>最近 fallback 樣本</h4>
+            <small style={{ display: "block", marginBottom: 8, color: "#64748b" }}>
+              顯示最近 fallback 事件，並嘗試對齊鄰近 LLM 錯誤分類，快速定位 timeout/parse 等來源。
+            </small>
+            <div style={{ overflowX: "auto" }}>
+              <table className="pro-table">
+                <thead>
+                  <tr>
+                    <th>時間</th>
+                    <th>Step</th>
+                    <th>Kind</th>
+                    <th>LLM 錯誤分類</th>
+                    <th>Session</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.recentFallbackSamples.map((sample) => (
+                    <tr key={`${sample.at}:${sample.sessionId ?? ""}:${sample.kind}`}>
+                      <td>{new Date(sample.at).toLocaleString("zh-TW", { hour12: false })}</td>
+                      <td>{sample.step ?? "—"}</td>
+                      <td>{sample.kind}</td>
+                      <td>{sample.matchedLlmErrorCategory ?? "—"}</td>
+                      <td>{sample.sessionId ?? "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {data.recentFallbackSamples.length === 0 ? <small>目前時間窗內沒有 fallback 樣本。</small> : null}
 
             <hr style={{ border: 0, borderTop: "1px solid #e2e8f0", margin: "14px 0" }} />
             <h4 style={{ marginBottom: 6 }}>作品 Artifact 健康度</h4>

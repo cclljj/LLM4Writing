@@ -1471,6 +1471,8 @@ Request:
 - `storage.tableHealth`（含 `llm4writing_llm_events`、`llm4writing_learning_events` 是否存在）。
 - `storage.fallbackMetricsSource`（`persisted_learning_events` 或 `estimated_from_ai_messages`）。
 - 若事件表缺失或事件不足，需在 `storage.warnings` 提示目前 fallback 指標為估算值。
+- 回傳應包含近期 fallback 樣本摘要（例如最近 N 筆）：
+- 至少含 `at`、`step`、`kind`、`sessionId/activityId`，以及可對齊到的 `LLM error_category`（若存在）。
 
 #### `GET /api/admin/diagnostics/fallback-report`
 
