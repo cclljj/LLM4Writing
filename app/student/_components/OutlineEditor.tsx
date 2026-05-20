@@ -190,6 +190,7 @@ export default function OutlineEditor({
   }
 
   function addChildNode(parentId: string) {
+    if (locked) return;
     const parent = outlineNodes.find((node) => node.id === parentId);
     if (!parent) return;
     const siblings = outlineNodes.filter((node) => node.parentId === parentId);
@@ -211,6 +212,7 @@ export default function OutlineEditor({
   }
 
   function removeLeafNode(nodeId: string) {
+    if (locked) return;
     const hasChildren = outlineNodes.some((node) => node.parentId === nodeId);
     const permissions = getStructureTreeNodePermissions(getDepth(nodeId), hasChildren ? 1 : 0);
     if (!permissions.canDelete) return;
@@ -234,6 +236,7 @@ export default function OutlineEditor({
   }
 
   function finishNodeEditing(nodeId: string, nextText?: string) {
+    if (locked) return;
     setEditingNodeId(null);
     if (!getStructureTreeNodePermissions(getDepth(nodeId), childrenMap.get(nodeId)?.length ?? 0).canEditText) return;
     setOutlineDirty(true);
@@ -248,6 +251,7 @@ export default function OutlineEditor({
   }
 
   function scheduleLongPressEdit(nodeId: string) {
+    if (locked) return;
     if (!getStructureTreeNodePermissions(getDepth(nodeId), childrenMap.get(nodeId)?.length ?? 0).canEditText) return;
     if (longPressTimerRef.current) {
       window.clearTimeout(longPressTimerRef.current);
@@ -268,6 +272,7 @@ export default function OutlineEditor({
   }
 
   async function handleComplete() {
+    if (locked) return;
     if (!onComplete) return;
     const mermaid = toMermaid(outlineNodes);
     await onComplete(mermaid);
@@ -327,6 +332,7 @@ export default function OutlineEditor({
                 key={node.id}
                 onMouseEnter={() => draggingNodeId && setDropTargetNodeId(node.id)}
                 onMouseDown={(event) => {
+                  if (locked) return;
                   const target = event.target as HTMLElement;
                   if (target.closest("button") || target.closest("input")) return;
                   if (!permissions.canEditText) return;
@@ -338,6 +344,7 @@ export default function OutlineEditor({
                 onMouseUp={clearLongPressEdit}
                 onMouseLeave={clearLongPressEdit}
                 onTouchStart={(event) => {
+                  if (locked) return;
                   const target = event.target as HTMLElement;
                   if (target.closest("button") || target.closest("input")) return;
                   if (!permissions.canEditText) return;
@@ -347,6 +354,7 @@ export default function OutlineEditor({
                 onTouchMove={clearLongPressEdit}
                 onDoubleClick={(event) => {
                   event.stopPropagation();
+                  if (locked) return;
                   if (!permissions.canEditText) return;
                   setDraggingNodeId(null);
                   setDropTargetNodeId(null);
@@ -364,11 +372,12 @@ export default function OutlineEditor({
                   boxShadow: "0 4px 14px rgba(15, 23, 42, 0.08)",
                   padding: "8px 10px 6px",
                   cursor: permissions.canEditText ? "move" : "default",
+                  opacity: locked ? 0.92 : 1,
                   userSelect: "none"
                 }}
               >
                 <div style={{ display: "flex", justifyContent: "flex-end", gap: 4, marginBottom: 4 }}>
-                  {permissions.canAddChild ? (
+                  {permissions.canAddChild && !locked ? (
                     <button
                       type="button"
                       className="secondary"
@@ -379,7 +388,7 @@ export default function OutlineEditor({
                       ➕
                     </button>
                   ) : null}
-                  {permissions.canDelete ? (
+                  {permissions.canDelete && !locked ? (
                     <button
                       type="button"
                       className="secondary"
@@ -391,7 +400,7 @@ export default function OutlineEditor({
                     </button>
                   ) : null}
                 </div>
-                {permissions.canEditText && editingNodeId === node.id ? (
+                {permissions.canEditText && !locked && editingNodeId === node.id ? (
                   <input
                     autoFocus
                     value={node.text}

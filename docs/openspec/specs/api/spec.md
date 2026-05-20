@@ -199,6 +199,12 @@ The system SHALL expose admin/course management APIs with role-sensitive visibil
 - **WHEN** `groupGate["3-complete"]` is missing but artifact evidence exists (submitted outline snapshot or persisted outline diagnostics)
 - **THEN** teacher dashboard readiness still treats the corresponding members as completed and allows step advancement
 
+#### Scenario: Step3 reopen editing cancels completion gate
+
+- **GIVEN** a student has already completed Step3 and entered locked state
+- **WHEN** the student triggers reopen editing in Step3
+- **THEN** the backend removes that user from Step3 complete gate and marks reopen-editing state until the student completes Step3 again
+
 #### Scenario: Admin store migration
 
 - **GIVEN** an admin calls `POST /api/admin/maintenance/store-migrate`

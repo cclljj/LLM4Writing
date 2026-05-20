@@ -595,7 +595,28 @@ test("#334: teacher Step3 advance hint prioritizes joined users to avoid absent-
   assert.ok(src.includes("step3SubmittedOutlines"), "Step3 helper should fallback to submitted outline members when joinedUsers are unavailable");
   assert.ok(src.includes("legacy sessions may miss the gate signal"), "Step3 hint should include backward-compatibility note for legacy gate signal");
   assert.ok(src.includes("completedUsers.add(participant)"), "Step3 hint should infer completion from submitted outlines");
+  assert.ok(src.includes("3-reopen"), "Step3 hint should respect explicit reopen-editing marker");
   assert.ok(src.includes("尚未收齊已加入成員的完成結構樹回報"), "Step3 hint should communicate joined-member gate status");
+});
+
+test("#356: Step3 completion lock supports reopen editing flow", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { resolve, dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const thisDir = dirname(fileURLToPath(import.meta.url));
+
+  const step3CompleteSrc = readFileSync(resolve(thisDir, "../app/api/session/step3/complete/route.ts"), "utf8");
+  const step3ReopenSrc = readFileSync(resolve(thisDir, "../app/api/session/step3/reopen/route.ts"), "utf8");
+  const studentSrc = readFileSync(resolve(thisDir, "../app/student/page.tsx"), "utf8");
+  const editorSrc = readFileSync(resolve(thisDir, "../app/student/_components/OutlineEditor.tsx"), "utf8");
+
+  assert.ok(step3CompleteSrc.includes("session.step3SubmittedOutlines[user.username] = outlineText"), "Step3 complete should always refresh submitted snapshot");
+  assert.ok(step3CompleteSrc.includes("3-reopen"), "Step3 complete should clear reopen marker when completing again");
+  assert.ok(step3ReopenSrc.includes("session.groupGate[doneKey] = Array.from(doneUsers)"), "Step3 reopen route should remove user from complete gate");
+  assert.ok(step3ReopenSrc.includes("session.groupGate[reopenKey] = Array.from(reopenUsers)"), "Step3 reopen route should add user to reopen marker");
+  assert.ok(studentSrc.includes("/api/session/step3/reopen"), "student Step3 UI should call reopen API");
+  assert.ok(studentSrc.includes("恢復編輯"), "student Step3 UI should render reopen editing button");
+  assert.ok(editorSrc.includes("if (locked) return;"), "outline editor should hard-stop editing actions when locked");
 });
 
 test("#335: teacher Step4 advance hint prioritizes joined users to avoid absent-member deadlock", async () => {

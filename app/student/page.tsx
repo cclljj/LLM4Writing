@@ -884,6 +884,28 @@ export default function StudentPage() {
     applySessionSafely(data);
   }
 
+  async function reopenStep3Editing() {
+    if (!session) return;
+    const courseStatus = activityStatusMap[session.activityId ?? ""];
+    if (courseStatus && courseStatus !== "in_progress") {
+      setError(courseStatus === "paused" ? "課程目前暫停中，請等待老師繼續上課。" : "課程目前不可操作，請等待老師指示。");
+      return;
+    }
+    setError("");
+    const response = await fetch("/api/session/step3/reopen", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId: session.id })
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      setError(formatUserError(data.error ?? "reopen_step3_failed"));
+      return;
+    }
+    setStep3CompleteHint("");
+    applySessionSafely(data);
+  }
+
   async function completeStep4() {
     if (!session) return;
     const courseStatus = activityStatusMap[session.activityId ?? ""];
@@ -1372,6 +1394,13 @@ export default function StudentPage() {
                   <small>{waitingStep3Members ? "你已完成結構樹，等待其他同學完成..." : "你已完成結構樹，可等待老師切換下一步。"}</small>
                 </p>
               ) : null}
+              {step3CompletedByMe && isInputEnabled ? (
+                <div style={{ marginTop: 8 }}>
+                  <button type="button" className="secondary" onClick={() => reopenStep3Editing()}>
+                    恢復編輯
+                  </button>
+                </div>
+              ) : null}
               {!step3CompletedByMe && isInputEnabled && canReplyToQuestion && !isSendingMessage ? (
                 <form onSubmit={sendMessage}>
                   <label>你的回答</label>
@@ -1396,7 +1425,7 @@ export default function StudentPage() {
                 completeHint={step3CompleteHint}
                 completedMessage={
                   step3CompletedByMe
-                    ? (waitingStep3Members ? "你已完成結構樹，等待其他同學完成..." : "你已完成結構樹，可等待老師切換下一步。")
+                    ? (waitingStep3Members ? "你已完成結構樹，已鎖定編輯，等待其他同學完成..." : "你已完成結構樹，已鎖定編輯，可等待老師切換下一步。")
                     : undefined
                 }
               />

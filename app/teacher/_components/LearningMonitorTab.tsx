@@ -779,6 +779,8 @@ export default function LearningMonitorTab({
   }
 
   function hasStep3CompletionEvidence(session: MonitorSession, participant: string): boolean {
+    const reopenedUsers = new Set(session.groupGate?.["3-reopen"] ?? []);
+    if (reopenedUsers.has(participant)) return false;
     const submitted = session.step3SubmittedOutlines?.[participant]?.trim() ?? "";
     if (submitted.length > 0) return true;
     const outlineChars = session.artifactDiagnostics?.step3OutlineChars?.[participant] ?? 0;

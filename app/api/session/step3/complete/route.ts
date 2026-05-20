@@ -40,14 +40,18 @@ export async function POST(request: NextRequest) {
   session.outlines[user.username] = outlineText;
   recordArtifactUpdateSignal(session, "outline", user.username);
   if (!session.step3SubmittedOutlines) session.step3SubmittedOutlines = {};
-  if (!session.step3SubmittedOutlines[user.username]) {
-    session.step3SubmittedOutlines[user.username] = outlineText;
-  }
+  session.step3SubmittedOutlines[user.username] = outlineText;
 
   const key = "3-complete";
   const doneUsers = new Set(session.groupGate[key] ?? []);
   doneUsers.add(user.username);
   session.groupGate[key] = Array.from(doneUsers);
+  const reopenKey = "3-reopen";
+  const reopenUsers = new Set(session.groupGate[reopenKey] ?? []);
+  if (reopenUsers.has(user.username)) {
+    reopenUsers.delete(user.username);
+    session.groupGate[reopenKey] = Array.from(reopenUsers);
+  }
 
   await saveSession(session);
   return NextResponse.json(session);
