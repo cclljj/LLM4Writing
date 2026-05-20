@@ -218,6 +218,13 @@ The admin console SHALL provide Prompt/LLM diagnostics, KPI trends, and non-sens
 - **THEN** the panel shows recent fallback samples with timestamp, step/kind, and matched LLM error-category hints when available
 - **AND** for Step1/2 fallback kinds (`step12_feedback`, `step12_next_question`, `step12_round`), `fallback_used=true` samples include a non-empty reason category (at least `other`)
 
+#### Scenario: Stable trend labels
+
+- **GIVEN** diagnostics renders course/class trend tables
+- **WHEN** event-backed trend rows are aggregated
+- **THEN** school/class/course labels prefer session-snapshot metadata (by `session_id`) before activity lookup
+- **AND** labels fall back to activity-id metadata when session snapshot metadata is unavailable
+
 #### Scenario: Run store migration from diagnostics
 
 - **GIVEN** an admin detects missing critical tables in diagnostics

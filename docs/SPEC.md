@@ -1486,6 +1486,7 @@ Request:
 - 回傳應包含近期 fallback 樣本摘要（例如最近 N 筆）：
 - 至少含 `at`、`step`、`kind`、`sessionId/activityId`，以及可對齊到的 `LLM error_category`（若存在）。
 - Step1/2 的 fallback 事件（`step12_feedback`、`step12_next_question`、`step12_round`）在 `fallback_used=true` 時，必須持久化非空 `error_category`（至少 `other`），避免診斷面板顯示 `—`。
+- `trends.byCourse` / `trends.byClass` 的學校、班級、課程名稱需優先使用 session 快照 metadata（`session_id` 對應資料），再回退 `activity_id` 對應快取，最後才使用即時 activity 查詢，避免因後續主資料變更造成趨勢名稱漂移。
 
 #### `GET /api/admin/diagnostics/fallback-report`
 

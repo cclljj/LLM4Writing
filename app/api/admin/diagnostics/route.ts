@@ -622,6 +622,12 @@ type TrendMeta = {
   activityTitle: string;
 };
 
+type TrendBaseMeta = {
+  school: string;
+  classNumber: string;
+  activityTitle: string;
+};
+
 function buildTrendMeta(
   session: SessionState,
   activity: { school?: string; classNumber?: string; title?: string } | undefined,
@@ -644,6 +650,27 @@ function buildTrendMeta(
     classNumber,
     activityTitle
   };
+}
+
+function buildSessionTrendMetaMaps(sessions: SessionState[]): {
+  bySessionId: Map<string, TrendBaseMeta>;
+  byActivityId: Map<string, TrendBaseMeta>;
+} {
+  const bySessionId = new Map<string, TrendBaseMeta>();
+  const byActivityId = new Map<string, TrendBaseMeta>();
+  for (const session of sessions) {
+    const activity = session.activityId ? findActivity(session.activityId) : undefined;
+    const meta: TrendBaseMeta = {
+      school: activity?.school ?? "—",
+      classNumber: activity?.classNumber ?? "—",
+      activityTitle: session.activityTitle ?? activity?.title ?? session.activityId ?? "未命名課程"
+    };
+    bySessionId.set(session.id, meta);
+    if (session.activityId && !byActivityId.has(session.activityId)) {
+      byActivityId.set(session.activityId, meta);
+    }
+  }
+  return { bySessionId, byActivityId };
 }
 
 function computeTrendSeries(
@@ -764,7 +791,8 @@ function computeTrendSeries(
 
 function computeTrendSeriesFromLearningEvents(
   events: PersistedEventRow[],
-  dimension: TrendDimension
+  dimension: TrendDimension,
+  metaMaps?: { bySessionId: Map<string, TrendBaseMeta>; byActivityId: Map<string, TrendBaseMeta> }
 ): TrendSeries[] {
   const responseKinds = new Set(["step12_round", "step3_response", "step6_suggest", "step7_feedback", "step10_report"]);
   const byGroupDay = new Map<string, TrendMutableBucket>();
@@ -772,10 +800,13 @@ function computeTrendSeriesFromLearningEvents(
 
   for (const event of events) {
     const activityId = event.activity_id ?? "";
+    const sessionMeta = event.session_id ? metaMaps?.bySessionId.get(event.session_id) : undefined;
+    const activityMeta = activityId ? metaMaps?.byActivityId.get(activityId) : undefined;
     const activity = activityId ? findActivity(activityId) : undefined;
-    const school = activity?.school ?? "—";
-    const classNumber = activity?.classNumber ?? "—";
-    const activityTitle = activity?.title ?? activityId ?? "未命名課程";
+    const school = sessionMeta?.school ?? activityMeta?.school ?? activity?.school ?? "—";
+    const classNumber = sessionMeta?.classNumber ?? activityMeta?.classNumber ?? activity?.classNumber ?? "—";
+    const activityTitle =
+      sessionMeta?.activityTitle ?? activityMeta?.activityTitle ?? activity?.title ?? activityId ?? "未命名課程";
     const key =
       dimension === "class"
         ? `${school}::${classNumber}`
@@ -1017,6 +1048,7 @@ async function buildDiagnosticsPayload(selectedWindow: DiagnosticsWindow, nowMs:
   ]);
   const specSessions = sessions.filter((session) => session.workflow === "spec10");
   const windowedSpecSessions = specSessions.filter((session) => hasRecentActivity(session, cutoffMs));
+  const trendMetaMaps = buildSessionTrendMetaMaps(specSessions);
   const recentSessions = windowedSpecSessions
     .slice()
     .sort((a, b) => {
@@ -1078,10 +1110,10 @@ async function buildDiagnosticsPayload(selectedWindow: DiagnosticsWindow, nowMs:
   });
   const trends = {
     byCourse: hasEventMetrics
-      ? computeTrendSeriesFromLearningEvents(learningEvents, "course")
+      ? computeTrendSeriesFromLearningEvents(learningEvents, "course", trendMetaMaps)
       : computeTrendSeries(windowedSpecSessions, cutoffMs, "course"),
     byClass: hasEventMetrics
-      ? computeTrendSeriesFromLearningEvents(learningEvents, "class")
+      ? computeTrendSeriesFromLearningEvents(learningEvents, "class", trendMetaMaps)
       : computeTrendSeries(windowedSpecSessions, cutoffMs, "class")
   };
   const llmErrorTaxonomy = buildLlmErrorTaxonomy(llmEvents);

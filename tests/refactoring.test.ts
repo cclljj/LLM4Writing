@@ -402,6 +402,9 @@ test("#318: admin diagnostics route exposes step KPIs, trends, and LLM error tax
   assert.ok(src.includes("warnings"), "diagnostics route must expose warnings");
   assert.ok(src.includes("runtimeHost"), "diagnostics route must expose runtime DB host");
   assert.ok(src.includes("recentFallbackSamples"), "diagnostics route must expose recent fallback samples");
+  assert.ok(src.includes("buildSessionTrendMetaMaps"), "diagnostics route should build trend metadata from session snapshots");
+  assert.ok(src.includes("computeTrendSeriesFromLearningEvents(learningEvents, \"course\", trendMetaMaps)"), "event-backed course trends should use session metadata map");
+  assert.ok(src.includes("computeTrendSeriesFromLearningEvents(learningEvents, \"class\", trendMetaMaps)"), "event-backed class trends should use session metadata map");
 });
 
 test("#318: admin diagnostics UI renders new monitoring sections", async () => {
