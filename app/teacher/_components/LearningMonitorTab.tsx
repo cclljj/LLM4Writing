@@ -758,6 +758,27 @@ export default function LearningMonitorTab({
     return typeof latest === "number" ? new Date(latest) : null;
   }
 
+  function resolveStepGateMembers(session: MonitorSession, gateKey: "3-complete" | "4-complete"): string[] {
+    const joinedMembers = (session.joinedUsers ?? []).filter((user) => session.participants.includes(user));
+    if (joinedMembers.length > 0) return joinedMembers;
+
+    const activeFromStats = session.participants.filter((participant) => {
+      const stats = session.studentMessageStats?.[participant];
+      return (stats?.count ?? 0) > 0;
+    });
+    if (activeFromStats.length > 0) return activeFromStats;
+
+    if (gateKey === "3-complete") {
+      const submittedUsers = session.participants.filter((participant) => {
+        const submitted = session.step3SubmittedOutlines?.[participant]?.trim() ?? "";
+        return submitted.length > 0;
+      });
+      if (submittedUsers.length > 0) return submittedUsers;
+    }
+
+    return session.participants;
+  }
+
   function getStepAdvanceHint(session: MonitorSession): { ready: boolean; text: string; nextStep?: number } {
     const step = session.currentStep;
     const nextStep = step < 10 ? step + 1 : undefined;
@@ -789,8 +810,7 @@ export default function LearningMonitorTab({
 
     if (step === 4) {
       const completedUsers = session.groupGate?.["4-complete"] ?? [];
-      const joinedMembers = (session.joinedUsers ?? []).filter((user) => session.participants.includes(user));
-      const step4GateMembers = joinedMembers.length > 0 ? joinedMembers : session.participants;
+      const step4GateMembers = resolveStepGateMembers(session, "4-complete");
       const ready =
         step4GateMembers.length > 0 &&
         step4GateMembers.every((participant) => completedUsers.includes(participant));
@@ -801,8 +821,7 @@ export default function LearningMonitorTab({
 
     if (step === 3) {
       const completedUsers = session.groupGate?.["3-complete"] ?? [];
-      const joinedMembers = (session.joinedUsers ?? []).filter((user) => session.participants.includes(user));
-      const step3GateMembers = joinedMembers.length > 0 ? joinedMembers : session.participants;
+      const step3GateMembers = resolveStepGateMembers(session, "3-complete");
       const ready =
         step3GateMembers.length > 0 &&
         step3GateMembers.every((participant) => completedUsers.includes(participant));

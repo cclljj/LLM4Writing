@@ -588,7 +588,9 @@ test("#334: teacher Step3 advance hint prioritizes joined users to avoid absent-
 
   const src = readFileSync(resolve(thisDir, "../app/teacher/_components/LearningMonitorTab.tsx"), "utf8");
   assert.ok(src.includes("const joinedMembers = (session.joinedUsers ?? []).filter"), "Step3 hint should derive joined members");
-  assert.ok(src.includes("const step3GateMembers = joinedMembers.length > 0 ? joinedMembers : session.participants"), "Step3 hint should fallback to participants when joinedUsers are unavailable");
+  assert.ok(src.includes("resolveStepGateMembers(session, \"3-complete\")"), "Step3 hint should resolve gate members through helper");
+  assert.ok(src.includes("activeFromStats"), "Step3 helper should fallback to active members inferred from message stats");
+  assert.ok(src.includes("step3SubmittedOutlines"), "Step3 helper should fallback to submitted outline members when joinedUsers are unavailable");
   assert.ok(src.includes("尚未收齊已加入成員的完成結構樹回報"), "Step3 hint should communicate joined-member gate status");
 });
 
@@ -599,7 +601,7 @@ test("#335: teacher Step4 advance hint prioritizes joined users to avoid absent-
   const thisDir = dirname(fileURLToPath(import.meta.url));
 
   const src = readFileSync(resolve(thisDir, "../app/teacher/_components/LearningMonitorTab.tsx"), "utf8");
-  assert.ok(src.includes("const step4GateMembers = joinedMembers.length > 0 ? joinedMembers : session.participants"), "Step4 hint should fallback to participants when joinedUsers are unavailable");
+  assert.ok(src.includes("resolveStepGateMembers(session, \"4-complete\")"), "Step4 hint should resolve gate members through helper");
   assert.ok(src.includes("步驟 4 尚未收齊已加入成員的完成確認"), "Step4 hint should communicate joined-member gate status");
 });
 
