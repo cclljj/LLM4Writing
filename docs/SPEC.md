@@ -980,6 +980,7 @@ Loading 規則（#270）：
 
 - `getStepAdvanceHint(session).ready` 為 true 時標示可推進並提供一鍵推進。
 - Step3 的可推進判定需優先使用 `joinedUsers`（已實際加入課程者）作為 gate 成員；若 `joinedUsers` 缺失，需先回退到有互動紀錄的 active 成員（`studentMessageStats.count > 0`），再回退到已提交 Step3 結構樹快照的成員，最後才回退 `participants`，避免未進場名單造成教師端無法推進。
+- Step3 的可推進判定需向後相容舊資料：即使 `groupGate["3-complete"]` 缺漏，只要該成員存在 `step3SubmittedOutlines` 快照，也視為已完成 Step3 gate（用於教師端切換判斷）。
 - Step4 的可推進判定需比照 Step3：優先使用 `joinedUsers`，若缺失則先回退到有互動紀錄的 active 成員（`studentMessageStats.count > 0`），最後才回退 `participants`，避免未進場名單造成教師端無法推進。
 - 目前 group gate 有未完成組員且最後事件距今 >= 10 分鐘，標示高風險。
 - 有未完成組員但未達高風險門檻，標示留意。

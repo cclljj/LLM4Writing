@@ -134,6 +134,12 @@ The classroom dashboard SHALL show all sessions for the selected course and prio
 - **AND** when joined-member data is unavailable, it falls back to active members inferred from student message stats
 - **AND** if still unavailable, it can use members with submitted Step3 outlines before final fallback to full participants
 
+#### Scenario: Step3 legacy completion signal backfill
+
+- **GIVEN** a legacy Step3 session is missing complete `3-complete` gate records
+- **WHEN** submitted Step3 outline snapshots exist for gate members
+- **THEN** the dashboard treats those members as completed for Step3 advance readiness
+
 #### Scenario: Step4 advance gate uses joined members first
 
 - **GIVEN** a Step4 session has assigned participants but not all assigned users have actually joined the session

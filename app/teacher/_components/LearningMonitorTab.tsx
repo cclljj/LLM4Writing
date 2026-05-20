@@ -820,11 +820,17 @@ export default function LearningMonitorTab({
     }
 
     if (step === 3) {
-      const completedUsers = session.groupGate?.["3-complete"] ?? [];
+      const completedUsers = new Set(session.groupGate?.["3-complete"] ?? []);
+      // Backward-compatibility: legacy sessions may miss the gate signal even though
+      // students already submitted Step3 snapshots before the newer gate logic landed.
+      session.participants.forEach((participant) => {
+        const submitted = session.step3SubmittedOutlines?.[participant]?.trim() ?? "";
+        if (submitted) completedUsers.add(participant);
+      });
       const step3GateMembers = resolveStepGateMembers(session, "3-complete");
       const ready =
         step3GateMembers.length > 0 &&
-        step3GateMembers.every((participant) => completedUsers.includes(participant));
+        step3GateMembers.every((participant) => completedUsers.has(participant));
       return ready
         ? { ready: true, text: `步驟 ${step} 已收齊完成條件，建議切換到 Step ${nextStep}。`, nextStep }
         : {
