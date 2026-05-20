@@ -175,6 +175,12 @@ The system SHALL expose admin/course management APIs with role-sensitive visibil
 - **THEN** the response explicitly indicates whether metrics come from persisted learning events or message-estimation fallback
 - **AND** includes warnings when critical event tables are missing or event coverage is insufficient
 
+#### Scenario: Step1/2 fallback reason completeness
+
+- **GIVEN** Step1/2 fallback events are included in diagnostics samples
+- **WHEN** a sample kind is `step12_feedback`, `step12_next_question`, or `step12_round` with `fallback_used=true`
+- **THEN** the diagnostics sample includes a non-empty fallback reason category (for example `timeout`, `truncation`, `parse_fail`, or `other`)
+
 #### Scenario: Admin store migration
 
 - **GIVEN** an admin calls `POST /api/admin/maintenance/store-migrate`

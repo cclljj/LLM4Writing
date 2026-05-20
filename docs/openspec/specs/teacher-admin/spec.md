@@ -216,6 +216,7 @@ The admin console SHALL provide Prompt/LLM diagnostics, KPI trends, and non-sens
 - **GIVEN** an admin investigates high fallback periods
 - **WHEN** diagnostics data is loaded
 - **THEN** the panel shows recent fallback samples with timestamp, step/kind, and matched LLM error-category hints when available
+- **AND** for Step1/2 fallback kinds (`step12_feedback`, `step12_next_question`, `step12_round`), `fallback_used=true` samples include a non-empty reason category (at least `other`)
 
 #### Scenario: Run store migration from diagnostics
 

@@ -1479,6 +1479,7 @@ Request:
 - 若事件表缺失或事件不足，需在 `storage.warnings` 提示目前 fallback 指標為估算值。
 - 回傳應包含近期 fallback 樣本摘要（例如最近 N 筆）：
 - 至少含 `at`、`step`、`kind`、`sessionId/activityId`，以及可對齊到的 `LLM error_category`（若存在）。
+- Step1/2 的 fallback 事件（`step12_feedback`、`step12_next_question`、`step12_round`）在 `fallback_used=true` 時，必須持久化非空 `error_category`（至少 `other`），避免診斷面板顯示 `—`。
 
 #### `GET /api/admin/diagnostics/fallback-report`
 

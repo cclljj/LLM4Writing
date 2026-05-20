@@ -5,7 +5,8 @@ import { isLlmConfigured, llmChatCompletionText, LlmChatMessage } from "@/src/li
 import { buildStudentCourseContext } from "@/src/lib/llm-context";
 import { extractCurrentSystemQuestion, normalizeForCompare, validateStudentAnswer, validateStudentAnswerSimple } from "@/src/lib/answer-validation";
 import { recordRejectedAnswerSignal } from "@/src/lib/learning-diagnostics";
-import { recordLearningEvent } from "@/src/lib/store";
+import { classifyLlmError } from "@/src/lib/llm-observability";
+import { PersistedErrorCategory, recordLearningEvent } from "@/src/lib/store";
 import {
   hasFormalLlmQualityRisk,
   parseStructuredStepAiResponse,
@@ -475,7 +476,13 @@ async function generateStep12Feedback(
   session: SessionState,
   step: 1 | 2,
   userId: string
-): Promise<{ feedbackText: string; source: "llm" | "fallback"; llmAttempts: number; usedFallback: boolean }> {
+): Promise<{
+  feedbackText: string;
+  source: "llm" | "fallback";
+  llmAttempts: number;
+  usedFallback: boolean;
+  fallbackErrorCategory?: PersistedErrorCategory;
+}> {
   const context = buildStep12StepContext(session, step, userId);
   const fallback = buildStep12FallbackFeedback(session, step, context.currentSubstepKey);
   const stepPrompt = session.promptConfig.stepPrompts[String(step)] ?? "";
@@ -504,10 +511,17 @@ async function generateStep12Feedback(
   ];
 
   if (!isLlmConfigured()) {
-    return { feedbackText: fallback, source: "fallback", llmAttempts: 0, usedFallback: true };
+    return {
+      feedbackText: fallback,
+      source: "fallback",
+      llmAttempts: 0,
+      usedFallback: true,
+      fallbackErrorCategory: "other"
+    };
   }
 
   let llmAttempts = 0;
+  let fallbackErrorCategory: PersistedErrorCategory | undefined;
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     llmAttempts = attempt;
     try {
@@ -521,12 +535,20 @@ async function generateStep12Feedback(
       if (!isStep12FeedbackQualityRisk(normalized)) {
         return { feedbackText: normalized, source: "llm", llmAttempts, usedFallback: false };
       }
-    } catch {
+      fallbackErrorCategory = fallbackErrorCategory ?? "other";
+    } catch (error) {
+      fallbackErrorCategory = classifyLlmError(error);
       // Continue to next attempt; fallback handled after loop.
     }
   }
 
-  return { feedbackText: fallback, source: "fallback", llmAttempts, usedFallback: true };
+  return {
+    feedbackText: fallback,
+    source: "fallback",
+    llmAttempts,
+    usedFallback: true,
+    fallbackErrorCategory: fallbackErrorCategory ?? "other"
+  };
 }
 
 async function generateStep12NextQuestion(
@@ -540,6 +562,7 @@ async function generateStep12NextQuestion(
   source: "subStepPrompt_llm" | "questionBank_random" | "fallback";
   llmAttempts: number;
   usedFallback: boolean;
+  fallbackErrorCategory?: PersistedErrorCategory;
 }> {
   const subStepPrompt = session.promptConfig.subStepPrompts?.[nextSubstepKey]?.trim() ?? "";
   if (!subStepPrompt) {
@@ -551,13 +574,20 @@ async function generateStep12NextQuestion(
       nextQuestion: getStep12FallbackQuestion(session, nextSubstepKey),
       source: "fallback",
       llmAttempts: 0,
-      usedFallback: true
+      usedFallback: true,
+      fallbackErrorCategory: "other"
     };
   }
 
   const fallback = getStep12FallbackQuestion(session, nextSubstepKey);
   if (!isLlmConfigured()) {
-    return { nextQuestion: fallback, source: "fallback", llmAttempts: 0, usedFallback: true };
+    return {
+      nextQuestion: fallback,
+      source: "fallback",
+      llmAttempts: 0,
+      usedFallback: true,
+      fallbackErrorCategory: "other"
+    };
   }
 
   const context = buildStep12StepContext(session, step, userId);
@@ -583,6 +613,7 @@ async function generateStep12NextQuestion(
   ];
 
   let llmAttempts = 0;
+  let fallbackErrorCategory: PersistedErrorCategory | undefined;
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     llmAttempts = attempt;
     try {
@@ -597,12 +628,20 @@ async function generateStep12NextQuestion(
       if (!isStep12QuestionQualityRisk(nextQuestion)) {
         return { nextQuestion, source: "subStepPrompt_llm", llmAttempts, usedFallback: false };
       }
-    } catch {
+      fallbackErrorCategory = fallbackErrorCategory ?? "other";
+    } catch (error) {
+      fallbackErrorCategory = classifyLlmError(error);
       // Continue to retry.
     }
   }
 
-  return { nextQuestion: fallback, source: "fallback", llmAttempts, usedFallback: true };
+  return {
+    nextQuestion: fallback,
+    source: "fallback",
+    llmAttempts,
+    usedFallback: true,
+    fallbackErrorCategory: fallbackErrorCategory ?? "other"
+  };
 }
 
 function appendStep12RoundLog(session: SessionState, log: Step12RoundLog): void {
@@ -1258,6 +1297,7 @@ export async function sendStudentMessage(
         let questionSource: "subStepPrompt_llm" | "questionBank_random" | "fallback" = "fallback";
         let llmAttemptCountQuestion = 0;
         let questionUsedFallback = false;
+        let questionFallbackErrorCategory: PersistedErrorCategory | undefined;
         let nextQuestion: string | undefined;
 
         if (nextSubStepKey) {
@@ -1271,6 +1311,7 @@ export async function sendStudentMessage(
           questionSource = questionResult.source;
           llmAttemptCountQuestion = questionResult.llmAttempts;
           questionUsedFallback = questionResult.usedFallback;
+          questionFallbackErrorCategory = questionResult.fallbackErrorCategory;
           nextQuestion = questionResult.nextQuestion;
         }
 
@@ -1306,6 +1347,10 @@ export async function sendStudentMessage(
           kind: "step12_round",
           latencyMs: roundLatencyMs,
           fallbackUsed: feedbackResult.usedFallback || questionUsedFallback,
+          errorCategory:
+            feedbackResult.usedFallback || questionUsedFallback
+              ? (feedbackResult.fallbackErrorCategory ?? questionFallbackErrorCategory ?? "other")
+              : undefined,
           createdAt: roundCompletedAt
         }).catch(() => undefined);
         if (feedbackResult.usedFallback) {
@@ -1315,6 +1360,7 @@ export async function sendStudentMessage(
             step,
             kind: "step12_feedback",
             fallbackUsed: true,
+            errorCategory: feedbackResult.fallbackErrorCategory ?? "other",
             createdAt: roundCompletedAt
           }).catch(() => undefined);
         }
@@ -1325,6 +1371,7 @@ export async function sendStudentMessage(
             step,
             kind: "step12_next_question",
             fallbackUsed: true,
+            errorCategory: questionFallbackErrorCategory ?? "other",
             createdAt: roundCompletedAt
           }).catch(() => undefined);
         }
