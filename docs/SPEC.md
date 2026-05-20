@@ -910,7 +910,7 @@ classnumber,username,name,school,role,password,ownerTeacherUsername
 - scope 判定需同時確認 session 屬於目前課程的分組定義：若 session 的小組成員與目前課程分組不一致，視為舊資料或跨課程污染，不得顯示於儀表板、對話區或個人進度。
 - 完整 `messages`、`outlines`、`step3SubmittedOutlines` 僅在選取小組對話時以 `?sessionId=...&detail=full` 延遲載入。
 - 輪詢只使用摘要 payload，降低 loading 與網路成本。
-- monitor 列表查詢在 Postgres 模式下需使用 summary-only DB 查詢（不得回傳整包 session payload）；只有點「查看對話」才可讀完整 payload。
+- monitor 列表查詢在 Postgres 模式下需使用 summary-first DB 查詢；一般情況不得回傳完整 messages/artifacts，僅為 legacy JSON-string payload 欄位回補可讀 raw payload。
 - 課堂儀表板、全班加入狀態、小組對話紀錄、個人對話紀錄四個 h2 標題後附加「— 學校 / 班級 / 文章題目」（#258）。
 
 課堂儀表板（#244）：
@@ -1440,10 +1440,11 @@ Request:
 - 支援 `?limit=N&offset=N`，預設 `limit=50`、`offset=0`。
 - 支援 `?activityId=...`，僅回傳指定課程的 sessions（學習管理「查看狀態」模式使用）。
 - Postgres 啟用且帶入 `activityId` 時，需使用 `llm4writing_sessions.activity_id` / `workflow` summary columns 在 DB 層完成 `WHERE activity_id = $1 ORDER BY updated_at DESC LIMIT/OFFSET`，不得先讀全表再分頁。
-- Postgres 啟用且帶入 `activityId` 的 monitor 列表路徑需走 summary-only query（例如 `listMonitorSessionSummariesByActivityId`），不得 `SELECT payload` 整包 JSON；僅取 summary columns 與必要 JSON 小欄位。
+- Postgres 啟用且帶入 `activityId` 的 monitor 列表路徑需走 summary-first query（例如 `listMonitorSessionSummariesByActivityId`），以 summary columns 與必要 JSON 小欄位為主；為相容 legacy JSON-string payload，可讀 raw payload 作為缺漏欄位 fallback，但不得載入完整 messages/artifacts。
 - 回傳前必須依活動目前分組再次過濾 session；同 `activityId` 但小組成員不符合目前分組者不得回傳。
 - 回應：`{ sessions: [...], total: N, limit: N, offset: N }`。
 - 摘要包含 `messageCount`、`lastMessageAt`、`studentMessageStats`、`stepReadyHints`、`artifactDiagnostics`。
+- 摘要模式需相容 legacy session payload：若 `payload` 為 JSON string 或 summary JSON 欄位缺漏，仍需解析 raw payload，並可從 `llm4writing_session_participants` split table 回補 `participants/joinedUsers`，避免教師端 Step3 gate 判定因空成員清單而無法顯示推進按鈕。
 - 完整小組詳情使用 `?sessionId=...&detail=full`；學習管理「查看狀態」模式應同時帶入 `activityId`，避免跨課程 session 被載入。
 - detail 模式才回傳完整 `messages`、`outlines`、`step3SubmittedOutlines`。
 - 未帶 `activityId` 的全域查詢可保留相容路徑；正式監控頁應一律帶入目前選定課程 `activityId`。

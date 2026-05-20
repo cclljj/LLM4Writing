@@ -646,6 +646,7 @@ export type MonitorSessionSummary = {
 
 type MonitorSummaryBaseRow = {
   id: string;
+  payload: unknown;
   activity_id: string | null;
   activity_title: string | null;
   group_id: string | null;
@@ -1218,6 +1219,7 @@ export async function listMonitorSessionSummariesByActivityId(
   const rows = await sql<MonitorSummaryBaseRow[]>`
     SELECT
       id,
+      payload,
       activity_id,
       group_id,
       current_step,
@@ -1247,11 +1249,24 @@ export async function listMonitorSessionSummariesByActivityId(
   `;
 
   const sessionIds = rows.map((row) => row.id);
+  const participantsMap = new Map<string, string[]>();
   const studentMessageStatsMap = new Map<string, Record<string, { count: number; lastMessageAt: string | null }>>();
   const artifactDiagnosticsMap = new Map<string, { step3OutlineChars: Record<string, number>; draftStep6Chars: Record<string, number> }>();
   const stepReadyHintsMap = new Map<string, { step1Ready: boolean; step2Ready: boolean }>();
 
   if (sessionIds.length > 0) {
+    const participantRows = await sql<{ session_id: string; username: string }[]>`
+      SELECT session_id, username
+      FROM llm4writing_session_participants
+      WHERE session_id IN ${sql(sessionIds)}
+      ORDER BY created_at ASC, username ASC
+    `;
+    for (const row of participantRows) {
+      const bucket = participantsMap.get(row.session_id) ?? [];
+      if (!bucket.includes(row.username)) bucket.push(row.username);
+      participantsMap.set(row.session_id, bucket);
+    }
+
     const messageAggRows = await sql<MonitorStudentMessageAggRow[]>`
       SELECT session_id, user_id, COUNT(*)::text AS cnt, MAX(at) AS last_at
       FROM llm4writing_session_messages
@@ -1299,36 +1314,49 @@ export async function listMonitorSessionSummariesByActivityId(
   }
 
   const sessions: MonitorSessionSummary[] = rows.map((row) => {
+    const payload = normalizeSessionPayload(row.payload);
+    const participants = asStringArray(row.participants_json);
+    const joinedUsers = asStringArray(row.joined_users_json);
+    const participantFallback = participantsMap.get(row.id) ?? [];
     const stepStateRaw = asRecord(row.step_state_json);
+    const payloadStepState = asRecord(payload?.stepState);
+    const effectiveStepStateRaw = Object.keys(stepStateRaw).length > 0 ? stepStateRaw : payloadStepState;
     const stepState: MonitorSessionSummary["stepState"] = {
-      step1Substep: Math.max(1, Number(stepStateRaw.step1Substep ?? 1) || 1),
-      step2Substep: Math.max(1, Number(stepStateRaw.step2Substep ?? 1) || 1)
+      step1Substep: Math.max(1, Number(effectiveStepStateRaw.step1Substep ?? 1) || 1),
+      step2Substep: Math.max(1, Number(effectiveStepStateRaw.step2Substep ?? 1) || 1)
     };
-    if (Number.isFinite(Number(stepStateRaw.step1Substep3Question))) stepState.step1Substep3Question = Number(stepStateRaw.step1Substep3Question);
-    if (Number.isFinite(Number(stepStateRaw.step1Substep4Question))) stepState.step1Substep4Question = Number(stepStateRaw.step1Substep4Question);
-    if (Number.isFinite(Number(stepStateRaw.step2Substep1Question))) stepState.step2Substep1Question = Number(stepStateRaw.step2Substep1Question);
+    if (Number.isFinite(Number(effectiveStepStateRaw.step1Substep3Question))) stepState.step1Substep3Question = Number(effectiveStepStateRaw.step1Substep3Question);
+    if (Number.isFinite(Number(effectiveStepStateRaw.step1Substep4Question))) stepState.step1Substep4Question = Number(effectiveStepStateRaw.step1Substep4Question);
+    if (Number.isFinite(Number(effectiveStepStateRaw.step2Substep1Question))) stepState.step2Substep1Question = Number(effectiveStepStateRaw.step2Substep1Question);
+
+    const qualitySignalsJson = asRecord(row.quality_signals_json);
+    const payloadQualitySignals = asRecord(payload?.qualitySignals);
+    const qualitySignalsRaw = Object.keys(qualitySignalsJson).length > 0 ? qualitySignalsJson : payloadQualitySignals;
+    const artifactSignalsJson = asRecord(row.artifact_signals_json);
+    const payloadArtifactSignals = asRecord(payload?.artifactSignals);
+    const artifactSignalsRaw = Object.keys(artifactSignalsJson).length > 0 ? artifactSignalsJson : payloadArtifactSignals;
 
     return {
       sessionId: row.id,
-      activityId: row.activity_id ?? undefined,
-      activityTitle: row.activity_title ?? undefined,
-      groupId: row.group_id ?? undefined,
-      groupName: row.group_name ?? undefined,
-      participants: asStringArray(row.participants_json),
-      joinedUsers: asStringArray(row.joined_users_json),
-      currentStep: row.current_step ?? 1,
-      personalSteps: asNumberRecord(row.personal_steps_json),
-      groupGate: asStringArrayRecord(row.group_gate_json),
+      activityId: row.activity_id ?? payload?.activityId ?? undefined,
+      activityTitle: row.activity_title ?? payload?.activityTitle ?? payload?.activityId ?? undefined,
+      groupId: row.group_id ?? payload?.groupId ?? undefined,
+      groupName: row.group_name ?? payload?.groupName ?? payload?.groupId ?? undefined,
+      participants: participants.length > 0 ? participants : (payload?.participants ?? participantFallback),
+      joinedUsers: joinedUsers.length > 0 ? joinedUsers : (payload?.joinedUsers ?? participantFallback),
+      currentStep: row.current_step ?? payload?.currentStep ?? 1,
+      personalSteps: Object.keys(asNumberRecord(row.personal_steps_json)).length > 0 ? asNumberRecord(row.personal_steps_json) : asNumberRecord(payload?.personalSteps),
+      groupGate: Object.keys(asStringArrayRecord(row.group_gate_json)).length > 0 ? asStringArrayRecord(row.group_gate_json) : asStringArrayRecord(payload?.groupGate),
       stepState,
-      reflectionIndex: asNumberRecord(row.reflection_index_json),
+      reflectionIndex: Object.keys(asNumberRecord(row.reflection_index_json)).length > 0 ? asNumberRecord(row.reflection_index_json) : asNumberRecord(payload?.reflectionIndex),
       qualitySignals: {
-        rejectedAnswerCounts: asNumberRecord(asRecord(row.quality_signals_json).rejectedAnswerCounts),
-        rejectedAnswerLastAt: asStringRecord(asRecord(row.quality_signals_json).rejectedAnswerLastAt)
+        rejectedAnswerCounts: asNumberRecord(qualitySignalsRaw.rejectedAnswerCounts),
+        rejectedAnswerLastAt: asStringRecord(qualitySignalsRaw.rejectedAnswerLastAt)
       },
       artifactSignals: {
-        outlineUpdatedAt: asStringRecord(asRecord(row.artifact_signals_json).outlineUpdatedAt),
-        draftStep6UpdatedAt: asStringRecord(asRecord(row.artifact_signals_json).draftStep6UpdatedAt),
-        draftStep8UpdatedAt: asStringRecord(asRecord(row.artifact_signals_json).draftStep8UpdatedAt)
+        outlineUpdatedAt: asStringRecord(artifactSignalsRaw.outlineUpdatedAt),
+        draftStep6UpdatedAt: asStringRecord(artifactSignalsRaw.draftStep6UpdatedAt),
+        draftStep8UpdatedAt: asStringRecord(artifactSignalsRaw.draftStep8UpdatedAt)
       },
       messageCount: row.message_count ?? 0,
       lastMessageAt: row.last_message_at?.toISOString() ?? null,

@@ -211,6 +211,12 @@ The system SHALL expose admin/course management APIs with role-sensitive visibil
 - **WHEN** teacher dashboard evaluates Step3 advance readiness
 - **THEN** readiness prioritizes `3-complete` for that user to avoid false blocking
 
+#### Scenario: Monitor summary recovers legacy payload metadata
+
+- **GIVEN** a persisted Step3 session stores legacy JSON-string payload or misses summary JSON fields
+- **WHEN** teacher monitor summary loads sessions for an activity
+- **THEN** the summary recovers participants and gate-related metadata from parsed payload or participant split rows so Step3 advance readiness can be evaluated
+
 #### Scenario: Admin store migration
 
 - **GIVEN** an admin calls `POST /api/admin/maintenance/store-migrate`

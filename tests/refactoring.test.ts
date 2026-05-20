@@ -620,6 +620,20 @@ test("#356: Step3 completion lock supports reopen editing flow", async () => {
   assert.ok(editorSrc.includes("if (locked) return;"), "outline editor should hard-stop editing actions when locked");
 });
 
+test("#357: monitor summary recovers legacy string payload and participant rows", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { resolve, dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const thisDir = dirname(fileURLToPath(import.meta.url));
+
+  const storeSrc = readFileSync(resolve(thisDir, "../src/lib/store.ts"), "utf8");
+  assert.ok(storeSrc.includes("payload: unknown;"), "monitor summary row should carry raw payload for legacy parsing");
+  assert.ok(storeSrc.includes("normalizeSessionPayload(row.payload)"), "monitor summary should parse legacy JSON-string payload");
+  assert.ok(storeSrc.includes("llm4writing_session_participants"), "monitor summary should query split participant rows");
+  assert.ok(storeSrc.includes("participants.length > 0 ? participants : (payload?.participants ?? participantFallback)"), "monitor summary should fallback participants from payload or participant rows");
+  assert.ok(storeSrc.includes("groupGate: Object.keys(asStringArrayRecord(row.group_gate_json)).length > 0"), "monitor summary should fallback groupGate from parsed payload");
+});
+
 test("#335: teacher Step4 advance hint prioritizes joined users to avoid absent-member deadlock", async () => {
   const { readFileSync } = await import("node:fs");
   const { resolve, dirname } = await import("node:path");
