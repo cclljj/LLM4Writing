@@ -447,6 +447,23 @@ test("#341: admin fallback report route exists and is admin-protected", async ()
   assert.ok(src.includes("byHour"), "fallback report route must include by-hour metrics");
 });
 
+test("#344: Step10 uses chunked generation and token budgets are uplifted", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { resolve, dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const thisDir = dirname(fileURLToPath(import.meta.url));
+
+  const engineSrc = readFileSync(resolve(thisDir, "../src/lib/engine.ts"), "utf8");
+  const llmClientSrc = readFileSync(resolve(thisDir, "../src/lib/llm-client.ts"), "utf8");
+  const step10RouteSrc = readFileSync(resolve(thisDir, "../app/api/session/step10/stream/route.ts"), "utf8");
+
+  assert.ok(engineSrc.includes("generateStep10ReportChunkedText"), "engine should expose chunked Step10 generation helper");
+  assert.ok(engineSrc.includes("section_"), "chunked Step10 path should generate per-section content");
+  assert.ok(engineSrc.includes("TOKEN_SCALE_NUMERATOR"), "engine should define token-scale uplift");
+  assert.ok(llmClientSrc.includes("max_tokens: input.maxTokens ?? 1170"), "llm client default max_tokens should be uplifted");
+  assert.ok(step10RouteSrc.includes("generateStep10ReportChunkedText"), "step10 streaming route should use chunked generator");
+});
+
 test("#319: course implementation report replaces download placeholder with PDF generation flow", async () => {
   const { readFileSync } = await import("node:fs");
   const { resolve, dirname } = await import("node:path");

@@ -22,6 +22,13 @@ function now(): string {
   return new Date().toISOString();
 }
 
+const TOKEN_SCALE_NUMERATOR = 13;
+const TOKEN_SCALE_DENOMINATOR = 10;
+
+function scaleTokens(base: number): number {
+  return Math.max(1, Math.round((base * TOKEN_SCALE_NUMERATOR) / TOKEN_SCALE_DENOMINATOR));
+}
+
 const step12RoundLocks = new Set<string>();
 
 function makeMessage(input: Omit<ChatMessage, "id" | "at">): ChatMessage {
@@ -504,7 +511,7 @@ async function generateStep12Feedback(
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     llmAttempts = attempt;
     try {
-      const raw = await generateAiTextWithRetry(baseMessages, 0.5, 700, {
+      const raw = await generateAiTextWithRetry(baseMessages, 0.5, scaleTokens(700), {
         attempts: 1,
         timeoutMs: 25_000,
         continuationMaxRounds: 2,
@@ -579,7 +586,7 @@ async function generateStep12NextQuestion(
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     llmAttempts = attempt;
     try {
-      const raw = await generateAiTextWithRetry(baseMessages, 0.4, 320, {
+      const raw = await generateAiTextWithRetry(baseMessages, 0.4, scaleTokens(320), {
         attempts: 1,
         timeoutMs: 20_000,
         continuationMaxRounds: 1,
@@ -693,12 +700,12 @@ async function generateAiTextForStep(
     // generous budget only for long-form content (article suggestions, analyses).
     const maxTokensByStep =
       step === 1 || step === 2
-        ? 700 // group dialog feedback JSON (allow enough room for complete feedback + question)
+        ? scaleTokens(700) // group dialog feedback JSON (allow enough room for complete feedback + question)
         : step === 3
-          ? 600 // tutor reply (typically short)
+          ? scaleTokens(600) // tutor reply (typically short)
           : step === 4
-            ? 800 // group discussion guidance
-            : 1200; // long-form steps (6/7/8/9/10)
+            ? scaleTokens(800) // group discussion guidance
+            : scaleTokens(1200); // long-form steps (6/7/8/9/10)
     // Step 4 keeps single-round response for latency; Step 1/2 use extra continuation
     // to avoid truncated feedback at substep boundaries (e.g., 2-3 -> 2-4).
     const shortStep = step === 4;
@@ -732,7 +739,7 @@ async function generateLegacyAiText(session: SessionState, step: number, context
     return await llmChatCompletionText({
       messages,
       temperature: 0.6,
-      maxTokens: 400,
+      maxTokens: scaleTokens(400),
       telemetry: { sessionId: session.id, activityId: session.activityId, step, label: "legacy_phase_reply" }
     });
   } catch {
@@ -838,7 +845,7 @@ async function generateStep5SummaryForUser(session: SessionState, userId: string
   const { messages, fallback } = buildStep5LlmInput(session, userId);
   if (!isLlmConfigured()) return fallback;
   try {
-    const raw = await generateAiTextWithRetry(messages, 0.6, 1200, {
+    const raw = await generateAiTextWithRetry(messages, 0.6, scaleTokens(1200), {
       continuationMaxRounds: 4,
       telemetry: { sessionId: session.id, activityId: session.activityId, step: 5, label: "step5_summary" }
     });
@@ -855,8 +862,8 @@ async function generateStep5SummaryForUser(session: SessionState, userId: string
         }
       ],
       0.5,
-      1400,
-      { continuationMaxRounds: 5, telemetry: { sessionId: session.id, activityId: session.activityId, step: 5, label: "step5_summary_retry" } }
+      scaleTokens(1400),
+      { continuationMaxRounds: 6, telemetry: { sessionId: session.id, activityId: session.activityId, step: 5, label: "step5_summary_retry" } }
     );
     return normalizeStep5Summary(normalizeFormalLlmText(retryRaw, { fallback }));
   } catch {
@@ -900,13 +907,74 @@ async function generateStep10Report(session: SessionState, userId: string): Prom
   if (!isLlmConfigured()) {
     return fallback;
   }
+  return generateStep10ReportChunkedText(messages, fallback, {
+    sessionId: session.id,
+    activityId: session.activityId,
+    step: 10,
+    label: "step10_report"
+  });
+}
+
+function parseStep10SectionTitles(raw: string): string[] {
+  const lines = raw
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^\s*[\d一二三四五六七八九十]+[.)、．]\s*/, "").trim())
+    .filter((line) => line.length > 0);
+  const deduped = Array.from(new Set(lines));
+  return deduped.slice(0, 4);
+}
+
+export async function generateStep10ReportChunkedText(
+  messages: LlmChatMessage[],
+  fallback: string,
+  telemetry: { sessionId?: string; activityId?: string; step?: number; label?: string }
+): Promise<string> {
   try {
-    const raw = await generateAiTextWithRetry(messages, 0.6, 900, {
-      continuationMaxRounds: 4,
-      telemetry: { sessionId: session.id, activityId: session.activityId, step: 10, label: "step10_report" }
-    });
-    const first = normalizeFormalLlmText(raw, { fallback });
-    if (!hasFormalLlmQualityRisk(first)) return first;
+    const outlineRaw = await generateAiTextWithRetry(
+      [
+        ...messages,
+        {
+          role: "user",
+          content: "請先列出 4 個總結報告段落標題（每行一個標題），只輸出標題清單，不要輸出段落內文。"
+        }
+      ],
+      0.4,
+      scaleTokens(240),
+      {
+        continuationMaxRounds: 2,
+        telemetry: { ...telemetry, label: `${telemetry.label ?? "step10_report"}:outline` }
+      }
+    );
+    const titles = parseStep10SectionTitles(outlineRaw);
+    const fallbackTitles = ["整體表現總覽", "學習進步重點", "可再加強之處", "下一步建議"];
+    const sectionTitles = titles.length >= 3 ? titles : fallbackTitles;
+
+    const sections: string[] = [];
+    for (let index = 0; index < sectionTitles.length; index += 1) {
+      const title = sectionTitles[index]!;
+      const sectionRaw = await generateAiTextWithRetry(
+        [
+          ...messages,
+          {
+            role: "user",
+            content:
+              `請只撰寫第 ${index + 1} 節「${title}」的內文。` +
+              "輸出 1-2 段完整文字，聚焦具體觀察與建議，不要重複其他小節。"
+          }
+        ],
+        0.5,
+        scaleTokens(620),
+        {
+          continuationMaxRounds: 4,
+          telemetry: { ...telemetry, label: `${telemetry.label ?? "step10_report"}:section_${index + 1}` }
+        }
+      );
+      const normalizedSection = normalizeFormalLlmText(sectionRaw, { fallback: `${title}：${fallback}` });
+      sections.push(`## ${title}\n${normalizedSection}`);
+    }
+
+    const stitched = sections.join("\n\n");
+    if (!hasFormalLlmQualityRisk(stitched)) return stitched;
 
     const retryRaw = await generateAiTextWithRetry(
       [
@@ -914,14 +982,18 @@ async function generateStep10Report(session: SessionState, userId: string): Prom
         {
           role: "user",
           content:
-            "請重新輸出完整且正式的總結報告：不得重複句段、不得提到截斷或續寫過程、每句要完整收尾。"
+            "以下是分段草稿，請整合成一份完整且正式的總結報告：不得重複句段、不得提到截斷或續寫過程、每句要完整收尾。\n\n" +
+            stitched
         }
       ],
-      0.5,
-      1200,
-      { continuationMaxRounds: 5, telemetry: { sessionId: session.id, activityId: session.activityId, step: 10, label: "step10_report_retry" } }
+      0.4,
+      scaleTokens(1600),
+      {
+        continuationMaxRounds: 7,
+        telemetry: { ...telemetry, label: `${telemetry.label ?? "step10_report"}:final_retry` }
+      }
     );
-    return normalizeFormalLlmText(retryRaw, { fallback });
+    return normalizeFormalLlmText(retryRaw, { fallback: stitched || fallback });
   } catch {
     return fallback;
   }

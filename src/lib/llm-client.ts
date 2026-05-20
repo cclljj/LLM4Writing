@@ -72,7 +72,7 @@ export async function llmChatCompletionText(input: {
           model: cfg.model,
           messages,
           temperature: input.temperature ?? 0.7,
-          max_tokens: input.maxTokens ?? 900
+          max_tokens: input.maxTokens ?? 1170
         }),
         signal: controller.signal
       });
@@ -173,7 +173,7 @@ export async function* llmChatCompletionStream(input: {
         model: cfg.model,
         messages: input.messages,
         temperature: input.temperature ?? 0.7,
-        max_tokens: input.maxTokens ?? 900,
+        max_tokens: input.maxTokens ?? 1170,
         stream: true
       }),
       signal: controller.signal

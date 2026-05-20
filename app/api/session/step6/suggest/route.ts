@@ -84,7 +84,7 @@ async function generateStep6SuggestionText(
   const firstRaw = await llmChatCompletionText({
     messages,
     temperature: 0.6,
-    maxTokens: 1800,
+    maxTokens: 2340,
     timeoutMs: 75_000,
     continueOnTruncation: true,
     continuationMaxRounds: 6,
@@ -103,7 +103,7 @@ async function generateStep6SuggestionText(
       }
     ],
     temperature: 0.4,
-    maxTokens: 2200,
+    maxTokens: 2860,
     timeoutMs: 90_000,
     continueOnTruncation: true,
     continuationMaxRounds: 7,

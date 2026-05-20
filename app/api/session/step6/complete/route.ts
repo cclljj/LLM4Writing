@@ -52,7 +52,7 @@ async function generateStep7FeedbackText(
   const firstRaw = await llmChatCompletionText({
     messages,
     temperature: 0.5,
-    maxTokens: 1400,
+    maxTokens: 1820,
     timeoutMs: 60_000,
     continueOnTruncation: true,
     continuationMaxRounds: 4,
@@ -70,7 +70,7 @@ async function generateStep7FeedbackText(
       }
     ],
     temperature: 0.4,
-    maxTokens: 1600,
+    maxTokens: 2080,
     timeoutMs: 75_000,
     continueOnTruncation: true,
     continuationMaxRounds: 5,

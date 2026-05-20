@@ -1,49 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { recordLearningEvent, saveSession } from "@/src/lib/store";
-import {
-  isLlmConfigured,
-  llmChatCompletionText,
-  type LlmChatMessage
-} from "@/src/lib/llm-client";
-import { hasFormalLlmQualityRisk, normalizeFormalLlmText } from "@/src/lib/llm-response";
+import { isLlmConfigured } from "@/src/lib/llm-client";
+import { normalizeFormalLlmText } from "@/src/lib/llm-response";
 import { requireStudentInSession } from "@/src/lib/api-helpers";
-import { buildStep10LlmInput, recordStep10Report } from "@/src/lib/engine";
+import { buildStep10LlmInput, generateStep10ReportChunkedText, recordStep10Report } from "@/src/lib/engine";
 import { recordStreamingCall } from "@/src/lib/llm-stats";
-
-async function generateStep10ReportText(
-  messages: LlmChatMessage[],
-  fallback: string,
-  telemetry: { sessionId?: string; activityId?: string; step?: number; label?: string }
-): Promise<string> {
-  const firstRaw = await llmChatCompletionText({
-    messages,
-    temperature: 0.6,
-    maxTokens: 1400,
-    timeoutMs: 60_000,
-    continueOnTruncation: true,
-    continuationMaxRounds: 4,
-    telemetry
-  });
-  const first = normalizeFormalLlmText(firstRaw, { fallback });
-  if (!hasFormalLlmQualityRisk(first)) return first;
-
-  const retryRaw = await llmChatCompletionText({
-    messages: [
-      ...messages,
-      {
-        role: "user",
-        content: "請重新輸出完整且正式的總結報告：不得重複句段、不得提到截斷或續寫過程、每句要完整收尾。"
-      }
-    ],
-    temperature: 0.4,
-    maxTokens: 1600,
-    timeoutMs: 75_000,
-    continueOnTruncation: true,
-    continuationMaxRounds: 5,
-    telemetry: { ...telemetry, label: `${telemetry.label ?? "step10_stream"}:retry` }
-  });
-  return normalizeFormalLlmText(retryRaw, { fallback });
-}
 
 /**
  * SSE-streamed endpoint for the Step 10 final report (#241).
@@ -108,7 +69,7 @@ export async function POST(request: NextRequest) {
           }).catch(() => undefined);
         } else {
           try {
-            const normalized = await generateStep10ReportText(messages, fallback, {
+            const normalized = await generateStep10ReportChunkedText(messages, fallback, {
               sessionId: session.id,
               activityId: session.activityId,
               step: 10,

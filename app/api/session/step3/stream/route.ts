@@ -71,7 +71,7 @@ async function generateStep3ReplyText(
   const firstRaw = await llmChatCompletionText({
     messages,
     temperature: 0.6,
-    maxTokens: 900,
+    maxTokens: 1170,
     timeoutMs: 60_000,
     continueOnTruncation: true,
     continuationMaxRounds: 5,
@@ -90,7 +90,7 @@ async function generateStep3ReplyText(
       }
     ],
     temperature: 0.5,
-    maxTokens: 1100,
+    maxTokens: 1430,
     timeoutMs: 75_000,
     continueOnTruncation: true,
     continuationMaxRounds: 6,

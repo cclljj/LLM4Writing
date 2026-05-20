@@ -187,6 +187,13 @@ The system SHALL stream Step3, Step6 suggestion, Step7 preview, and Step10 repor
 - **WHEN** the server detects quality risk such as truncation residue, duplicated stitched lines, or incomplete ending
 - **THEN** the server regenerates once with a stronger completeness instruction before streaming the final output to the student
 
+#### Scenario: Step10 chunked final report generation
+
+- **GIVEN** a student reaches Step10 final report generation
+- **WHEN** the backend generates report content
+- **THEN** it generates Step10 in multiple sections (outline + per-section content) and composes the final report
+- **AND** uses a final polish pass only when section stitching still has quality risk, reducing truncation fallback from single long completions
+
 ### Requirement: Student UI Continuity
 
 The student UI SHALL keep course progress, previous-step review, next-action guidance, save status, and polling behavior coherent with the student's current workflow state.
