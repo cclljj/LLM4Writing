@@ -770,13 +770,21 @@ export default function LearningMonitorTab({
 
     if (gateKey === "3-complete") {
       const submittedUsers = session.participants.filter((participant) => {
-        const submitted = session.step3SubmittedOutlines?.[participant]?.trim() ?? "";
-        return submitted.length > 0;
+        return hasStep3CompletionEvidence(session, participant);
       });
       if (submittedUsers.length > 0) return submittedUsers;
     }
 
     return session.participants;
+  }
+
+  function hasStep3CompletionEvidence(session: MonitorSession, participant: string): boolean {
+    const submitted = session.step3SubmittedOutlines?.[participant]?.trim() ?? "";
+    if (submitted.length > 0) return true;
+    const outlineChars = session.artifactDiagnostics?.step3OutlineChars?.[participant] ?? 0;
+    if (outlineChars > 0) return true;
+    const outlineUpdatedAt = session.artifactDiagnostics?.step3OutlineUpdatedAt?.[participant] ?? "";
+    return outlineUpdatedAt.trim().length > 0;
   }
 
   function getStepAdvanceHint(session: MonitorSession): { ready: boolean; text: string; nextStep?: number } {
@@ -824,8 +832,7 @@ export default function LearningMonitorTab({
       // Backward-compatibility: legacy sessions may miss the gate signal even though
       // students already submitted Step3 snapshots before the newer gate logic landed.
       session.participants.forEach((participant) => {
-        const submitted = session.step3SubmittedOutlines?.[participant]?.trim() ?? "";
-        if (submitted) completedUsers.add(participant);
+        if (hasStep3CompletionEvidence(session, participant)) completedUsers.add(participant);
       });
       const step3GateMembers = resolveStepGateMembers(session, "3-complete");
       const ready =

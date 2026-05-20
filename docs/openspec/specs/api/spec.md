@@ -181,11 +181,23 @@ The system SHALL expose admin/course management APIs with role-sensitive visibil
 - **WHEN** later events contain placeholder labels (for example `—` or unnamed course) for the same class/course key
 - **THEN** trend labels keep the best available school/class/course names instead of regressing to placeholders
 
+#### Scenario: Diagnostics skips orphan placeholder rows
+
+- **GIVEN** historical session/event records remain after an activity has been deleted
+- **WHEN** trend metadata for those records is placeholder-only and cannot be resolved to meaningful school/class/course labels
+- **THEN** diagnostics trend output skips those orphan rows instead of showing placeholder `-` items
+
 #### Scenario: Step1/2 fallback reason completeness
 
 - **GIVEN** Step1/2 fallback events are included in diagnostics samples
 - **WHEN** a sample kind is `step12_feedback`, `step12_next_question`, or `step12_round` with `fallback_used=true`
 - **THEN** the diagnostics sample includes a non-empty fallback reason category (for example `timeout`, `truncation`, `parse_fail`, or `other`)
+
+#### Scenario: Step3 teacher advance backfills legacy completion evidence
+
+- **GIVEN** a Step3 group was completed before newer gate signals were introduced
+- **WHEN** `groupGate["3-complete"]` is missing but artifact evidence exists (submitted outline snapshot or persisted outline diagnostics)
+- **THEN** teacher dashboard readiness still treats the corresponding members as completed and allows step advancement
 
 #### Scenario: Admin store migration
 

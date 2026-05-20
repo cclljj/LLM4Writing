@@ -633,6 +633,14 @@ function isTrendMetaPlaceholder(value: string | undefined): boolean {
   return !normalized || normalized === "—" || normalized === "未命名課程";
 }
 
+function hasMeaningfulTrendMeta(meta: TrendBaseMeta): boolean {
+  return (
+    !isTrendMetaPlaceholder(meta.school) ||
+    !isTrendMetaPlaceholder(meta.classNumber) ||
+    !isTrendMetaPlaceholder(meta.activityTitle)
+  );
+}
+
 function mergeTrendMeta(
   current: TrendBaseMeta | undefined,
   incoming: TrendBaseMeta
@@ -688,6 +696,7 @@ function buildSessionTrendMetaMaps(sessions: SessionState[]): {
       classNumber: activity?.classNumber ?? "—",
       activityTitle: activity?.title ?? session.activityTitle ?? session.activityId ?? "未命名課程"
     };
+    if (!hasMeaningfulTrendMeta(meta)) continue;
     bySessionId.set(session.id, mergeTrendMeta(bySessionId.get(session.id), meta));
     if (session.activityId) {
       byActivityId.set(session.activityId, mergeTrendMeta(byActivityId.get(session.activityId), meta));
@@ -708,6 +717,7 @@ function computeTrendSeries(
   for (const session of sessions) {
     const activity = session.activityId ? findActivity(session.activityId) : undefined;
     const meta = buildTrendMeta(session, activity, dimension);
+    if (!hasMeaningfulTrendMeta(meta)) continue;
     metaMap.set(meta.key, meta);
 
     for (const message of session.messages) {
@@ -842,6 +852,7 @@ function computeTrendSeriesFromLearningEvents(
       classNumber,
       activityTitle: dimension === "class" ? "全部課程" : activityTitle
     };
+    if (!hasMeaningfulTrendMeta(meta)) continue;
     const mergedMeta = mergeTrendMeta(metaMap.get(key), meta);
     metaMap.set(key, {
       ...meta,

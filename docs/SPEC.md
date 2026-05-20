@@ -981,6 +981,7 @@ Loading 規則（#270）：
 - `getStepAdvanceHint(session).ready` 為 true 時標示可推進並提供一鍵推進。
 - Step3 的可推進判定需優先使用 `joinedUsers`（已實際加入課程者）作為 gate 成員；若 `joinedUsers` 缺失，需先回退到有互動紀錄的 active 成員（`studentMessageStats.count > 0`），再回退到已提交 Step3 結構樹快照的成員，最後才回退 `participants`，避免未進場名單造成教師端無法推進。
 - Step3 的可推進判定需向後相容舊資料：即使 `groupGate["3-complete"]` 缺漏，只要該成員存在 `step3SubmittedOutlines` 快照，也視為已完成 Step3 gate（用於教師端切換判斷）。
+- Step3 的可推進判定需再擴充舊資料證據來源：若 `step3SubmittedOutlines` 缺漏，但 `artifactDiagnostics.step3OutlineChars > 0` 或 `artifactDiagnostics.step3OutlineUpdatedAt` 存在，也視為該成員已提交 Step3 產物，避免摘要模式下無法推進。
 - Step4 的可推進判定需比照 Step3：優先使用 `joinedUsers`，若缺失則先回退到有互動紀錄的 active 成員（`studentMessageStats.count > 0`），最後才回退 `participants`，避免未進場名單造成教師端無法推進。
 - 目前 group gate 有未完成組員且最後事件距今 >= 10 分鐘，標示高風險。
 - 有未完成組員但未達高風險門檻，標示留意。
@@ -1489,6 +1490,7 @@ Request:
 - Step1/2 的 fallback 事件（`step12_feedback`、`step12_next_question`、`step12_round`）在 `fallback_used=true` 時，必須持久化非空 `error_category`（至少 `other`），避免診斷面板顯示 `—`。
 - `trends.byCourse` / `trends.byClass` 的學校、班級、課程名稱需以「完整 metadata 優先」原則組裝：同一 key 若先遇到佔位值（`—`、`未命名課程`），後續遇到較完整值必須可覆蓋補齊，不可反向被佔位值覆寫。
 - 事件聚合時 metadata 來源順序：即時 activity -> `session_id` 快照對應 -> `activity_id` 快照對應 -> fallback；但最終寫入趨勢 series 前需做「非佔位值優先合併」，避免 sparse event 導致名稱退化。
+- 若趨勢資料僅剩佔位 metadata（無有效學校/班級/課程資訊，常見於課程已刪除後的孤兒歷史資料），該筆趨勢應在 diagnostics 聚合階段略過，不顯示 `-` 汙染項目。
 
 #### `GET /api/admin/diagnostics/fallback-report`
 
