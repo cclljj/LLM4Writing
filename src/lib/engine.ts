@@ -360,7 +360,7 @@ function buildStep12StepContext(session: SessionState, step: 1 | 2, userId: stri
     .join("\n");
   const crossStepContext = buildStudentCourseContext(session, userId, step, {
     maxMessages: 48,
-    maxChars: 6500,
+    maxChars: 13000,
     includeSystem: true
   });
   return { essayTitle, currentSubstepKey, currentQuestion, sameStepRecent, crossStepContext };
@@ -664,7 +664,7 @@ async function generateAiTextForStep(
   const scopedSteps = new Set([1, 2, 3, 4, 6, 8, 9]);
   const scopedUserId = userId && scopedSteps.has(step) ? userId : undefined;
   const crossStepContext = scopedUserId
-    ? buildStudentCourseContext(session, scopedUserId, step, { maxMessages: 48, maxChars: 6500, includeSystem: true })
+    ? buildStudentCourseContext(session, scopedUserId, step, { maxMessages: 48, maxChars: 13000, includeSystem: true })
     : "";
   const sameStepRecent = session.messages
     .filter((m) => m.step === step)

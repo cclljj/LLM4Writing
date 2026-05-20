@@ -460,7 +460,8 @@ test("#344: Step10 uses chunked generation and token budgets are uplifted", asyn
   assert.ok(engineSrc.includes("generateStep10ReportChunkedText"), "engine should expose chunked Step10 generation helper");
   assert.ok(engineSrc.includes("section_"), "chunked Step10 path should generate per-section content");
   assert.ok(engineSrc.includes("TOKEN_SCALE_NUMERATOR"), "engine should define token-scale uplift");
-  assert.ok(llmClientSrc.includes("max_tokens: input.maxTokens ?? 1170"), "llm client default max_tokens should be uplifted");
+  assert.ok(llmClientSrc.includes("MIN_LLM_MAX_TOKENS = 50_000"), "llm client should define the truncation-safe token floor");
+  assert.ok(llmClientSrc.includes("resolveMaxTokens(input.maxTokens)"), "llm client should apply the token floor to requests");
   assert.ok(step10RouteSrc.includes("generateStep10ReportChunkedText"), "step10 streaming route should use chunked generator");
 });
 

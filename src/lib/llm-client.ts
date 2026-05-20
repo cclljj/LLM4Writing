@@ -13,9 +13,18 @@ export type LlmConfig = {
   model: string;
 };
 
+const MIN_LLM_MAX_TOKENS = 50_000;
+
 function readEnv(name: string): string | undefined {
   const v = process.env[name];
   return typeof v === "string" && v.trim() ? v.trim() : undefined;
+}
+
+function resolveMaxTokens(maxTokens?: number): number {
+  if (typeof maxTokens !== "number" || !Number.isFinite(maxTokens)) {
+    return MIN_LLM_MAX_TOKENS;
+  }
+  return Math.max(MIN_LLM_MAX_TOKENS, Math.round(maxTokens));
 }
 
 export function getLlmConfig(): LlmConfig | null {
@@ -72,7 +81,7 @@ export async function llmChatCompletionText(input: {
           model: cfg.model,
           messages,
           temperature: input.temperature ?? 0.7,
-          max_tokens: input.maxTokens ?? 1170
+          max_tokens: resolveMaxTokens(input.maxTokens)
         }),
         signal: controller.signal
       });
@@ -173,7 +182,7 @@ export async function* llmChatCompletionStream(input: {
         model: cfg.model,
         messages: input.messages,
         temperature: input.temperature ?? 0.7,
-        max_tokens: input.maxTokens ?? 1170,
+        max_tokens: resolveMaxTokens(input.maxTokens),
         stream: true
       }),
       signal: controller.signal

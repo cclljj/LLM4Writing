@@ -143,7 +143,7 @@ export async function POST(request: NextRequest) {
     .join("\n");
   const crossStepContext = buildStudentCourseContext(session, user.username, 3, {
     maxMessages: 48,
-    maxChars: 6500,
+    maxChars: 13000,
     includeSystem: true
   });
 

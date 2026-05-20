@@ -132,7 +132,7 @@ export async function POST(request: NextRequest) {
   recordArtifactUpdateSignal(session, "draft6", user.username);
   const crossStepContext = buildStudentCourseContext(session, user.username, 6, {
     maxMessages: 48,
-    maxChars: 6500,
+    maxChars: 13000,
     includeSystem: true
   });
 

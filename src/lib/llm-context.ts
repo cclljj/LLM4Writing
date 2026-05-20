@@ -148,7 +148,7 @@ export function buildStudentCourseContext(
 ): string {
   const resolved: Required<BuildStudentContextOptions> = {
     maxMessages: options.maxMessages ?? 40,
-    maxChars: options.maxChars ?? 6000,
+    maxChars: options.maxChars ?? 12000,
     includeSystem: options.includeSystem ?? true
   };
   const nowMs = Date.now();
