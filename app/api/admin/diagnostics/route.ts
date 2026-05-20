@@ -628,6 +628,29 @@ type TrendBaseMeta = {
   activityTitle: string;
 };
 
+function isTrendMetaPlaceholder(value: string | undefined): boolean {
+  const normalized = (value ?? "").trim();
+  return !normalized || normalized === "—" || normalized === "未命名課程";
+}
+
+function mergeTrendMeta(
+  current: TrendBaseMeta | undefined,
+  incoming: TrendBaseMeta
+): TrendBaseMeta {
+  if (!current) return incoming;
+  return {
+    school: isTrendMetaPlaceholder(current.school) && !isTrendMetaPlaceholder(incoming.school) ? incoming.school : current.school,
+    classNumber:
+      isTrendMetaPlaceholder(current.classNumber) && !isTrendMetaPlaceholder(incoming.classNumber)
+        ? incoming.classNumber
+        : current.classNumber,
+    activityTitle:
+      isTrendMetaPlaceholder(current.activityTitle) && !isTrendMetaPlaceholder(incoming.activityTitle)
+        ? incoming.activityTitle
+        : current.activityTitle
+  };
+}
+
 function buildTrendMeta(
   session: SessionState,
   activity: { school?: string; classNumber?: string; title?: string } | undefined,
@@ -635,7 +658,7 @@ function buildTrendMeta(
 ): TrendMeta {
   const school = activity?.school ?? "—";
   const classNumber = activity?.classNumber ?? "—";
-  const activityTitle = session.activityTitle ?? activity?.title ?? session.activityId ?? "未命名課程";
+  const activityTitle = activity?.title ?? session.activityTitle ?? session.activityId ?? "未命名課程";
   if (dimension === "class") {
     return {
       key: `${school}::${classNumber}`,
@@ -663,11 +686,11 @@ function buildSessionTrendMetaMaps(sessions: SessionState[]): {
     const meta: TrendBaseMeta = {
       school: activity?.school ?? "—",
       classNumber: activity?.classNumber ?? "—",
-      activityTitle: session.activityTitle ?? activity?.title ?? session.activityId ?? "未命名課程"
+      activityTitle: activity?.title ?? session.activityTitle ?? session.activityId ?? "未命名課程"
     };
-    bySessionId.set(session.id, meta);
-    if (session.activityId && !byActivityId.has(session.activityId)) {
-      byActivityId.set(session.activityId, meta);
+    bySessionId.set(session.id, mergeTrendMeta(bySessionId.get(session.id), meta));
+    if (session.activityId) {
+      byActivityId.set(session.activityId, mergeTrendMeta(byActivityId.get(session.activityId), meta));
     }
   }
   return { bySessionId, byActivityId };
@@ -803,21 +826,29 @@ function computeTrendSeriesFromLearningEvents(
     const sessionMeta = event.session_id ? metaMaps?.bySessionId.get(event.session_id) : undefined;
     const activityMeta = activityId ? metaMaps?.byActivityId.get(activityId) : undefined;
     const activity = activityId ? findActivity(activityId) : undefined;
-    const school = sessionMeta?.school ?? activityMeta?.school ?? activity?.school ?? "—";
-    const classNumber = sessionMeta?.classNumber ?? activityMeta?.classNumber ?? activity?.classNumber ?? "—";
+    const school = activity?.school ?? activityMeta?.school ?? sessionMeta?.school ?? "—";
+    const classNumber = activity?.classNumber ?? activityMeta?.classNumber ?? sessionMeta?.classNumber ?? "—";
     const activityTitle =
-      sessionMeta?.activityTitle ?? activityMeta?.activityTitle ?? activity?.title ?? activityId ?? "未命名課程";
+      activity?.title ?? activityMeta?.activityTitle ?? sessionMeta?.activityTitle ?? activityId ?? "未命名課程";
     const key =
       dimension === "class"
         ? `${school}::${classNumber}`
-        : `${school}::${classNumber}::${activityTitle}`;
+        : activityId
+          ? `activity::${activityId}`
+          : `${school}::${classNumber}::${activityTitle}`;
     const meta: TrendMeta = {
       key,
       school,
       classNumber,
       activityTitle: dimension === "class" ? "全部課程" : activityTitle
     };
-    metaMap.set(key, meta);
+    const mergedMeta = mergeTrendMeta(metaMap.get(key), meta);
+    metaMap.set(key, {
+      ...meta,
+      school: mergedMeta.school,
+      classNumber: mergedMeta.classNumber,
+      activityTitle: dimension === "class" ? "全部課程" : mergedMeta.activityTitle
+    });
 
     const day = dayKeyFromIso(event.created_at.toISOString());
     if (!day) continue;

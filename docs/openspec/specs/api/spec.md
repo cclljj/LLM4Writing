@@ -175,6 +175,12 @@ The system SHALL expose admin/course management APIs with role-sensitive visibil
 - **THEN** the response explicitly indicates whether metrics come from persisted learning events or message-estimation fallback
 - **AND** includes warnings when critical event tables are missing or event coverage is insufficient
 
+#### Scenario: Diagnostics trend labels stay stable
+
+- **GIVEN** diagnostics trend series are aggregated from persisted learning events with mixed metadata completeness
+- **WHEN** later events contain placeholder labels (for example `—` or unnamed course) for the same class/course key
+- **THEN** trend labels keep the best available school/class/course names instead of regressing to placeholders
+
 #### Scenario: Step1/2 fallback reason completeness
 
 - **GIVEN** Step1/2 fallback events are included in diagnostics samples

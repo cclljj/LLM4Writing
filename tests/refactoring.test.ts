@@ -405,6 +405,8 @@ test("#318: admin diagnostics route exposes step KPIs, trends, and LLM error tax
   assert.ok(src.includes("buildSessionTrendMetaMaps"), "diagnostics route should build trend metadata from session snapshots");
   assert.ok(src.includes("computeTrendSeriesFromLearningEvents(learningEvents, \"course\", trendMetaMaps)"), "event-backed course trends should use session metadata map");
   assert.ok(src.includes("computeTrendSeriesFromLearningEvents(learningEvents, \"class\", trendMetaMaps)"), "event-backed class trends should use session metadata map");
+  assert.ok(src.includes("activity::${activityId}"), "event-backed course trends should group by stable activity id key");
+  assert.ok(src.includes("activity?.title ?? activityMeta?.activityTitle ?? sessionMeta?.activityTitle"), "event-backed labels should prefer current activity title before legacy snapshots");
 });
 
 test("#318: admin diagnostics UI renders new monitoring sections", async () => {
