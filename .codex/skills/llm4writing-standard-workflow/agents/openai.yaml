@@ -1,0 +1,4 @@
+interface:
+  display_name: "LLM4Writing Standard Workflow"
+  short_description: "Run this repo's edit workflow."
+  default_prompt: "Use the LLM4Writing standard workflow for this repository change."

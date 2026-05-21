@@ -6,6 +6,7 @@ This repository uses `AGENTS.md` as the short operating guide for coding agents.
 
 - Product/system behavior is documented in `docs/SPEC.md`.
 - Change workflow is documented in `TASK.md`.
+- Project workflow skill lives in `.codex/skills/llm4writing-standard-workflow/`.
 - `README.md` is the human-facing project overview.
 
 ## Working Rules
