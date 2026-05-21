@@ -35,6 +35,8 @@ export type CourseImplementationPdfInput = {
   step3SubmittedOutline: string;
   step4RevisedOutline: string;
   generatedAtIso: string;
+  /** ISO timestamp of the student's last recorded activity (used as completion datetime). */
+  completedAtIso?: string;
 };
 
 const FONT_FILE_NAME = "NotoSansTC[wght].ttf";
@@ -519,6 +521,7 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
       `- 班級：${input.classNumber}`,
       `- 校名：${input.school}`,
       `- 課程 ID：${input.activityId}`,
+      `- 完成課程日期時間：${input.completedAtIso ? new Date(input.completedAtIso).toLocaleString("zh-TW") : "—"}`,
     ].join("\n"),
     PAGE.marginX,
     contentWidth,
