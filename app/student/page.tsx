@@ -105,6 +105,8 @@ const stepNameMap: Record<number, string> = {
   10: "總結報告"
 };
 
+const LAST_ACTIVITY_STORAGE_KEY = "student:lastActivityId";
+
 function getMode(step: number): InteractionMode {
   if ([1, 2, 4].includes(step)) return "group_interaction";
   if ([3, 6, 8].includes(step)) return "personal_interaction";
@@ -187,6 +189,27 @@ export default function StudentPage() {
   const lastOwnStepRef = useRef<number | null>(null);
   const sessionEtagRef = useRef<string>("");
   const outlineMermaidRef = useRef<string>("");
+  const restoreAttemptedRef = useRef<string>("");
+
+  const rememberLastActivity = (activityId: string | null) => {
+    if (typeof window === "undefined") return;
+    if (activityId) {
+      window.localStorage.setItem(LAST_ACTIVITY_STORAGE_KEY, activityId);
+    } else {
+      window.localStorage.removeItem(LAST_ACTIVITY_STORAGE_KEY);
+    }
+  };
+
+  const syncActivityQuery = (activityId: string | null) => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (activityId) {
+      url.searchParams.set("activityId", activityId);
+    } else {
+      url.searchParams.delete("activityId");
+    }
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+  };
 
   const applySessionSafely = (incoming: SessionState) => {
     setSession((prev) => {
@@ -678,9 +701,9 @@ export default function StudentPage() {
     setActivityStatusMap(statusMap);
   }
 
-  async function joinActivity(activityId: string) {
+  async function joinActivity(activityId: string, options?: { silent?: boolean }) {
     if (!loginUser) { setError(formatUserError("auth_not_ready")); return; }
-    setError("");
+    if (!options?.silent) setError("");
     const response = await fetch("/api/student/join", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -692,6 +715,7 @@ export default function StudentPage() {
       try { data = JSON.parse(raw) as Record<string, unknown>; } catch { data = {}; }
     }
     if (!response.ok) {
+      if (options?.silent) return;
       if (data.error === "course_not_started") { setError(formatUserError("course_not_started")); return; }
       if (data.error === "course_ended") { setError(formatUserError("course_ended")); return; }
       if (data.error === "course_paused") { setError(formatUserError("course_paused")); return; }
@@ -705,9 +729,59 @@ export default function StudentPage() {
       return;
     }
     applySessionSafely(data as SessionState);
+    rememberLastActivity(activityId);
+    syncActivityQuery(activityId);
     setPreparingCourse(null);
     await refreshOverview();
   }
+
+  useEffect(() => {
+    if (!session?.activityId) return;
+    rememberLastActivity(session.activityId);
+    syncActivityQuery(session.activityId);
+  }, [session?.activityId]);
+
+  useEffect(() => {
+    if (!authReady || !loginUser || session || isLoadingOverview) return;
+    if (restoreAttemptedRef.current) return;
+    if (typeof window === "undefined") return;
+
+    const url = new URL(window.location.href);
+    const fromQuery = url.searchParams.get("activityId")?.trim() ?? "";
+    const fromStorage = window.localStorage.getItem(LAST_ACTIVITY_STORAGE_KEY)?.trim() ?? "";
+    const candidate = fromQuery || fromStorage;
+    if (!candidate) {
+      restoreAttemptedRef.current = "__none__";
+      return;
+    }
+
+    const allKnownCourses = [...activeCourses, ...pausedCourses, ...upcomingCourses, ...classCourses];
+    const known = allKnownCourses.find((c) => c.id === candidate);
+    if (!known) {
+      restoreAttemptedRef.current = "__unknown__";
+      rememberLastActivity(null);
+      syncActivityQuery(null);
+      return;
+    }
+    if (known.courseStatus !== "in_progress" && known.courseStatus !== "paused") {
+      restoreAttemptedRef.current = "__not_resumable__";
+      rememberLastActivity(null);
+      syncActivityQuery(null);
+      return;
+    }
+
+    restoreAttemptedRef.current = candidate;
+    joinActivity(candidate, { silent: true }).catch(() => undefined);
+  }, [
+    activeCourses,
+    authReady,
+    classCourses,
+    isLoadingOverview,
+    loginUser,
+    pausedCourses,
+    session,
+    upcomingCourses
+  ]);
 
   async function sendMessage(e: FormEvent) {
     e.preventDefault();
@@ -1247,6 +1321,8 @@ export default function StudentPage() {
                   onClick={() => {
                     setSession(null);
                     setPreparingCourse(null);
+                    rememberLastActivity(null);
+                    syncActivityQuery(null);
                     refreshOverview().catch(() => undefined);
                   }}
                 >

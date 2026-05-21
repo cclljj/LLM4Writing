@@ -21,6 +21,17 @@ import { ActivityRow, EssayRow, MonitorSession, OpenClassRow, UserRow } from "./
 void (null as unknown as MonitorSession);
 void (null as unknown as typeof OutlineSvg);
 
+const TEACHER_TAB_STORAGE_KEY = "teacher:activeTab";
+const ADMIN_TAB_STORAGE_KEY = "admin:activeTab";
+const TEACHER_ALLOWED_TABS = ["system", "learning", "course"] as const;
+const ADMIN_ALLOWED_TABS = ["system", "learning", "course", "diagnostics", "audit"] as const;
+type TeacherTab = "system" | "learning" | "course" | "diagnostics" | "audit";
+
+function isAllowedTab(tab: string, isAdminConsole: boolean): tab is TeacherTab {
+  const allowed = isAdminConsole ? ADMIN_ALLOWED_TABS : TEACHER_ALLOWED_TABS;
+  return (allowed as readonly string[]).includes(tab);
+}
+
 export default function TeacherPage() {
   const router = useRouter();
   const pathname = usePathname();
@@ -29,7 +40,7 @@ export default function TeacherPage() {
   const [loginName, setLoginName] = useState("");
   const [loginSchool, setLoginSchool] = useState("");
   const [loginRole, setLoginRole] = useState<"teacher" | "admin">("teacher");
-  const [tab, setTab] = useState<"system" | "learning" | "course" | "diagnostics" | "audit">("system");
+  const [tab, setTab] = useState<TeacherTab>("system");
   const [users, setUsers] = useState<UserRow[]>([]);
   const [essays, setEssays] = useState<EssayRow[]>([]);
   const [openClasses, setOpenClasses] = useState<OpenClassRow[]>([]);
@@ -82,6 +93,34 @@ export default function TeacherPage() {
     refreshAll();
   }, [isAdminConsole, router]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const storageKey = isAdminConsole ? ADMIN_TAB_STORAGE_KEY : TEACHER_TAB_STORAGE_KEY;
+    const url = new URL(window.location.href);
+    const fromQuery = url.searchParams.get("tab")?.trim() ?? "";
+    const fromStorage = window.localStorage.getItem(storageKey)?.trim() ?? "";
+    const candidate = fromQuery || fromStorage;
+    if (!candidate) return;
+    if (!isAllowedTab(candidate, isAdminConsole)) {
+      window.localStorage.removeItem(storageKey);
+      return;
+    }
+    setTab(candidate);
+  }, [isAdminConsole]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!isAllowedTab(tab, isAdminConsole)) {
+      setTab("system");
+      return;
+    }
+    const storageKey = isAdminConsole ? ADMIN_TAB_STORAGE_KEY : TEACHER_TAB_STORAGE_KEY;
+    window.localStorage.setItem(storageKey, tab);
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", tab);
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+  }, [isAdminConsole, tab]);
+
   async function refreshAll() {
     const token = Date.now();
     refreshTokenRef.current = token;
@@ -131,6 +170,10 @@ export default function TeacherPage() {
 
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(TEACHER_TAB_STORAGE_KEY);
+      window.localStorage.removeItem(ADMIN_TAB_STORAGE_KEY);
+    }
     window.location.href = "/login";
   }
 

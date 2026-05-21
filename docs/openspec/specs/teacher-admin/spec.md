@@ -22,6 +22,13 @@ The teacher workspace SHALL provide account management, course management, and l
 - **WHEN** the page loads
 - **THEN** the admin can use global versions of the shared management capabilities
 
+#### Scenario: Reload restores workspace tab and monitor course context
+
+- **GIVEN** a teacher or admin is working on a non-default workspace tab
+- **WHEN** the page is refreshed
+- **THEN** the UI restores the previously selected tab instead of always returning to the first tab
+- **AND** if the user is in learning management with a selected course, the monitor restores that `activityId` context after reload
+
 ### Requirement: Account Management
 
 The system SHALL support role-aware account CRUD, reset password, and CSV batch creation.

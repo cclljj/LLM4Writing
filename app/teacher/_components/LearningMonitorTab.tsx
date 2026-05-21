@@ -35,6 +35,9 @@ const stepNameMap: Record<number, string> = {
   10: "總結報告"
 };
 
+const TEACHER_MONITOR_ACTIVITY_STORAGE_KEY = "teacher:monitor:selectedActivityId";
+const ADMIN_MONITOR_ACTIVITY_STORAGE_KEY = "admin:monitor:selectedActivityId";
+
 interface LearningMonitorTabProps {
   loginRole: "teacher" | "admin";
   isAdminConsole: boolean;
@@ -93,6 +96,44 @@ export default function LearningMonitorTab({
   const monitorPayloadHashRef = useRef<string>("");
   const monitorPollDelayRef = useRef<number>(3000);
   const monitorSessionsRef = useRef<MonitorSession[]>([]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (selectedLearningActivityId) return;
+    const storageKey = isAdminConsole ? ADMIN_MONITOR_ACTIVITY_STORAGE_KEY : TEACHER_MONITOR_ACTIVITY_STORAGE_KEY;
+    const url = new URL(window.location.href);
+    const fromQuery = url.searchParams.get("activityId")?.trim() ?? "";
+    const fromStorage = window.localStorage.getItem(storageKey)?.trim() ?? "";
+    const candidate = fromQuery || fromStorage;
+    if (!candidate) return;
+    const exists = activities.some((activity) => activity.id === candidate);
+    if (!exists) {
+      window.localStorage.removeItem(storageKey);
+      if (fromQuery) {
+        url.searchParams.delete("activityId");
+        window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+      }
+      return;
+    }
+    setSelectedLearningActivityId(candidate);
+  }, [activities, isAdminConsole, selectedLearningActivityId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const storageKey = isAdminConsole ? ADMIN_MONITOR_ACTIVITY_STORAGE_KEY : TEACHER_MONITOR_ACTIVITY_STORAGE_KEY;
+    const url = new URL(window.location.href);
+    if (!selectedLearningActivityId) {
+      window.localStorage.removeItem(storageKey);
+      if (url.searchParams.get("activityId")) {
+        url.searchParams.delete("activityId");
+        window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+      }
+      return;
+    }
+    window.localStorage.setItem(storageKey, selectedLearningActivityId);
+    url.searchParams.set("activityId", selectedLearningActivityId);
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+  }, [isAdminConsole, selectedLearningActivityId]);
 
   const learningSchoolOptions = useMemo(
     () => Array.from(new Set(activities.map((item) => item.school).filter(Boolean))).sort((a, b) => a.localeCompare(b, "zh-Hant")),

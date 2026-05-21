@@ -49,6 +49,7 @@ The system SHALL expose student course discovery, joining, and history APIs scop
 - **GIVEN** a student belongs to the activity's class and group
 - **WHEN** the student calls `POST /api/student/join` for an in-progress course
 - **THEN** the system returns an existing session if present or creates a `spec10` session
+- **AND** repeated join calls for the same activity can be used by the client to restore in-progress state after page reload
 
 #### Scenario: Join unavailable course
 
@@ -155,6 +156,7 @@ The system SHALL expose course control, step switching, monitor, and personal-pr
 - **GIVEN** a teacher or admin calls `GET /api/teacher/monitor`
 - **WHEN** no full detail is requested
 - **THEN** the API returns summary data, not full messages and artifact payloads
+- **AND** when `activityId` is provided, the response remains scoped to that activity so clients can restore monitor context after reload
 
 #### Scenario: Monitor full detail
 

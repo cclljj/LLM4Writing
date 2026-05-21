@@ -239,6 +239,18 @@ The student UI SHALL keep course progress, previous-step review, next-action gui
 - **WHEN** the frontend polls session state
 - **THEN** it uses the session endpoint with conditional GET behavior and avoids overwriting local structure-tree or draft edits that are in progress
 
+#### Scenario: Reload restores current student course context
+
+- **GIVEN** a student is already in a course session view
+- **WHEN** the student refreshes the page
+- **THEN** the frontend restores the same `activityId` context when the course remains joinable instead of always falling back to the lobby
+
+#### Scenario: Step6 and Step8 draft editors allow paste
+
+- **GIVEN** a student is writing or polishing essay drafts in Step6 or Step8
+- **WHEN** the student pastes text from an external draft source
+- **THEN** the draft textarea accepts paste input to support practical writing workflows
+
 #### Scenario: Step5+ progress display
 
 - **GIVEN** a student is in Step5 or later
