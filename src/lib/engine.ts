@@ -14,6 +14,7 @@ import {
 import { recordRejectedAnswerSignal } from "@/src/lib/learning-diagnostics";
 import { classifyLlmError } from "@/src/lib/llm-observability";
 import { PersistedErrorCategory, recordLearningEvent } from "@/src/lib/store";
+import { parseStep10SectionTitles, stripLeadingStep10SectionHeading } from "@/src/lib/step10-report-format";
 import {
   hasFormalLlmQualityRisk,
   parseStructuredStepAiResponse,
@@ -1046,15 +1047,6 @@ async function generateStep10Report(session: SessionState, userId: string): Prom
   });
 }
 
-function parseStep10SectionTitles(raw: string): string[] {
-  const lines = raw
-    .split(/\r?\n/)
-    .map((line) => line.replace(/^\s*[\d一二三四五六七八九十]+[.)、．]\s*/, "").trim())
-    .filter((line) => line.length > 0);
-  const deduped = Array.from(new Set(lines));
-  return deduped.slice(0, 4);
-}
-
 export async function generateStep10ReportChunkedText(
   messages: LlmChatMessage[],
   fallback: string,
@@ -1066,7 +1058,9 @@ export async function generateStep10ReportChunkedText(
         ...messages,
         {
           role: "user",
-          content: "請先列出 4 個總結報告段落標題（每行一個標題），只輸出標題清單，不要輸出段落內文。"
+          content:
+            "請先列出 4 個總結報告段落標題（每行一個標題），只輸出純文字標題清單，不要輸出段落內文。" +
+            "不得使用 Markdown 標題符號（例如 #、##、###）、粗體符號或清單符號。"
         }
       ],
       0.4,
@@ -1090,7 +1084,8 @@ export async function generateStep10ReportChunkedText(
             role: "user",
             content:
               `請只撰寫第 ${index + 1} 節「${title}」的內文。` +
-              "輸出 1-2 段完整文字，聚焦具體觀察與建議，不要重複其他小節。"
+              "輸出 1-2 段完整文字，聚焦具體觀察與建議，不要重複其他小節。" +
+              "不要輸出本節標題、Markdown 標題符號或粗體標題，標題會由系統自動加入。"
           }
         ],
         0.5,
@@ -1100,7 +1095,10 @@ export async function generateStep10ReportChunkedText(
           telemetry: { ...telemetry, label: `${telemetry.label ?? "step10_report"}:section_${index + 1}` }
         }
       );
-      const normalizedSection = normalizeFormalLlmText(sectionRaw, { fallback: `${title}：${fallback}` });
+      const normalizedSection = stripLeadingStep10SectionHeading(
+        normalizeFormalLlmText(sectionRaw, { fallback: `${title}：${fallback}` }),
+        title
+      );
       sections.push(`## ${title}\n${normalizedSection}`);
     }
 

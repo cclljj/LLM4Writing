@@ -19,6 +19,7 @@ import { buildStudentNextAction } from "../src/lib/student-next-action";
 import { computeNextOpenClassId } from "../src/lib/activity-store";
 import { buildStep1Question, buildStep2Question } from "../src/lib/workflow-questions";
 import { advanceStep1Or2SubstepAfterAi, getNextSubstepKeyAfterCompletion, handleStep1Or2Group, recoverStalledStep1Or2AiWait } from "../src/lib/workflow-step1-2";
+import { parseStep10SectionTitles, stripLeadingStep10SectionHeading } from "../src/lib/step10-report-format";
 import { renderMessageHtml } from "../app/student/_components/renderMessageHtml";
 
 function makeMessage(input: Omit<ChatMessage, "id" | "at">): ChatMessage {
@@ -789,4 +790,14 @@ test("renderMessageHtml collapses duplicated markdown heading prefixes", () => {
   assert.match(html, /<h4[^>]*><strong>結構組織<\/strong><\/h4>/);
   assert.equal(html.includes("### <strong>立意取材"), false);
   assert.equal(html.includes("## ###"), false);
+});
+
+test("Step10 section title parsing removes markdown wrappers before composition", () => {
+  const titles = parseStep10SectionTitles("1. ### **立意取材**\n- ## **結構組織**\n三、### 遣詞造句：\n```");
+  assert.deepEqual(titles, ["立意取材", "結構組織", "遣詞造句"]);
+});
+
+test("Step10 section content drops a repeated leading generated title", () => {
+  const text = stripLeadingStep10SectionHeading("### **立意取材**\n你能從自身經驗出發。", "立意取材");
+  assert.equal(text, "你能從自身經驗出發。");
 });

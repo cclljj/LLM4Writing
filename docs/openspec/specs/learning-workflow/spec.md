@@ -228,6 +228,7 @@ The system SHALL stream Step3, Step6 suggestion, Step7 preview, and Step10 repor
 - **WHEN** the backend generates report content
 - **THEN** it generates Step10 in multiple sections (outline + per-section content) and composes the final report
 - **AND** uses a final polish pass only when section stitching still has quality risk, reducing truncation fallback from single long completions
+- **AND** normalizes outline titles to plain text and strips repeated leading section headings before server-side composition, preventing duplicated markdown heading prefixes such as `## ### Title`
 
 ### Requirement: Student UI Continuity
 
