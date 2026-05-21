@@ -16,8 +16,24 @@ function applyInlineMarkdown(input: string): string {
     .replace(/_(.+?)_/g, "<em>$1</em>");
 }
 
+function stripOuterCodeFence(input: string): string {
+  const lines = input.split(/\r?\n/);
+  if (lines.length < 3) return input;
+  const first = lines[0]?.trim() ?? "";
+  const last = lines[lines.length - 1]?.trim() ?? "";
+  if (!first.startsWith("```") || last !== "```") return input;
+  return lines.slice(1, -1).join("\n");
+}
+
 export function renderMessageHtml(text: string): string {
-  const normalizedText = text.replace(/^\uFEFF/, "").replace(/<br\s*\/?>/gi, "\n");
+  const normalizedText = stripOuterCodeFence(
+    text
+      .replace(/^\uFEFF/, "")
+      .replace(/\\r\\n/g, "\n")
+      .replace(/\\n/g, "\n")
+      .replace(/\\t/g, "  ")
+      .replace(/<br\s*\/?>/gi, "\n")
+  );
   const lines = normalizedText.split(/\r?\n/);
   const htmlParts: string[] = [];
   let unorderedListBuffer: string[] = [];

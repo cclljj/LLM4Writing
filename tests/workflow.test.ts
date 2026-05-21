@@ -19,6 +19,7 @@ import { buildStudentNextAction } from "../src/lib/student-next-action";
 import { computeNextOpenClassId } from "../src/lib/activity-store";
 import { buildStep1Question, buildStep2Question } from "../src/lib/workflow-questions";
 import { advanceStep1Or2SubstepAfterAi, getNextSubstepKeyAfterCompletion, handleStep1Or2Group, recoverStalledStep1Or2AiWait } from "../src/lib/workflow-step1-2";
+import { renderMessageHtml } from "../app/student/_components/renderMessageHtml";
 
 function makeMessage(input: Omit<ChatMessage, "id" | "at">): ChatMessage {
   return { id: `m-${Math.random()}`, at: "2026-05-06T00:00:00.000Z", ...input };
@@ -747,4 +748,13 @@ test("step6 draft validation rejects insufficient content and accepts a real ess
     "其次，海洋廢棄物的問題日益嚴重，民眾應減少一次性塑膠的使用。" +
     "最後，森林濫伐破壞了生態平衡，必須透過立法與教育並行加以遏止。";
   assert.equal(validateDraftContent(validDraft), null);
+});
+
+test("renderMessageHtml handles legacy escaped newlines and outer markdown code fences", () => {
+  const legacy = "```markdown\\n## 總結報告\\n- 重點一\\n- 重點二\\n```";
+  const html = renderMessageHtml(legacy);
+  assert.match(html, /<h3[^>]*>總結報告<\/h3>/);
+  assert.match(html, /<ul><li>重點一<\/li><li>重點二<\/li><\/ul>/);
+  assert.equal(html.includes("```"), false);
+  assert.equal(html.includes("## 總結報告"), false);
 });

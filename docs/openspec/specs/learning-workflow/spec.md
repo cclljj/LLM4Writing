@@ -265,6 +265,12 @@ The student UI SHALL keep course progress, previous-step review, next-action gui
 - **THEN** the preview uses the same markdown-to-HTML rendering as the final Step10 report
 - **AND** raw markdown markers such as `##` are not shown as plain text
 
+#### Scenario: Step10 rendering tolerates legacy escaped text shape
+
+- **GIVEN** stored Step10 text uses legacy escaped line breaks (for example literal `\\n`) or is wrapped by an outer markdown code fence
+- **WHEN** Step10 content is rendered in student views
+- **THEN** the renderer normalizes those wrappers first and still displays headings/lists as formatted HTML
+
 #### Scenario: Step5+ progress display
 
 - **GIVEN** a student is in Step5 or later
