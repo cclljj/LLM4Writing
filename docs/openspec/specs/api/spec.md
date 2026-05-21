@@ -95,6 +95,8 @@ The system SHALL expose session read, chat, artifact, and step-specific mutation
 - **GIVEN** a student sends a Step4 peer-discussion message via `POST /api/chat/send`
 - **WHEN** the message includes explicit abusive wording
 - **THEN** the API rejects it with a student-facing error without appending the message to session history
+- **AND** messages asking to use abusive language are also rejected
+- **AND** clearly off-topic chatter without classroom relevance is rejected even when short
 - **AND** short harmless messages and classroom-linked creative discussion remain allowed
 
 #### Scenario: Artifact save

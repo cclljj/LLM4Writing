@@ -132,9 +132,10 @@ const CJK_STOP_CHARS = new Set(["的", "了", "是", "在", "有", "和", "與",
 const SIMPLE_GENERIC_RELEVANCE_TERMS = ["題目", "重點", "關鍵", "想法", "觀點", "理由", "例子", "經驗", "情況", "情境", "條件", "標準", "定義", "範圍"];
 const GENRE_RESPONSE_MARKERS = /(文體|記敘文|敘事文|抒情文|議論文|論說文|說明文|散文|故事文|寫景文)/u;
 const CLASSROOM_DISCUSSION_MARKERS = /(作文|文章|題目|主題|論點|觀點|理由|證據|例子|結構|段落|修正|回饋|同學|老師|課堂|寫作|內容|想法)/u;
-const OFF_TOPIC_MARKERS = /(明星|偶像|演唱會|追星|電競|手遊|lol|傳說對決|王者榮耀|原神|崩鐵|fgo|vtuber|實況主|八卦|緋聞|戀愛話題)/iu;
-const PROFANITY_MARKERS = /(幹你娘|操你媽|他媽的|媽的|靠北|靠夭|白痴|智障|低能|廢物|去死|fuck|shit|bitch|asshole)/iu;
-const SHORT_TOLERANT_LEN = 16;
+const DISCUSSION_STRUCTURE_MARKERS = /(我同意|我不同意|我覺得|我認為|可以改成|建議改成|補充|換個角度|原因是|因為|例如|這點|那段|這句|改寫|刪掉|新增)/u;
+const OFF_TOPIC_MARKERS = /(明星|偶像|演唱會|追星|電競|手遊|lol|傳說對決|王者榮耀|原神|崩鐵|fgo|vtuber|實況主|八卦|緋聞|戀愛話題|robl?ox|robolx|roblox|兄弟輸了|開黑|上分)/iu;
+const PROFANITY_MARKERS = /(幹你娘|操你媽|他媽的|媽的|靠北|靠夭|白痴|智障|低能|廢物|去死|fuck|shit|bitch|asshole|髒話|粗口|罵人)/iu;
+const CASUAL_CHAT_MARKERS = /(昨天|晚上|等一下|待會|一起玩|要不要玩|有空嗎|笑死|哈哈|lol)/iu;
 
 export function validateStep4DiscussionMessage(text: string): string | null {
   const trimmed = text.trim();
@@ -142,9 +143,12 @@ export function validateStep4DiscussionMessage(text: string): string | null {
   if (PROFANITY_MARKERS.test(trimmed)) {
     return "這段內容含有不適合課堂的用語，請調整語氣後再送出。";
   }
-  // Keep room for short, energetic interactions in Step4 as long as they are not offensive.
-  if (trimmed.length <= SHORT_TOLERANT_LEN) return null;
-  if (OFF_TOPIC_MARKERS.test(trimmed) && !CLASSROOM_DISCUSSION_MARKERS.test(trimmed)) {
+  const hasClassroomContext = CLASSROOM_DISCUSSION_MARKERS.test(trimmed) || DISCUSSION_STRUCTURE_MARKERS.test(trimmed);
+  if (OFF_TOPIC_MARKERS.test(trimmed) && !hasClassroomContext) {
+    return "這段內容目前和課堂任務關聯比較低，請補上一點和文章修正或論點討論有關的內容。";
+  }
+  // Block pure social chatter that lacks classroom linkage, including short messages.
+  if (!hasClassroomContext && (CASUAL_CHAT_MARKERS.test(trimmed) || trimmed.length <= 10)) {
     return "這段內容目前和課堂任務關聯比較低，請補上一點和文章修正或論點討論有關的內容。";
   }
   return null;

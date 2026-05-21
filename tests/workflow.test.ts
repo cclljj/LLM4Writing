@@ -110,6 +110,9 @@ test("step1 substeps 1-1/1-2 accept concise requirement-fitting answers", () => 
 
 test("step4 discussion moderation blocks profanity/off-topic but keeps short or classroom-linked creativity", () => {
   assert.match(validateStep4DiscussionMessage("你這白痴在講什麼") ?? "", /不適合課堂/);
+  assert.match(validateStep4DiscussionMessage("這邊可以講髒話嗎") ?? "", /不適合課堂/);
+  assert.match(validateStep4DiscussionMessage("晚上一起玩 robolx") ?? "", /關聯比較低/);
+  assert.match(validateStep4DiscussionMessage("昨天兄弟輸了") ?? "", /關聯比較低/);
   assert.match(
     validateStep4DiscussionMessage("我昨天一直在看明星八卦和電競實況，超好笑跟這堂課無關但我想聊") ?? "",
     /關聯比較低/
