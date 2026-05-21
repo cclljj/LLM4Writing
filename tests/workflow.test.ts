@@ -762,12 +762,14 @@ test("renderMessageHtml handles legacy escaped newlines and outer markdown code 
 test("renderMessageHtml unwraps JSON-shaped Step10 report text before markdown rendering", () => {
   const jsonString = JSON.stringify("## 總結報告\\n- 重點一\\n- 重點二");
   const jsonObject = JSON.stringify({ step10Report: "## 總結報告\\n- 重點一\\n- 重點二" });
+  const openAiWrapper = JSON.stringify({ choices: [{ message: { content: "## 總結報告\\n- 重點一\\n- 重點二" } }] });
+  const geminiWrapper = JSON.stringify({ candidates: [{ content: { parts: [{ text: "## 總結報告\\n- 重點一\\n- 重點二" }] } }] });
 
-  for (const sample of [jsonString, jsonObject]) {
+  for (const sample of [jsonString, jsonObject, openAiWrapper, geminiWrapper]) {
     const html = renderMessageHtml(sample);
     assert.match(html, /<h3[^>]*>總結報告<\/h3>/);
     assert.match(html, /<ul><li>重點一<\/li><li>重點二<\/li><\/ul>/);
     assert.equal(html.includes("## 總結報告"), false);
-    assert.equal(html.includes("step10Report"), false);
+    assert.equal(/step10Report|choices|candidates/.test(html), false);
   }
 });

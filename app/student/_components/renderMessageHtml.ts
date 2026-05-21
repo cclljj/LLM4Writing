@@ -27,10 +27,29 @@ function stripOuterCodeFence(input: string): string {
 
 function readRenderableJsonValue(value: unknown): string | null {
   if (typeof value === "string") return value;
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  if (!value || typeof value !== "object") return null;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const nested = readRenderableJsonValue(item);
+      if (nested) return nested;
+    }
+    return null;
+  }
   const record = value as Record<string, unknown>;
   for (const key of ["report", "step10Report", "summary", "content", "text", "feedback", "message"]) {
     if (typeof record[key] === "string") return record[key];
+  }
+  const openAiContent = (record.choices as Array<{ message?: { content?: unknown }; text?: unknown }> | undefined)?.[0];
+  const openAiText = readRenderableJsonValue(openAiContent?.message?.content ?? openAiContent?.text);
+  if (openAiText) return openAiText;
+
+  const geminiPart = (record.candidates as Array<{ content?: { parts?: unknown[] } }> | undefined)?.[0]?.content?.parts;
+  const geminiText = readRenderableJsonValue(geminiPart);
+  if (geminiText) return geminiText;
+
+  for (const key of ["data", "result", "response", "output"]) {
+    const nested = readRenderableJsonValue(record[key]);
+    if (nested) return nested;
   }
   return null;
 }
@@ -61,6 +80,9 @@ function unwrapRenderableText(input: string): string {
     }
 
     const unescaped = current
+      .replace(/\\u000d\\u000a/g, "\n")
+      .replace(/\\u000a/g, "\n")
+      .replace(/\\u0009/g, "  ")
       .replace(/\\\\r\\\\n/g, "\n")
       .replace(/\\\\n/g, "\n")
       .replace(/\\\\t/g, "  ")

@@ -267,7 +267,7 @@ The student UI SHALL keep course progress, previous-step review, next-action gui
 
 #### Scenario: Step10 rendering tolerates legacy wrapped text shapes
 
-- **GIVEN** stored Step10 text uses legacy escaped line breaks, double-escaped line breaks, JSON string/object wrappers, or an outer markdown code fence
+- **GIVEN** stored Step10 text uses legacy escaped line breaks, double-escaped line breaks, JSON string/object wrappers, nested LLM provider response wrappers, or an outer markdown code fence
 - **WHEN** Step10 content is rendered in student views
 - **THEN** the renderer normalizes those wrappers first and still displays headings/lists as formatted HTML
 
