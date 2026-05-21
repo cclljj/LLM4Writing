@@ -459,7 +459,6 @@ function parseUserCsv(csvText: string):
       return { ok: false, error: `csv_invalid_column_count_line_${idx + 1}` };
     }
 
-    const hasClassNumber = true;
     const hasOwner = cells.length >= 7;
 
     rows.push({

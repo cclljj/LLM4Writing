@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { deferStateUpdate } from "@/src/lib/defer-state-update";
 
 type AuditLogEntry = {
   id: string;
@@ -30,7 +31,7 @@ export default function AdminAuditLogPanel() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  async function loadAuditLogs(nextDays = days) {
+  const loadAuditLogs = useCallback(async (nextDays = days) => {
     setLoading(true);
     setError("");
     try {
@@ -48,11 +49,13 @@ export default function AdminAuditLogPanel() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [days]);
 
   useEffect(() => {
-    loadAuditLogs(days).catch(() => undefined);
-  }, [days]);
+    deferStateUpdate(() => {
+      loadAuditLogs(days).catch(() => undefined);
+    });
+  }, [days, loadAuditLogs]);
 
   const grouped = useMemo(() => {
     const groups = new Map<string, AuditLogEntry[]>();

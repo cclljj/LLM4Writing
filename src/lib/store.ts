@@ -159,10 +159,15 @@ function createEmptyReports() {
 }
 
 function buildSessionCorePayload(session: SessionState): SessionCorePayload {
-  const { messages: _messages, outlines: _outlines, step3SubmittedOutlines: _step3SubmittedOutlines, draftStep6: _draftStep6, draftStep8: _draftStep8, reports: _reports, step12RoundLogs: _step12RoundLogs, ...rest } = session;
-  return {
-    ...rest
-  };
+  const rest = { ...session } as Partial<SessionState> & Record<string, unknown>;
+  delete rest.messages;
+  delete rest.outlines;
+  delete rest.step3SubmittedOutlines;
+  delete rest.draftStep6;
+  delete rest.draftStep8;
+  delete rest.reports;
+  delete rest.step12RoundLogs;
+  return rest as SessionCorePayload;
 }
 
 function mergeSessionParts(core: SessionCorePayload, parts: {

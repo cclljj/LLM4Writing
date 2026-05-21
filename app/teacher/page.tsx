@@ -9,6 +9,7 @@ import CourseManagementTab from "./_components/CourseManagementTab";
 import AdminAuditLogPanel from "./_components/AdminAuditLogPanel";
 import OutlineSvg from "@/app/_components/OutlineSvg";
 import { formatUserError } from "@/src/lib/error-messages";
+import { deferStateUpdate } from "@/src/lib/defer-state-update";
 import { ActivityRow, EssayRow, MonitorSession, OpenClassRow, UserRow } from "./_components/types";
 
 // The following type fields are declared in _components/types.ts and reproduced
@@ -105,13 +106,13 @@ export default function TeacherPage() {
       window.localStorage.removeItem(storageKey);
       return;
     }
-    setTab(candidate);
+    deferStateUpdate(() => setTab(candidate));
   }, [isAdminConsole]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!isAllowedTab(tab, isAdminConsole)) {
-      setTab("system");
+      deferStateUpdate(() => setTab("system"));
       return;
     }
     const storageKey = isAdminConsole ? ADMIN_TAB_STORAGE_KEY : TEACHER_TAB_STORAGE_KEY;

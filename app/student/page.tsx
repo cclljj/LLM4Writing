@@ -1,11 +1,12 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { buildStudentNextAction } from "@/src/lib/student-next-action";
 import { getStep9QuestionsFromConfig } from "@/src/lib/spec";
 import { validateDraftContent } from "@/src/lib/answer-validation";
 import { appendErrorHint, formatUserError } from "@/src/lib/error-messages";
+import { deferStateUpdate } from "@/src/lib/defer-state-update";
 import OutlineSvg from "@/app/_components/OutlineSvg";
 import GroupWaitingStatus from "./_components/GroupWaitingStatus";
 import NextActionCard from "./_components/NextActionCard";
@@ -211,7 +212,7 @@ export default function StudentPage() {
     window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
   };
 
-  const applySessionSafely = (incoming: SessionState) => {
+  const applySessionSafely = useCallback((incoming: SessionState) => {
     setSession((prev) => {
       if (!prev || !loginUser) return incoming;
       if (prev.id !== incoming.id) return incoming;
@@ -226,7 +227,7 @@ export default function StudentPage() {
       }
       return incoming;
     });
-  };
+  }, [loginUser]);
 
   useEffect(() => {
     fetch("/api/auth/me", { cache: "no-store" })
@@ -244,7 +245,7 @@ export default function StudentPage() {
         router.push("/login");
       })
       .finally(() => setAuthReady(true));
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     if (!authReady || !loginUser) return;
@@ -279,7 +280,7 @@ export default function StudentPage() {
       tick++;
     }, 5000);
     return () => window.clearInterval(timer);
-  }, [authReady, loginUser, session?.id]);
+  }, [applySessionSafely, authReady, loginUser, session?.id]);
 
   useEffect(() => {
     if (!session || !loginUser) return;
@@ -288,11 +289,13 @@ export default function StudentPage() {
     const justEnteredStep8 = lastOwnStepRef.current !== 8 && ownStep === 8;
     if (ownStep === 6 && (justEnteredStep6 || !draftText)) {
       const latestDraft = session.draftStep6[loginUser] ?? "";
-      setDraftText(latestDraft);
-      setSavedDraft6Text(latestDraft);
-      setDraftSaveError("");
-      setLastDraftSavedAt(null);
-      setStep6RefUser((prev) => (prev ? prev : loginUser));
+      deferStateUpdate(() => {
+        setDraftText(latestDraft);
+        setSavedDraft6Text(latestDraft);
+        setDraftSaveError("");
+        setLastDraftSavedAt(null);
+        setStep6RefUser((prev) => (prev ? prev : loginUser));
+      });
     }
     if (ownStep === 8) {
       const latestDraft = session.draftStep8[loginUser] ?? session.draftStep6[loginUser] ?? "";
@@ -301,17 +304,21 @@ export default function StudentPage() {
         justEnteredStep8 ||
         (!hasUnsavedLocalStep8Edit && (draftText.length === 0 || latestDraft !== draftText));
       if (shouldHydrateStep8Draft) {
-        setDraftText(latestDraft);
-        setSavedDraft8Text(latestDraft);
-        setDraftSaveError("");
-        setLastDraftSavedAt(null);
+        deferStateUpdate(() => {
+          setDraftText(latestDraft);
+          setSavedDraft8Text(latestDraft);
+          setDraftSaveError("");
+          setLastDraftSavedAt(null);
+        });
       }
     }
     if (!refUser && session.participants.length > 0) {
-      setRefUser((session.participants.find((user) => user !== loginUser) ?? session.participants[0])!);
+      deferStateUpdate(() =>
+        setRefUser((session.participants.find((user) => user !== loginUser) ?? session.participants[0])!)
+      );
     }
     lastOwnStepRef.current = ownStep;
-  }, [draftText, loginUser, refUser, savedDraft8Text, session?.currentStep, session?.id, session?.personalSteps, session?.participants, session?.draftStep6, session?.draftStep8]);
+  }, [draftText, loginUser, refUser, savedDraft8Text, session]);
 
   useEffect(() => {
     const ownStep = session && loginUser ? session.personalSteps?.[loginUser] ?? session.currentStep : 1;
@@ -335,20 +342,20 @@ export default function StudentPage() {
       }
     }, 1200);
     return () => window.clearTimeout(timer);
-  }, [isAutoAdvancingStep5, loginUser, session]);
+  }, [applySessionSafely, isAutoAdvancingStep5, loginUser, session]);
 
   useEffect(() => {
     const ownStep = session && loginUser ? session.personalSteps?.[loginUser] ?? session.currentStep : 1;
     if (!session || !loginUser || ownStep !== 6) return;
     if (!step6RefUser || !session.participants.includes(step6RefUser)) {
-      setStep6RefUser(loginUser);
+      deferStateUpdate(() => setStep6RefUser(loginUser));
     }
   }, [loginUser, session, step6RefUser]);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
-      setShowDebugLog(params.get("debug") === "yes");
+      deferStateUpdate(() => setShowDebugLog(params.get("debug") === "yes"));
     }
   }, []);
 
@@ -358,12 +365,12 @@ export default function StudentPage() {
 
   useEffect(() => {
     if (currentStep !== 9) return;
-    setStep9Answers(["", "", "", ""]);
+    deferStateUpdate(() => setStep9Answers(["", "", "", ""]));
   }, [currentStep, session?.id]);
 
   useEffect(() => {
     if (currentStep !== 3) {
-      setStep3CompleteHint("");
+      deferStateUpdate(() => setStep3CompleteHint(""));
     }
   }, [currentStep, session?.id]);
 
@@ -534,7 +541,7 @@ export default function StudentPage() {
   const activeGateKey = getActiveGroupGateKey(session, currentStep);
   const responders = activeGateKey ? session?.groupGate?.[activeGateKey] ?? [] : [];
   const step3CompletedUsers = session?.groupGate?.["3-complete"] ?? [];
-  const step4CompletedUsers = session?.groupGate?.["4-complete"] ?? [];
+  const step4CompletedUsers = useMemo(() => session?.groupGate?.["4-complete"] ?? [], [session?.groupGate]);
   const step3CompletedByMe = Boolean(loginUser && step3CompletedUsers.includes(loginUser));
   const step4CompletedByMe = Boolean(loginUser && step4CompletedUsers.includes(loginUser));
   const step4CompletedPeers = useMemo(
@@ -608,7 +615,7 @@ export default function StudentPage() {
   useEffect(() => {
     const isStep10Waiting = currentStep === 10 && !ownStep10Report?.trim();
     if (!isStep10Waiting) {
-      setStep10LoadingDots("...");
+      deferStateUpdate(() => setStep10LoadingDots("..."));
       return;
     }
     const timer = window.setInterval(() => {
@@ -772,7 +779,11 @@ export default function StudentPage() {
     }
 
     restoreAttemptedRef.current = candidate;
-    joinActivity(candidate, { silent: true }).catch(() => undefined);
+    deferStateUpdate(() => {
+      joinActivity(candidate, { silent: true }).catch(() => undefined);
+    });
+    // joinActivity depends on broad page state; this restore guard must run once per candidate.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     activeCourses,
     authReady,
@@ -1164,6 +1175,8 @@ export default function StudentPage() {
       .catch(() => {
         step10StreamRequestedRef.current = "";
       });
+    // streamStep10Report intentionally closes over the latest session helpers.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.id, currentStep, ownStep10Report, loginUser]);
 
   async function completeStep6ToStep8() {
@@ -1361,7 +1374,6 @@ export default function StudentPage() {
 
           <HistoryReview
             steps={historyReviewSteps}
-            loginUser={loginUser}
             step3SubmittedOutlineMermaid={step3SubmittedOutlineMermaid}
             step4OutlineMermaid={step4OutlineMermaid}
           />
@@ -1552,7 +1564,6 @@ export default function StudentPage() {
               onDraftChange={setDraftText}
               onSaveDraft={() => saveArtifact(currentStep === 6 ? "draft6" : "draft8", draftText)}
               onSuggest={requestStep6Suggestion}
-              onCompleteStep6={completeStep6ToStep8}
               onCompleteStep8={completeStep8ToStep9}
               isSuggestingStep6={isSuggestingStep6}
               isCompletingStep6={isCompletingStep6}

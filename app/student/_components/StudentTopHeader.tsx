@@ -23,7 +23,6 @@ export default function StudentTopHeader() {
   const [identity, setIdentity] = useState<Identity>(() => readIdentity());
 
   useEffect(() => {
-    setIdentity(readIdentity());
     fetch("/api/auth/me", { cache: "no-store" })
       .then((res) => res.json())
       .then((data) => {

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ChatMessage } from "@/src/lib/types";
+import { deferStateUpdate } from "@/src/lib/defer-state-update";
 import OutlineSvg from "@/app/_components/OutlineSvg";
 import { renderMessageHtml } from "@/app/student/_components/renderMessageHtml";
 
@@ -86,12 +87,14 @@ export default function StudentCourseHistoryPage() {
 
   useEffect(() => {
     if (!activityId) {
-      setError("activityId_missing");
-      setLoading(false);
+      deferStateUpdate(() => {
+        setError("activityId_missing");
+        setLoading(false);
+      });
       return;
     }
 
-    setLoading(true);
+    deferStateUpdate(() => setLoading(true));
     fetch(`/api/student/course-history/${activityId}`)
       .then(async (res) => {
         const data = await res.json();
@@ -124,15 +127,17 @@ export default function StudentCourseHistoryPage() {
 
   useEffect(() => {
     if (historySteps.length === 0) {
-      setStepExpanded({});
+      deferStateUpdate(() => setStepExpanded({}));
       return;
     }
-    setStepExpanded((prev) => {
-      const next: Record<number, boolean> = {};
-      historySteps.forEach((step) => {
-        next[step] = prev[step] ?? false;
+    deferStateUpdate(() => {
+      setStepExpanded((prev) => {
+        const next: Record<number, boolean> = {};
+        historySteps.forEach((step) => {
+          next[step] = prev[step] ?? false;
+        });
+        return next;
       });
-      return next;
     });
   }, [historySteps]);
 

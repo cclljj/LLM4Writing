@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { deferStateUpdate } from "@/src/lib/defer-state-update";
 type DiagnosticsWindow = "24h" | "7d" | "14d" | "30d";
 const WINDOW_OPTIONS: DiagnosticsWindow[] = ["24h", "7d", "14d", "30d"];
 
@@ -228,7 +229,7 @@ export default function AdminPromptDiagnostics() {
   const [timeWindow, setTimeWindow] = useState<DiagnosticsWindow>("7d");
   const [migrationMessage, setMigrationMessage] = useState("");
 
-  async function loadDiagnostics(window: DiagnosticsWindow = timeWindow) {
+  const loadDiagnostics = useCallback(async (window: DiagnosticsWindow = timeWindow) => {
     setLoading(true);
     setError("");
     try {
@@ -246,11 +247,13 @@ export default function AdminPromptDiagnostics() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [timeWindow]);
 
   useEffect(() => {
-    loadDiagnostics(timeWindow).catch(() => undefined);
-  }, [timeWindow]);
+    deferStateUpdate(() => {
+      loadDiagnostics(timeWindow).catch(() => undefined);
+    });
+  }, [loadDiagnostics, timeWindow]);
 
   async function runStoreMigration() {
     setMigrationMessage("執行中...");

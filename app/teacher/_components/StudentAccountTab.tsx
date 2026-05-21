@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { deferStateUpdate } from "@/src/lib/defer-state-update";
 import { UserRow } from "./types";
 
 interface StudentAccountTabProps {
@@ -128,17 +129,19 @@ export default function StudentAccountTab({
   const userPageStartIndex = useMemo(() => (userPage - 1) * 20, [userPage]);
 
   useEffect(() => {
-    setClassFilter("");
-    setUserPage(1);
+    deferStateUpdate(() => {
+      setClassFilter("");
+      setUserPage(1);
+    });
   }, [roleFilter, schoolFilter]);
 
   useEffect(() => {
-    setUserPage(1);
+    deferStateUpdate(() => setUserPage(1));
   }, [classFilter, userSortBy, userSortDirection, userQuery]);
 
   useEffect(() => {
     if (userPage > totalUserPages) {
-      setUserPage(totalUserPages);
+      deferStateUpdate(() => setUserPage(totalUserPages));
     }
   }, [userPage, totalUserPages]);
 
@@ -147,18 +150,20 @@ export default function StudentAccountTab({
     if (loginRole === "teacher") {
       const school = loginTeacherProfile?.school ?? "";
       if (newUserForm.ownerTeacherUsername !== loginUser || newUserForm.school !== school) {
-        setNewUserForm((prev) => ({
-          ...prev,
-          ownerTeacherUsername: loginUser,
-          school
-        }));
+        deferStateUpdate(() =>
+          setNewUserForm((prev) => ({
+            ...prev,
+            ownerTeacherUsername: loginUser,
+            school
+          }))
+        );
       }
     }
   }, [newUserForm.role, loginRole, loginUser, loginTeacherProfile?.school, newUserForm.ownerTeacherUsername, newUserForm.school]);
 
   useEffect(() => {
     if (!isBulkCreatingUsers) {
-      setBulkCreateDots("...");
+      deferStateUpdate(() => setBulkCreateDots("..."));
       return;
     }
     const timer = window.setInterval(() => {

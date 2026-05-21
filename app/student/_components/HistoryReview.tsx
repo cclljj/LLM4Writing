@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import OutlineSvg from "@/app/_components/OutlineSvg";
+import { deferStateUpdate } from "@/src/lib/defer-state-update";
 import { renderMessageHtml } from "./renderMessageHtml";
 
 type InteractiveItem = {
@@ -20,14 +21,12 @@ type StepReview = {
 
 type HistoryReviewProps = {
   steps: StepReview[];
-  loginUser: string;
   step3SubmittedOutlineMermaid?: string;
   step4OutlineMermaid?: string;
 };
 
 export default function HistoryReview({
   steps,
-  loginUser,
   step3SubmittedOutlineMermaid,
   step4OutlineMermaid,
 }: HistoryReviewProps) {
@@ -35,15 +34,17 @@ export default function HistoryReview({
 
   useEffect(() => {
     if (steps.length === 0) {
-      setExpanded({});
+      deferStateUpdate(() => setExpanded({}));
       return;
     }
-    setExpanded((prev) => {
-      const next: Record<number, boolean> = {};
-      steps.forEach((review) => {
-        next[review.step] = prev[review.step] ?? false;
+    deferStateUpdate(() => {
+      setExpanded((prev) => {
+        const next: Record<number, boolean> = {};
+        steps.forEach((review) => {
+          next[review.step] = prev[review.step] ?? false;
+        });
+        return next;
       });
-      return next;
     });
   }, [steps]);
 

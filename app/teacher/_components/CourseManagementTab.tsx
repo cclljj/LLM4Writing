@@ -1,6 +1,7 @@
 "use client";
 
 import { DragEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { deferStateUpdate } from "@/src/lib/defer-state-update";
 import { ActivityGroup, ActivityRow, EssayRow, OpenClassRow, UserRow, genreOptions } from "./types";
 import CourseImplementationReportTab from "./CourseImplementationReportTab";
 
@@ -44,7 +45,7 @@ export default function CourseManagementTab({
   // 若 loginRole 變動（例如資料重新載入後角色更新），確保非 admin 不會卡在 essay 分頁
   useEffect(() => {
     if (loginRole !== "admin" && subTab === "essay") {
-      setSubTab("task");
+      deferStateUpdate(() => setSubTab("task"));
     }
   }, [loginRole, subTab]);
 
@@ -172,16 +173,16 @@ export default function CourseManagementTab({
   }, [filteredOpenClasses, listPage]);
 
   useEffect(() => {
-    setListPage(1);
+    deferStateUpdate(() => setListPage(1));
   }, [listSchoolFilter, listClassFilter]);
 
   useEffect(() => {
-    if (listPage > totalListPages) setListPage(totalListPages);
+    if (listPage > totalListPages) deferStateUpdate(() => setListPage(totalListPages));
   }, [listPage, totalListPages]);
 
   // 切換 admin 學校篩選時重置班級
   useEffect(() => {
-    setListClassFilter("all");
+    deferStateUpdate(() => setListClassFilter("all"));
   }, [listSchoolFilter]);
 
   // 當 admin 切換 form 學校時，重置班級
@@ -189,7 +190,7 @@ export default function CourseManagementTab({
     if (loginRole !== "admin") return;
     if (!taskForm.id) {
       // 只有在新建模式下重置（編輯時學校固定）
-      setTaskForm((prev) => ({ ...prev, classNumber: "" }));
+      deferStateUpdate(() => setTaskForm((prev) => ({ ...prev, classNumber: "" })));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [taskForm.school, loginRole]);
@@ -198,15 +199,19 @@ export default function CourseManagementTab({
   useEffect(() => {
     if (taskForm.id) return; // 編輯模式由 startEditTask 處理
     if (!taskForm.classNumber) {
-      setUnassignedStudents([]);
-      setEditableGroups([]);
+      deferStateUpdate(() => {
+        setUnassignedStudents([]);
+        setEditableGroups([]);
+      });
       return;
     }
     const studentsForClass = users
       .filter((u) => u.role === "student" && u.school === currentFormSchool && u.classNumber === taskForm.classNumber)
       .map((u) => u.username);
-    setUnassignedStudents(studentsForClass);
-    setEditableGroups(buildEmptyGroups(groupCount));
+    deferStateUpdate(() => {
+      setUnassignedStudents(studentsForClass);
+      setEditableGroups(buildEmptyGroups(groupCount));
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [taskForm.classNumber, currentFormSchool]);
 
@@ -216,25 +221,26 @@ export default function CourseManagementTab({
   useEffect(() => {
     if (!taskForm.classNumber) return; // 尚未選班級時不動
     const safeCount = Math.max(1, groupCount);
-    setEditableGroups((prev) => {
-      if (prev.length === safeCount) return prev;
-      if (prev.length < safeCount) {
-        const additions: ActivityGroup[] = [];
-        for (let i = prev.length; i < safeCount; i += 1) {
-          additions.push({ groupId: `g${i + 1}`, groupName: String(i + 1), members: [] });
+    deferStateUpdate(() => {
+      setEditableGroups((prev) => {
+        if (prev.length === safeCount) return prev;
+        if (prev.length < safeCount) {
+          const additions: ActivityGroup[] = [];
+          for (let i = prev.length; i < safeCount; i += 1) {
+            additions.push({ groupId: `g${i + 1}`, groupName: String(i + 1), members: [] });
+          }
+          return [...prev, ...additions];
         }
-        return [...prev, ...additions];
-      }
-      // 縮減：把被移除小組的成員放回未分配
-      const kept = prev.slice(0, safeCount);
-      const removed = prev.slice(safeCount);
-      const displaced = removed.flatMap((g) => g.members);
-      if (displaced.length > 0) {
-        setUnassignedStudents((u) => Array.from(new Set([...u, ...displaced])));
-      }
-      return kept;
+        // 縮減：把被移除小組的成員放回未分配
+        const kept = prev.slice(0, safeCount);
+        const removed = prev.slice(safeCount);
+        const displaced = removed.flatMap((g) => g.members);
+        if (displaced.length > 0) {
+          setUnassignedStudents((u) => Array.from(new Set([...u, ...displaced])));
+        }
+        return kept;
+      });
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groupCount, taskForm.classNumber]);
 
   function buildEmptyGroups(count: number): ActivityGroup[] {

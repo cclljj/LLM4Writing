@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import OutlineSvg from "@/app/_components/OutlineSvg";
 import { renderMessageHtml } from "@/app/student/_components/renderMessageHtml";
+import { deferStateUpdate } from "@/src/lib/defer-state-update";
 import { ActivityRow, MonitorSession, OpenClassRow, UserRow } from "./types";
 import { generateCourseImplementationPdf } from "./courseImplementationPdf";
 
@@ -414,7 +415,7 @@ export default function CourseImplementationReportTab({
 
   useEffect(() => {
     if (page > totalPages) {
-      setPage(totalPages);
+      deferStateUpdate(() => setPage(totalPages));
     }
   }, [page, totalPages]);
 

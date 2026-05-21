@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import OutlineSvg from "@/app/_components/OutlineSvg";
+import { deferStateUpdate } from "@/src/lib/defer-state-update";
 
 type Step68PanelProps = {
   currentStep: 6 | 8;
@@ -11,7 +12,6 @@ type Step68PanelProps = {
   onDraftChange: (value: string) => void;
   onSaveDraft: () => void;
   onSuggest?: () => void;
-  onCompleteStep6?: () => void;
   onCompleteStep8?: () => void;
   isSuggestingStep6: boolean;
   isCompletingStep6: boolean;
@@ -35,7 +35,6 @@ export default function Step68Panel({
   onDraftChange,
   onSaveDraft,
   onSuggest,
-  onCompleteStep6,
   onCompleteStep8,
   isSuggestingStep6,
   isCompletingStep6,
@@ -52,7 +51,7 @@ export default function Step68Panel({
 
   useEffect(() => {
     if (!(currentStep === 6 && isSuggestingStep6)) {
-      setSuggestingDots("...");
+      deferStateUpdate(() => setSuggestingDots("..."));
       return;
     }
     const timer = window.setInterval(() => {
@@ -63,7 +62,7 @@ export default function Step68Panel({
 
   useEffect(() => {
     if (!(currentStep === 6 && isCompletingStep6)) {
-      setCompletingDots("...");
+      deferStateUpdate(() => setCompletingDots("..."));
       return;
     }
     const timer = window.setInterval(() => {

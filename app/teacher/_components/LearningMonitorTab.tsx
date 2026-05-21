@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArtifactDiagnostics, buildAdvancedStuckRisk, QualitySignals } from "@/src/lib/learning-diagnostics";
 import { formatUserError } from "@/src/lib/error-messages";
+import { deferStateUpdate } from "@/src/lib/defer-state-update";
 import {
   getActivityGroupScopedSessions,
   getActivityScopedSessions,
@@ -19,7 +20,7 @@ import {
   TEACHER_MONITOR_MIN_POLL_MS
 } from "@/src/lib/teacher-monitor-polling";
 import TeacherDashboard, { TeacherDashboardData } from "./TeacherDashboard";
-import { ActivityRow, MonitorSession, PersonalProgressRow, UserRow } from "./types";
+import { ActivityRow, MonitorSession, UserRow } from "./types";
 
 // Re-export QualitySignals/ArtifactDiagnostics usage via types import
 type _QS = QualitySignals;
@@ -66,7 +67,6 @@ export default function LearningMonitorTab({
 }: LearningMonitorTabProps) {
   const [monitorSessions, setMonitorSessions] = useState<MonitorSession[]>([]);
   const [monitorSelected, setMonitorSelected] = useState<MonitorSession | null>(null);
-  const [groupViewStep, setGroupViewStep] = useState<string>("all");
   // Default to collapsed (#245): teachers usually scan the dashboard first; logs are
   // opt-in details. Section-level and per-step cards both default to closed.
   const [groupLogExpanded, setGroupLogExpanded] = useState(false);
@@ -80,7 +80,6 @@ export default function LearningMonitorTab({
   const [learningActionKey, setLearningActionKey] = useState("");
   const [detailLoadingSessionId, setDetailLoadingSessionId] = useState("");
   const [learningWarning, setLearningWarning] = useState("");
-  const [progressRows, setProgressRows] = useState<PersonalProgressRow[]>([]);
   const [selectedProgressUser, setSelectedProgressUser] = useState("");
   const [personalMessages, setPersonalMessages] = useState<{ id: string; role: string; userId?: string; step: number; text: string; at: string }[]>([]);
   const [userOutline, setUserOutline] = useState("");
@@ -122,7 +121,7 @@ export default function LearningMonitorTab({
       }
       return;
     }
-    setSelectedLearningActivityId(candidate);
+    deferStateUpdate(() => setSelectedLearningActivityId(candidate));
   }, [activities, isAdminConsole, selectedLearningActivityId]);
 
   useEffect(() => {
@@ -555,24 +554,25 @@ export default function LearningMonitorTab({
     if (!monitorSelected) return;
     const latest = filteredMonitorSessions.find((session) => session.sessionId === monitorSelected.sessionId);
     if (!latest) {
-      setMonitorSelected(null);
+      deferStateUpdate(() => setMonitorSelected(null));
       return;
     }
-    setMonitorSelected(latest);
-  }, [filteredMonitorSessions, monitorSelected?.sessionId]);
+    deferStateUpdate(() => setMonitorSelected(latest));
+  }, [filteredMonitorSessions, monitorSelected]);
 
   useEffect(() => {
     monitorSessionsRef.current = monitorSessions;
   }, [monitorSessions]);
 
   useEffect(() => {
-    setMonitorSelected(null);
-    setProgressRows([]);
-    setPersonalMessages([]);
-    setSelectedProgressUser("");
-    setProgressSessionId("");
-    setUserOutline("");
-    setUserStep3SubmittedOutline("");
+    deferStateUpdate(() => {
+      setMonitorSelected(null);
+      setPersonalMessages([]);
+      setSelectedProgressUser("");
+      setProgressSessionId("");
+      setUserOutline("");
+      setUserStep3SubmittedOutline("");
+    });
   }, [selectedLearningActivityId]);
 
   // Auto-load the first student when the personal log card is first expanded with
@@ -582,14 +582,18 @@ export default function LearningMonitorTab({
     if (selectedProgressUser) return;
     if (personalLogOptions.length === 0) return;
     const first = personalLogOptions[0]!;
-    setProgressSessionId(first.sessionId);
-    loadProgress(first.sessionId, first.username).catch(() => undefined);
+    deferStateUpdate(() => {
+      setProgressSessionId(first.sessionId);
+      loadProgress(first.sessionId, first.username).catch(() => undefined);
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [personalLogExpanded, selectedProgressUser, personalLogOptions]);
 
   useEffect(() => {
     if (!showCourseStatusView || !selectedLearningActivityId) return;
     refreshMonitor().catch(() => undefined);
+    // refreshMonitor is a page action that closes over current filters and setters.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showCourseStatusView, selectedLearningActivityId]);
 
   useEffect(() => {
@@ -632,30 +636,32 @@ export default function LearningMonitorTab({
       cancelled = true;
       if (timerId !== null) window.clearTimeout(timerId);
     };
+    // refreshMonitor is intentionally read from the current render when polling starts.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showCourseStatusView, selectedLearningActivityId]);
 
   useEffect(() => {
-    setLearningPage(1);
+    deferStateUpdate(() => setLearningPage(1));
   }, [learningSchoolFilter, learningClassFilter, learningCourseFilter, learningStatusFilter]);
 
   useEffect(() => {
-    setProgressStatsPage(1);
+    deferStateUpdate(() => setProgressStatsPage(1));
   }, [selectedLearningActivityId, filteredMonitorSessions.length]);
 
   useEffect(() => {
     if (progressStatsPage > personalProgressStatsTotalPages) {
-      setProgressStatsPage(personalProgressStatsTotalPages);
+      deferStateUpdate(() => setProgressStatsPage(personalProgressStatsTotalPages));
     }
   }, [progressStatsPage, personalProgressStatsTotalPages]);
 
   useEffect(() => {
     if (learningPage > totalLearningPages) {
-      setLearningPage(totalLearningPages);
+      deferStateUpdate(() => setLearningPage(totalLearningPages));
     }
   }, [learningPage, totalLearningPages]);
 
   useEffect(() => {
-    setLearningJumpPage(String(learningPage));
+    deferStateUpdate(() => setLearningJumpPage(String(learningPage)));
   }, [learningPage]);
 
   // Load data on mount (replaces the tab === "learning" guard)
@@ -764,13 +770,6 @@ export default function LearningMonitorTab({
     if (status === "paused") return "暫停中";
     if (status === "ended") return "已結束";
     return "尚未開始";
-  }
-
-  function formatSessionLabel(session: MonitorSession): string {
-    const school = session.school?.trim() || selectedLearningActivity?.school || "unknown-school";
-    const classNumber = session.classNumber?.trim() || selectedLearningActivity?.classNumber || "unknown-class";
-    const groupNumber = (session.groupName || session.groupId || "unknown-group").toString();
-    return `${school} + ${classNumber} + ${groupNumber}`;
   }
 
   function getMonitorGateKey(session: MonitorSession): string | null {
@@ -1064,7 +1063,6 @@ export default function LearningMonitorTab({
         currentStep: data.currentStep,
         messages: data.messages
       });
-      setGroupViewStep("all");
       await onRefreshData();
       await refreshMonitor(selectedLearningActivityId);
     });
@@ -1090,7 +1088,6 @@ export default function LearningMonitorTab({
         setError(formatUserError(data.error ?? "progress_failed"));
         return;
       }
-      setProgressRows(data.progress ?? []);
       setPersonalMessages(data.personalMessages ?? []);
       if (username) {
         setSelectedProgressUser(username);
@@ -1377,7 +1374,6 @@ export default function LearningMonitorTab({
             onAdvanceStep={(sessionId, step) => applyStepSwitch(sessionId, step)}
             onInspectDialogue={(session) => {
               setMonitorSelected(session);
-              setGroupViewStep("all");
               setProgressSessionId(session.sessionId);
               if (session.messages.length === 0) {
                 loadMonitorSessionDetail(session.sessionId).catch(() => undefined);
@@ -1567,7 +1563,6 @@ export default function LearningMonitorTab({
                       const next = groupLogOptions.find((opt) => opt.sessionId === sid);
                       if (next) {
                         setMonitorSelected(next.session);
-                        setGroupViewStep("all");
                         setProgressSessionId(next.sessionId);
                         if (next.session.messages.length === 0) {
                           loadMonitorSessionDetail(next.sessionId).catch(() => undefined);
