@@ -133,6 +133,12 @@ The system SHALL provide an editable personal structure tree in Step3 based on t
 - **WHEN** the student edits nodes
 - **THEN** first-level and second-level nodes keep the configured restrictions, while third-level and deeper nodes may be edited according to the documented rules
 
+#### Scenario: Server-side Step3 completion lock
+
+- **GIVEN** a student has completed Step3 and has not reopened editing
+- **WHEN** the client attempts to save the Step3 outline artifact again
+- **THEN** the server rejects the save so the completed structure tree cannot be modified silently
+
 #### Scenario: Step3 completion validation
 
 - **GIVEN** the student attempts to complete Step3

@@ -176,6 +176,7 @@ Upstash 啟用條件：
 
 - `student` 只能操作自己參與的 session 與 artifact。
 - `teacher` 只能管理自己名下學生、自己可見班級的任務與分組。
+- `teacher` 對 session 的教師端操作（例如切換步驟）必須同時符合：session `activityId` 屬於教師可見任務、session 小組仍符合該任務分組範圍。
 - `admin` 可管理全域資料。
 
 ### 3.2 教師可見範圍
@@ -1314,6 +1315,7 @@ Request:
 
 - 權限：student 且需為 session participant。
 - 僅允許 Step3。
+- Step3 已完成且尚未透過 `step3/reopen` 恢復編輯時，server 端不得再接受 outline artifact 寫入；若仍嘗試儲存，回傳 `step3_outline_locked_after_completion`。
 - 寫入 `groupGate["3-complete"]`，名單去重。
 - 每次送出都覆寫 Step3 完成快照（`step3SubmittedOutlines[username]`），確保再次完成後使用最新內容。
 - 若先前有 `groupGate["3-reopen"]` 標記，完成時需移除該標記。
@@ -1445,7 +1447,7 @@ Request:
 { "sessionId": "...", "step": 6 }
 ```
 
-- 權限：teacher/admin。
+- 權限：teacher/admin；teacher 需通過 session/activity 可見範圍檢查，包含可見班級與目前活動分組 scope。
 - 使用 `switchStep`。
 - 成功切換後需寫入 audit log（`action=teacher_step_switch`，含 `fromStep`/`toStep`/`activityId`）。
 
@@ -1601,6 +1603,7 @@ Request:
 - 權限：teacher/admin。
 - teacher 只能管理自己與自己學生。
 - student 必須有 `ownerTeacherUsername` 與 `classNumber`。
+- UI 產生臨時密碼時需使用 Web Crypto 等密碼學安全亂數，不得使用 `Math.random()`。
 - 禁止自刪。
 - 禁止不合法角色變更。
 - 支援 CSV 批次建立，6/7 欄，且 `classnumber` 必為第一欄。

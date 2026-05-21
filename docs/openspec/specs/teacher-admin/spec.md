@@ -45,6 +45,12 @@ The system SHALL support role-aware account CRUD, reset password, and CSV batch 
 - **WHEN** required ownership or class fields are missing
 - **THEN** the system rejects the operation
 
+#### Scenario: Secure temporary password generation
+
+- **GIVEN** the account management UI generates a temporary password
+- **WHEN** the password is produced in the browser
+- **THEN** it uses cryptographically secure randomness rather than `Math.random`
+
 #### Scenario: Delete user feedback
 
 - **GIVEN** a user deletion is confirmed

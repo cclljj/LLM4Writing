@@ -645,6 +645,44 @@ test("#335: teacher Step4 advance hint prioritizes joined users to avoid absent-
   assert.ok(src.includes("步驟 4 尚未收齊已加入成員的完成確認"), "Step4 hint should communicate joined-member gate status");
 });
 
+test("#370: teacher step switch enforces teacher-visible session scope", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { resolve, dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const thisDir = dirname(fileURLToPath(import.meta.url));
+
+  const routeSrc = readFileSync(resolve(thisDir, "../app/api/teacher/step/route.ts"), "utf8");
+  const helperSrc = readFileSync(resolve(thisDir, "../src/lib/teacher-session-access.ts"), "utf8");
+  assert.ok(routeSrc.includes("canAccessTeacherSession"), "teacher step route must check session visibility before switchStep");
+  assert.ok(routeSrc.includes("forbidden_session"), "teacher step route must reject cross-scope sessions");
+  assert.ok(helperSrc.includes("isSessionInActivityGroupScope"), "teacher access helper must enforce activity group scope");
+  assert.ok(helperSrc.includes("getUsersVisibleToTeacherStore"), "teacher access helper must derive visible classes from owned students");
+});
+
+test("#370: artifact save enforces Step3 outline lock server-side", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { resolve, dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const thisDir = dirname(fileURLToPath(import.meta.url));
+
+  const src = readFileSync(resolve(thisDir, "../app/api/session/artifact/save/route.ts"), "utf8");
+  assert.ok(src.includes("3-complete"), "artifact save must inspect Step3 completion gate");
+  assert.ok(src.includes("3-reopen"), "artifact save must allow editing after explicit Step3 reopen");
+  assert.ok(src.includes("step3_outline_locked_after_completion"), "artifact save must return a specific lock error");
+  assert.ok(src.includes("{ status: 409 }"), "artifact save lock should be a conflict response");
+});
+
+test("#370: temporary password generation uses Web Crypto instead of Math.random", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { resolve, dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const thisDir = dirname(fileURLToPath(import.meta.url));
+
+  const src = readFileSync(resolve(thisDir, "../app/teacher/_components/StudentAccountTab.tsx"), "utf8");
+  assert.ok(src.includes("crypto.getRandomValues"), "temporary password generation must use cryptographic randomness");
+  assert.ok(!src.includes("Math.random() * chars.length"), "temporary password generation must not use Math.random");
+});
+
 test("#347: step12 fallback events persist errorCategory for diagnostics", async () => {
   const { readFileSync } = await import("node:fs");
   const { resolve, dirname } = await import("node:path");

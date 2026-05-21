@@ -64,6 +64,12 @@ The system SHALL enforce student, teacher, and admin data boundaries.
 - **WHEN** the target data is outside the teacher's visible students or classes
 - **THEN** the request is rejected or the data is omitted
 
+#### Scenario: Teacher session mutation boundary
+
+- **GIVEN** a teacher requests a session-level mutation such as switching steps
+- **WHEN** the session's activity or group scope is outside the teacher's visible classes
+- **THEN** the request is rejected before mutating the session
+
 #### Scenario: Admin global boundary
 
 - **GIVEN** an admin performs a management action
@@ -139,4 +145,3 @@ The system SHALL apply baseline browser security headers to all routes.
 - **GIVEN** the app runs in production
 - **WHEN** headers are applied
 - **THEN** `Strict-Transport-Security` is included
-

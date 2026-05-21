@@ -31,6 +31,11 @@ export async function POST(request: NextRequest) {
   await markUserOnline(session.id, user.username);
 
   if (body.type === "outline") {
+    const completedUsers = new Set(session.groupGate?.["3-complete"] ?? []);
+    const reopenedUsers = new Set(session.groupGate?.["3-reopen"] ?? []);
+    if (completedUsers.has(user.username) && !reopenedUsers.has(user.username)) {
+      return NextResponse.json({ error: "step3_outline_locked_after_completion" }, { status: 409 });
+    }
     session.outlines[user.username] = body.content;
     recordArtifactUpdateSignal(session, "outline", user.username);
   }

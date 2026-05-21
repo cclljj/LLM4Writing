@@ -4,6 +4,7 @@ import { getSession, saveSession } from "@/src/lib/store";
 import { switchStep } from "@/src/lib/engine";
 import { SwitchStepPayload } from "@/src/lib/types";
 import { recordAuditLog } from "@/src/lib/audit-log-store";
+import { canAccessTeacherSession } from "@/src/lib/teacher-session-access";
 
 export async function POST(request: NextRequest) {
   const user = await getCurrentUser();
@@ -16,6 +17,9 @@ export async function POST(request: NextRequest) {
 
   if (!session) {
     return NextResponse.json({ error: "session_not_found" }, { status: 404 });
+  }
+  if (!(await canAccessTeacherSession(user, session))) {
+    return NextResponse.json({ error: "forbidden_session" }, { status: 403 });
   }
 
   try {

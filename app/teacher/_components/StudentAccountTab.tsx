@@ -210,9 +210,11 @@ export default function StudentAccountTab({
 
   function createRandomPassword(length = 12): string {
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%";
+    const randomValues = new Uint32Array(length);
+    window.crypto.getRandomValues(randomValues);
     let result = "";
     for (let i = 0; i < length; i += 1) {
-      result += chars[Math.floor(Math.random() * chars.length)]!;
+      result += chars[randomValues[i]! % chars.length]!;
     }
     return result;
   }
