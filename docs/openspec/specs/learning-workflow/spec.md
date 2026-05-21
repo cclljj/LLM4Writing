@@ -271,6 +271,13 @@ The student UI SHALL keep course progress, previous-step review, next-action gui
 - **WHEN** Step10 content is rendered in student views
 - **THEN** the renderer normalizes those wrappers first and still displays headings/lists as formatted HTML
 
+#### Scenario: Step10 rendering consistency across history and monitor views
+
+- **GIVEN** Step10 summary content is viewed from student course-history or teacher/admin personal-record views
+- **WHEN** the same report text is rendered outside the live Step10 page
+- **THEN** those views use the same markdown normalization and rendering rules
+- **AND** they do not regress to showing raw markdown markers such as `##`
+
 #### Scenario: Step5+ progress display
 
 - **GIVEN** a student is in Step5 or later

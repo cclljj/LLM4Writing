@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ChatMessage } from "@/src/lib/types";
 import OutlineSvg from "@/app/_components/OutlineSvg";
+import { renderMessageHtml } from "@/app/student/_components/renderMessageHtml";
 
 type HistorySummary = {
   sessionCount: number;
@@ -82,42 +83,6 @@ export default function StudentCourseHistoryPage() {
   const [stepExpanded, setStepExpanded] = useState<Record<number, boolean>>({});
 
   const activityId = useMemo(() => String(params?.activityId ?? ""), [params?.activityId]);
-
-  const renderMessageHtml = (text: string): string => {
-    const normalizedText = text.replace(/<br\s*\/?>/gi, "\n");
-    const lines = normalizedText.split(/\r?\n/);
-    const htmlParts: string[] = [];
-    let listBuffer: string[] = [];
-
-    const flushList = () => {
-      if (listBuffer.length === 0) return;
-      htmlParts.push(`<ul>${listBuffer.join("")}</ul>`);
-      listBuffer = [];
-    };
-
-    for (const rawLine of lines) {
-      const line = rawLine.trim();
-      if (!line) {
-        flushList();
-        continue;
-      }
-      const escaped = line
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#39;")
-        .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
-      if (escaped.startsWith("- ")) {
-        listBuffer.push(`<li>${escaped.slice(2)}</li>`);
-        continue;
-      }
-      flushList();
-      htmlParts.push(`<p style=\"margin:6px 0;\">${escaped}</p>`);
-    }
-    flushList();
-    return htmlParts.join("");
-  };
 
   useEffect(() => {
     if (!activityId) {
