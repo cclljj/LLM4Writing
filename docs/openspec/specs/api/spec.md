@@ -90,6 +90,13 @@ The system SHALL expose session read, chat, artifact, and step-specific mutation
 - **WHEN** the body includes any `userId`
 - **THEN** the server uses the authenticated cookie identity and ignores the client-provided identity for authorization
 
+#### Scenario: Step4 classroom discussion moderation
+
+- **GIVEN** a student sends a Step4 peer-discussion message via `POST /api/chat/send`
+- **WHEN** the message includes explicit abusive wording
+- **THEN** the API rejects it with a student-facing error without appending the message to session history
+- **AND** short harmless messages and classroom-linked creative discussion remain allowed
+
 #### Scenario: Artifact save
 
 - **GIVEN** a session participant calls `POST /api/session/artifact/save`

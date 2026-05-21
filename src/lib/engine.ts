@@ -4,7 +4,13 @@ import { STEP_DEFINITIONS, getModeByStep, getStepName } from "@/src/lib/spec";
 import { isLlmConfigured, llmChatCompletionText, LlmChatMessage } from "@/src/lib/llm-client";
 import { buildStudentCourseContext } from "@/src/lib/llm-context";
 import { findActivity } from "@/src/lib/activity-store";
-import { extractCurrentSystemQuestion, normalizeForCompare, validateStudentAnswer, validateStudentAnswerSimple } from "@/src/lib/answer-validation";
+import {
+  extractCurrentSystemQuestion,
+  normalizeForCompare,
+  validateStep4DiscussionMessage,
+  validateStudentAnswer,
+  validateStudentAnswerSimple
+} from "@/src/lib/answer-validation";
 import { recordRejectedAnswerSignal } from "@/src/lib/learning-diagnostics";
 import { classifyLlmError } from "@/src/lib/llm-observability";
 import { PersistedErrorCategory, recordLearningEvent } from "@/src/lib/store";
@@ -1475,6 +1481,10 @@ export async function sendStudentMessage(
     const completedUsers = new Set(session.groupGate["4-complete"] ?? []);
     if (completedUsers.has(userId)) {
       throw new Error("step4_already_completed");
+    }
+    const step4ModerationError = validateStep4DiscussionMessage(text);
+    if (step4ModerationError) {
+      throw new Error(step4ModerationError);
     }
     session.messages.push(makeMessage({ role: "student", userId, step, text }));
     return session;

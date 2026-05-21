@@ -155,6 +155,13 @@ The system SHALL let students compare group outlines, revise their own outline, 
 - **WHEN** the teacher monitor evaluates the group
 - **THEN** the group is eligible to move to Step5
 
+#### Scenario: Step4 discussion keeps classroom relevance with light-touch filtering
+
+- **GIVEN** students discuss in Step4 before completion
+- **WHEN** a message contains explicit abusive wording or long clearly off-topic chatter without classroom relevance
+- **THEN** the message is rejected
+- **AND** short harmless replies and creative but classroom-linked ideas remain acceptable
+
 ### Requirement: Personal Pacing From Step5
 
 The system SHALL use personal pacing from Step5 onward.

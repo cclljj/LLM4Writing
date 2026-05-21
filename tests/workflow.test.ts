@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { ChatMessage, SessionState } from "../src/lib/types";
-import { validateStudentAnswer, validateDraftContent, validateStudentAnswerSimple } from "../src/lib/answer-validation";
+import { validateStep4DiscussionMessage, validateStudentAnswer, validateDraftContent, validateStudentAnswerSimple } from "../src/lib/answer-validation";
 import { buildAdvancedStuckRisk, recordRejectedAnswerSignal } from "../src/lib/learning-diagnostics";
 import { isTruncatedFinishReason, pickAssistantTextResult } from "../src/lib/llm-openai-response";
 import { resolvePendingOutlineAfterServerSync, shouldSyncOutlineFromSession } from "../src/lib/outline-sync-guard";
@@ -106,6 +106,19 @@ test("step1 substeps 1-1/1-2 accept concise requirement-fitting answers", () => 
   });
   assert.equal(validateStudentAnswerSimple(step12, "s1", 1, "勇氣、責任、尊重"), null);
   assert.match(validateStudentAnswerSimple(step12, "s1", 1, "勇氣、責任") ?? "", /至少 3 個關鍵字/);
+});
+
+test("step4 discussion moderation blocks profanity/off-topic but keeps short or classroom-linked creativity", () => {
+  assert.match(validateStep4DiscussionMessage("你這白痴在講什麼") ?? "", /不適合課堂/);
+  assert.match(
+    validateStep4DiscussionMessage("我昨天一直在看明星八卦和電競實況，超好笑跟這堂課無關但我想聊") ?? "",
+    /關聯比較低/
+  );
+  assert.equal(validateStep4DiscussionMessage("我同意你這點"), null);
+  assert.equal(
+    validateStep4DiscussionMessage("我們可以用遊戲闖關當比喻，去補強這段文章的論點和例子。"),
+    null
+  );
 });
 
 test("LLM parser prefers structured JSON and still supports legacy marker parsing", () => {
