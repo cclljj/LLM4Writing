@@ -25,15 +25,57 @@ function stripOuterCodeFence(input: string): string {
   return lines.slice(1, -1).join("\n");
 }
 
-export function renderMessageHtml(text: string): string {
-  const normalizedText = stripOuterCodeFence(
-    text
-      .replace(/^\uFEFF/, "")
+function readRenderableJsonValue(value: unknown): string | null {
+  if (typeof value === "string") return value;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  for (const key of ["report", "step10Report", "summary", "content", "text", "feedback", "message"]) {
+    if (typeof record[key] === "string") return record[key];
+  }
+  return null;
+}
+
+function unwrapRenderableText(input: string): string {
+  let current = input.trim();
+  for (let round = 0; round < 3; round += 1) {
+    const fenced = stripOuterCodeFence(current).trim();
+    if (fenced !== current) {
+      current = fenced;
+      continue;
+    }
+
+    if (
+      (current.startsWith('"') && current.endsWith('"')) ||
+      (current.startsWith("{") && current.endsWith("}"))
+    ) {
+      try {
+        const parsed = JSON.parse(current) as unknown;
+        const value = readRenderableJsonValue(parsed);
+        if (value && value.trim() !== current) {
+          current = value.trim();
+          continue;
+        }
+      } catch {
+        // Fall through to escaped text normalization below.
+      }
+    }
+
+    const unescaped = current
+      .replace(/\\\\r\\\\n/g, "\n")
+      .replace(/\\\\n/g, "\n")
+      .replace(/\\\\t/g, "  ")
       .replace(/\\r\\n/g, "\n")
       .replace(/\\n/g, "\n")
       .replace(/\\t/g, "  ")
-      .replace(/<br\s*\/?>/gi, "\n")
-  );
+      .trim();
+    if (unescaped === current) return current;
+    current = unescaped;
+  }
+  return current;
+}
+
+export function renderMessageHtml(text: string): string {
+  const normalizedText = unwrapRenderableText(text.replace(/^\uFEFF/, "").replace(/<br\s*\/?>/gi, "\n"));
   const lines = normalizedText.split(/\r?\n/);
   const htmlParts: string[] = [];
   let unorderedListBuffer: string[] = [];
