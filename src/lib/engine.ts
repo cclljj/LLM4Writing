@@ -14,6 +14,7 @@ import {
 import { recordRejectedAnswerSignal } from "@/src/lib/learning-diagnostics";
 import { classifyLlmError } from "@/src/lib/llm-observability";
 import { PersistedErrorCategory, recordLearningEvent } from "@/src/lib/store";
+import { isStep12FeedbackQualityRisk } from "@/src/lib/step12-feedback-quality";
 import {
   buildStep10SectionPrompt,
   composeStep10Report,
@@ -437,27 +438,6 @@ function buildStep11GenreCheckHint(session: SessionState, currentSubstepKey: str
   ].join("\n");
 }
 
-function isStep12FeedbackQualityRisk(text: string, step?: 1 | 2, substepKey?: string): boolean {
-  const trimmed = text.trim();
-  if (!trimmed) return true;
-  if (/^已收到大家的回覆[，、].*請繼續下一題[。！!]?$/.test(trimmed)) return true;
-  if (/^已收到.*回覆.*整理得很好.*下一題/.test(trimmed)) return true;
-  if (/```|^\{+|\}+$/m.test(trimmed)) return true;
-  if (/"feedback"|nextQuestion|\"question\"|json/i.test(trimmed)) return true;
-  if (/[？?]/.test(trimmed)) return true;
-  if (/請回答以下問題|nextQuestion|子步驟\s*\d-\d/.test(trimmed)) return true;
-  if (/[，、：；]$/.test(trimmed)) return true;
-  if (/(而且|並且|所以|但是|例如|像是|包含|以及)$/.test(trimmed)) return true;
-  const end = trimmed.at(-1) ?? "";
-  const completeEnding = /[。！？.!?」』]$/.test(end);
-  if (!completeEnding && trimmed.length >= 12) return true;
-  if (step === 2 && substepKey && ["2-2", "2-3", "2-4"].includes(substepKey)) {
-    if (trimmed.length < 80) return true;
-    if (!/(重點|摘要|補強|建議|原因|例子|主張|素材|細節|說服力)/.test(trimmed)) return true;
-  }
-  return hasFormalLlmQualityRisk(trimmed);
-}
-
 function sanitizeStep12Feedback(raw: string, fallbackText: string): string {
   const parsed = parseStructuredStepAiResponse(raw);
   const feedback = parsed?.feedbackText ?? splitAiFeedbackAndQuestion(raw).feedbackText ?? raw;
@@ -569,10 +549,27 @@ function getStep12FeedbackFocusPrompt(session: SessionState, substepKey: string)
   return session.promptConfig.step12FeedbackFocusPrompts?.[substepKey]?.trim() ?? "";
 }
 
+function buildStep12FeedbackBoundaryPrompt(step: 1 | 2, currentSubstepKey: string, nextSubstepKey: string | null): string {
+  const currentStepName = step === 1 ? "步驟一「審視題目」" : "步驟二「蒐集資料」";
+  const bannedFutureStages =
+    step === 1
+      ? "禁止提到或暗示即將進入步驟二、第二階段、蒐集資料、步驟三、第三階段、生成論點。"
+      : "禁止提到或暗示即將進入步驟三、第三階段、生成論點。";
+  const nextBoundary = nextSubstepKey
+    ? `下一步補強只能描述「目前 ${currentStepName} 內，下一個合法子步驟 ${nextSubstepKey} 要補強的內容」，不可宣告進入其他步驟或階段。`
+    : `目前 ${currentStepName} 的子步驟即將收尾；只能提醒等待教師切換或整理本步驟重點，不可宣告進入其他步驟或階段。`;
+  return [
+    `目前流程邊界：學生仍在 ${currentStepName}，目前子步驟是 ${currentSubstepKey}。`,
+    nextBoundary,
+    bannedFutureStages
+  ].join("\n");
+}
+
 async function generateStep12Feedback(
   session: SessionState,
   step: 1 | 2,
-  userId: string
+  userId: string,
+  nextSubstepKey: string | null
 ): Promise<{
   feedbackText: string;
   source: "llm" | "fallback";
@@ -585,10 +582,11 @@ async function generateStep12Feedback(
   const stepPrompt = session.promptConfig.stepPrompts[String(step)] ?? "";
   const feedbackPrompt = getStep12FeedbackPrompt(session, step);
   const feedbackFocusPrompt = getStep12FeedbackFocusPrompt(session, context.currentSubstepKey);
+  const boundaryPrompt = buildStep12FeedbackBoundaryPrompt(step, context.currentSubstepKey, nextSubstepKey);
   const systemParts = [session.promptConfig.systemPrompt ?? "", stepPrompt, `目前子步驟：${context.currentSubstepKey}`]
     .filter(Boolean)
     .join("\n\n");
-  const feedbackInstructions = [feedbackPrompt, feedbackFocusPrompt ? `本子步驟回饋焦點：${feedbackFocusPrompt}` : ""]
+  const feedbackInstructions = [feedbackPrompt, boundaryPrompt, feedbackFocusPrompt ? `本子步驟回饋焦點：${feedbackFocusPrompt}` : ""]
     .filter(Boolean)
     .join("\n\n");
   const baseMessages: LlmChatMessage[] = [
@@ -1360,7 +1358,7 @@ export async function sendStudentMessage(
         }
 
         const nextSubStepKey = getNextSubstepKeyAfterCompletion(result.session, step as 1 | 2, result.substep);
-        const feedbackResult = await generateStep12Feedback(result.session, step as 1 | 2, userId);
+        const feedbackResult = await generateStep12Feedback(result.session, step as 1 | 2, userId, nextSubStepKey);
         result.session.messages.push(
           makeMessage({
             role: "ai",

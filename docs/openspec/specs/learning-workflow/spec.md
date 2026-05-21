@@ -46,6 +46,22 @@ Gate members are resolved from joined members first and fall back to assigned pa
 - **THEN** the system uses the step-specific prompt when present, otherwise the default feedback prompt
 - **AND** it may add `step12FeedbackFocusPrompts[currentSubstepKey]` to guide substep-specific feedback without changing next-question source
 
+#### Scenario: Feedback stays within current workflow boundary
+
+- **GIVEN** Step1/2 feedback is generated before the teacher has advanced to the next course step
+- **WHEN** the feedback prompt is assembled
+- **THEN** the prompt includes the current substep and the legal next substep boundary
+- **AND** the feedback `next strengthening` guidance only refers to the current step's legal next substep
+- **AND** Step1 feedback that mentions Step2, second stage, material collection, Step3, third stage, or argument generation is rejected and retried or replaced by fallback
+- **AND** Step2 feedback that mentions Step3, third stage, or argument generation is rejected and retried or replaced by fallback
+
+#### Scenario: Feedback uses stable student-facing sections
+
+- **GIVEN** Step1/2 feedback is generated
+- **WHEN** the LLM returns the JSON `feedback` value
+- **THEN** the student-facing feedback is expected to contain the Markdown sections `### **建議回饋**`, `### **重點摘要**`, and `### **下一步補強**`
+- **AND** the feedback stage does not include the next question
+
 #### Scenario: Step1-1 genre mismatch correction
 
 - **GIVEN** Step `1-1` asks for writing genre and the activity has a configured genre

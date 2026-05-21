@@ -19,6 +19,7 @@ import { buildStudentNextAction } from "../src/lib/student-next-action";
 import { computeNextOpenClassId } from "../src/lib/activity-store";
 import { buildStep1Question, buildStep2Question } from "../src/lib/workflow-questions";
 import { advanceStep1Or2SubstepAfterAi, getNextSubstepKeyAfterCompletion, handleStep1Or2Group, recoverStalledStep1Or2AiWait } from "../src/lib/workflow-step1-2";
+import { isStep12FeedbackQualityRisk } from "../src/lib/step12-feedback-quality";
 import {
   composeStep10Report,
   normalizeStep10SectionBody,
@@ -156,6 +157,33 @@ test("LLM parser prefers structured JSON and still supports legacy marker parsin
   assert.equal(legacy.feedbackText, "這輪整理得不錯。");
   assert.equal(legacy.nextQuestion, "請補上一個例子。");
   assert.equal(isUsableNextQuestion("請依上一則 AI 提問作答（本題要延伸討論）。"), false);
+});
+
+test("Step1/2 feedback quality guard rejects premature future stage announcements", () => {
+  assert.equal(
+    isStep12FeedbackQualityRisk(
+      "### **建議回饋**\n你已整理出核心主張。\n\n### **重點摘要**\n你能對比快樂與空虛。\n\n### **下一步補強**\n接下來我們要進入第二階段「蒐集資料」，找更多例子。",
+      1,
+      "1-4-1"
+    ),
+    true
+  );
+  assert.equal(
+    isStep12FeedbackQualityRisk(
+      "### **建議回饋**\n你已整理出核心主張。\n\n### **重點摘要**\n你能對比快樂與空虛。\n\n### **下一步補強**\n下一輪請在步驟一內，把這句主張再收斂得更清楚。",
+      1,
+      "1-4-1"
+    ),
+    false
+  );
+  assert.equal(
+    isStep12FeedbackQualityRisk(
+      "### **建議回饋**\n你已補充具體素材。\n\n### **重點摘要**\n例子、原因與主張的連結已更清楚。\n\n### **下一步補強**\n接下來要進入步驟三生成論點。",
+      2,
+      "2-3"
+    ),
+    true
+  );
 });
 
 test("sanitizeStudentFacingText keeps text intact and extracts feedback from JSON-ish content", () => {

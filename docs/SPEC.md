@@ -429,9 +429,10 @@ Step1/2 改為兩段式 prompt 組裝：
 2. 當前步驟 `stepPrompts[String(step)]`
 3. `step12FeedbackPrompts[String(step)]` 或 `step12FeedbackPrompts.default`
 4. 目前子步驟 key 與「目前子步驟題目」
-5. 若存在 `step12FeedbackFocusPrompts[currentSubstepKey]`，加入該子步驟回饋焦點
-6. 本步驟最近對話 + 跨步驟歷史節錄
-7. Step `1-1` 需加入文體檢核補充：以活動設定文體（`activity.genre`）比對本輪學生回答；若不一致，回饋必須明確糾正
+5. 目前仍屬於 Step1/2 的流程邊界與合法 `nextSubstepKey`；回饋中的「下一步補強」只能指目前步驟內的下一個合法子步驟，不得自行宣告進入後續課程步驟
+6. 若存在 `step12FeedbackFocusPrompts[currentSubstepKey]`，加入該子步驟回饋焦點
+7. 本步驟最近對話 + 跨步驟歷史節錄
+8. Step `1-1` 需加入文體檢核補充：以活動設定文體（`activity.genre`）比對本輪學生回答；若不一致，回饋必須明確糾正
 
 第二段（下一題）：
 
@@ -472,10 +473,13 @@ Step1/2 第二段（下一題）JSON 契約（僅當使用 `subStepPrompts[nextS
 - LLM 應只輸出 JSON object，不加 Markdown code fence 或額外說明。
 - `feedback` 與 `nextQuestion` 必須為繁體中文。
 - 第一段 `feedback` 不可提出新問題；第二段 `nextQuestion` 不可夾帶回饋段落。
+- `feedback` 應以學生可讀 Markdown 呈現三段：`### **建議回饋**`、`### **重點摘要**`、`### **下一步補強**`；三段內容不得省略。
+- Step1 的 `feedback` 在教師尚未切換前不得提到或暗示 Step2/步驟二/第二階段/蒐集資料，或 Step3/步驟三/第三階段/生成論點；Step2 的 `feedback` 在教師尚未切換前不得提到或暗示 Step3/步驟三/第三階段/生成論點。
 - `nextQuestion` 不可空白、不可照抄 prompt、不可寫「請依上一則 AI 提問作答」。
 - 後端先解析 JSON；若不是 JSON，仍相容舊格式「請回答以下問題」。
 - `nextQuestion` 顯示前需再做文字淨化：去除 code fence（如 ```json）與 JSON 殼層殘留；若仍為 JSON 結構樣式則視為無效題目並走 fallback。
 - `feedback` 顯示前也需做同級淨化與完整性檢查：若偵測 JSON 殘留（如 ` ```json{`、裸 `{`、欄位名殘留）或疑似截斷半句，視為無效回饋並重試/走 fallback。
+- `feedback` 顯示前若偵測到上述未來步驟提前宣告，也視為無效回饋並重試/走 fallback。
 - Step2 後半段（`2-2`、`2-3`、`2-4`）回饋需具備基本內容深度：不可過短，且需呈現摘要、建議、補強方向、原因/例子/主張/素材/細節/說服力等有效教學訊號之一；不足時需重試/走 fallback。
 - Step `1-1` 若學生回答文體與活動設定文體不一致，回饋必須包含：正確文體、錯誤說明、修正指引；不得直接略過糾正就進入 `1-2` 語境。
 - 第一段與第二段都需有 timeout/retry/fallback，任一階段失敗不得造成流程卡住。
