@@ -33,6 +33,7 @@ The system SHALL expose login, logout, current-user, health, and public workflow
 - **GIVEN** `GET /api/health` is called
 - **WHEN** database status is returned
 - **THEN** the response does not include database credentials or other secrets
+- **AND** in production failure mode, `db.detail` is a generic code instead of low-level database error text
 
 ### Requirement: Student Activity APIs
 

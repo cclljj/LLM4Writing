@@ -15,6 +15,7 @@ function safeDbDetail(error: unknown): string {
 }
 
 export async function GET() {
+  const isProduction = process.env.NODE_ENV === "production";
   const enabled = isDatabaseEnabled();
   let ok = false;
   let detail: string | null = null;
@@ -29,7 +30,7 @@ export async function GET() {
       }
     } catch (error) {
       ok = false;
-      detail = safeDbDetail(error);
+      detail = isProduction ? "db_unavailable" : safeDbDetail(error);
     }
   }
   return NextResponse.json({

@@ -145,3 +145,20 @@ The system SHALL apply baseline browser security headers to all routes.
 - **GIVEN** the app runs in production
 - **WHEN** headers are applied
 - **THEN** `Strict-Transport-Security` is included
+
+#### Scenario: Production CSP script hardening
+
+- **GIVEN** the app runs in production
+- **WHEN** CSP headers are applied
+- **THEN** `script-src` excludes `'unsafe-eval'`
+
+### Requirement: Supabase RPC Security Baseline
+
+The system SHALL prevent publicly callable high-privilege RPC execution in Supabase.
+
+#### Scenario: Restrict rls_auto_enable execution
+
+- **GIVEN** `public.rls_auto_enable()` exists in the database
+- **WHEN** security hardening is applied
+- **THEN** `PUBLIC`, `anon`, and `authenticated` do not retain `EXECUTE` permission on the function
+- **AND** the function is configured as `SECURITY INVOKER`

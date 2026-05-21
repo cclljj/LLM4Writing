@@ -1173,6 +1173,7 @@ Error:
 - 回傳基礎服務狀態與儲存模式。
 - DB 欄位：`db.enabled`、`db.ok`、`db.detail`。
 - `db.detail` 不可含敏感憑證。
+- Production 發生 DB 連線錯誤時，`db.detail` 僅可回傳通用錯誤碼（目前為 `db_unavailable`），不得回傳底層例外訊息。
 
 #### `GET /api/spec`
 
@@ -1778,11 +1779,18 @@ Auth session 必須是 server 簽章 token，格式為 `v1.<payload>.<signature>
 
 - `Content-Security-Policy` 至少限制 `default-src 'self'`、`object-src 'none'`、`frame-ancestors 'none'`、`base-uri 'self'`。
 - 因前端 Markdown 與既有元件仍有 inline style/HTML，`style-src` 可暫時保留 `'unsafe-inline'`；若未來導入 nonce/hash，再收緊。
+- `script-src` 在 Production 不得包含 `'unsafe-eval'`；開發環境可為了工具相容暫時保留。
 - `X-Frame-Options: DENY`。
 - `X-Content-Type-Options: nosniff`。
 - `Referrer-Policy: strict-origin-when-cross-origin`。
 - `Permissions-Policy` 預設關閉 camera、microphone、geolocation、payment、usb。
 - Production 需加 `Strict-Transport-Security`。
+
+### 10.7 Supabase RPC 權限基線
+
+- 若 DB 存在 `public.rls_auto_enable()`，不得允許 `PUBLIC` / `anon` / `authenticated` 直接執行。
+- `public.rls_auto_enable()` 應使用 `SECURITY INVOKER`（除非有明確且經審核的 `SECURITY DEFINER` 需求）。
+- 可使用 `scripts/supabase/harden_security.sh` 套用最小安全修補。
 
 ## 11. 不變量
 

@@ -241,6 +241,36 @@ test("next config: defines baseline security headers and CSP", async () => {
   assert.ok(nextConfig.includes("Referrer-Policy"));
   assert.ok(nextConfig.includes("Permissions-Policy"));
   assert.ok(nextConfig.includes("Strict-Transport-Security"));
+  assert.ok(nextConfig.includes("isProduction"), "CSP should branch by environment");
+  assert.ok(nextConfig.includes("'unsafe-eval'"), "development CSP keeps unsafe-eval for compatibility");
+  assert.ok(
+    nextConfig.includes("script-src 'self' 'unsafe-inline'${isProduction ? \"\" : \" 'unsafe-eval'\"}"),
+    "production CSP should exclude unsafe-eval"
+  );
+});
+
+test("health route: production response redacts low-level DB error details", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { resolve, dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+
+  const thisDir = dirname(fileURLToPath(import.meta.url));
+  const healthRoute = readFileSync(resolve(thisDir, "../app/api/health/route.ts"), "utf8");
+
+  assert.ok(healthRoute.includes("isProduction"), "health route should branch by environment");
+  assert.ok(healthRoute.includes('detail = isProduction ? "db_unavailable" : safeDbDetail(error);'));
+});
+
+test("supabase hardening script: revokes public execute from rls_auto_enable", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { resolve, dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+
+  const thisDir = dirname(fileURLToPath(import.meta.url));
+  const script = readFileSync(resolve(thisDir, "../scripts/supabase/harden_security.sh"), "utf8");
+
+  assert.ok(script.includes("REVOKE EXECUTE ON FUNCTION public.rls_auto_enable() FROM PUBLIC, anon, authenticated"));
+  assert.ok(script.includes("ALTER FUNCTION public.rls_auto_enable() SECURITY INVOKER"));
 });
 
 test("auth session token: verifies valid token and rejects tampered role", async () => {

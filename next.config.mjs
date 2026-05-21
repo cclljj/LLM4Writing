@@ -1,3 +1,5 @@
+const isProduction = process.env.NODE_ENV === "production";
+
 const cspDirectives = [
   "default-src 'self'",
   "base-uri 'self'",
@@ -6,12 +8,12 @@ const cspDirectives = [
   "img-src 'self' data: blob: https:",
   "font-src 'self' data: https:",
   "style-src 'self' 'unsafe-inline'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+  `script-src 'self' 'unsafe-inline'${isProduction ? "" : " 'unsafe-eval'"}`,
   "connect-src 'self' https:",
   "form-action 'self'"
 ];
 
-if (process.env.NODE_ENV === "production") {
+if (isProduction) {
   cspDirectives.push("upgrade-insecure-requests");
 }
 
@@ -38,7 +40,7 @@ const securityHeaders = [
   }
 ];
 
-if (process.env.NODE_ENV === "production") {
+if (isProduction) {
   securityHeaders.push({
     key: "Strict-Transport-Security",
     value: "max-age=31536000; includeSubDomains"

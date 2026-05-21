@@ -73,3 +73,15 @@
 - 可直接重放的完整攻擊請求
 
 若必須提供，請先遮罩後再提交。
+
+## Supabase Security Hardening
+
+若 Supabase Advisor 提示 `public.rls_auto_enable()` 可被 `anon/authenticated` 執行，請立即套用：
+
+```bash
+scripts/supabase/harden_security.sh --target-url "$DATABASE_URL"
+```
+
+此腳本會：
+- 撤銷 `PUBLIC` / `anon` / `authenticated` 對 `public.rls_auto_enable()` 的 `EXECUTE` 權限
+- 將該函式調整為 `SECURITY INVOKER`
