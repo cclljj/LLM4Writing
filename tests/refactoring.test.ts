@@ -725,6 +725,7 @@ test("#348: Step1/2 feedback prompt is configurable from system prompt config", 
   };
   const promptConfigSrc = readFileSync(resolve(thisDir, "../src/lib/prompt-config.ts"), "utf8");
   const typeSrc = readFileSync(resolve(thisDir, "../src/lib/types.ts"), "utf8");
+  const feedbackQualitySrc = readFileSync(resolve(thisDir, "../src/lib/step12-feedback-quality.ts"), "utf8");
   const engineSrc = readFileSync(resolve(thisDir, "../src/lib/engine.ts"), "utf8");
 
   assert.ok(config.step12FeedbackPrompts, "system config should define Step1/2 feedback prompts");
@@ -743,7 +744,10 @@ test("#348: Step1/2 feedback prompt is configurable from system prompt config", 
   assert.ok(engineSrc.includes("getStep12FeedbackFocusPrompt"), "engine should read configured substep feedback focus");
   assert.ok(engineSrc.includes("本子步驟回饋焦點"), "engine should include substep-specific focus in feedback prompt");
   assert.ok(engineSrc.includes("prompts[String(step)]?.trim() || prompts.default?.trim()"), "engine should prefer step-specific feedback prompt");
-  assert.ok(engineSrc.includes("[\"2-2\", \"2-3\", \"2-4\"].includes(substepKey)"), "Step2 late feedback should have stricter quality gate");
+  assert.ok(
+    feedbackQualitySrc.includes("[\"2-2\", \"2-3\", \"2-4\"].includes(substepKey)"),
+    "Step2 late feedback should have stricter quality gate"
+  );
 });
 
 test("#351: Step1-1 feedback includes genre mismatch correction context", async () => {
