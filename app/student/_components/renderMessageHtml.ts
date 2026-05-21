@@ -25,37 +25,63 @@ function stripOuterCodeFence(input: string): string {
   return lines.slice(1, -1).join("\n");
 }
 
-function readRenderableJsonValue(value: unknown): string | null {
+function hasMarkdownSignal(text: string): boolean {
+  return /(^|\n)\s*(#{1,6}\s*|[-*]\s+|\d+\.\s+|>\s+)/.test(text) || text.includes("\\n");
+}
+
+function pickRenderableText(candidates: string[]): string | null {
+  if (candidates.length === 0) return null;
+  const scored = candidates
+    .map((text) => ({
+      text,
+      score: (hasMarkdownSignal(text) ? 10_000 : 0) + text.length
+    }))
+    .sort((a, b) => b.score - a.score);
+  return scored[0]?.text ?? null;
+}
+
+function readRenderableJsonValue(value: unknown, depth = 0): string | null {
+  if (depth > 5) return null;
   if (typeof value === "string") return value;
   if (!value || typeof value !== "object") return null;
   if (Array.isArray(value)) {
-    for (const item of value) {
-      const nested = readRenderableJsonValue(item);
-      if (nested) return nested;
-    }
-    return null;
+    return pickRenderableText(value.map((item) => readRenderableJsonValue(item, depth + 1)).filter((item): item is string => Boolean(item)));
   }
   const record = value as Record<string, unknown>;
-  for (const key of ["report", "step10Report", "summary", "content", "text", "feedback", "message"]) {
+  const directKeys = ["report", "step10Report", "summary", "content", "text", "feedback", "message", "output_text"];
+  for (const key of directKeys) {
     if (typeof record[key] === "string") return record[key];
   }
+  const recursiveKeys = [...directKeys, "parts"];
+  for (const key of recursiveKeys) {
+    const nested = readRenderableJsonValue(record[key], depth + 1);
+    if (nested) return nested;
+  }
+
   const openAiContent = (record.choices as Array<{ message?: { content?: unknown }; text?: unknown }> | undefined)?.[0];
-  const openAiText = readRenderableJsonValue(openAiContent?.message?.content ?? openAiContent?.text);
+  const openAiText = readRenderableJsonValue(openAiContent?.message?.content ?? openAiContent?.text, depth + 1);
   if (openAiText) return openAiText;
 
   const geminiPart = (record.candidates as Array<{ content?: { parts?: unknown[] } }> | undefined)?.[0]?.content?.parts;
-  const geminiText = readRenderableJsonValue(geminiPart);
+  const geminiText = readRenderableJsonValue(geminiPart, depth + 1);
   if (geminiText) return geminiText;
 
   for (const key of ["data", "result", "response", "output"]) {
-    const nested = readRenderableJsonValue(record[key]);
+    const nested = readRenderableJsonValue(record[key], depth + 1);
     if (nested) return nested;
   }
   return null;
 }
 
+function decodeMarkdownMarkerEntities(input: string): string {
+  return input
+    .replace(/&num;|&#35;|&#x23;/gi, "#")
+    .replace(/&ast;|&#42;|&#x2a;/gi, "*")
+    .replace(/&hyphen;|&#45;|&#x2d;/gi, "-");
+}
+
 function unwrapRenderableText(input: string): string {
-  let current = input.trim();
+  let current = decodeMarkdownMarkerEntities(input.trim());
   for (let round = 0; round < 3; round += 1) {
     const fenced = stripOuterCodeFence(current).trim();
     if (fenced !== current) {
@@ -79,7 +105,7 @@ function unwrapRenderableText(input: string): string {
       }
     }
 
-    const unescaped = current
+    const unescaped = decodeMarkdownMarkerEntities(current)
       .replace(/\\u000d\\u000a/g, "\n")
       .replace(/\\u000a/g, "\n")
       .replace(/\\u0009/g, "  ")

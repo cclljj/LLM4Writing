@@ -764,12 +764,21 @@ test("renderMessageHtml unwraps JSON-shaped Step10 report text before markdown r
   const jsonObject = JSON.stringify({ step10Report: "## 總結報告\\n- 重點一\\n- 重點二" });
   const openAiWrapper = JSON.stringify({ choices: [{ message: { content: "## 總結報告\\n- 重點一\\n- 重點二" } }] });
   const geminiWrapper = JSON.stringify({ candidates: [{ content: { parts: [{ text: "## 總結報告\\n- 重點一\\n- 重點二" }] } }] });
+  const contentArrayWrapper = JSON.stringify({ content: [{ type: "text", text: "## 總結報告\\n- 重點一\\n- 重點二" }] });
 
-  for (const sample of [jsonString, jsonObject, openAiWrapper, geminiWrapper]) {
+  for (const sample of [jsonString, jsonObject, openAiWrapper, geminiWrapper, contentArrayWrapper]) {
     const html = renderMessageHtml(sample);
     assert.match(html, /<h3[^>]*>總結報告<\/h3>/);
     assert.match(html, /<ul><li>重點一<\/li><li>重點二<\/li><\/ul>/);
     assert.equal(html.includes("## 總結報告"), false);
-    assert.equal(/step10Report|choices|candidates/.test(html), false);
+    assert.equal(/step10Report|choices|candidates|content/.test(html), false);
   }
+});
+
+test("renderMessageHtml decodes markdown marker entities before heading parsing", () => {
+  const html = renderMessageHtml("&num;&num; 總結報告\n&#45; 重點一\n&#45; 重點二");
+  assert.match(html, /<h3[^>]*>總結報告<\/h3>/);
+  assert.match(html, /<ul><li>重點一<\/li><li>重點二<\/li><\/ul>/);
+  assert.equal(html.includes("&num;"), false);
+  assert.equal(html.includes("&#45;"), false);
 });
