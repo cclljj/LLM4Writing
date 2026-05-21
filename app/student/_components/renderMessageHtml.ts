@@ -17,7 +17,7 @@ function applyInlineMarkdown(input: string): string {
 }
 
 export function renderMessageHtml(text: string): string {
-  const normalizedText = text.replace(/<br\s*\/?>/gi, "\n");
+  const normalizedText = text.replace(/^\uFEFF/, "").replace(/<br\s*\/?>/gi, "\n");
   const lines = normalizedText.split(/\r?\n/);
   const htmlParts: string[] = [];
   let unorderedListBuffer: string[] = [];
@@ -56,24 +56,14 @@ export function renderMessageHtml(text: string): string {
 
     flushLists();
 
-    const h1 = escaped.match(/^#\s+(.+)$/);
-    if (h1) {
-      htmlParts.push(`<h2 style="margin:10px 0 6px;">${h1[1]}</h2>`);
-      continue;
-    }
-    const h2 = escaped.match(/^##\s+(.+)$/);
-    if (h2) {
-      htmlParts.push(`<h3 style="margin:9px 0 5px;">${h2[1]}</h3>`);
-      continue;
-    }
-    const h3 = escaped.match(/^###\s+(.+)$/);
-    if (h3) {
-      htmlParts.push(`<h4 style="margin:8px 0 4px;">${h3[1]}</h4>`);
-      continue;
-    }
-    const h4 = escaped.match(/^####\s+(.+)$/);
-    if (h4) {
-      htmlParts.push(`<h5 style="margin:8px 0 4px;">${h4[1]}</h5>`);
+    const heading = escaped.match(/^(#{1,4})\s*(.+)$/);
+    if (heading) {
+      const level = heading[1].length;
+      const content = heading[2];
+      if (level === 1) htmlParts.push(`<h2 style="margin:10px 0 6px;">${content}</h2>`);
+      if (level === 2) htmlParts.push(`<h3 style="margin:9px 0 5px;">${content}</h3>`);
+      if (level === 3) htmlParts.push(`<h4 style="margin:8px 0 4px;">${content}</h4>`);
+      if (level === 4) htmlParts.push(`<h5 style="margin:8px 0 4px;">${content}</h5>`);
       continue;
     }
     const quote = escaped.match(/^>\s?(.+)$/);

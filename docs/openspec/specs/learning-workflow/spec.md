@@ -258,6 +258,13 @@ The student UI SHALL keep course progress, previous-step review, next-action gui
 - **THEN** the UI shows only the in-progress generation hint
 - **AND** the course-completed reminder card is shown only after the Step10 report content is available
 
+#### Scenario: Step10 streaming preview keeps markdown rendering
+
+- **GIVEN** a Step10 summary report is still streaming
+- **WHEN** partial content is shown to the student
+- **THEN** the preview uses the same markdown-to-HTML rendering as the final Step10 report
+- **AND** raw markdown markers such as `##` are not shown as plain text
+
 #### Scenario: Step5+ progress display
 
 - **GIVEN** a student is in Step5 or later

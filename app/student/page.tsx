@@ -1401,7 +1401,6 @@ export default function StudentPage() {
                       border: "1px solid #cbd5e1",
                       borderRadius: 8,
                       background: "#f8fafc",
-                      whiteSpace: "pre-wrap",
                       fontSize: 14,
                       lineHeight: 1.6
                     }}
@@ -1409,7 +1408,7 @@ export default function StudentPage() {
                     <small style={{ display: "block", marginBottom: 6, color: "#64748b", fontWeight: 600 }}>
                       AI 正在產生總結，這個步驟會花比較多的時間，請稍候{step10LoadingDots}
                     </small>
-                    {step10StreamingText}
+                    <div style={{ marginTop: 4 }} dangerouslySetInnerHTML={{ __html: renderMessageHtml(step10StreamingText) }} />
                   </div>
                 ) : (
                   <small style={{ color: "#94a3b8" }}>
