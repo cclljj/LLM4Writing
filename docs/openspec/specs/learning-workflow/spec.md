@@ -238,9 +238,10 @@ The system SHALL stream Step3, Step6 suggestion, Step7 preview, and Step10 repor
 
 - **GIVEN** a student reaches Step10 final report generation
 - **WHEN** the backend generates report content
-- **THEN** it generates Step10 in multiple sections (outline + per-section content) and composes the final report
+- **THEN** it generates Step10 in multiple configured sections from `promptConfig.step10Report.sections` and composes the final report
 - **AND** uses a final polish pass only when section stitching still has quality risk, reducing truncation fallback from single long completions
-- **AND** normalizes outline titles to plain text and strips repeated leading section headings before server-side composition, preventing duplicated markdown heading prefixes such as `## ### Title`
+- **AND** server-owned headings are composed from config while LLM section calls produce plain body text
+- **AND** strips repeated leading section headings and truncates accidentally generated cross-section content before server-side composition, preventing duplicated markdown heading prefixes such as `## ### Title`
 
 ### Requirement: Student UI Continuity
 

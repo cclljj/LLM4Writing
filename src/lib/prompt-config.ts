@@ -1,4 +1,4 @@
-import { Activity, PromptConfig } from "@/src/lib/types";
+import { Activity, PromptConfig, Step10ReportConfig } from "@/src/lib/types";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import systemPromptConfig from "@/src/config/system-prompt-config.json";
@@ -13,6 +13,7 @@ type RawSystemPromptConfig = {
   subStepPrompts_fallbacks?: Record<string, string>;
   questionBanks?: Record<string, string[]>;
   step9Questions?: Record<string, string>;
+  step10Report?: Step10ReportConfig;
   writingTasks?: Record<string, { questionBanks?: Record<string, string[]> }>;
 };
 
@@ -45,7 +46,8 @@ export function resolvePromptConfigForActivity(activityId: string): PromptConfig
       subStepPrompts: {},
       subStepPromptsFallbacks: {},
       questionBanks: {},
-      step9Questions: {}
+      step9Questions: {},
+      step10Report: undefined
     };
   }
 
@@ -67,6 +69,9 @@ export function resolvePromptConfigForActivity(activityId: string): PromptConfig
       .filter(([key, value]) => ["1", "2", "3", "4"].includes(key) && typeof value === "string")
       .map(([key, value]) => [key, value])
   ) as Record<string, string>;
+  const step10Report = raw.step10Report && Array.isArray(raw.step10Report.sections)
+    ? raw.step10Report
+    : undefined;
 
   const taskBanks = raw.writingTasks ?? {};
   const matchedTask =
@@ -89,6 +94,7 @@ export function resolvePromptConfigForActivity(activityId: string): PromptConfig
     subStepPromptsFallbacks,
     questionBanks: { ...baseQuestionBanks, ...scopedQuestionBanks },
     step9Questions,
+    step10Report,
     stepOpenings: stepOpeningTexts
   };
 }

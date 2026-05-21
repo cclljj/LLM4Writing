@@ -14,7 +14,12 @@ import {
 import { recordRejectedAnswerSignal } from "@/src/lib/learning-diagnostics";
 import { classifyLlmError } from "@/src/lib/llm-observability";
 import { PersistedErrorCategory, recordLearningEvent } from "@/src/lib/store";
-import { parseStep10SectionTitles, stripLeadingStep10SectionHeading } from "@/src/lib/step10-report-format";
+import {
+  buildStep10SectionPrompt,
+  composeStep10Report,
+  normalizeStep10SectionBody,
+  resolveStep10ReportConfig
+} from "@/src/lib/step10-report-format";
 import {
   hasFormalLlmQualityRisk,
   parseStructuredStepAiResponse,
@@ -1012,11 +1017,13 @@ export function buildStep10LlmInput(
   userId: string
 ): { messages: LlmChatMessage[]; fallback: string } {
   const fallback = buildStep10Report(session, userId);
+  const reportConfig = resolveStep10ReportConfig(session.promptConfig.step10Report);
   const systemParts: string[] = [];
   if (session.promptConfig.systemPrompt) systemParts.push(session.promptConfig.systemPrompt);
-  const step10Prompt = session.promptConfig.stepPrompts["10"];
-  if (step10Prompt) systemParts.push(step10Prompt);
-  systemParts.push("請針對該學生在整個課程中的表現，輸出完整總結報告。");
+  systemParts.push(reportConfig.baseInstruction);
+  systemParts.push(
+    "Step10 的章節標題由系統程式統一加入。LLM 回覆時不得自行輸出標題、Markdown 標題、粗體符號或完整報告格式。"
+  );
 
   const fullContext = buildFullCourseContextForUser(session, userId);
   const finalEssay = session.draftStep8[userId] ?? session.draftStep6[userId] ?? "(尚未提交作文)";
@@ -1039,7 +1046,7 @@ async function generateStep10Report(session: SessionState, userId: string): Prom
   if (!isLlmConfigured()) {
     return fallback;
   }
-  return generateStep10ReportChunkedText(messages, fallback, {
+  return generateStep10ReportChunkedText(messages, fallback, session.promptConfig.step10Report, {
     sessionId: session.id,
     activityId: session.activityId,
     step: 10,
@@ -1050,42 +1057,21 @@ async function generateStep10Report(session: SessionState, userId: string): Prom
 export async function generateStep10ReportChunkedText(
   messages: LlmChatMessage[],
   fallback: string,
+  config: SessionState["promptConfig"]["step10Report"],
   telemetry: { sessionId?: string; activityId?: string; step?: number; label?: string }
 ): Promise<string> {
+  const reportConfig = resolveStep10ReportConfig(config);
+  const allTitles = reportConfig.sections.map((section) => section.title);
   try {
-    const outlineRaw = await generateAiTextWithRetry(
-      [
-        ...messages,
-        {
-          role: "user",
-          content:
-            "請先列出 4 個總結報告段落標題（每行一個標題），只輸出純文字標題清單，不要輸出段落內文。" +
-            "不得使用 Markdown 標題符號（例如 #、##、###）、粗體符號或清單符號。"
-        }
-      ],
-      0.4,
-      scaleTokens(240),
-      {
-        continuationMaxRounds: 2,
-        telemetry: { ...telemetry, label: `${telemetry.label ?? "step10_report"}:outline` }
-      }
-    );
-    const titles = parseStep10SectionTitles(outlineRaw);
-    const fallbackTitles = ["整體表現總覽", "學習進步重點", "可再加強之處", "下一步建議"];
-    const sectionTitles = titles.length >= 3 ? titles : fallbackTitles;
-
-    const sections: string[] = [];
-    for (let index = 0; index < sectionTitles.length; index += 1) {
-      const title = sectionTitles[index]!;
+    const sections: Array<{ title: string; body: string }> = [];
+    for (let index = 0; index < reportConfig.sections.length; index += 1) {
+      const section = reportConfig.sections[index]!;
       const sectionRaw = await generateAiTextWithRetry(
         [
           ...messages,
           {
             role: "user",
-            content:
-              `請只撰寫第 ${index + 1} 節「${title}」的內文。` +
-              "輸出 1-2 段完整文字，聚焦具體觀察與建議，不要重複其他小節。" +
-              "不要輸出本節標題、Markdown 標題符號或粗體標題，標題會由系統自動加入。"
+            content: buildStep10SectionPrompt(reportConfig.sectionPromptTemplate, section)
           }
         ],
         0.5,
@@ -1095,14 +1081,15 @@ export async function generateStep10ReportChunkedText(
           telemetry: { ...telemetry, label: `${telemetry.label ?? "step10_report"}:section_${index + 1}` }
         }
       );
-      const normalizedSection = stripLeadingStep10SectionHeading(
-        normalizeFormalLlmText(sectionRaw, { fallback: `${title}：${fallback}` }),
-        title
+      const normalizedSection = normalizeStep10SectionBody(
+        normalizeFormalLlmText(sectionRaw, { fallback: `${section.title}：${fallback}` }),
+        section.title,
+        allTitles
       );
-      sections.push(`## ${title}\n${normalizedSection}`);
+      sections.push({ title: section.title, body: normalizedSection });
     }
 
-    const stitched = sections.join("\n\n");
+    const stitched = composeStep10Report(sections, reportConfig.completionReminder);
     if (!hasFormalLlmQualityRisk(stitched)) return stitched;
 
     const retryRaw = await generateAiTextWithRetry(
@@ -1110,9 +1097,7 @@ export async function generateStep10ReportChunkedText(
         ...messages,
         {
           role: "user",
-          content:
-            "以下是分段草稿，請整合成一份完整且正式的總結報告：不得重複句段、不得提到截斷或續寫過程、每句要完整收尾。\n\n" +
-            stitched
+          content: `${reportConfig.finalPolishPrompt}\n\n${stitched}`
         }
       ],
       0.4,
@@ -1122,7 +1107,7 @@ export async function generateStep10ReportChunkedText(
         telemetry: { ...telemetry, label: `${telemetry.label ?? "step10_report"}:final_retry` }
       }
     );
-    return normalizeFormalLlmText(retryRaw, { fallback: stitched || fallback });
+    return normalizeStep10SectionBody(normalizeFormalLlmText(retryRaw, { fallback: stitched || fallback }), "", []);
   } catch {
     return fallback;
   }

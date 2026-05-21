@@ -464,6 +464,8 @@ test("#344: Step10 uses chunked generation and token budgets are uplifted", asyn
 
   assert.ok(engineSrc.includes("generateStep10ReportChunkedText"), "engine should expose chunked Step10 generation helper");
   assert.ok(engineSrc.includes("section_"), "chunked Step10 path should generate per-section content");
+  assert.ok(engineSrc.includes("resolveStep10ReportConfig"), "Step10 should use config-driven report sections");
+  assert.equal(engineSrc.includes("請先列出 4 個總結報告段落標題"), false, "Step10 should not depend on LLM-generated outlines");
   assert.ok(engineSrc.includes("TOKEN_SCALE_NUMERATOR"), "engine should define token-scale uplift");
   assert.ok(llmClientSrc.includes("MIN_LLM_MAX_TOKENS = 50_000"), "llm client should define the truncation-safe token floor");
   assert.ok(llmClientSrc.includes("resolveMaxTokens(input.maxTokens)"), "llm client should apply the token floor to requests");
@@ -713,12 +715,14 @@ test("#348: Step1/2 feedback prompt is configurable from system prompt config", 
     step12FeedbackPrompts?: Record<string, string>;
     step12FeedbackFocusPrompts?: Record<string, string>;
     subStepPrompts?: Record<string, string>;
+    step10Report?: { sections?: Array<{ title?: string }> };
   };
   const promptConfigSrc = readFileSync(resolve(thisDir, "../src/lib/prompt-config.ts"), "utf8");
   const typeSrc = readFileSync(resolve(thisDir, "../src/lib/types.ts"), "utf8");
   const engineSrc = readFileSync(resolve(thisDir, "../src/lib/engine.ts"), "utf8");
 
   assert.ok(config.step12FeedbackPrompts, "system config should define Step1/2 feedback prompts");
+  assert.ok(config.step10Report?.sections?.length, "system config should define Step10 report sections");
   assert.ok(config.step12FeedbackPrompts?.["2"], "system config should allow a Step2-specific feedback prompt");
   assert.ok(configSrc.includes("重點摘要"), "configured feedback prompt should require summary content");
   assert.ok(config.step12FeedbackFocusPrompts?.["2-2"], "system config should define Step2 2-2 feedback focus");

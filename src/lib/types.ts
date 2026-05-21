@@ -28,6 +28,22 @@ export interface PromptConfig {
   questionBanks: Record<string, string[]>;
   step9Questions?: Record<string, string>;
   stepOpenings?: Record<string, string>;
+  step10Report?: Step10ReportConfig;
+}
+
+export interface Step10ReportSectionConfig {
+  id: string;
+  title: string;
+  focus: string;
+  instruction: string;
+}
+
+export interface Step10ReportConfig {
+  sections: Step10ReportSectionConfig[];
+  baseInstruction?: string;
+  sectionPromptTemplate?: string;
+  finalPolishPrompt?: string;
+  completionReminder?: string;
 }
 
 export interface ChatMessage {

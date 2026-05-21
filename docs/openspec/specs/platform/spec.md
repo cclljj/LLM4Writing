@@ -76,6 +76,13 @@ The system SHALL load prompt configuration from `src/config/system-prompt-config
 - **WHEN** prompt configuration is resolved for that activity
 - **THEN** activity-specific question banks under `writingTasks` are preferred when available
 
+#### Scenario: Configured Step10 report sections
+
+- **GIVEN** `src/config/system-prompt-config.json` defines `step10Report.sections`
+- **WHEN** Step10 report generation is prepared for a session
+- **THEN** the resolved prompt configuration includes the ordered Step10 section titles, focus text, section prompt template, final polish prompt, and completion reminder
+- **AND** the LLM is instructed to generate section body text only while the server owns headings
+
 #### Scenario: Read-only prompt API
 
 - **GIVEN** a teacher or admin calls a prompt configuration write endpoint

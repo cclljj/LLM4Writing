@@ -147,6 +147,20 @@ export function renderMessageHtml(text: string): string {
       continue;
     }
 
+    const inlineHeading = line.match(/^(#{1,6})\s+(?:\*\*|__)(.+?)(?:\*\*|__)(\S.*)$/);
+    if (inlineHeading) {
+      flushLists();
+      const level = Math.min(4, inlineHeading[1]!.length);
+      const title = escapeHtml(inlineHeading[2]!.trim());
+      const body = applyInlineMarkdown(escapeHtml(inlineHeading[3]!.trim()));
+      if (level === 1) htmlParts.push(`<h2 style="margin:10px 0 6px;">${title}</h2>`);
+      if (level === 2) htmlParts.push(`<h3 style="margin:9px 0 5px;">${title}</h3>`);
+      if (level === 3) htmlParts.push(`<h4 style="margin:8px 0 4px;">${title}</h4>`);
+      if (level === 4) htmlParts.push(`<h5 style="margin:8px 0 4px;">${title}</h5>`);
+      htmlParts.push(`<p style="margin:6px 0;">${body}</p>`);
+      continue;
+    }
+
     const escaped = applyInlineMarkdown(escapeHtml(line));
     if (escaped.startsWith("- ") || escaped.startsWith("* ")) {
       orderedListBuffer = [];

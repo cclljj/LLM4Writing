@@ -15,7 +15,7 @@ workspace "LLM4Writing C4 Model" "C4 model diagrams generated from docs/openspec
         llmOrchestrator = component "LLM Orchestrator" "Coordinates LLM prompts, retries, continuation, and fallback response generation." "Engine + llm-client"
         contextCompressor = component "LLM Context Compressor" "Builds layered historical summaries, removes duplicate/noisy lines, and preserves recent raw context." "llm-context"
         tokenBudgetGuard = component "LLM Token Budget Guard" "Applies centralized max_tokens floor (>= 50000) for chat and stream requests." "llm-client"
-        step10Chunker = component "Step10 Chunked Report Generator" "Generates Step10 as outline + per-section content + optional final polish to reduce truncation." "engine"
+        step10Chunker = component "Step10 Configured Report Generator" "Generates Step10 from configured sections, server-owned headings, section body prompts, and optional final polish." "engine"
 
         ui -> authz "Authenticates and authorizes"
         ui -> workflowApi "Calls student/session APIs"

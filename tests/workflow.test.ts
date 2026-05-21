@@ -19,7 +19,13 @@ import { buildStudentNextAction } from "../src/lib/student-next-action";
 import { computeNextOpenClassId } from "../src/lib/activity-store";
 import { buildStep1Question, buildStep2Question } from "../src/lib/workflow-questions";
 import { advanceStep1Or2SubstepAfterAi, getNextSubstepKeyAfterCompletion, handleStep1Or2Group, recoverStalledStep1Or2AiWait } from "../src/lib/workflow-step1-2";
-import { parseStep10SectionTitles, stripLeadingStep10SectionHeading } from "../src/lib/step10-report-format";
+import {
+  composeStep10Report,
+  normalizeStep10SectionBody,
+  parseStep10SectionTitles,
+  resolveStep10ReportConfig,
+  stripLeadingStep10SectionHeading
+} from "../src/lib/step10-report-format";
 import {
   computeTeacherMonitorPayloadHash,
   hasLowLatencyStepAdvanceGate,
@@ -799,6 +805,13 @@ test("renderMessageHtml collapses duplicated markdown heading prefixes", () => {
   assert.equal(html.includes("## ###"), false);
 });
 
+test("renderMessageHtml keeps inline heading body in normal paragraph text", () => {
+  const html = renderMessageHtml("### **立意取材**你能從自身經驗出發。");
+  assert.match(html, /<h4[^>]*>立意取材<\/h4>/);
+  assert.match(html, /<p[^>]*>你能從自身經驗出發。<\/p>/);
+  assert.equal(html.includes("<strong>立意取材</strong>你能"), false);
+});
+
 test("Step10 section title parsing removes markdown wrappers before composition", () => {
   const titles = parseStep10SectionTitles("1. ### **立意取材**\n- ## **結構組織**\n三、### 遣詞造句：\n```");
   assert.deepEqual(titles, ["立意取材", "結構組織", "遣詞造句"]);
@@ -807,6 +820,34 @@ test("Step10 section title parsing removes markdown wrappers before composition"
 test("Step10 section content drops a repeated leading generated title", () => {
   const text = stripLeadingStep10SectionHeading("### **立意取材**\n你能從自身經驗出發。", "立意取材");
   assert.equal(text, "你能從自身經驗出發。");
+});
+
+test("Step10 section body keeps only the requested section from a full-format LLM reply", () => {
+  const titles = ["立意取材", "結構組織", "遣詞造句", "錯別字、格式與標點符號", "總評語"];
+  const body = normalizeStep10SectionBody(
+    "### **立意取材**你能從生活經驗取材。\n\n### **結構組織**這段不該出現在本節。",
+    "立意取材",
+    titles
+  );
+  assert.equal(body, "你能從生活經驗取材。");
+});
+
+test("Step10 section body stops before an old inline completion reminder", () => {
+  const body = normalizeStep10SectionBody(
+    "### **總評語**這次練習很完整。\n\n**課程完成提醒：** 舊提醒不應留在總評語。",
+    "總評語",
+    ["立意取材", "結構組織", "遣詞造句", "錯別字、格式與標點符號", "總評語"]
+  );
+  assert.equal(body, "這次練習很完整。");
+});
+
+test("Step10 report config composes stable headings with plain body text", () => {
+  const config = resolveStep10ReportConfig({
+    sections: [{ id: "content", title: "立意取材", focus: "取材", instruction: "說明取材。" }],
+    completionReminder: "請持續練習。"
+  });
+  const report = composeStep10Report([{ title: config.sections[0]!.title, body: "你能從經驗出發。" }], config.completionReminder);
+  assert.equal(report, "## 立意取材\n你能從經驗出發。\n\n## 課程完成提醒\n請持續練習。");
 });
 
 test("teacher monitor payload hash changes when Step3/4 gate members change", () => {

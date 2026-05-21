@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
           }).catch(() => undefined);
         } else {
           try {
-            const normalized = await generateStep10ReportChunkedText(messages, fallback, {
+            const normalized = await generateStep10ReportChunkedText(messages, fallback, session.promptConfig.step10Report, {
               sessionId: session.id,
               activityId: session.activityId,
               step: 10,
