@@ -171,8 +171,9 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
     doc.rect(0, 34, PAGE.width, 8, "F");
 
     doc.setFontSize(9);
-    setTextColor(COLORS.muted);
+    setTextColor([255, 255, 255]);
     doc.text(`LLM4Writing 課程實施報告`, PAGE.marginX, 26);
+    setTextColor(COLORS.muted);
     doc.text(`第 ${pageNo} 頁`, PAGE.width - PAGE.marginX - 48, PAGE.height - 18);
     setTextColor(COLORS.text);
   }
@@ -410,7 +411,7 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
   }
 
   function renderTimeline(messages: PdfMessage[]): void {
-    writeSectionHeader("完整互動歷程（依系統順序，Markdown 排版）");
+    writeSectionHeader("完整互動歷程");
 
     if (messages.length === 0) {
       renderMarkdown("目前沒有可輸出的互動紀錄。", PAGE.marginX, contentWidth, 11);
@@ -503,7 +504,7 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
   doc.text("課程實施報告", PAGE.marginX + 16, y + 20);
   doc.setFontSize(12);
   setTextColor(COLORS.muted);
-  doc.text("Student Portfolio PDF v1", PAGE.marginX + 18, y + 42);
+  doc.text("Version: 1.0", PAGE.marginX + 18, y + 42);
   setTextColor(COLORS.text);
   doc.setFontSize(11);
   doc.text(`產出時間：${new Date(input.generatedAtIso).toLocaleString("zh-TW")}`, PAGE.marginX + 18, y + 62);
@@ -513,34 +514,13 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
   writeSectionHeader("學生摘要");
   renderMarkdown(
     [
-      `### ${input.name}（${input.username}）`,
+      `- 學生帳號：${input.username}`,
+      `- 學生姓名：${input.name}`,
+      `- 班級：${input.classNumber}`,
+      `- 校名：${input.school}`,
       `- 課程 ID：${input.activityId}`,
-      `- 完成度星等：${input.starLabel}`,
-      `- 目前步驟：${input.metric.stepText}`,
-      `- 最高步驟：Step ${input.metric.maxStep}`,
-      `- 互動訊息數（學生）：${input.metric.messageCount}`,
-      `- 是否有加入紀錄：${input.metric.joined ? "是" : "否"}`,
+      `- 完成課程日期時間：${new Date(input.generatedAtIso).toLocaleString("zh-TW")}`,
     ].join("\n"),
-    PAGE.marginX,
-    contentWidth,
-    11
-  );
-
-  writeSectionHeader("步驟進度與產出指標");
-  renderMarkdown(
-    [
-      `- Step3 結構樹字元數：${input.metric.step3OutlineChars}`,
-      `- Step6 初稿字元數：${input.metric.draftStep6Chars}`,
-      `- 回答品質拒答次數：${input.metric.rejectedCount}`,
-    ].join("\n"),
-    PAGE.marginX,
-    contentWidth,
-    11
-  );
-
-  writeSectionHeader("星等依據");
-  renderMarkdown(
-    input.starRationales.map((reason, idx) => `${idx + 1}. ${reason}`).join("\n"),
     PAGE.marginX,
     contentWidth,
     11
@@ -553,7 +533,6 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
     [
       "> 本報告依系統記錄順序完整呈現學生與系統互動內容。",
       "- 本檔可作為學生個人留存版學習歷程。",
-      "- 若需跨學生比較，請使用教師端課程實施報告清單。",
     ].join("\n"),
     PAGE.marginX,
     contentWidth,

@@ -507,9 +507,15 @@ test("#319: course implementation PDF builder includes required v1 sections", as
 
   const src = readFileSync(resolve(thisDir, "../app/teacher/_components/courseImplementationPdf.ts"), "utf8");
   assert.ok(src.includes("學生摘要"), "PDF must include student summary section");
-  assert.ok(src.includes("步驟進度與產出指標"), "PDF must include step progress section");
-  assert.ok(src.includes("星等依據"), "PDF must include star rationale section");
-  assert.ok(src.includes("完整互動歷程（依系統順序"), "PDF must include full ordered interaction timeline section");
+  assert.ok(!src.includes("步驟進度與產出指標"), "PDF should remove step progress section");
+  assert.ok(!src.includes("星等依據"), "PDF should remove star rationale section");
+  assert.ok(src.includes("完整互動歷程"), "PDF should include full ordered interaction timeline section title");
+  assert.ok(!src.includes("（依系統順序，Markdown 排版）"), "timeline section title should remove markdown suffix");
+  assert.ok(src.includes("Version: 1.0"), "cover should show Version: 1.0");
+  assert.ok(!src.includes("Student Portfolio PDF v1"), "legacy cover version text should be removed");
+  assert.ok(src.includes("setTextColor([255, 255, 255])"), "header report title should be white");
+  assert.ok(src.includes("完成課程日期時間"), "student summary should include completion datetime");
+  assert.ok(!src.includes("完成度星等"), "student summary should omit star details");
   assert.ok(src.includes("步驟三完成結構樹（圖形）"), "PDF must include step3 outline graphical section");
   assert.ok(src.includes("步驟四修正後結構樹（圖形）"), "PDF must include step4 outline graphical section");
   assert.ok(!src.includes("step4Outline !== step3Outline"), "step4 outline should not be hidden when text matches step3");
