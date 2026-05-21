@@ -519,7 +519,6 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
       `- 班級：${input.classNumber}`,
       `- 校名：${input.school}`,
       `- 課程 ID：${input.activityId}`,
-      `- 完成課程日期時間：${new Date(input.generatedAtIso).toLocaleString("zh-TW")}`,
     ].join("\n"),
     PAGE.marginX,
     contentWidth,
