@@ -1264,7 +1264,10 @@ export default function StudentPage() {
         body: JSON.stringify({ sessionId: session.id, draft: draftText })
       });
       const data = await response.json();
-      if (!response.ok) { setError(formatUserError(data.error ?? "step8_complete_failed")); return; }
+      if (!response.ok) {
+        setError(appendErrorHint(data.error ?? "step8_complete_failed", typeof data.hint === "string" ? data.hint : undefined));
+        return;
+      }
       setSavedDraft8Text(draftText);
       setLastDraftSavedAt(new Date().toISOString());
       applySessionSafely(data);

@@ -792,6 +792,40 @@ test("step6 draft validation rejects insufficient content and accepts a real ess
   assert.equal(validateDraftContent(validDraft), null);
 });
 
+test("Step6/8 draft validation accepts earnest title-related drafts without exact title copy", () => {
+  const session = baseSession({ activityTitle: "螢幕下的童年回憶" });
+  const earnestDraft =
+    "小時候，我常常拿著平板玩遊戲，當下覺得很快樂，好像時間一下子就過去了。" +
+    "可是長大一點後，我發現那些遊戲關卡大多很相似，留下來的記憶反而不多。" +
+    "有一次我和朋友在遊樂場跌進泥巴，全身都髒了，大家卻笑得很開心。" +
+    "那種真實互動帶來的感受，比螢幕裡預設好的路線更鮮明，也讓我的童年有了可以回想的畫面。";
+
+  assert.equal(validateDraftContent(session, earnestDraft, "初稿"), null);
+  assert.equal(validateDraftContent(session, earnestDraft, "最終稿"), null);
+});
+
+test("Step6/8 draft validation rejects short or low-information title-padded drafts", () => {
+  const session = baseSession({ activityTitle: "螢幕下的童年回憶" });
+
+  assert.match(
+    validateDraftContent(session, "螢幕下的童年回憶讓我想到很多事情，我覺得很好，也很有意思。", "初稿") ?? "",
+    /字數不足/
+  );
+  assert.match(
+    validateDraftContent(session, "螢幕下的童年回憶".repeat(12), "最終稿") ?? "",
+    /字數不足|資訊量偏低|重複字元/
+  );
+  assert.match(
+    validateDraftContent(
+      session,
+      "今天早餐我吃了蛋餅和豆漿，店裡的人很多，排隊花了不少時間。後來我去操場打球，大家玩得很開心，下午又討論明星和遊戲，整天都很熱鬧。" +
+        "晚餐又去買飲料，回家看比賽和明星訪談，還整理球鞋、聊天、安排週末聚會，整篇都在描述日常行程與娛樂活動。",
+      "初稿"
+    ) ?? "",
+    /關聯性不足/
+  );
+});
+
 test("renderMessageHtml handles legacy escaped newlines and outer markdown code fences", () => {
   const legacy = "```markdown\\n## 總結報告\\n- 重點一\\n- 重點二\\n```";
   const html = renderMessageHtml(legacy);

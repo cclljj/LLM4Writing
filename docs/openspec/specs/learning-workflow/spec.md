@@ -222,6 +222,19 @@ The system SHALL validate Step6 drafts, Step8 final drafts, and Step9 reflection
 - **WHEN** the student submits it for completion
 - **THEN** the API returns `draft_insufficient` with a hint and does not advance the personal step
 
+#### Scenario: Step6 and Step8 validation accepts earnest drafts
+
+- **GIVEN** a student submits an earnest multi-sentence Step6 draft or Step8 final draft
+- **WHEN** the draft is related to the topic through key concepts or meaningful title keyword overlap but does not copy the exact full title
+- **THEN** the draft is accepted if it satisfies minimum length, CJK count, diversity, repetition, and low-quality phrase checks
+
+#### Scenario: Step6 and Step8 validation rejects low-information drafts
+
+- **GIVEN** a student submits a very short draft, repeated title text, filler, random text, or unrelated content
+- **WHEN** the student attempts to complete Step6 or Step8
+- **THEN** the API returns `draft_insufficient` with a concrete hint
+- **AND** the student-facing Step8 completion UI shows the returned hint
+
 #### Scenario: Step9 partial invalid reflection
 
 - **GIVEN** a student submits four Step9 reflection answers

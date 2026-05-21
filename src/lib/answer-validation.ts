@@ -113,16 +113,49 @@ function isLowEffortAnswer(text: string): boolean {
   return /^(不知道|不會|隨便|沒意見|無|沒有|\.{2,}|。{2,}|哈+|呵+|lol)$/i.test(text.trim());
 }
 
-function hasQuestionOverlap(question: string, answer: string): boolean {
-  const questionTerms = Array.from(
-    new Set(
-      (question.match(/[\u3400-\u9fff]{2,}/gu) ?? [])
-        .map((term) => term.trim())
-        .filter((term) => term.length >= 2)
-    )
-  ).slice(0, 12);
-  if (questionTerms.length === 0) return true;
-  return questionTerms.some((term) => answer.includes(term));
+const DRAFT_MIN_TOTAL_CHARS = 100;
+const DRAFT_MIN_CJK_CHARS = 50;
+const DRAFT_MIN_UNIQUE_CJK_CHARS = 12;
+
+function countCjk(text: string): number {
+  return (text.match(/[㐀-鿿]/gu) ?? []).length;
+}
+
+function countUniqueCjk(text: string): number {
+  return new Set(text.match(/[㐀-鿿]/gu) ?? []).size;
+}
+
+function extractDraftTitleKeywords(title: string): string[] {
+  const normalized = normalizeForCompare(title);
+  const latinOrDigit = (title.match(/[A-Za-z0-9]+/g) ?? []).map((token) => token.toLowerCase());
+  const chunks = normalized
+    .split(/[的是在有和與及或上下中內外前後左右一二三四五六七八九十]+/u)
+    .map((chunk) => chunk.trim())
+    .filter((chunk) => chunk.length >= 2);
+  const meaningfulChars = Array.from(normalized.match(/[㐀-鿿]/gu) ?? [])
+    .filter((char) => !CJK_STOP_CHARS.has(char) && !["上", "下", "中", "內", "外"].includes(char))
+    .join("");
+  const bigrams: string[] = [];
+  for (let i = 0; i < meaningfulChars.length - 1; i += 1) {
+    bigrams.push(meaningfulChars.slice(i, i + 2));
+  }
+  return Array.from(new Set([...latinOrDigit, ...chunks, ...bigrams])).filter((keyword) => keyword.length >= 2);
+}
+
+function hasDraftTitleRelevance(title: string, draft: string): boolean {
+  const normalizedTitle = normalizeForCompare(title);
+  const normalizedDraft = normalizeForCompare(draft);
+  if (!normalizedTitle || !normalizedDraft) return true;
+  if (normalizedDraft.includes(normalizedTitle)) return true;
+
+  const keywords = extractDraftTitleKeywords(title);
+  if (keywords.some((keyword) => normalizedDraft.toLowerCase().includes(keyword.toLowerCase()))) return true;
+
+  const titleChars = Array.from(new Set(normalizedTitle.match(/[㐀-鿿]/gu) ?? []))
+    .filter((char) => !CJK_STOP_CHARS.has(char) && !["上", "下", "中", "內", "外"].includes(char));
+  if (titleChars.length === 0) return true;
+  const overlapCount = titleChars.filter((char) => normalizedDraft.includes(char)).length;
+  return overlapCount >= Math.min(2, titleChars.length);
 }
 
 const SIMPLE_RELEVANCE_MIN_LEN = 8;
@@ -314,9 +347,13 @@ export function validateDraftContent(
   const draft = hasSessionArg ? String(draftOrVersion ?? "") : sessionOrDraft;
   const version: "初稿" | "最終稿" = hasSessionArg ? (maybeVersion ?? "初稿") : "初稿";
   const trimmed = draft.trim();
-  const cjkCount = (trimmed.match(/[㐀-鿿]/gu) ?? []).length;
-  if (cjkCount < 50) {
-    return `文章${version}中文字數不足（目前約 ${cjkCount} 個中文字，需至少 50 個）。請補充更完整內容後再送出。`;
+  if (trimmed.length < DRAFT_MIN_TOTAL_CHARS) {
+    return `文章${version}字數不足（目前約 ${trimmed.length} 字，需至少 ${DRAFT_MIN_TOTAL_CHARS} 字）。請補充更完整的段落內容後再送出。`;
+  }
+
+  const cjkCount = countCjk(trimmed);
+  if (cjkCount < DRAFT_MIN_CJK_CHARS) {
+    return `文章${version}中文字數不足（目前約 ${cjkCount} 個中文字，需至少 ${DRAFT_MIN_CJK_CHARS} 個）。請補充更完整內容後再送出。`;
   }
 
   if (looksLikeRandomToken(trimmed)) {
@@ -329,9 +366,14 @@ export function validateDraftContent(
   }
 
   // Detect heavy repetition (e.g. "啊啊啊啊啊" or "測試測試測試測試").
-  const deduped = trimmed.replace(/(.{1,6})\1{3,}/gu, "$1");
+  const deduped = trimmed.replace(/(.{1,12})\1{2,}/gu, "$1");
   if (deduped.length < trimmed.length * 0.4) {
     return `文章${version}看起來包含大量重複字元或填充文字，請修改為具體且有意義的內容後再送出。`;
+  }
+
+  const uniqueCjkCount = countUniqueCjk(trimmed);
+  if (uniqueCjkCount < DRAFT_MIN_UNIQUE_CJK_CHARS) {
+    return `文章${version}看起來資訊量偏低，請補上具體事件、理由、感受或例子後再送出。`;
   }
 
   const title = (session?.activityTitle ?? "").trim();
@@ -349,7 +391,7 @@ export function validateDraftContent(
     ) {
       return `你的文章${version}和題目文字太接近，請加入自己的觀點與內容。`;
     }
-    if (!hasQuestionOverlap(title, trimmed)) {
+    if (!hasDraftTitleRelevance(title, trimmed)) {
       return `你的文章${version}和題目關聯性不足，請聚焦題目關鍵概念補強內容後再送出。`;
     }
   }
