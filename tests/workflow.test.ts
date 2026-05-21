@@ -782,3 +782,11 @@ test("renderMessageHtml decodes markdown marker entities before heading parsing"
   assert.equal(html.includes("&num;"), false);
   assert.equal(html.includes("&#45;"), false);
 });
+
+test("renderMessageHtml collapses duplicated markdown heading prefixes", () => {
+  const html = renderMessageHtml("## ### **立意取材**\n### **結構組織**");
+  assert.match(html, /<h4[^>]*><strong>立意取材<\/strong><\/h4>/);
+  assert.match(html, /<h4[^>]*><strong>結構組織<\/strong><\/h4>/);
+  assert.equal(html.includes("### <strong>立意取材"), false);
+  assert.equal(html.includes("## ###"), false);
+});

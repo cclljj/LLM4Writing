@@ -162,10 +162,11 @@ export function renderMessageHtml(text: string): string {
 
     flushLists();
 
-    const heading = escaped.match(/^(#{1,4})\s*(.+)$/);
+    const heading = escaped.match(/^((?:#{1,6}\s*)+)(.+)$/);
     if (heading) {
-      const level = heading[1].length;
-      const content = heading[2];
+      const headingMarkers = heading[1].match(/#{1,6}/g) ?? ["#"];
+      const level = Math.min(4, headingMarkers[headingMarkers.length - 1]!.length);
+      const content = heading[2].replace(/^#{1,6}\s*/, "").trim();
       if (level === 1) htmlParts.push(`<h2 style="margin:10px 0 6px;">${content}</h2>`);
       if (level === 2) htmlParts.push(`<h3 style="margin:9px 0 5px;">${content}</h3>`);
       if (level === 3) htmlParts.push(`<h4 style="margin:8px 0 4px;">${content}</h4>`);
