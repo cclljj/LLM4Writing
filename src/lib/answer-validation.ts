@@ -141,15 +141,15 @@ export function validateStep4DiscussionMessage(text: string): string | null {
   const trimmed = text.trim();
   if (!trimmed) return "請先輸入你的討論內容再送出。";
   if (PROFANITY_MARKERS.test(trimmed)) {
-    return "這段內容含有不適合課堂的用語，請調整語氣後再送出。";
+    return "這段內容含有不適合課堂的用語。這裡是課堂討論區，請避免離題或使用不當語言，調整後再送出。";
   }
   const hasClassroomContext = CLASSROOM_DISCUSSION_MARKERS.test(trimmed) || DISCUSSION_STRUCTURE_MARKERS.test(trimmed);
   if (OFF_TOPIC_MARKERS.test(trimmed) && !hasClassroomContext) {
-    return "這段內容目前和課堂任務關聯比較低，請補上一點和文章修正或論點討論有關的內容。";
+    return "這段內容目前和課堂任務關聯比較低。這裡是課堂討論區，請不要離題，補上一點和文章修正或論點討論有關的內容。";
   }
   // Block pure social chatter that lacks classroom linkage, including short messages.
   if (!hasClassroomContext && (CASUAL_CHAT_MARKERS.test(trimmed) || trimmed.length <= 10)) {
-    return "這段內容目前和課堂任務關聯比較低，請補上一點和文章修正或論點討論有關的內容。";
+    return "這段內容目前和課堂任務關聯比較低。這裡是課堂討論區，請不要離題，補上一點和文章修正或論點討論有關的內容。";
   }
   return null;
 }

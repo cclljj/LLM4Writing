@@ -98,6 +98,7 @@ The system SHALL expose session read, chat, artifact, and step-specific mutation
 - **AND** messages asking to use abusive language are also rejected
 - **AND** clearly off-topic chatter without classroom relevance is rejected even when short
 - **AND** short harmless messages and classroom-linked creative discussion remain allowed
+- **AND** rejection messages include a classroom reminder telling students this area is for class discussion and should not go off-topic
 
 #### Scenario: Artifact save
 
