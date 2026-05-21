@@ -11,6 +11,13 @@ import {
 } from "@/src/lib/monitor-session-scope";
 import OutlineSvg from "@/app/_components/OutlineSvg";
 import { renderMessageHtml } from "@/app/student/_components/renderMessageHtml";
+import {
+  computeTeacherMonitorPayloadHash,
+  hasLowLatencyStepAdvanceGate,
+  resolveTeacherMonitorNextPollDelay,
+  TEACHER_MONITOR_FAST_POLL_MS,
+  TEACHER_MONITOR_MIN_POLL_MS
+} from "@/src/lib/teacher-monitor-polling";
 import TeacherDashboard, { TeacherDashboardData } from "./TeacherDashboard";
 import { ActivityRow, MonitorSession, PersonalProgressRow, UserRow } from "./types";
 
@@ -336,7 +343,13 @@ export default function LearningMonitorTab({
       const personalStepsKey = session.personalSteps
         ? Object.entries(session.personalSteps).sort().map(([k, v]) => `${k}=${v}`).join(",")
         : "";
-      const signature = `${session.currentStep}:${session.messageCount ?? session.messages.length}:${session.lastMessageAt ?? last?.at ?? ""}:${session.groupGate ? Object.keys(session.groupGate).length : 0}:${personalStepsKey}`;
+      const groupGateKey = session.groupGate
+        ? Object.entries(session.groupGate)
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([key, values]) => `${key}=${[...values].sort().join(",")}`)
+          .join(";")
+        : "";
+      const signature = `${session.currentStep}:${session.messageCount ?? session.messages.length}:${session.lastMessageAt ?? last?.at ?? ""}:${groupGateKey}:${personalStepsKey}`;
       seen.add(session.sessionId);
       const cached = cache.get(session.sessionId);
       if (cached && cached.signature === signature && cached.value.session === session) {
@@ -584,32 +597,30 @@ export default function LearningMonitorTab({
     let cancelled = false;
     let timerId: number | null = null;
     // Reset backoff on (re)entering the polling effect.
-    monitorPollDelayRef.current = 3000;
+    monitorPollDelayRef.current = TEACHER_MONITOR_MIN_POLL_MS;
     monitorPayloadHashRef.current = "";
-
-    const MIN_DELAY = 3000;
-    const MAX_DELAY = 30000;
 
     const tick = async () => {
       if (cancelled) return;
       if (monitorPollingBusyRef.current) {
         // Try again soon without changing backoff.
-        timerId = window.setTimeout(tick, MIN_DELAY);
+        timerId = window.setTimeout(tick, TEACHER_MONITOR_FAST_POLL_MS);
         return;
       }
       monitorPollingBusyRef.current = true;
       const beforeHash = monitorPayloadHashRef.current;
+      let latestSessions: MonitorSession[] = [];
       try {
-        await refreshMonitor();
+        latestSessions = await refreshMonitor();
       } finally {
         monitorPollingBusyRef.current = false;
       }
-      // If refreshMonitor saw no change it leaves the hash untouched; double the delay.
-      // If it saw change it already reset the delay to MIN_DELAY.
       if (!cancelled) {
-        if (monitorPayloadHashRef.current === beforeHash) {
-          monitorPollDelayRef.current = Math.min(MAX_DELAY, monitorPollDelayRef.current * 2);
-        }
+        monitorPollDelayRef.current = resolveTeacherMonitorNextPollDelay({
+          currentDelayMs: monitorPollDelayRef.current,
+          unchanged: monitorPayloadHashRef.current === beforeHash,
+          hasLowLatencyGate: hasLowLatencyStepAdvanceGate(latestSessions)
+        });
         timerId = window.setTimeout(tick, monitorPollDelayRef.current);
       }
     };
@@ -655,16 +666,6 @@ export default function LearningMonitorTab({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function computeMonitorPayloadHash(sessions: MonitorSession[]): string {
-    // Cheap signature: per-session id + currentStep + last message timestamp + message count.
-    return sessions
-      .map((s) => {
-        const last = s.messages[s.messages.length - 1];
-        return `${s.sessionId}:${s.currentStep}:${s.messageCount ?? s.messages.length}:${s.lastMessageAt ?? last?.at ?? ""}`;
-      })
-      .join("|");
-  }
-
   async function refreshMonitor(activityIdOverride?: string): Promise<MonitorSession[]> {
     const targetActivityId = activityIdOverride ?? selectedLearningActivityId;
     const monitorUrl = targetActivityId
@@ -706,10 +707,12 @@ export default function LearningMonitorTab({
     setLearningWarning("");
 
     // Track payload changes for exponential-backoff polling (#239).
-    const nextHash = computeMonitorPayloadHash(mergedSessions);
+    const nextHash = computeTeacherMonitorPayloadHash(mergedSessions);
     if (nextHash !== monitorPayloadHashRef.current) {
       monitorPayloadHashRef.current = nextHash;
-      monitorPollDelayRef.current = 3000; // reset on activity
+      monitorPollDelayRef.current = hasLowLatencyStepAdvanceGate(mergedSessions)
+        ? TEACHER_MONITOR_FAST_POLL_MS
+        : TEACHER_MONITOR_MIN_POLL_MS; // reset on activity
     }
     return mergedSessions;
   }

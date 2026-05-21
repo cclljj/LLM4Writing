@@ -155,6 +155,12 @@ The system SHALL let students compare group outlines, revise their own outline, 
 - **WHEN** the teacher monitor evaluates the group
 - **THEN** the group is eligible to move to Step5
 
+#### Scenario: Teacher readiness polling latency
+
+- **GIVEN** a course has active Step3 or Step4 sessions waiting for teacher advancement
+- **WHEN** students complete the current gate
+- **THEN** the teacher/admin monitor uses low-latency summary polling and includes `groupGate` member contents in change detection so the advance button appears without waiting for long polling backoff
+
 #### Scenario: Step4 discussion keeps classroom relevance with light-touch filtering
 
 - **GIVEN** students discuss in Step4 before completion

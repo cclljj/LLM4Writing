@@ -20,6 +20,13 @@ import { computeNextOpenClassId } from "../src/lib/activity-store";
 import { buildStep1Question, buildStep2Question } from "../src/lib/workflow-questions";
 import { advanceStep1Or2SubstepAfterAi, getNextSubstepKeyAfterCompletion, handleStep1Or2Group, recoverStalledStep1Or2AiWait } from "../src/lib/workflow-step1-2";
 import { parseStep10SectionTitles, stripLeadingStep10SectionHeading } from "../src/lib/step10-report-format";
+import {
+  computeTeacherMonitorPayloadHash,
+  hasLowLatencyStepAdvanceGate,
+  resolveTeacherMonitorNextPollDelay,
+  TEACHER_MONITOR_FAST_POLL_MS,
+  TEACHER_MONITOR_MIN_POLL_MS
+} from "../src/lib/teacher-monitor-polling";
 import { renderMessageHtml } from "../app/student/_components/renderMessageHtml";
 
 function makeMessage(input: Omit<ChatMessage, "id" | "at">): ChatMessage {
@@ -800,4 +807,28 @@ test("Step10 section title parsing removes markdown wrappers before composition"
 test("Step10 section content drops a repeated leading generated title", () => {
   const text = stripLeadingStep10SectionHeading("### **立意取材**\n你能從自身經驗出發。", "立意取材");
   assert.equal(text, "你能從自身經驗出發。");
+});
+
+test("teacher monitor payload hash changes when Step3/4 gate members change", () => {
+  const before = computeTeacherMonitorPayloadHash([
+    { sessionId: "s1", currentStep: 3, messageCount: 2, lastMessageAt: "2026-05-21T00:00:00.000Z", groupGate: { "3-complete": ["u1"] } }
+  ]);
+  const after = computeTeacherMonitorPayloadHash([
+    { sessionId: "s1", currentStep: 3, messageCount: 2, lastMessageAt: "2026-05-21T00:00:00.000Z", groupGate: { "3-complete": ["u1", "u2"] } }
+  ]);
+  assert.notEqual(before, after);
+});
+
+test("teacher monitor keeps Step3/4 advance gates on fast polling", () => {
+  assert.equal(hasLowLatencyStepAdvanceGate([{ sessionId: "s1", currentStep: 3 }]), true);
+  assert.equal(hasLowLatencyStepAdvanceGate([{ sessionId: "s1", currentStep: 4 }]), true);
+  assert.equal(hasLowLatencyStepAdvanceGate([{ sessionId: "s1", currentStep: 5 }]), false);
+  assert.equal(
+    resolveTeacherMonitorNextPollDelay({ currentDelayMs: 12000, unchanged: true, hasLowLatencyGate: true }),
+    TEACHER_MONITOR_FAST_POLL_MS
+  );
+  assert.equal(
+    resolveTeacherMonitorNextPollDelay({ currentDelayMs: 12000, unchanged: false, hasLowLatencyGate: false }),
+    TEACHER_MONITOR_MIN_POLL_MS
+  );
 });

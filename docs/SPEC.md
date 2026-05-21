@@ -918,6 +918,7 @@ classnumber,username,name,school,role,password,ownerTeacherUsername
 - scope 判定需同時確認 session 屬於目前課程的分組定義：若 session 的小組成員與目前課程分組不一致，視為舊資料或跨課程污染，不得顯示於儀表板、對話區或個人進度。
 - 完整 `messages`、`outlines`、`step3SubmittedOutlines` 僅在選取小組對話時以 `?sessionId=...&detail=full` 延遲載入。
 - 輪詢只使用摘要 payload，降低 loading 與網路成本。
+- Step3/Step4 等待教師推進期間，monitor 摘要輪詢需維持低延遲（約 1 秒）以快速反映 `groupGate["3-complete"]` / `groupGate["4-complete"]` 變化；輪詢變更偵測與前端 analytics cache signature 必須納入 `groupGate` 完成名單內容，而非只看 gate key 數量。
 - monitor 列表查詢在 Postgres 模式下需使用 summary-first DB 查詢；一般情況不得回傳完整 messages/artifacts，僅為 legacy JSON-string payload 欄位回補可讀 raw payload。
 - 課堂儀表板、全班加入狀態、小組對話紀錄、個人對話紀錄四個 h2 標題後附加「— 學校 / 班級 / 文章題目」（#258）。
 
@@ -1459,6 +1460,7 @@ Request:
 - 回傳前必須依活動目前分組再次過濾 session；同 `activityId` 但小組成員不符合目前分組者不得回傳。
 - 回應：`{ sessions: [...], total: N, limit: N, offset: N }`。
 - 摘要包含 `messageCount`、`lastMessageAt`、`studentMessageStats`、`stepReadyHints`、`artifactDiagnostics`。
+- 摘要中的 `groupGate` 是 Step3/Step4 教師推進按鈕的即時 readiness 依據；前端輪詢 hash 必須把各 gate 的完成者名單納入，確保同一 gate key 下新增完成者也會重置輪詢退避與重新計算可推進狀態。
 - 摘要模式需相容 legacy session payload：若 `payload` 為 JSON string 或 summary JSON 欄位缺漏，仍需解析 raw payload，並可從 `llm4writing_session_participants` split table 回補 `participants/joinedUsers`，避免教師端 Step3 gate 判定因空成員清單而無法顯示推進按鈕。
 - 完整小組詳情使用 `?sessionId=...&detail=full`；學習管理「查看狀態」模式應同時帶入 `activityId`，避免跨課程 session 被載入。
 - detail 模式才回傳完整 `messages`、`outlines`、`step3SubmittedOutlines`。
