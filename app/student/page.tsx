@@ -604,6 +604,7 @@ export default function StudentPage() {
   const groupStatusTone = groupStatusAllDone ? "success" : groupStatusSubmittedByMe ? "warning" : "";
   const ownStep7Report = session && loginUser ? session.reports.step7[loginUser] : undefined;
   const ownStep10Report = session && loginUser ? session.reports.step10[loginUser] : undefined;
+  const isStep10ReportReady = Boolean(ownStep10Report && ownStep10Report.trim());
   useEffect(() => {
     const isStep10Waiting = currentStep === 10 && !ownStep10Report?.trim();
     if (!isStep10Waiting) {
@@ -1390,8 +1391,8 @@ export default function StudentPage() {
               <>
                 <hr style={{ border: 0, borderTop: "1px solid #e5e7eb", margin: "10px 0" }} />
                 <h3 style={{ margin: "0 0 8px" }}>總結報告</h3>
-                {ownStep10Report && ownStep10Report.trim() ? (
-                  <div style={{ marginTop: 4 }} dangerouslySetInnerHTML={{ __html: renderMessageHtml(ownStep10Report) }} />
+                {isStep10ReportReady ? (
+                  <div style={{ marginTop: 4 }} dangerouslySetInnerHTML={{ __html: renderMessageHtml(ownStep10Report ?? "") }} />
                 ) : step10StreamingText ? (
                   <div
                     style={{
@@ -1584,7 +1585,7 @@ export default function StudentPage() {
             </div>
           ) : null}
 
-          {currentStep === 10 ? (
+          {currentStep === 10 && isStep10ReportReady ? (
             <div className="card" style={{ borderColor: "#bfdbfe", background: "#eff6ff" }}>
               <h2>課程已完成</h2>
               <small>整個課程已經結束，請等待老師指示進行後續課程。</small>

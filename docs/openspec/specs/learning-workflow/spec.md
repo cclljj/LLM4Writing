@@ -251,6 +251,13 @@ The student UI SHALL keep course progress, previous-step review, next-action gui
 - **WHEN** the student pastes text from an external draft source
 - **THEN** the draft textarea accepts paste input to support practical writing workflows
 
+#### Scenario: Step10 completion card appears only after report is ready
+
+- **GIVEN** a student has just advanced from Step9 to Step10
+- **WHEN** the Step10 summary report is still streaming or not yet persisted
+- **THEN** the UI shows only the in-progress generation hint
+- **AND** the course-completed reminder card is shown only after the Step10 report content is available
+
 #### Scenario: Step5+ progress display
 
 - **GIVEN** a student is in Step5 or later
