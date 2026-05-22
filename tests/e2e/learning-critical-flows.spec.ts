@@ -50,18 +50,29 @@ function mutateOutlineForCompletion(outline: string): string {
 
 async function setupInProgressCourse(adminPage: Page, suffix: string, classNumber: string): Promise<{ activityId: string; title: string }> {
   const title = `E2E-${suffix}-${Date.now()}`;
+  const essayTitle = `${title}-essay`;
   const requestedEssayId = `essay-e2e-${Date.now()}-${Math.floor(Math.random() * 10_000)}`;
   const essayRes = await postFromPage(adminPage, "/api/admin/essays", {
     id: requestedEssayId,
-    title: `${title}-essay`,
+    title: essayTitle,
     genre: "議論文",
     description: "seed for e2e",
     enabled: true
   });
   expect(essayRes.status, `essay create failed: ${JSON.stringify(essayRes.body)}`).toBe(200);
-  const essayData = essayRes.body as Record<string, unknown>;
-  const savedEssay = essayData.saved as Record<string, unknown> | undefined;
-  const essayId = (savedEssay?.id as string | undefined) ?? requestedEssayId;
+  let essayId = "";
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const essaysRes = await adminPage.request.get("/api/admin/essays");
+    expect(essaysRes.ok()).toBeTruthy();
+    const essaysJson = (await essaysRes.json()) as { essays?: Array<Record<string, unknown>> };
+    const foundEssay = (essaysJson.essays ?? []).find((essay) => essay.title === essayTitle);
+    if (foundEssay && typeof foundEssay.id === "string" && foundEssay.id.trim().length > 0) {
+      essayId = foundEssay.id;
+      break;
+    }
+    await adminPage.waitForTimeout(120);
+  }
+  expect(essayId, `essay id resolve failed for ${essayTitle}`).toBeTruthy();
 
   const openClassRes = await postFromPage(adminPage, "/api/admin/openclasses", {
       classNumber,
