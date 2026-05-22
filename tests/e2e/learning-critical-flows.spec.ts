@@ -36,10 +36,10 @@ async function postFromPage<T = Record<string, unknown>>(page: Page, url: string
       } catch {
         body = {};
       }
-      return { status: response.status, body };
+      return { status: response.status, body: body as Record<string, unknown> };
     },
     { inputUrl: url, inputData: data }
-  );
+  ) as unknown as Promise<{ status: number; body: T }>;
 }
 
 function mutateOutlineForCompletion(outline: string): string {
@@ -59,7 +59,8 @@ async function setupInProgressCourse(adminPage: Page, suffix: string, classNumbe
   });
   expect(openClassRes.status, `openclass failed: ${JSON.stringify(openClassRes.body)}`).toBe(200);
   const openClassData = openClassRes.body as Record<string, unknown>;
-  const activityId = openClassData.saved?.id as string;
+  const savedData = openClassData.saved as Record<string, unknown> | undefined;
+  const activityId = savedData?.id as string;
   expect(activityId).toBeTruthy();
 
   const groupsRes = await postFromPage(adminPage, "/api/admin/groups", {
@@ -74,7 +75,7 @@ async function setupInProgressCourse(adminPage: Page, suffix: string, classNumbe
   });
   expect(startRes.status).toBe(200);
 
-  const activityTitle = (openClassData.saved?.title as string) || title;
+  const activityTitle = (savedData?.title as string) || title;
   return { activityId, title: activityTitle };
 }
 

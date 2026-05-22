@@ -102,10 +102,10 @@ export function buildStep10SectionPrompt(
   section: Step10ReportSectionConfig
 ): string {
   return template
-    .replaceAll("{{id}}", section.id)
+    .replaceAll("{{id}}", section.id ?? "")
     .replaceAll("{{title}}", section.title)
-    .replaceAll("{{focus}}", section.focus)
-    .replaceAll("{{instruction}}", section.instruction);
+    .replaceAll("{{focus}}", section.focus ?? "")
+    .replaceAll("{{instruction}}", section.instruction ?? "");
 }
 
 function splitHeadingAndRemainder(line: string): { title: string; remainder: string } | null {

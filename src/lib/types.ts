@@ -32,10 +32,10 @@ export interface PromptConfig {
 }
 
 export interface Step10ReportSectionConfig {
-  id: string;
+  id?: string;
   title: string;
-  focus: string;
-  instruction: string;
+  focus?: string;
+  instruction?: string;
 }
 
 export interface Step10ReportConfig {

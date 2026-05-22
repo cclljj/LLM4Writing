@@ -101,7 +101,7 @@ test("store behavior: monitor summaries are activity-scoped and paginated", asyn
 });
 
 test("learning diagnostics behavior: rejected answer signal is accumulated", () => {
-  const session = { qualitySignals: { rejectedAnswerCounts: {}, rejectedAnswerLastAt: {} as Record<string, string> } };
+  const session = { qualitySignals: { rejectedAnswerCounts: {} as Record<string, number>, rejectedAnswerLastAt: {} as Record<string, string> } };
   recordRejectedAnswerSignal(session, "u1", "step1::q1");
   recordRejectedAnswerSignal(session, "u1", "step1::q1");
   assert.equal(session.qualitySignals.rejectedAnswerCounts["u1::step1::q1"], 2);
