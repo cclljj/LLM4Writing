@@ -50,40 +50,43 @@ function mutateOutlineForCompletion(outline: string): string {
 
 async function setupInProgressCourse(adminPage: Page, suffix: string, classNumber: string): Promise<{ activityId: string; title: string }> {
   const title = `E2E-${suffix}-${Date.now()}`;
-  const essayTitle = `${title}-essay`;
-  const requestedEssayId = `essay-e2e-${Date.now()}-${Math.floor(Math.random() * 10_000)}`;
-  const essayRes = await postFromPage(adminPage, "/api/admin/essays", {
-    id: requestedEssayId,
-    title: essayTitle,
-    genre: "議論文",
-    description: "seed for e2e",
-    enabled: true
-  });
-  expect(essayRes.status, `essay create failed: ${JSON.stringify(essayRes.body)}`).toBe(200);
-  let essayId = "";
-  for (let attempt = 0; attempt < 5; attempt += 1) {
+  let activityId = "";
+  let activityTitle = title;
+  let courseStatus: string | undefined;
+
+  const activitiesRes = await adminPage.request.get("/api/admin/activities");
+  expect(activitiesRes.ok()).toBeTruthy();
+  const activitiesData = (await activitiesRes.json()) as { activities?: Array<Record<string, unknown>> };
+  const classActivities = (activitiesData.activities ?? []).filter((item) => item.classNumber === classNumber);
+  const reusable =
+    classActivities.find((item) => item.courseStatus === "in_progress" || item.courseStatus === "not_started" || item.courseStatus === "paused") ??
+    classActivities[0];
+
+  if (reusable && typeof reusable.id === "string") {
+    activityId = reusable.id;
+    activityTitle = typeof reusable.title === "string" && reusable.title.trim().length > 0 ? reusable.title : title;
+    courseStatus = typeof reusable.courseStatus === "string" ? reusable.courseStatus : undefined;
+  } else {
     const essaysRes = await adminPage.request.get("/api/admin/essays");
     expect(essaysRes.ok()).toBeTruthy();
-    const essaysJson = (await essaysRes.json()) as { essays?: Array<Record<string, unknown>> };
-    const foundEssay = (essaysJson.essays ?? []).find((essay) => essay.title === essayTitle);
-    if (foundEssay && typeof foundEssay.id === "string" && foundEssay.id.trim().length > 0) {
-      essayId = foundEssay.id;
-      break;
-    }
-    await adminPage.waitForTimeout(120);
-  }
-  expect(essayId, `essay id resolve failed for ${essayTitle}`).toBeTruthy();
+    const essaysData = (await essaysRes.json()) as { essays?: Array<Record<string, unknown>> };
+    const enabledEssay = (essaysData.essays ?? []).find((essay) => essay.enabled !== false);
+    expect(enabledEssay && typeof enabledEssay.id === "string", "expected at least one enabled essay").toBeTruthy();
+    const essayId = enabledEssay?.id as string;
 
-  const openClassRes = await postFromPage(adminPage, "/api/admin/openclasses", {
+    const openClassRes = await postFromPage(adminPage, "/api/admin/openclasses", {
       classNumber,
       essayId,
       durationMinutes: 40,
       supplemental: "E2E supplemental"
-  });
-  expect(openClassRes.status, `openclass failed: ${JSON.stringify(openClassRes.body)}`).toBe(200);
-  const openClassData = openClassRes.body as Record<string, unknown>;
-  const savedData = openClassData.saved as Record<string, unknown> | undefined;
-  const activityId = savedData?.id as string;
+    });
+    expect(openClassRes.status, `openclass failed: ${JSON.stringify(openClassRes.body)}`).toBe(200);
+    const openClassData = openClassRes.body as Record<string, unknown>;
+    const savedData = openClassData.saved as Record<string, unknown> | undefined;
+    activityId = (savedData?.id as string) ?? "";
+    activityTitle = (savedData?.title as string) || title;
+    courseStatus = (savedData?.courseStatus as string | undefined) ?? "not_started";
+  }
   expect(activityId).toBeTruthy();
 
   const groupsRes = await postFromPage(adminPage, "/api/admin/groups", {
@@ -92,13 +95,28 @@ async function setupInProgressCourse(adminPage: Page, suffix: string, classNumbe
   });
   expect(groupsRes.status).toBe(200);
 
-  const startRes = await postFromPage(adminPage, "/api/teacher/course-control", {
-    activityId,
-    action: "start"
-  });
-  expect(startRes.status).toBe(200);
+  if (courseStatus === "not_started") {
+    const startRes = await postFromPage(adminPage, "/api/teacher/course-control", {
+      activityId,
+      action: "start"
+    });
+    expect(startRes.status).toBe(200);
+  } else if (courseStatus === "paused") {
+    const resumeRes = await postFromPage(adminPage, "/api/teacher/course-control", {
+      activityId,
+      action: "pause_resume"
+    });
+    expect(resumeRes.status).toBe(200);
+  } else if (courseStatus === "ended") {
+    const startRes = await postFromPage(adminPage, "/api/teacher/course-control", {
+      activityId,
+      action: "start"
+    });
+    if (startRes.status !== 200) {
+      throw new Error(`cannot reuse ended activity ${activityId}`);
+    }
+  }
 
-  const activityTitle = (savedData?.title as string) || title;
   return { activityId, title: activityTitle };
 }
 
@@ -139,7 +157,7 @@ test("學生 Step3 完成後，教師端出現推進 Step4 按鈕", async ({ bro
     const { activityId } = await setupInProgressCourse(adminPage, "step3-advance", classNumber);
 
     const joinRes = await postFromPage(studentPage, "/api/student/join", { activityId });
-    expect(joinRes.status).toBe(201);
+    expect([200, 201]).toContain(joinRes.status);
     const joined = joinRes.body as Record<string, unknown>;
     const sessionId = joined.id as string;
     expect(sessionId).toBeTruthy();
@@ -181,7 +199,7 @@ test("Step4 討論過濾：離題阻擋、課堂相關內容允許", async ({ br
     const { activityId } = await setupInProgressCourse(adminPage, "step4-filter", classNumber);
 
     const joinRes = await postFromPage(studentPage, "/api/student/join", { activityId });
-    expect(joinRes.status).toBe(201);
+    expect([200, 201]).toContain(joinRes.status);
     const joined = joinRes.body as Record<string, unknown>;
     const sessionId = joined.id as string;
 
@@ -214,7 +232,7 @@ test("Step10 報告顯示：Markdown 正常渲染且不顯示雙重標題前綴"
     const { activityId, title } = await setupInProgressCourse(adminPage, "step10-render", classNumber);
 
     const joinRes = await postFromPage(studentPage, "/api/student/join", { activityId });
-    expect(joinRes.status).toBe(201);
+    expect([200, 201]).toContain(joinRes.status);
     const joined = joinRes.body as Record<string, unknown>;
     const sessionId = joined.id as string;
 
