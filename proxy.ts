@@ -71,6 +71,48 @@ function validateStateChangeOrigin(request: NextRequest): { ok: true } | { ok: f
 }
 
 // ---------------------------------------------------------------------------
+// #386: Nonce-based CSP — generated per page request.
+// Replaces 'unsafe-inline' in script-src with 'nonce-{nonce}' + 'strict-dynamic'.
+// The nonce is forwarded via x-nonce request header so RootLayout can read it.
+// ---------------------------------------------------------------------------
+
+function buildNonceCsp(nonce: string): string {
+  const isProduction = process.env.NODE_ENV === "production";
+  const parts = [
+    "default-src 'self'",
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${isProduction ? "" : " 'unsafe-eval'"}`,
+    "style-src 'self' 'unsafe-inline'",
+    "base-uri 'self'",
+    "object-src 'none'",
+    "frame-ancestors 'none'",
+    "img-src 'self' data: blob: https:",
+    "font-src 'self' data: https:",
+    "connect-src 'self' https:",
+    "form-action 'self'",
+    ...(isProduction ? ["upgrade-insecure-requests"] : [])
+  ];
+  return parts.join("; ");
+}
+
+/**
+ * Build a NextResponse.next() that injects the CSP nonce into both
+ * the request headers (readable by Server Components via headers()) and
+ * the response headers (enforced by the browser).
+ */
+function nextWithNonce(request: NextRequest): NextResponse {
+  const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
+  const csp = buildNonceCsp(nonce);
+
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-nonce", nonce);
+  requestHeaders.set("Content-Security-Policy", csp);
+
+  const response = NextResponse.next({ request: { headers: requestHeaders } });
+  response.headers.set("Content-Security-Policy", csp);
+  return response;
+}
+
+// ---------------------------------------------------------------------------
 // Proxy
 // ---------------------------------------------------------------------------
 
@@ -156,7 +198,8 @@ export async function proxy(request: NextRequest) {
     }
   }
 
-  return NextResponse.next();
+  // All page routes: inject nonce-based CSP (#386)
+  return nextWithNonce(request);
 }
 
 export const config = {

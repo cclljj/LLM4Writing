@@ -243,15 +243,16 @@ test("next config: defines baseline security headers and CSP", async () => {
   assert.ok(nextConfig.includes("Strict-Transport-Security"));
   assert.ok(nextConfig.includes("isProduction"), "CSP should branch by environment");
 
-  // #386: script-src is now managed by middleware.ts with per-request nonces
-  // (replacing the previous 'unsafe-inline'). Verify the middleware file exists
-  // and contains the nonce-based script-src.
-  const middleware = readFileSync(resolve(thisDir, "../middleware.ts"), "utf8");
-  assert.ok(middleware.includes("nonce"), "middleware should generate a nonce for CSP");
-  assert.ok(middleware.includes("script-src"), "middleware should set script-src with nonce");
-  assert.ok(!middleware.includes("script-src 'self' 'unsafe-inline'"), "nonce-based script-src must not include unsafe-inline");
-  assert.ok(middleware.includes("'unsafe-eval'"), "development CSP keeps unsafe-eval for HMR compatibility");
-  assert.ok(middleware.includes("strict-dynamic"), "nonce CSP should use strict-dynamic for script propagation");
+  // #386: script-src is managed by proxy.ts with per-request nonces
+  // (replacing the previous 'unsafe-inline'). Verify proxy.ts contains the
+  // nonce-based script-src (middleware.ts was removed; proxy.ts is the single
+  // Next.js middleware entry point for this project).
+  const proxy = readFileSync(resolve(thisDir, "../proxy.ts"), "utf8");
+  assert.ok(proxy.includes("nonce"), "proxy should generate a nonce for CSP");
+  assert.ok(proxy.includes("script-src"), "proxy should set script-src with nonce");
+  assert.ok(!proxy.includes("script-src 'self' 'unsafe-inline'"), "nonce-based script-src must not include unsafe-inline");
+  assert.ok(proxy.includes("'unsafe-eval'"), "development CSP keeps unsafe-eval for HMR compatibility");
+  assert.ok(proxy.includes("strict-dynamic"), "nonce CSP should use strict-dynamic for script propagation");
 });
 
 test("health route: production response redacts low-level DB error details", async () => {
