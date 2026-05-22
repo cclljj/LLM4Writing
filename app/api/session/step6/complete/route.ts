@@ -11,6 +11,7 @@ import { hasFormalLlmQualityRisk, normalizeFormalLlmText } from "@/src/lib/llm-r
 import { requireStudentInSession, validateTextInput } from "@/src/lib/api-helpers";
 import { validateDraftContent } from "@/src/lib/answer-validation";
 import { recordStreamingCall } from "@/src/lib/llm-stats";
+import { classifyLlmError } from "@/src/lib/llm-observability";
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -122,7 +123,8 @@ export async function POST(request: NextRequest) {
             activityId: session.activityId,
             step: 7,
             kind: "fallback",
-            fallbackUsed: true
+            fallbackUsed: true,
+            errorCategory: "other"
           }).catch(() => undefined);
         } else {
           const messages = buildStep7Messages(session.promptConfig?.stepPrompts?.["7"], finalDraft);
@@ -138,7 +140,7 @@ export async function POST(request: NextRequest) {
             for (let i = 0; i < normalized.length; i += chunkSize) {
               send({ type: "chunk", text: normalized.slice(i, i + chunkSize) });
             }
-          } catch {
+          } catch (error) {
             if (collected.length === 0) {
               collected.push(FALLBACK_FEEDBACK);
               send({ type: "chunk", text: FALLBACK_FEEDBACK });
@@ -148,7 +150,8 @@ export async function POST(request: NextRequest) {
                 activityId: session.activityId,
                 step: 7,
                 kind: "fallback",
-                fallbackUsed: true
+                fallbackUsed: true,
+                errorCategory: classifyLlmError(error)
               }).catch(() => undefined);
             }
           }

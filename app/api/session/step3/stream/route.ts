@@ -12,6 +12,7 @@ import { recordRejectedAnswerSignal } from "@/src/lib/learning-diagnostics";
 import { requireStudentInSession, validateTextInput } from "@/src/lib/api-helpers";
 import { validateStudentAnswer } from "@/src/lib/answer-validation";
 import { recordStreamingCall } from "@/src/lib/llm-stats";
+import { classifyLlmError } from "@/src/lib/llm-observability";
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -167,7 +168,8 @@ export async function POST(request: NextRequest) {
             activityId: session.activityId,
             step: 3,
             kind: "fallback",
-            fallbackUsed: true
+            fallbackUsed: true,
+            errorCategory: "other"
           }).catch(() => undefined);
         } else {
           const messages = buildStep3Messages(
@@ -192,7 +194,7 @@ export async function POST(request: NextRequest) {
                 send({ type: "chunk", text: normalized.slice(i, i + chunkSize) });
               }
             }
-          } catch {
+          } catch (error) {
             if (collected.length === 0) {
               collected.push(FALLBACK_STEP3);
               send({ type: "chunk", text: FALLBACK_STEP3 });
@@ -202,7 +204,8 @@ export async function POST(request: NextRequest) {
                 activityId: session.activityId,
                 step: 3,
                 kind: "fallback",
-                fallbackUsed: true
+                fallbackUsed: true,
+                errorCategory: classifyLlmError(error)
               }).catch(() => undefined);
             }
           }

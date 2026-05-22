@@ -5,6 +5,7 @@ import { normalizeFormalLlmText } from "@/src/lib/llm-response";
 import { requireStudentInSession } from "@/src/lib/api-helpers";
 import { buildStep10LlmInput, generateStep10ReportChunkedText, recordStep10Report } from "@/src/lib/engine";
 import { recordStreamingCall } from "@/src/lib/llm-stats";
+import { classifyLlmError } from "@/src/lib/llm-observability";
 
 /**
  * SSE-streamed endpoint for the Step 10 final report (#241).
@@ -65,7 +66,8 @@ export async function POST(request: NextRequest) {
             activityId: session.activityId,
             step: 10,
             kind: "fallback",
-            fallbackUsed: true
+            fallbackUsed: true,
+            errorCategory: "other"
           }).catch(() => undefined);
         } else {
           try {
@@ -80,7 +82,7 @@ export async function POST(request: NextRequest) {
             for (let i = 0; i < normalized.length; i += chunkSize) {
               send({ type: "chunk", text: normalized.slice(i, i + chunkSize) });
             }
-          } catch {
+          } catch (error) {
             if (collected.length === 0) {
               collected.push(fallback);
               send({ type: "chunk", text: fallback });
@@ -90,7 +92,8 @@ export async function POST(request: NextRequest) {
                 activityId: session.activityId,
                 step: 10,
                 kind: "fallback",
-                fallbackUsed: true
+                fallbackUsed: true,
+                errorCategory: classifyLlmError(error)
               }).catch(() => undefined);
             }
           }

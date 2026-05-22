@@ -1535,8 +1535,10 @@ Request:
 - `storage.fallbackMetricsSource`（`persisted_learning_events` 或 `estimated_from_ai_messages`）。
 - 若事件表缺失或事件不足，需在 `storage.warnings` 提示目前 fallback 指標為估算值。
 - 回傳應包含近期 fallback 樣本摘要（例如最近 N 筆）：
-- 至少含 `at`、`step`、`kind`、`sessionId/activityId`，以及可對齊到的 `LLM error_category`（若存在）。
-- Step1/2 的 fallback 事件（`step12_feedback`、`step12_next_question`、`step12_round`）在 `fallback_used=true` 時，必須持久化非空 `error_category`（至少 `other`），避免診斷面板顯示 `—`。
+- 至少含 `at`、`step`、`kind`、`sessionId/activityId`、`LLM error_category`（若存在）與 `sampleErrorSource`（`learning_event` / `matched_llm_event` / `none`）。
+- fallback 樣本的 `LLM error_category` 需優先使用 fallback event 本身 `error_category`；若該欄位為空，才回退對齊鄰近 `llm_events`。
+- Step1/2 的 fallback 事件（`step12_feedback`、`step12_next_question`、`step12_round`）在 `fallback_used=true` 時，必須持久化非空 `error_category`（至少 `other`）。
+- Step3/7/10 的 fallback 事件在 `fallback_used=true` 時也必須持久化非空 `error_category`（至少 `other`），避免診斷面板顯示 `—`。
 - `trends.byCourse` / `trends.byClass` 的學校、班級、課程名稱需以「完整 metadata 優先」原則組裝：同一 key 若先遇到佔位值（`—`、`未命名課程`），後續遇到較完整值必須可覆蓋補齊，不可反向被佔位值覆寫。
 - 事件聚合時 metadata 來源順序：即時 activity -> `session_id` 快照對應 -> `activity_id` 快照對應 -> fallback；但最終寫入趨勢 series 前需做「非佔位值優先合併」，避免 sparse event 導致名稱退化。
 - 若趨勢資料僅剩佔位 metadata（無有效學校/班級/課程資訊，常見於課程已刪除後的孤兒歷史資料），該筆趨勢應在 diagnostics 聚合階段略過，不顯示 `-` 汙染項目。

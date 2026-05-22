@@ -177,6 +177,7 @@ type DiagnosticsPayload = {
     activityId: string | null;
     fallbackUsed: boolean;
     matchedLlmErrorCategory: string | null;
+    sampleErrorSource: "learning_event" | "matched_llm_event" | "none";
   }>;
   artifactHealth: {
     totalStudents: number;
@@ -625,7 +626,7 @@ export default function AdminPromptDiagnostics() {
             <hr style={{ border: 0, borderTop: "1px solid #e2e8f0", margin: "14px 0" }} />
             <h4 style={{ marginBottom: 6 }}>最近 fallback 樣本</h4>
             <small style={{ display: "block", marginBottom: 8, color: "#64748b" }}>
-              顯示最近 fallback 事件，並嘗試對齊鄰近 LLM 錯誤分類，快速定位 timeout/parse 等來源。
+              顯示最近 fallback 事件。優先使用 fallback 事件本身的分類，缺失時再對齊鄰近 LLM 錯誤分類，快速定位 timeout/parse 等來源。
             </small>
             <div style={{ overflowX: "auto" }}>
               <table className="pro-table">
@@ -635,6 +636,7 @@ export default function AdminPromptDiagnostics() {
                     <th>Step</th>
                     <th>Kind</th>
                     <th>LLM 錯誤分類</th>
+                    <th>分類來源</th>
                     <th>Session</th>
                   </tr>
                 </thead>
@@ -645,6 +647,7 @@ export default function AdminPromptDiagnostics() {
                       <td>{sample.step ?? "—"}</td>
                       <td>{sample.kind}</td>
                       <td>{sample.matchedLlmErrorCategory ?? "—"}</td>
+                      <td>{sample.sampleErrorSource}</td>
                       <td>{sample.sessionId ?? "—"}</td>
                     </tr>
                   ))}
