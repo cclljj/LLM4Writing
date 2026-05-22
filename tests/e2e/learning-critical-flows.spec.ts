@@ -70,22 +70,50 @@ async function setupInProgressCourse(adminPage: Page, suffix: string, classNumbe
     const essaysRes = await adminPage.request.get("/api/admin/essays");
     expect(essaysRes.ok()).toBeTruthy();
     const essaysData = (await essaysRes.json()) as { essays?: Array<Record<string, unknown>> };
-    const enabledEssay = (essaysData.essays ?? []).find((essay) => essay.enabled !== false);
-    expect(enabledEssay && typeof enabledEssay.id === "string", "expected at least one enabled essay").toBeTruthy();
-    const essayId = enabledEssay?.id as string;
+    let essayId =
+      (essaysData.essays ?? []).find((essay) => essay.enabled !== false && typeof essay.id === "string")?.id as
+        | string
+        | undefined;
 
-    const openClassRes = await postFromPage(adminPage, "/api/admin/openclasses", {
-      classNumber,
-      essayId,
-      durationMinutes: 40,
-      supplemental: "E2E supplemental"
-    });
-    expect(openClassRes.status, `openclass failed: ${JSON.stringify(openClassRes.body)}`).toBe(200);
-    const openClassData = openClassRes.body as Record<string, unknown>;
-    const savedData = openClassData.saved as Record<string, unknown> | undefined;
-    activityId = (savedData?.id as string) ?? "";
-    activityTitle = (savedData?.title as string) || title;
-    courseStatus = (savedData?.courseStatus as string | undefined) ?? "not_started";
+    if (!essayId) {
+      const createEssayRes = await postFromPage(adminPage, "/api/admin/essays", {
+        title: `${title}-essay`,
+        genre: "議論文",
+        description: "seed for e2e",
+        enabled: true
+      });
+      expect(createEssayRes.status, `essay create failed: ${JSON.stringify(createEssayRes.body)}`).toBe(200);
+      const created = createEssayRes.body as Record<string, unknown>;
+      const savedEssay = created.saved as Record<string, unknown> | undefined;
+      essayId = typeof savedEssay?.id === "string" ? savedEssay.id : undefined;
+      expect(essayId, "expected created essay id").toBeTruthy();
+    }
+
+    let openClassCreated = false;
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const openClassRes = await postFromPage(adminPage, "/api/admin/openclasses", {
+        classNumber,
+        essayId,
+        durationMinutes: 40,
+        supplemental: "E2E supplemental"
+      });
+      if (openClassRes.status === 200) {
+        const openClassData = openClassRes.body as Record<string, unknown>;
+        const savedData = openClassData.saved as Record<string, unknown> | undefined;
+        activityId = (savedData?.id as string) ?? "";
+        activityTitle = (savedData?.title as string) || title;
+        courseStatus = (savedData?.courseStatus as string | undefined) ?? "not_started";
+        openClassCreated = true;
+        break;
+      }
+      const body = openClassRes.body as Record<string, unknown>;
+      if (body.error === "essay_not_found") {
+        await adminPage.waitForTimeout(150);
+        continue;
+      }
+      throw new Error(`openclass failed: ${JSON.stringify(openClassRes.body)}`);
+    }
+    expect(openClassCreated).toBeTruthy();
   }
   expect(activityId).toBeTruthy();
 
