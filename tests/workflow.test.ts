@@ -431,6 +431,17 @@ test("Step1/2 group gate prioritizes joined users and does not block on absent m
   assert.equal(second.allResponded, true);
 });
 
+test("Step1/2 group gate does not auto-complete when one joined member has not answered yet", () => {
+  const session = baseSession({
+    participants: ["s1", "s2"],
+    joinedUsers: ["s1", "s2"]
+  });
+
+  const first = handleStep1Or2Group(session, "s2", "我先回答完整想法", makeMessage);
+  assert.equal(first.allResponded, false);
+  assert.deepEqual(new Set(session.groupGate["1-1"]), new Set(["s2"]));
+});
+
 test("Step1/2 group gate falls back to participants when joinedUsers is unavailable", () => {
   const session = baseSession({
     participants: ["s1", "s2", "s3"],

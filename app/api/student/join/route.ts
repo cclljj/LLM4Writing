@@ -114,11 +114,11 @@ export async function POST(request: NextRequest) {
             .map((m) => m.userId as string)
         )
       );
-      // Guard against legacy/corrupted records where joinedUsers was accidentally prefilled with full participants.
-      const trustedJoinedUsers = (existing.joinedUsers ?? []).filter(
-        (name) => messageJoinedUsers.includes(name) || name === user.username
-      );
-      const nextJoinedUsers = Array.from(new Set([...trustedJoinedUsers, ...messageJoinedUsers, user.username]));
+      // #395: joinedUsers must be append-only during normal joins.
+      // Do not shrink peers just because they have not spoken yet; otherwise
+      // step1/2 gate members may be reduced and trigger premature auto-advance.
+      const persistedJoinedUsers = (existing.joinedUsers ?? []).filter((name) => participants.includes(name));
+      const nextJoinedUsers = Array.from(new Set([...persistedJoinedUsers, ...messageJoinedUsers, user.username]));
       const prevJoinedUsers = existing.joinedUsers ?? [];
       const joinedChanged =
         nextJoinedUsers.length !== prevJoinedUsers.length ||

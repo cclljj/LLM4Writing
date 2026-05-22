@@ -75,3 +75,16 @@ test("source-guard: session route still references If-None-Match", async () => {
   const src = readFileSync(resolve(thisDir, "../app/api/session/[sessionId]/route.ts"), "utf8");
   assert.ok(src.includes("If-None-Match") || src.includes("if-none-match"));
 });
+
+test("source-guard: student join keeps joinedUsers append-only and does not shrink by message authors", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { resolve, dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const thisDir = dirname(fileURLToPath(import.meta.url));
+  const src = readFileSync(resolve(thisDir, "../app/api/student/join/route.ts"), "utf8");
+  assert.ok(src.includes("persistedJoinedUsers"), "join route should keep persisted joined users");
+  assert.ok(
+    !src.includes("messageJoinedUsers.includes(name) || name === user.username"),
+    "join route should not drop joined users solely because they have not spoken"
+  );
+});

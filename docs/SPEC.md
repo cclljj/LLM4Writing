@@ -382,6 +382,7 @@ Artifact 類型：
 
 Step1 有 5 個子步驟，Step2 有 4 個子步驟。每個子步驟需先收齊 gate 成員回覆，才會觸發 Step1/2 的兩段式處理（先回饋，再產生下一題）。
 Step1/2 gate 成員判定：優先使用 `joinedUsers`（已實際加入課程者）；若 `joinedUsers` 為空才回退 `participants`。
+`joinedUsers` 維護需採 append-only（僅移除非本 session `participants` 的無效帳號）；不可因某成員尚未發言就把該成員從 `joinedUsers` 移除，避免 gate 成員縮減導致同組誤判全員作答並提前跳題。
 
 Gate key 範例：
 
@@ -1219,6 +1220,7 @@ Request:
 - 找 activity 與自己所在 group。
 - 有分組但找不到學生分組時回 `403 not_group_member`。
 - 有舊 session 則回舊 session。
+- 回舊 session 時需維護 `joinedUsers` 為 append-only：保留既有有效成員並加入當前 user；可補齊 legacy 訊息作者，但不得因未發言而縮減既有 joined 成員。
 - 否則建立 `workflow: "spec10"` session。
 
 Error:
