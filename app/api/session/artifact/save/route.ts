@@ -19,6 +19,9 @@ export async function POST(request: NextRequest) {
   if (!body.sessionId || !body.type || body.content === undefined) {
     return NextResponse.json({ error: "missing_required_fields" }, { status: 400 });
   }
+  if (typeof body.content === "string" && body.content.length > 10_000) { // #388
+    return NextResponse.json({ error: "input_too_long", field: "content", maxLength: 10_000 }, { status: 400 });
+  }
 
   const session = await getSession(body.sessionId);
   if (!session) {

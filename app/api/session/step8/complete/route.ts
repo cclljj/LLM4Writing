@@ -2,14 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { saveSession } from "@/src/lib/store";
 import { getStep9QuestionsFromConfig } from "@/src/lib/spec";
-import { requireStudentInSession } from "@/src/lib/api-helpers";
+import { requireStudentInSession, validateTextInput } from "@/src/lib/api-helpers";
 import { validateDraftContent } from "@/src/lib/answer-validation";
 
 export async function POST(request: NextRequest) {
   const body = (await request.json()) as { sessionId?: string; draft?: string };
-  if (typeof body.draft !== "string") {
-    return NextResponse.json({ error: "missing_required_fields" }, { status: 400 });
-  }
+  const draftLenError = validateTextInput(body.draft, "draft"); // #388
+  if (draftLenError) return draftLenError;
   const result = await requireStudentInSession(body.sessionId);
   if (result instanceof NextResponse) return result;
   const { user, session } = result;
@@ -19,7 +18,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "invalid_step" }, { status: 400 });
   }
 
-  const finalDraft = body.draft;
+  const finalDraft = body.draft as string;
   const draftError = validateDraftContent(session, finalDraft, "最終稿");
   if (draftError) {
     return NextResponse.json({ error: "draft_insufficient", hint: draftError }, { status: 400 });

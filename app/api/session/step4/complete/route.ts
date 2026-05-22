@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { recordArtifactUpdateSignal } from "@/src/lib/learning-diagnostics";
 import { saveSession } from "@/src/lib/store";
-import { requireStudentInSession } from "@/src/lib/api-helpers";
+import { requireStudentInSession, validateTextInput } from "@/src/lib/api-helpers";
 
 export async function POST(request: NextRequest) {
   const body = (await request.json()) as { sessionId?: string; outline?: string };
@@ -13,6 +13,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "invalid_step" }, { status: 400 });
   }
   const outlineText = typeof body.outline === "string" ? body.outline : "";
+  if (outlineText.length > 10_000) { // #388
+    return NextResponse.json({ error: "input_too_long", field: "outline", maxLength: 10_000 }, { status: 400 });
+  }
   session.outlines[user.username] = outlineText;
   recordArtifactUpdateSignal(session, "outline", user.username);
 

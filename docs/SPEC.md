@@ -1739,6 +1739,16 @@ Retry-After: <秒數>
 - Redis 失敗時 fallback 到 in-memory map，避免影響學生互動流程。
 - presence 僅作即時監看用途，不回寫 session payload，也不影響 `updated_at` / `ETag`。
 
+### 10.2a Login Brute-Force Protection（#385）
+
+- `POST /api/auth/login` 必須追蹤每個帳號的連續失敗次數。
+- 連續失敗 10 次以上，對該帳號鎖定 10 分鐘，回傳 HTTP 429：
+  ```json
+  { "error": "too_many_attempts", "retryAfterSeconds": N }
+  ```
+- 鎖定計數器儲存於 in-process memory（Serverless cold start 會重置，可接受）。
+- 登入成功後清除失敗計數。
+
 ### 10.3 Auth Session Cookie
 
 | 屬性 | 值 |
@@ -1775,16 +1785,30 @@ Auth session 必須是 server 簽章 token，格式為 `v1.<payload>.<signature>
 
 ### 10.6 Security Headers / CSP
 
-所有 route 需透過 `next.config.mjs` 套用基礎安全 headers：
+**架構（#386）**：`script-src` 由 `middleware.ts` 以 per-request nonce 管理；其他 security headers 由 `next.config.mjs` 統一設定。
+
+`next.config.mjs` 必須包含：
 
 - `Content-Security-Policy` 至少限制 `default-src 'self'`、`object-src 'none'`、`frame-ancestors 'none'`、`base-uri 'self'`。
-- 因前端 Markdown 與既有元件仍有 inline style/HTML，`style-src` 可暫時保留 `'unsafe-inline'`；若未來導入 nonce/hash，再收緊。
-- `script-src` 在 Production 不得包含 `'unsafe-eval'`；開發環境可為了工具相容暫時保留。
+- `style-src` 保留 `'unsafe-inline'`（前端 Markdown 元件依賴 inline style）。
+- `script-src` 由 middleware.ts 覆蓋（config 中僅作 API route fallback）。
 - `X-Frame-Options: DENY`。
 - `X-Content-Type-Options: nosniff`。
 - `Referrer-Policy: strict-origin-when-cross-origin`。
 - `Permissions-Policy` 預設關閉 camera、microphone、geolocation、payment、usb。
 - Production 需加 `Strict-Transport-Security`。
+
+`middleware.ts` 必須：
+
+- 每個 page request 產生新 nonce（`crypto.randomUUID()` base64）。
+- 設定 `script-src 'self' 'nonce-{nonce}' 'strict-dynamic'`（production 不得含 `'unsafe-eval'`）。
+- 透過 `x-nonce` request header 將 nonce 傳遞給 layout。
+- **不得**在 `script-src` 中使用 `'unsafe-inline'`。
+
+### 10.6.1 DOMPurify 最後防護層（#387）
+
+- `renderMessageHtml()` 的輸出必須通過 `isomorphic-dompurify` 的 `sanitize()` 最終清洗，僅允許白名單 HTML tags（`p`、`ul`、`ol`、`li`、`strong`、`em`、`code`、`h2`–`h5`、`blockquote`、`span`）與 `style` attribute。
+- 所有 `dangerouslySetInnerHTML` 使用點必須透過 `renderMessageHtml()` 取得已 sanitize 的 HTML。
 
 ### 10.7 Supabase RPC 權限基線
 
@@ -1809,6 +1833,9 @@ Auth session 必須是 server 簽章 token，格式為 `v1.<payload>.<signature>
 11. 學生端不得顯示 internal prompt 或 system prompt 原文。
 12. Step5+ 個人步調不得混入其他學生個人訊息。
 13. 教師端 monitor 不得暴露學生 Step6/8 草稿全文。
+14. `POST /api/session/start` 必須要求 teacher 或 admin 角色（#383）。
+15. `GET /api/session/[sessionId]` 必須要求認證；student 需為 participant（#384）。
+16. 所有 student step 路由的 `text`/`outline`/`draft`/`content` 欄位不得超過 10,000 字元（#388）。
 
 ## 12. 已知限制
 

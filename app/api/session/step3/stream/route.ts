@@ -9,7 +9,7 @@ import {
 import { buildStudentCourseContext } from "@/src/lib/llm-context";
 import { hasFormalLlmQualityRisk, normalizeFormalLlmText, sanitizeStudentFacingText } from "@/src/lib/llm-response";
 import { recordRejectedAnswerSignal } from "@/src/lib/learning-diagnostics";
-import { requireStudentInSession } from "@/src/lib/api-helpers";
+import { requireStudentInSession, validateTextInput } from "@/src/lib/api-helpers";
 import { validateStudentAnswer } from "@/src/lib/answer-validation";
 import { recordStreamingCall } from "@/src/lib/llm-stats";
 
@@ -101,10 +101,9 @@ async function generateStep3ReplyText(
 
 export async function POST(request: NextRequest) {
   const body = (await request.json()) as { sessionId?: string; text?: string };
-  if (typeof body.text !== "string") {
-    return NextResponse.json({ error: "missing_required_fields" }, { status: 400 });
-  }
-  const studentText = body.text;
+  const textError = validateTextInput(body.text, "text"); // #388
+  if (textError) return textError;
+  const studentText = body.text as string;
 
   const result = await requireStudentInSession(body.sessionId);
   if (result instanceof NextResponse) return result;

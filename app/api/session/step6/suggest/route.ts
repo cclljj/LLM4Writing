@@ -9,7 +9,7 @@ import {
 } from "@/src/lib/llm-client";
 import { buildStudentCourseContext } from "@/src/lib/llm-context";
 import { hasStep6SuggestionQualityRisk, normalizeStep6SuggestionText } from "@/src/lib/llm-response";
-import { requireStudentInSession } from "@/src/lib/api-helpers";
+import { requireStudentInSession, validateTextInput } from "@/src/lib/api-helpers";
 import { recordStreamingCall } from "@/src/lib/llm-stats";
 
 function nowIso(): string {
@@ -115,9 +115,8 @@ async function generateStep6SuggestionText(
 
 export async function POST(request: NextRequest) {
   const body = (await request.json()) as { sessionId?: string; draft?: string };
-  if (typeof body.draft !== "string") {
-    return NextResponse.json({ error: "missing_required_fields" }, { status: 400 });
-  }
+  const draftError = validateTextInput(body.draft, "draft"); // #388
+  if (draftError) return draftError;
   const result = await requireStudentInSession(body.sessionId);
   if (result instanceof NextResponse) return result;
   const { user, session } = result;
@@ -127,7 +126,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "invalid_step" }, { status: 400 });
   }
 
-  const draft = body.draft;
+  const draft = body.draft as string;
   session.draftStep6[user.username] = draft;
   recordArtifactUpdateSignal(session, "draft6", user.username);
   const crossStepContext = buildStudentCourseContext(session, user.username, 6, {

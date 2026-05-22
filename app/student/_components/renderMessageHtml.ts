@@ -1,3 +1,7 @@
+// #387: DOMPurify as a final defence-in-depth sanitization layer.
+// isomorphic-dompurify works in both Node.js (SSR) and browser contexts.
+import DOMPurify from "isomorphic-dompurify";
+
 function escapeHtml(input: string): string {
   return input
     .replaceAll("&", "&amp;")
@@ -197,5 +201,10 @@ export function renderMessageHtml(text: string): string {
   }
 
   flushLists();
-  return htmlParts.join("");
+  // Final defence-in-depth: DOMPurify strips any surviving dangerous markup
+  // (e.g. edge cases in inline markdown, unexpected LLM output after prompt injection).
+  return DOMPurify.sanitize(htmlParts.join(""), {
+    ALLOWED_TAGS: ["p", "ul", "ol", "li", "strong", "em", "code", "h2", "h3", "h4", "h5", "blockquote", "span"],
+    ALLOWED_ATTR: ["style"]
+  });
 }
