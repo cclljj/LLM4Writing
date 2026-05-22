@@ -1,6 +1,4 @@
 import { expect, test, type Browser, type Page } from "@playwright/test";
-import { promises as fs } from "node:fs";
-import path from "node:path";
 
 test.describe.configure({ mode: "serial" });
 
@@ -48,8 +46,18 @@ function mutateOutlineForCompletion(outline: string): string {
 
 async function setupInProgressCourse(adminPage: Page, suffix: string, classNumber: string): Promise<{ activityId: string; title: string }> {
   const title = `E2E-${suffix}-${Date.now()}`;
-  const essayId = `essay-e2e-${Date.now()}-${Math.floor(Math.random() * 10_000)}`;
-  await ensureEssayOnDisk(essayId, `${title}-essay`);
+  const requestedEssayId = `essay-e2e-${Date.now()}-${Math.floor(Math.random() * 10_000)}`;
+  const essayRes = await postFromPage(adminPage, "/api/admin/essays", {
+    id: requestedEssayId,
+    title: `${title}-essay`,
+    genre: "議論文",
+    description: "seed for e2e",
+    enabled: true
+  });
+  expect(essayRes.status, `essay create failed: ${JSON.stringify(essayRes.body)}`).toBe(200);
+  const essayData = essayRes.body as Record<string, unknown>;
+  const savedEssay = essayData.saved as Record<string, unknown> | undefined;
+  const essayId = (savedEssay?.id as string | undefined) ?? requestedEssayId;
 
   const openClassRes = await postFromPage(adminPage, "/api/admin/openclasses", {
       classNumber,
@@ -77,33 +85,6 @@ async function setupInProgressCourse(adminPage: Page, suffix: string, classNumbe
 
   const activityTitle = (savedData?.title as string) || title;
   return { activityId, title: activityTitle };
-}
-
-async function ensureEssayOnDisk(essayId: string, essayTitle: string) {
-  const file = path.join(process.cwd(), ".data", "domain-state.json");
-  let payload: Record<string, unknown> = {};
-  try {
-    const raw = await fs.readFile(file, "utf8");
-    payload = JSON.parse(raw) as Record<string, unknown>;
-  } catch {
-    payload = {};
-  }
-
-  const essays = Array.isArray(payload.essays) ? [...payload.essays] as Array<Record<string, unknown>> : [];
-  const exists = essays.some((essay) => essay?.id === essayId);
-  if (!exists) {
-    essays.push({
-      id: essayId,
-      title: essayTitle,
-      genre: "議論文",
-      description: "seed for e2e",
-      enabled: true
-    });
-  }
-  payload.essays = essays;
-
-  await fs.mkdir(path.dirname(file), { recursive: true });
-  await fs.writeFile(file, JSON.stringify(payload, null, 2), "utf8");
 }
 
 async function loginAsAdminTeacherAndStudent(browser: Browser) {
