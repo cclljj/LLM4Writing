@@ -14,30 +14,34 @@ type LoggedInActors = {
 let loggedInActors: LoggedInActors | null = null;
 
 async function login(page: Page, username: string, password: string) {
-  await page.goto("/");
-  await page.getByPlaceholder("請輸入帳號").fill(username);
-  await page.getByPlaceholder("請輸入密碼").fill(password);
-  await page.getByRole("button", { name: "登入系統" }).click();
+  const response = await page.request.post("/api/auth/login", { data: { username, password } });
+  let data: { redirectTo?: string; error?: string } = {};
+  try {
+    data = (await response.json()) as { redirectTo?: string; error?: string };
+  } catch {
+    data = {};
+  }
+  expect(response.status(), `login failed for ${username}: ${JSON.stringify(data)}`).toBe(200);
+  const redirectTo = data.redirectTo ?? "/";
+  await page.goto(redirectTo);
 }
 
 async function postFromPage<T = Record<string, unknown>>(page: Page, url: string, data: unknown): Promise<{ status: number; body: T }> {
-  return page.evaluate(
-    async ({ inputUrl, inputData }) => {
-      const response = await fetch(inputUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(inputData)
-      });
-      let body: unknown = {};
-      try {
-        body = await response.json();
-      } catch {
-        body = {};
-      }
-      return { status: response.status, body: body as Record<string, unknown> };
-    },
-    { inputUrl: url, inputData: data }
-  ) as unknown as Promise<{ status: number; body: T }>;
+  const baseOrigin = "http://127.0.0.1:3000";
+  const response = await page.request.post(url, {
+    data,
+    headers: {
+      origin: baseOrigin,
+      referer: `${baseOrigin}/`
+    }
+  });
+  let body: unknown = {};
+  try {
+    body = (await response.json()) as unknown;
+  } catch {
+    body = {};
+  }
+  return { status: response.status(), body: body as T };
 }
 
 function mutateOutlineForCompletion(outline: string): string {

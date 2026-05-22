@@ -17,7 +17,8 @@ export default defineConfig({
       ...process.env,
       SUPABASE_DB_URL: "",
       POSTGRES_URL: "",
-      DATABASE_URL: ""
+      DATABASE_URL: "",
+      DISABLE_LOGIN_RATE_LIMIT: "1"
     },
     reuseExistingServer: !process.env.CI,
     timeout: 120_000

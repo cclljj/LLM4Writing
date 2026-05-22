@@ -3,10 +3,16 @@ import { expect, test } from "@playwright/test";
 test.describe.configure({ mode: "serial" });
 
 async function login(page: import("@playwright/test").Page, username: string, password: string) {
-  await page.goto("/");
-  await page.getByPlaceholder("請輸入帳號").fill(username);
-  await page.getByPlaceholder("請輸入密碼").fill(password);
-  await page.getByRole("button", { name: "登入系統" }).click();
+  const response = await page.request.post("/api/auth/login", { data: { username, password } });
+  let data: { redirectTo?: string; error?: string } = {};
+  try {
+    data = (await response.json()) as { redirectTo?: string; error?: string };
+  } catch {
+    data = {};
+  }
+  expect(response.status(), `login failed for ${username}: ${JSON.stringify(data)}`).toBe(200);
+  const redirectTo = data.redirectTo ?? "/";
+  await page.goto(redirectTo);
 }
 
 test("student login routes to student home", async ({ page }) => {

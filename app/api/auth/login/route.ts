@@ -17,6 +17,7 @@ import {
 const MAX_FAILURES = 10;
 const LOCKOUT_WINDOW_MS = 10 * 60 * 1000; // 10 min sliding window
 const LOCKOUT_DURATION_MS = 10 * 60 * 1000; // 10 min lockout
+const RATE_LIMIT_DISABLED = process.env.DISABLE_LOGIN_RATE_LIMIT === "1";
 
 type LoginAttemptRecord = { failures: number; windowStart: number; lockedUntil: number };
 const loginAttempts = new Map<string, LoginAttemptRecord>();
@@ -65,7 +66,7 @@ export async function POST(request: NextRequest) {
     const password = body.password ?? "";
 
     // Check lockout before hitting bcrypt / DB (#385)
-    if (username) {
+    if (!RATE_LIMIT_DISABLED && username) {
       const rec = getLoginRecord(username);
       if (isLockedOut(rec)) {
         const retryAfterSec = Math.ceil((rec.lockedUntil - Date.now()) / 1000);
@@ -78,7 +79,7 @@ export async function POST(request: NextRequest) {
 
     const claims = await validateCredential(username, password);
     if (!claims) {
-      if (username) recordFailure(getLoginRecord(username));
+      if (!RATE_LIMIT_DISABLED && username) recordFailure(getLoginRecord(username));
       return NextResponse.json({ error: "invalid_credentials" }, { status: 401 });
     }
 
