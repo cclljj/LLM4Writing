@@ -4,6 +4,17 @@ import path from "node:path";
 
 test.describe.configure({ mode: "serial" });
 
+type LoggedInActors = {
+  adminCtx: import("@playwright/test").BrowserContext;
+  teacherCtx: import("@playwright/test").BrowserContext;
+  studentCtx: import("@playwright/test").BrowserContext;
+  adminPage: Page;
+  teacherPage: Page;
+  studentPage: Page;
+};
+
+let loggedInActors: LoggedInActors | null = null;
+
 async function login(page: Page, username: string, password: string) {
   await page.goto("/");
   await page.getByPlaceholder("請輸入帳號").fill(username);
@@ -95,24 +106,36 @@ async function ensureEssayOnDisk(essayId: string, essayTitle: string) {
 }
 
 async function loginAsAdminTeacherAndStudent(browser: Browser) {
-  const adminCtx = await browser.newContext();
-  const teacherCtx = await browser.newContext();
-  const studentCtx = await browser.newContext();
-  const adminPage = await adminCtx.newPage();
-  const teacherPage = await teacherCtx.newPage();
-  const studentPage = await studentCtx.newPage();
-  await login(adminPage, "admin", "admin123");
+  if (!loggedInActors) {
+    const adminCtx = await browser.newContext();
+    const teacherCtx = await browser.newContext();
+    const studentCtx = await browser.newContext();
+    const adminPage = await adminCtx.newPage();
+    const teacherPage = await teacherCtx.newPage();
+    const studentPage = await studentCtx.newPage();
+
+    await login(adminPage, "admin", "admin123");
+    await expect(adminPage).toHaveURL(/\/admin(\?.*)?$/);
+    await login(teacherPage, "teacher", "teacher123");
+    await expect(teacherPage).toHaveURL(/\/teacher(\?.*)?$/);
+    await login(studentPage, "student", "student123");
+    await expect(studentPage).toHaveURL(/\/student(\?.*)?$/);
+
+    loggedInActors = { adminCtx, teacherCtx, studentCtx, adminPage, teacherPage, studentPage };
+  }
+
+  const { adminCtx, teacherCtx, studentCtx, adminPage, teacherPage, studentPage } = loggedInActors;
+  await adminPage.goto("/admin");
   await expect(adminPage).toHaveURL(/\/admin(\?.*)?$/);
-  await login(teacherPage, "teacher", "teacher123");
+  await teacherPage.goto("/teacher");
   await expect(teacherPage).toHaveURL(/\/teacher(\?.*)?$/);
-  await login(studentPage, "student", "student123");
+  await studentPage.goto("/student");
   await expect(studentPage).toHaveURL(/\/student(\?.*)?$/);
   return { adminCtx, teacherCtx, studentCtx, adminPage, teacherPage, studentPage };
 }
 
 test("學生 Step3 完成後，教師端出現推進 Step4 按鈕", async ({ browser }) => {
-  const { adminCtx, teacherCtx, studentCtx, adminPage, teacherPage, studentPage } = await loginAsAdminTeacherAndStudent(browser);
-  try {
+  const { adminPage, teacherPage, studentPage } = await loginAsAdminTeacherAndStudent(browser);
     const overview = await studentPage.request.get("/api/student/overview");
     const overviewJson = await overview.json();
     const classNumber = (overviewJson.profile?.classNumber as string) ?? "701";
@@ -151,16 +174,10 @@ test("學生 Step3 完成後，教師端出現推進 Step4 按鈕", async ({ bro
 
     const advanceRes = await postFromPage(adminPage, "/api/teacher/step", { sessionId, step: 4 });
     expect(advanceRes.status).toBe(200);
-  } finally {
-    await adminCtx.close();
-    await teacherCtx.close();
-    await studentCtx.close();
-  }
 });
 
 test("Step4 討論過濾：離題阻擋、課堂相關內容允許", async ({ browser }) => {
-  const { adminCtx, teacherCtx, studentCtx, adminPage, teacherPage, studentPage } = await loginAsAdminTeacherAndStudent(browser);
-  try {
+  const { adminPage, teacherPage, studentPage } = await loginAsAdminTeacherAndStudent(browser);
     const overview = await studentPage.request.get("/api/student/overview");
     const overviewJson = await overview.json();
     const classNumber = (overviewJson.profile?.classNumber as string) ?? "701";
@@ -190,16 +207,10 @@ test("Step4 討論過濾：離題阻擋、課堂相關內容允許", async ({ br
       text: "我們可以用遊戲闖關當比喻，補強文章論點與例子。"
     });
     expect(allowedRes.status).toBe(200);
-  } finally {
-    await adminCtx.close();
-    await teacherCtx.close();
-    await studentCtx.close();
-  }
 });
 
 test("Step10 報告顯示：Markdown 正常渲染且不顯示雙重標題前綴", async ({ browser }) => {
-  const { adminCtx, teacherCtx, studentCtx, adminPage, teacherPage, studentPage } = await loginAsAdminTeacherAndStudent(browser);
-  try {
+  const { adminPage, teacherPage, studentPage } = await loginAsAdminTeacherAndStudent(browser);
     const overview = await studentPage.request.get("/api/student/overview");
     const overviewJson = await overview.json();
     const classNumber = (overviewJson.profile?.classNumber as string) ?? "701";
@@ -230,9 +241,12 @@ test("Step10 報告顯示：Markdown 正常渲染且不顯示雙重標題前綴"
     const reportText = await reportCard.innerText();
     expect(reportText.includes("## ")).toBeFalsy();
     expect(reportText.includes("### **")).toBeFalsy();
-  } finally {
-    await adminCtx.close();
-    await teacherCtx.close();
-    await studentCtx.close();
-  }
+});
+
+test.afterAll(async () => {
+  if (!loggedInActors) return;
+  await loggedInActors.adminCtx.close();
+  await loggedInActors.teacherCtx.close();
+  await loggedInActors.studentCtx.close();
+  loggedInActors = null;
 });
