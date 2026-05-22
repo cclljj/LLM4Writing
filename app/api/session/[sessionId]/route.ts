@@ -61,9 +61,19 @@ export async function GET(request: Request, context: { params: Promise<{ session
   const { session, updatedAt } = meta;
   const etag = `"${updatedAt}"`;
 
-  // Mark presence as side-effect only (does NOT touch session payload or updated_at)
+  // #384: Require authentication — unauthenticated callers must not read session data
+  // (which includes student drafts, outlines, conversation history, and PII).
   const user = await getCurrentUser();
-  if (user?.role === "student" && session.participants.includes(user.username)) {
+  if (!user) {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
+  // Students must be a participant; teachers/admins have broader visibility.
+  if (user.role === "student" && !session.participants.includes(user.username)) {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
+
+  // Mark presence as side-effect only (does NOT touch session payload or updated_at)
+  if (user.role === "student") {
     await markUserOnline(session.id, user.username);
   }
 
