@@ -55,6 +55,13 @@ const defaultUsers: StoredUser[] = [
   }
 ];
 
+function shouldSeedDefaultUsersForDb(): boolean {
+  const explicit = process.env.ALLOW_DB_DEFAULT_USERS?.trim().toLowerCase();
+  if (explicit === "true") return true;
+  if (explicit === "false") return false;
+  return process.env.NODE_ENV !== "production";
+}
+
 function getMemoryStore(): MemoryUserStore {
   const globalScope = globalThis as unknown as Record<string, MemoryUserStore | undefined>;
   if (!globalScope[KEY]) {
@@ -125,21 +132,26 @@ async function ensureUserTable(): Promise<void> {
         return;
       }
 
-      // Backfill default bootstrap accounts if they are missing.
-      // Use ON CONFLICT DO NOTHING so existing data is never overwritten.
-      for (const user of defaultUsers) {
-        const { password, ...payload } = user;
-        const passwordHash = await hashPassword(password);
-        try {
-          await sql`
-            INSERT INTO llm4writing_users (username, payload, password)
-            VALUES (${user.username}, ${JSON.stringify(payload)}::jsonb, ${passwordHash})
-            ON CONFLICT (username) DO NOTHING
-          `;
-        } catch (error) {
-          // Production DB roles may be read-only for DML; do not fail login flow for that.
-          if (!isPermissionLikeError(error)) {
-            throw error;
+      // #393: In production, do not auto-backfill default credentials.
+      // Explicit override is available only when operators intentionally set
+      // ALLOW_DB_DEFAULT_USERS=true.
+      if (shouldSeedDefaultUsersForDb()) {
+        // Backfill default bootstrap accounts if they are missing.
+        // Use ON CONFLICT DO NOTHING so existing data is never overwritten.
+        for (const user of defaultUsers) {
+          const { password, ...payload } = user;
+          const passwordHash = await hashPassword(password);
+          try {
+            await sql`
+              INSERT INTO llm4writing_users (username, payload, password)
+              VALUES (${user.username}, ${JSON.stringify(payload)}::jsonb, ${passwordHash})
+              ON CONFLICT (username) DO NOTHING
+            `;
+          } catch (error) {
+            // Production DB roles may be read-only for DML; do not fail login flow for that.
+            if (!isPermissionLikeError(error)) {
+              throw error;
+            }
           }
         }
       }

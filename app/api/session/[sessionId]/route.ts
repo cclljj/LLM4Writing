@@ -9,6 +9,7 @@ import { loadActivityWithConfig } from "@/src/lib/prompt-config";
 import { resolveStructureTreeTemplate } from "@/src/lib/genre-resolver";
 import { getCurrentUser } from "@/src/lib/auth-server";
 import { markUserOnline } from "@/src/lib/session-presence";
+import { canAccessTeacherSession } from "@/src/lib/teacher-session-access";
 
 function makeMessage(input: Omit<ChatMessage, "id" | "at">): ChatMessage {
   return {
@@ -70,6 +71,11 @@ export async function GET(request: Request, context: { params: Promise<{ session
   // Students must be a participant; teachers/admins have broader visibility.
   if (user.role === "student" && !session.participants.includes(user.username)) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
+  // #393: Teachers must also satisfy class/group scope checks to avoid
+  // cross-class session data disclosure by guessed/leaked sessionId.
+  if (user.role === "teacher" && !(await canAccessTeacherSession(user, session))) {
+    return NextResponse.json({ error: "forbidden_session" }, { status: 403 });
   }
 
   // Mark presence as side-effect only (does NOT touch session payload or updated_at)

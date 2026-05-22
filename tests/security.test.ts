@@ -210,6 +210,19 @@ test("auth server: validates signed session and reloads user role from store", a
   );
 });
 
+test("session read route: teacher access must pass teacher-session scope guard", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { resolve, dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+
+  const thisDir = dirname(fileURLToPath(import.meta.url));
+  const route = readFileSync(resolve(thisDir, "../app/api/session/[sessionId]/route.ts"), "utf8");
+
+  assert.ok(route.includes("canAccessTeacherSession"), "session read route should import teacher scope guard");
+  assert.ok(route.includes('user.role === "teacher"'), "session read route should branch for teacher role");
+  assert.ok(route.includes("forbidden_session"), "out-of-scope teacher access should return forbidden_session");
+});
+
 test("user store: hashes passwords and migrates legacy plaintext on successful login", async () => {
   const { readFileSync } = await import("node:fs");
   const { resolve, dirname } = await import("node:path");
@@ -224,6 +237,21 @@ test("user store: hashes passwords and migrates legacy plaintext on successful l
   assert.ok(userStore.includes("bcrypt.compare"), "user store should verify hashed passwords with bcrypt.compare");
   assert.ok(userStore.includes("sessionVersion"), "user store should persist sessionVersion for revocable sessions");
   assert.ok(userStore.includes("sessionVersion) + 1"), "password/role mutations should bump session version");
+  assert.ok(userStore.includes("ALLOW_DB_DEFAULT_USERS"), "db default-user seeding should require explicit opt-in env in production");
+  assert.ok(userStore.includes('process.env.NODE_ENV !== "production"'), "production should not auto-seed default DB users");
+});
+
+test("session start route: validates participant scope for teacher/admin", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { resolve, dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+
+  const thisDir = dirname(fileURLToPath(import.meta.url));
+  const route = readFileSync(resolve(thisDir, "../app/api/session/start/route.ts"), "utf8");
+
+  assert.ok(route.includes("getUsersVisibleToTeacherStore"), "teacher should be limited to visible students");
+  assert.ok(route.includes("listUsersStore"), "admin validation should load user list");
+  assert.ok(route.includes("invalid_participants_scope"), "invalid/out-of-scope participants should be rejected");
 });
 
 test("next config: defines baseline security headers and CSP", async () => {
