@@ -76,7 +76,9 @@ async function setupInProgressCourse(adminPage: Page, suffix: string, classNumbe
         | undefined;
 
     if (!essayId) {
+      const seedEssayId = `essay-e2e-${Date.now()}-${Math.floor(Math.random() * 10_000)}`;
       const createEssayRes = await postFromPage(adminPage, "/api/admin/essays", {
+        id: seedEssayId,
         title: `${title}-essay`,
         genre: "議論文",
         description: "seed for e2e",
