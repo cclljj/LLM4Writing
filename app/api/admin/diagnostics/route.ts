@@ -12,6 +12,7 @@ import { findActivity } from "@/src/lib/activity-store";
 import { getLlmCallStats } from "@/src/lib/llm-observability";
 import { getDatabaseHost, isDatabaseEnabled } from "@/src/lib/db-config";
 import type { SessionState } from "@/src/lib/types";
+import { buildRecentFallbackTraces } from "@/src/lib/diagnostics-fallback-traces";
 type DiagnosticsWindow = "24h" | "7d" | "14d" | "30d";
 type DiagnosticsPayload = Record<string, unknown>;
 type DiagnosticsCacheEntry = {
@@ -1040,72 +1041,6 @@ function buildLlmErrorTaxonomy(llmEvents?: PersistedEventRow[]) {
   };
 }
 
-function buildRecentFallbackSamples(
-  learningEvents: PersistedEventRow[],
-  llmEvents: PersistedEventRow[],
-  limit = 12
-): Array<{
-  at: string;
-  step: number | null;
-  kind: string;
-  sessionId: string | null;
-  activityId: string | null;
-  fallbackUsed: boolean;
-  matchedLlmErrorCategory: string | null;
-  sampleErrorSource: "learning_event" | "matched_llm_event" | "none";
-}> {
-  const llmErrors = llmEvents.filter((event) => typeof event.error_category === "string" && event.error_category.trim().length > 0);
-  const fallbackEvents = learningEvents
-    .filter((event) => event.fallback_used)
-    .sort((a, b) => b.created_at.getTime() - a.created_at.getTime())
-    .slice(0, limit);
-
-  return fallbackEvents.map((fallbackEvent) => {
-    const ownCategory = typeof fallbackEvent.error_category === "string" && fallbackEvent.error_category.trim().length > 0
-      ? fallbackEvent.error_category
-      : null;
-    if (ownCategory) {
-      return {
-        at: fallbackEvent.created_at.toISOString(),
-        step: fallbackEvent.step ?? null,
-        kind: fallbackEvent.kind,
-        sessionId: fallbackEvent.session_id ?? null,
-        activityId: fallbackEvent.activity_id ?? null,
-        fallbackUsed: fallbackEvent.fallback_used,
-        matchedLlmErrorCategory: ownCategory,
-        sampleErrorSource: "learning_event" as const
-      };
-    }
-
-    const matched = llmErrors
-      .filter((llmEvent) => {
-        if (llmEvent.session_id && fallbackEvent.session_id && llmEvent.session_id !== fallbackEvent.session_id) return false;
-        if (llmEvent.activity_id && fallbackEvent.activity_id && llmEvent.activity_id !== fallbackEvent.activity_id) return false;
-        const diffMs = Math.abs(llmEvent.created_at.getTime() - fallbackEvent.created_at.getTime());
-        return diffMs <= 2 * 60 * 1000;
-      })
-      .sort((a, b) => {
-        const aDiff = Math.abs(a.created_at.getTime() - fallbackEvent.created_at.getTime());
-        const bDiff = Math.abs(b.created_at.getTime() - fallbackEvent.created_at.getTime());
-        if (aDiff !== bDiff) return aDiff - bDiff;
-        const aSameStep = typeof a.step === "number" && typeof fallbackEvent.step === "number" && a.step === fallbackEvent.step ? 1 : 0;
-        const bSameStep = typeof b.step === "number" && typeof fallbackEvent.step === "number" && b.step === fallbackEvent.step ? 1 : 0;
-        return bSameStep - aSameStep;
-      })[0];
-
-    return {
-      at: fallbackEvent.created_at.toISOString(),
-      step: fallbackEvent.step ?? null,
-      kind: fallbackEvent.kind,
-      sessionId: fallbackEvent.session_id ?? null,
-      activityId: fallbackEvent.activity_id ?? null,
-      fallbackUsed: fallbackEvent.fallback_used,
-      matchedLlmErrorCategory: matched?.error_category ?? null,
-      sampleErrorSource: matched?.error_category ? "matched_llm_event" : "none"
-    };
-  });
-}
-
 async function buildDiagnosticsPayload(selectedWindow: DiagnosticsWindow, nowMs: number): Promise<DiagnosticsPayload> {
   const config = systemPromptConfig as Record<string, unknown>;
   const cutoffMs = nowMs - WINDOW_MS[selectedWindow];
@@ -1186,7 +1121,22 @@ async function buildDiagnosticsPayload(selectedWindow: DiagnosticsWindow, nowMs:
       : computeTrendSeries(windowedSpecSessions, cutoffMs, "class")
   };
   const llmErrorTaxonomy = buildLlmErrorTaxonomy(llmEvents);
-  const recentFallbackSamples = buildRecentFallbackSamples(learningEvents, llmEvents);
+  const recentFallbackTraces = buildRecentFallbackTraces({
+    learningEvents,
+    llmEvents,
+    sessions: specSessions,
+    limit: 10
+  });
+  const recentFallbackSamples = recentFallbackTraces.map((trace) => ({
+    at: trace.at,
+    step: trace.step,
+    kind: trace.kind,
+    sessionId: trace.sessionId,
+    activityId: trace.activityId,
+    fallbackUsed: trace.fallbackUsed,
+    matchedLlmErrorCategory: trace.matchedLlmErrorCategory,
+    sampleErrorSource: trace.sampleErrorSource
+  }));
 
   return {
     llm,
@@ -1234,6 +1184,7 @@ async function buildDiagnosticsPayload(selectedWindow: DiagnosticsWindow, nowMs:
     trends,
     llmErrorTaxonomy,
     recentFallbackSamples,
+    recentFallbackTraces,
     artifactHealth: computeArtifactHealth(windowedSpecSessions),
     tokenUsage,
     generatedAt: new Date(nowMs).toISOString()

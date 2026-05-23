@@ -237,8 +237,19 @@ The admin console SHALL provide Prompt/LLM diagnostics, KPI trends, and non-sens
 
 - **GIVEN** an admin investigates high fallback periods
 - **WHEN** diagnostics data is loaded
-- **THEN** the panel shows recent fallback samples with timestamp, step/kind, and matched LLM error-category hints when available
+- **THEN** the panel shows recent fallback samples with timestamp, step/kind, `error_category`, and `sampleErrorSource`
+- **AND** `sampleErrorSource` explicitly indicates `learning_event`, `matched_llm_event`, or `none`
+- **AND** fallback sample `error_category` uses the fallback event's own category first and only falls back to nearby matched LLM-event hints when missing
 - **AND** for Step1/2 fallback kinds (`step12_feedback`, `step12_next_question`, `step12_round`), `fallback_used=true` samples include a non-empty reason category (at least `other`)
+- **AND** Step3/7/10 fallback-used samples also include a non-empty reason category (at least `other`)
+
+#### Scenario: Recent fallback reconstructed prompt traces
+
+- **GIVEN** an admin needs deeper root-cause investigation for fallback events
+- **WHEN** diagnostics data is loaded
+- **THEN** the panel shows `recentFallbackTraces` entries that include reconstructed LLM input text for recent fallback events
+- **AND** each entry marks reconstruction source (`session_messages_and_prompt_config` or `event_only`)
+- **AND** the UI clearly states the content is reconstructed and not guaranteed to equal provider raw request payload
 
 #### Scenario: Stable trend labels
 

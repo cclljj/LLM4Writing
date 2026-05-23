@@ -206,6 +206,28 @@ The system SHALL expose admin/course management APIs with role-sensitive visibil
 - **WHEN** a sample kind is `step12_feedback`, `step12_next_question`, or `step12_round` with `fallback_used=true`
 - **THEN** the diagnostics sample includes a non-empty fallback reason category (for example `timeout`, `truncation`, `parse_fail`, or `other`)
 
+#### Scenario: Step3/7/10 fallback reason completeness
+
+- **GIVEN** Step3/7/10 fallback events are included in diagnostics samples
+- **WHEN** fallback-used events are recorded for those steps
+- **THEN** each sample includes a non-empty fallback reason category (at least `other`)
+
+#### Scenario: Fallback sample error source and precedence
+
+- **GIVEN** diagnostics recent fallback samples are generated
+- **WHEN** the system resolves `error_category` for each sample
+- **THEN** it uses the fallback event's own `error_category` first
+- **AND** only when that field is empty it may match nearby `llm_events` for category hints
+- **AND** each sample includes `sampleErrorSource` as `learning_event`, `matched_llm_event`, or `none`
+
+#### Scenario: Recent fallback trace reconstruction for admin diagnostics
+
+- **GIVEN** an admin requests diagnostics and recent fallback events exist
+- **WHEN** the backend builds diagnostics payload
+- **THEN** it returns `recentFallbackTraces` including timestamp, step/kind, session/activity identifiers, classification source, and reconstructed prompt text
+- **AND** reconstructed prompt text is explicitly marked as reconstruction (not guaranteed to be provider raw request body)
+- **AND** when session context is unavailable, the trace still returns event-only reconstruction metadata
+
 #### Scenario: Step3 teacher advance backfills legacy completion evidence
 
 - **GIVEN** a Step3 group was completed before newer gate signals were introduced

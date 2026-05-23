@@ -1539,6 +1539,10 @@ Request:
 - 回傳應包含近期 fallback 樣本摘要（例如最近 N 筆）：
 - 至少含 `at`、`step`、`kind`、`sessionId/activityId`、`LLM error_category`（若存在）與 `sampleErrorSource`（`learning_event` / `matched_llm_event` / `none`）。
 - fallback 樣本的 `LLM error_category` 需優先使用 fallback event 本身 `error_category`；若該欄位為空，才回退對齊鄰近 `llm_events`。
+- 回傳應包含 `recentFallbackTraces`（最近 fallback 近似送出內容重建）：
+- 每筆至少含 `at`、`step`、`kind`、`sessionId/activityId`、`matchedLlmErrorCategory`、`sampleErrorSource`、`reconstructionSource`、`reconstructedPrompt`。
+- `reconstructedPrompt` 來源為 `session messages + promptConfig + fallback event` 的重建結果，屬診斷用途，不保證與 provider 原始 request body 完全一致。
+- `reconstructionSource` 需標示 `session_messages_and_prompt_config` 或 `event_only`（無法取得 session/step 上下文時）。
 - Step1/2 的 fallback 事件（`step12_feedback`、`step12_next_question`、`step12_round`）在 `fallback_used=true` 時，必須持久化非空 `error_category`（至少 `other`）。
 - Step3/7/10 的 fallback 事件在 `fallback_used=true` 時也必須持久化非空 `error_category`（至少 `other`），避免診斷面板顯示 `—`。
 - `trends.byCourse` / `trends.byClass` 的學校、班級、課程名稱需以「完整 metadata 優先」原則組裝：同一 key 若先遇到佔位值（`—`、`未命名課程`），後續遇到較完整值必須可覆蓋補齊，不可反向被佔位值覆寫。

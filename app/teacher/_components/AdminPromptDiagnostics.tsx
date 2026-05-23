@@ -179,6 +179,18 @@ type DiagnosticsPayload = {
     matchedLlmErrorCategory: string | null;
     sampleErrorSource: "learning_event" | "matched_llm_event" | "none";
   }>;
+  recentFallbackTraces: Array<{
+    at: string;
+    step: number | null;
+    kind: string;
+    sessionId: string | null;
+    activityId: string | null;
+    fallbackUsed: boolean;
+    matchedLlmErrorCategory: string | null;
+    sampleErrorSource: "learning_event" | "matched_llm_event" | "none";
+    reconstructionSource: "session_messages_and_prompt_config" | "event_only";
+    reconstructedPrompt: string;
+  }>;
   artifactHealth: {
     totalStudents: number;
     outline: ArtifactBucket;
@@ -655,6 +667,55 @@ export default function AdminPromptDiagnostics() {
               </table>
             </div>
             {data.recentFallbackSamples.length === 0 ? <small>目前時間窗內沒有 fallback 樣本。</small> : null}
+            <h4 style={{ margin: "12px 0 6px" }}>最近 fallback 近似送出內容（重建）</h4>
+            <small style={{ display: "block", marginBottom: 8, color: "#64748b" }}>
+              這裡顯示的是重建版本（由事件 + session 訊息 + prompt 設定推估），不是 provider 原始 request body。可用來快速定位哪一段上下文容易觸發 fallback。
+            </small>
+            <div style={{ overflowX: "auto" }}>
+              <table className="pro-table">
+                <thead>
+                  <tr>
+                    <th>時間</th>
+                    <th>Step/Kind</th>
+                    <th>錯誤分類</th>
+                    <th>重建來源</th>
+                    <th>重建內容</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.recentFallbackTraces.map((trace) => (
+                    <tr key={`trace:${trace.at}:${trace.sessionId ?? ""}:${trace.kind}`}>
+                      <td>{new Date(trace.at).toLocaleString("zh-TW", { hour12: false })}</td>
+                      <td>{`Step ${trace.step ?? "—"} / ${trace.kind}`}</td>
+                      <td>{trace.matchedLlmErrorCategory ?? "—"}</td>
+                      <td>{trace.reconstructionSource}</td>
+                      <td style={{ minWidth: 420 }}>
+                        <details>
+                          <summary style={{ cursor: "pointer" }}>查看重建內容（Session: {trace.sessionId ?? "—"}）</summary>
+                          <pre
+                            style={{
+                              whiteSpace: "pre-wrap",
+                              marginTop: 8,
+                              padding: 10,
+                              borderRadius: 8,
+                              background: "#f8fafc",
+                              border: "1px solid #e2e8f0",
+                              fontSize: 12,
+                              lineHeight: 1.5,
+                              maxHeight: 300,
+                              overflow: "auto"
+                            }}
+                          >
+                            {trace.reconstructedPrompt}
+                          </pre>
+                        </details>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {data.recentFallbackTraces.length === 0 ? <small>目前沒有可重建的 fallback trace。</small> : null}
 
             <hr style={{ border: 0, borderTop: "1px solid #e2e8f0", margin: "14px 0" }} />
             <h4 style={{ marginBottom: 6 }}>作品 Artifact 健康度</h4>
