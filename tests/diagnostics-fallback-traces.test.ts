@@ -29,7 +29,7 @@ function makeSession(): SessionState {
         originalQuestion: "子步驟 1-2：請找出三個關鍵字。",
         originalPrompt: "[system]\n你是國小寫作老師\n\n[user]\n請針對本輪內容給回饋",
         originalResponse: "已收到大家回覆，請繼續下一題",
-        rejectionReasons: ["generic_feedback_template", "feedback_contains_question"],
+        rejectionReasons: ["generic_feedback_template", "instruction_leak"],
         errorCategory: "other"
       }
     ],
@@ -95,7 +95,7 @@ test("diagnostics fallback traces: reconstructs readable prompt from session con
   assert.equal(traces[0]?.debugTraceSource, "session_event");
   assert.equal(traces[0]?.originalQuestion, "子步驟 1-2：請找出三個關鍵字。");
   assert.equal(traces[0]?.originalResponse, "已收到大家回覆，請繼續下一題");
-  assert.deepEqual(traces[0]?.rejectionReasons, ["generic_feedback_template", "feedback_contains_question"]);
+  assert.deepEqual(traces[0]?.rejectionReasons, ["generic_feedback_template", "instruction_leak"]);
 });
 
 test("diagnostics fallback traces: keeps event-only trace when session is unavailable", () => {

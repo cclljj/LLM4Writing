@@ -559,7 +559,7 @@ function getStep12FeedbackPrompt(session: SessionState, step: 1 | 2): string {
   const configured = prompts[String(step)]?.trim() || prompts.default?.trim();
   if (configured) return configured;
   return [
-    "你現在只負責「回饋」，禁止提出下一題或任何問句。",
+    "你現在只負責「回饋」，禁止新增「### **請回答以下問題**」區塊（下一題由系統第二階段產生）。",
     "回饋必須包含：1) 先肯定本輪進展；2) 指出下一輪要補強的具體點。",
     "禁止輸出空泛句（例如「已收到大家的回覆，整理得很好，請繼續下一題」或同義句）。",
     "請只輸出 JSON：{\"feedback\":\"...\"}，不要輸出其他文字。"

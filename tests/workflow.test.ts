@@ -186,6 +186,17 @@ test("Step1/2 feedback quality guard rejects premature future stage announcement
   );
 });
 
+test("Step1/2 feedback quality guard allows question marks in 建議回饋 and 重點摘要", () => {
+  assert.equal(
+    isStep12FeedbackQualityRisk(
+      "### **建議回饋**\n你們已經抓到主張核心了，這個理由可以再具體一點嗎？\n\n### **重點摘要**\n你們提出了主張、理由與例子，是否已經把關鍵詞定義清楚？\n\n### **下一步補強**\n請在目前子步驟內補上一個更具體的生活例子，讓主張更有說服力。",
+      1,
+      "1-4-2"
+    ),
+    false
+  );
+});
+
 test("sanitizeStudentFacingText keeps text intact and extracts feedback from JSON-ish content", () => {
   assert.equal(sanitizeStudentFacingText("兩位同學都非常棒，都"), "兩位同學都非常棒，都");
   assert.equal(sanitizeStudentFacingText('{"feedback":"大家分析得很清楚，而且"}'), "大家分析得很清楚，而且");
@@ -650,6 +661,8 @@ test("engine source includes two-stage Step1/2 observability and question source
   assert.ok(src.includes("step12RoundLogs"), "engine should record step12RoundLogs observability fields");
   assert.ok(src.includes("step12FallbackDebugTraces"), "engine should maintain step12 fallback debug trace fields");
   assert.ok(src.includes("step12RoundState"), "engine should keep step12RoundState for re-entry guard");
+  assert.ok(src.includes("禁止新增「### **請回答以下問題**」區塊"), "feedback stage should block only next-question section injection");
+  assert.equal(src.includes("禁止提出下一題或任何問句"), false, "feedback stage should allow question-form wording");
 });
 
 test("advanced stuck risk combines rejection, idle, Step3, and Step6 signals", () => {

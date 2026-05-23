@@ -473,7 +473,8 @@ Step1/2 第二段（下一題）JSON 契約（僅當使用 `subStepPrompts[nextS
 
 - LLM 應只輸出 JSON object，不加 Markdown code fence 或額外說明。
 - `feedback` 與 `nextQuestion` 必須為繁體中文。
-- 第一段 `feedback` 不可提出新問題；第二段 `nextQuestion` 不可夾帶回饋段落。
+- 第一段 `feedback` 不可新增獨立「下一題」段落（如 `### **請回答以下問題**`）；第二段 `nextQuestion` 不可夾帶回饋段落。
+- 第一段 `feedback` 的 `### **建議回饋**`、`### **重點摘要**`、`### **下一步補強**` 允許使用問句語氣與問號（`?` / `？`），但不得藉此繞過第二段題目生成機制。
 - `feedback` 應以學生可讀 Markdown 呈現三段：`### **建議回饋**`、`### **重點摘要**`、`### **下一步補強**`；三段內容不得省略。
 - Step1 的 `feedback` 在教師尚未切換前不得提到或暗示 Step2/步驟二/第二階段/蒐集資料，或 Step3/步驟三/第三階段/生成論點；Step2 的 `feedback` 在教師尚未切換前不得提到或暗示 Step3/步驟三/第三階段/生成論點。
 - `nextQuestion` 不可空白、不可照抄 prompt、不可寫「請依上一則 AI 提問作答」。
