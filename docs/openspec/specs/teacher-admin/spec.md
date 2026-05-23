@@ -251,6 +251,13 @@ The admin console SHALL provide Prompt/LLM diagnostics, KPI trends, and non-sens
 - **AND** each entry marks reconstruction source (`session_messages_and_prompt_config` or `event_only`)
 - **AND** the UI clearly states the content is reconstructed and not guaranteed to equal provider raw request payload
 
+#### Scenario: Diagnostics panel shows original prompt/response and rejection reasons
+
+- **GIVEN** recent fallback traces have matched session debug traces
+- **WHEN** the diagnostics panel renders fallback trace details
+- **THEN** each trace can show original question, original prompt text, original response text, and rejection reason list
+- **AND** when no debug trace exists, the panel still shows reconstructed content and marks source as `none`
+
 #### Scenario: Stable trend labels
 
 - **GIVEN** diagnostics renders course/class trend tables

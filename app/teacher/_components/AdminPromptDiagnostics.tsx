@@ -190,6 +190,11 @@ type DiagnosticsPayload = {
     sampleErrorSource: "learning_event" | "matched_llm_event" | "none";
     reconstructionSource: "session_messages_and_prompt_config" | "event_only";
     reconstructedPrompt: string;
+    originalQuestion: string | null;
+    originalPrompt: string | null;
+    originalResponse: string | null;
+    rejectionReasons: string[];
+    debugTraceSource: "session_event" | "none";
   }>;
   artifactHealth: {
     totalStudents: number;
@@ -678,8 +683,10 @@ export default function AdminPromptDiagnostics() {
                     <th>時間</th>
                     <th>Step/Kind</th>
                     <th>錯誤分類</th>
-                    <th>重建來源</th>
-                    <th>重建內容</th>
+                    <th>原始提問</th>
+                    <th>原始回覆</th>
+                    <th>被拒原因</th>
+                    <th>細節</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -688,10 +695,33 @@ export default function AdminPromptDiagnostics() {
                       <td>{new Date(trace.at).toLocaleString("zh-TW", { hour12: false })}</td>
                       <td>{`Step ${trace.step ?? "—"} / ${trace.kind}`}</td>
                       <td>{trace.matchedLlmErrorCategory ?? "—"}</td>
-                      <td>{trace.reconstructionSource}</td>
+                      <td>{trace.originalQuestion ?? "—"}</td>
+                      <td>{trace.originalResponse ?? "—"}</td>
+                      <td>{trace.rejectionReasons.length > 0 ? trace.rejectionReasons.join(", ") : "—"}</td>
                       <td style={{ minWidth: 420 }}>
                         <details>
-                          <summary style={{ cursor: "pointer" }}>查看重建內容（Session: {trace.sessionId ?? "—"}）</summary>
+                          <summary style={{ cursor: "pointer" }}>查看原始提問與重建內容（Session: {trace.sessionId ?? "—"}）</summary>
+                          <div style={{ marginTop: 8, marginBottom: 8, fontSize: 12, color: "#64748b" }}>
+                            debugTraceSource={trace.debugTraceSource} / reconstructionSource={trace.reconstructionSource}
+                          </div>
+                          {trace.originalPrompt ? (
+                            <pre
+                              style={{
+                                whiteSpace: "pre-wrap",
+                                marginTop: 8,
+                                padding: 10,
+                                borderRadius: 8,
+                                background: "#eef2ff",
+                                border: "1px solid #c7d2fe",
+                                fontSize: 12,
+                                lineHeight: 1.5,
+                                maxHeight: 260,
+                                overflow: "auto"
+                              }}
+                            >
+                              {trace.originalPrompt}
+                            </pre>
+                          ) : null}
                           <pre
                             style={{
                               whiteSpace: "pre-wrap",

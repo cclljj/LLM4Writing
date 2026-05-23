@@ -1,10 +1,10 @@
 import { cache } from "react";
 import postgres, { Sql, TransactionSql } from "postgres";
-import { ChatMessage, SessionState, Step12RoundLog } from "@/src/lib/types";
+import { ChatMessage, SessionState, Step12FallbackDebugTrace, Step12RoundLog } from "@/src/lib/types";
 import { getDatabaseUrl, getPostgresClientOptions, isDatabaseEnabled } from "@/src/lib/db-config";
 
 type MemoryStore = Map<string, SessionState>;
-type SessionCorePayload = Omit<SessionState, "messages" | "outlines" | "step3SubmittedOutlines" | "draftStep6" | "draftStep8" | "reports" | "step12RoundLogs">;
+type SessionCorePayload = Omit<SessionState, "messages" | "outlines" | "step3SubmittedOutlines" | "draftStep6" | "draftStep8" | "reports" | "step12RoundLogs" | "step12FallbackDebugTraces">;
 type SessionSummaryColumns = {
   workflow: string | null;
   activityId: string | null;
@@ -154,6 +154,18 @@ function normalizeStep12RoundLogs(input: unknown): Step12RoundLog[] {
     .map((item) => ({ ...item }));
 }
 
+function normalizeStep12FallbackDebugTraces(input: unknown): Step12FallbackDebugTrace[] {
+  if (!Array.isArray(input)) return [];
+  return input
+    .filter((item): item is Step12FallbackDebugTrace => Boolean(item && typeof item === "object"))
+    .map((item) => ({
+      ...item,
+      rejectionReasons: Array.isArray(item.rejectionReasons)
+        ? item.rejectionReasons.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+        : []
+    }));
+}
+
 function createEmptyReports() {
   return { step5: {}, step7: {}, step10: {} } as SessionState["reports"];
 }
@@ -167,6 +179,7 @@ function buildSessionCorePayload(session: SessionState): SessionCorePayload {
   delete rest.draftStep8;
   delete rest.reports;
   delete rest.step12RoundLogs;
+  delete rest.step12FallbackDebugTraces;
   return rest as SessionCorePayload;
 }
 
@@ -178,6 +191,7 @@ function mergeSessionParts(core: SessionCorePayload, parts: {
   draftStep8: Record<string, string>;
   reports: SessionState["reports"];
   step12RoundLogs: Step12RoundLog[];
+  step12FallbackDebugTraces: Step12FallbackDebugTrace[];
 }): SessionState {
   return {
     ...core,
@@ -187,7 +201,8 @@ function mergeSessionParts(core: SessionCorePayload, parts: {
     draftStep6: parts.draftStep6,
     draftStep8: parts.draftStep8,
     reports: parts.reports,
-    step12RoundLogs: parts.step12RoundLogs
+    step12RoundLogs: parts.step12RoundLogs,
+    step12FallbackDebugTraces: parts.step12FallbackDebugTraces
   };
 }
 
@@ -267,6 +282,23 @@ function mergeStep12RoundLogs(base: Step12RoundLog[] | undefined, incoming: Step
   return merged;
 }
 
+function mergeStep12FallbackDebugTraces(
+  base: Step12FallbackDebugTrace[] | undefined,
+  incoming: Step12FallbackDebugTrace[] | undefined
+): Step12FallbackDebugTrace[] {
+  const all = [...(base ?? []), ...(incoming ?? [])];
+  const seen = new Set<string>();
+  const merged: Step12FallbackDebugTrace[] = [];
+  for (const item of all.sort((a, b) => a.at.localeCompare(b.at))) {
+    const key = `${item.at}:${item.kind}:${item.step}:${item.substepKey}:${item.originalQuestion}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(item);
+  }
+  if (merged.length <= 120) return merged;
+  return merged.slice(merged.length - 120);
+}
+
 function mergeReports(base: SessionState["reports"], incoming: SessionState["reports"]): SessionState["reports"] {
   return {
     step5: mergeStringRecord(base.step5, incoming.step5),
@@ -294,6 +326,7 @@ function mergeSessionStates(latest: SessionState, incoming: SessionState): Sessi
     draftStep6: mergeStringRecord(latest.draftStep6, incoming.draftStep6),
     draftStep8: mergeStringRecord(latest.draftStep8, incoming.draftStep8),
     reports: mergeReports(latest.reports ?? createEmptyReports(), incoming.reports ?? createEmptyReports()),
+    step12FallbackDebugTraces: mergeStep12FallbackDebugTraces(latest.step12FallbackDebugTraces, incoming.step12FallbackDebugTraces),
     qualitySignals: {
       rejectedAnswerCounts: mergeNumberRecord(latest.qualitySignals?.rejectedAnswerCounts, incoming.qualitySignals?.rejectedAnswerCounts),
       rejectedAnswerLastAt: mergeIsoRecord(latest.qualitySignals?.rejectedAnswerLastAt, incoming.qualitySignals?.rejectedAnswerLastAt)
@@ -697,6 +730,7 @@ type SessionPartsById = Record<string, {
   draftStep8: Record<string, string>;
   reports: SessionState["reports"];
   step12RoundLogs: Step12RoundLog[];
+  step12FallbackDebugTraces: Step12FallbackDebugTrace[];
 }>;
 
 function defaultSessionParts(): SessionPartsById[string] {
@@ -707,7 +741,8 @@ function defaultSessionParts(): SessionPartsById[string] {
     draftStep6: {},
     draftStep8: {},
     reports: createEmptyReports(),
-    step12RoundLogs: []
+    step12RoundLogs: [],
+    step12FallbackDebugTraces: []
   };
 }
 
@@ -763,7 +798,11 @@ async function replaceSessionSplitRows(sql: Sql | TransactionSql, session: Sessi
     await sql`INSERT INTO llm4writing_session_reports ${sql(rows)}`;
   }
 
-  await sql`DELETE FROM llm4writing_session_events WHERE session_id = ${session.id} AND event_type = 'step12_round_log'`;
+  await sql`
+    DELETE FROM llm4writing_session_events
+    WHERE session_id = ${session.id}
+      AND event_type IN ('step12_round_log', 'step12_fallback_debug_trace')
+  `;
   const logs = normalizeStep12RoundLogs(session.step12RoundLogs);
   if (logs.length > 0) {
     const rows = logs.map((log, idx) => ({
@@ -772,6 +811,18 @@ async function replaceSessionSplitRows(sql: Sql | TransactionSql, session: Sessi
       event_key: `${idx}:${log.at}`,
       payload: JSON.stringify(log),
       at: log.at
+    }));
+    await sql`INSERT INTO llm4writing_session_events ${sql(rows)}`;
+  }
+
+  const fallbackDebugTraces = normalizeStep12FallbackDebugTraces(session.step12FallbackDebugTraces);
+  if (fallbackDebugTraces.length > 0) {
+    const rows = fallbackDebugTraces.map((trace, idx) => ({
+      session_id: session.id,
+      event_type: "step12_fallback_debug_trace",
+      event_key: `${idx}:${trace.at}:${trace.kind}:${trace.step}`,
+      payload: JSON.stringify(trace),
+      at: trace.at
     }));
     await sql`INSERT INTO llm4writing_session_events ${sql(rows)}`;
   }
@@ -806,7 +857,11 @@ function mergeLegacyPayloadParts(session: SessionState, parts: SessionPartsById[
       Object.keys(parts.reports.step10).length > 0
         ? parts.reports
         : (session.reports ?? createEmptyReports()),
-    step12RoundLogs: parts.step12RoundLogs.length > 0 ? parts.step12RoundLogs : normalizeStep12RoundLogs(session.step12RoundLogs)
+    step12RoundLogs: parts.step12RoundLogs.length > 0 ? parts.step12RoundLogs : normalizeStep12RoundLogs(session.step12RoundLogs),
+    step12FallbackDebugTraces:
+      parts.step12FallbackDebugTraces.length > 0
+        ? parts.step12FallbackDebugTraces
+        : normalizeStep12FallbackDebugTraces(session.step12FallbackDebugTraces)
   };
 }
 
@@ -861,15 +916,19 @@ async function fetchSessionPartsByIds(sql: Sql | TransactionSql, sessionIds: str
   const eventRows = await sql<EventRow[]>`
     SELECT session_id, event_type, payload, at
     FROM llm4writing_session_events
-    WHERE session_id IN ${sql(sessionIds)} AND event_type = 'step12_round_log'
+    WHERE session_id IN ${sql(sessionIds)} AND event_type IN ('step12_round_log', 'step12_fallback_debug_trace')
     ORDER BY session_id ASC, at ASC
   `;
   for (const row of eventRows) {
     result[row.session_id] ??= defaultSessionParts();
-    if (row.event_type !== "step12_round_log") continue;
     const payload = typeof row.payload === "string" ? JSON.parse(row.payload) : row.payload;
-    if (payload && typeof payload === "object") {
+    if (!payload || typeof payload !== "object") continue;
+    if (row.event_type === "step12_round_log") {
       result[row.session_id].step12RoundLogs.push(payload as Step12RoundLog);
+      continue;
+    }
+    if (row.event_type === "step12_fallback_debug_trace") {
+      result[row.session_id].step12FallbackDebugTraces.push(payload as Step12FallbackDebugTrace);
     }
   }
 

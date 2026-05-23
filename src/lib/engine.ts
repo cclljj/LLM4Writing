@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { ChatMessage, SessionState, StartSessionPayload, Step12RoundLog } from "@/src/lib/types";
+import { ChatMessage, SessionState, StartSessionPayload, Step12FallbackDebugTrace, Step12RoundLog } from "@/src/lib/types";
 import { STEP_DEFINITIONS, getModeByStep, getStepName } from "@/src/lib/spec";
 import { isLlmConfigured, llmChatCompletionText, LlmChatMessage } from "@/src/lib/llm-client";
 import { buildStudentCourseContext } from "@/src/lib/llm-context";
@@ -14,7 +14,7 @@ import {
 import { recordRejectedAnswerSignal } from "@/src/lib/learning-diagnostics";
 import { classifyLlmError } from "@/src/lib/llm-observability";
 import { PersistedErrorCategory, recordLearningEvent } from "@/src/lib/store";
-import { isStep12FeedbackQualityRisk } from "@/src/lib/step12-feedback-quality";
+import { getStep12FeedbackRiskReasons } from "@/src/lib/step12-feedback-quality";
 import {
   buildStep10SectionPrompt,
   composeStep10Report,
@@ -99,6 +99,7 @@ export function createSession(payload: StartSessionPayload): SessionState {
     qualitySignals: { rejectedAnswerCounts: {}, rejectedAnswerLastAt: {} },
     artifactSignals: { outlineUpdatedAt: {}, draftStep6UpdatedAt: {}, draftStep8UpdatedAt: {} },
     step12RoundLogs: [],
+    step12FallbackDebugTraces: [],
     step12RoundState: { completedGateKeys: [] },
     groupGate: {},
     reflectionIndex: Object.fromEntries(participants.map((id) => [id, 0])),
@@ -181,6 +182,9 @@ function normalizeSessionRuntimeShape(session: SessionState): void {
   }
   if (!Array.isArray(session.step12RoundLogs)) {
     session.step12RoundLogs = [];
+  }
+  if (!Array.isArray(session.step12FallbackDebugTraces)) {
+    session.step12FallbackDebugTraces = [];
   }
   if (!session.step12RoundState || typeof session.step12RoundState !== "object") {
     session.step12RoundState = { completedGateKeys: [] };
@@ -364,6 +368,18 @@ function compactWhitespace(text: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
 
+function truncateForTrace(text: string, maxChars = 6000): string {
+  const normalized = text.trim();
+  if (normalized.length <= maxChars) return normalized;
+  return `${normalized.slice(0, maxChars - 1)}…`;
+}
+
+function buildOriginalPromptText(messages: LlmChatMessage[]): string {
+  return messages
+    .map((message) => `[${message.role}]\n${message.content}`)
+    .join("\n\n");
+}
+
 function buildStep12StepContext(session: SessionState, step: 1 | 2, userId: string): {
   essayTitle: string;
   currentSubstepKey: string;
@@ -489,14 +505,19 @@ function buildStep12FallbackFeedback(session: SessionState, step: 1 | 2, substep
   return `${base} 你們剛才提到「${latestStudentSnippet}」，這是可延伸的重點，建議沿著這個重點補強論證。`;
 }
 
-function isStep12QuestionQualityRisk(text: string): boolean {
+function getStep12QuestionRiskReasons(text: string): string[] {
+  const reasons: string[] = [];
   const q = compactWhitespace(text);
-  if (!isUsableNextQuestion(q)) return true;
-  if (q.length < 8) return true;
-  if (!/[？?]$/.test(q)) return true;
-  if (q.includes("\n")) return true;
-  if (/提問規則|子步驟 Prompt|請依上一則 AI 提問作答|questionBanks|stepPrompts/i.test(q)) return true;
-  return false;
+  if (!isUsableNextQuestion(q)) reasons.push("question_not_usable");
+  if (q.length < 8) reasons.push("question_too_short");
+  if (!/[？?]$/.test(q)) reasons.push("question_missing_terminal_question_mark");
+  if (q.includes("\n")) reasons.push("question_contains_newline");
+  if (/提問規則|子步驟 Prompt|請依上一則 AI 提問作答|questionBanks|stepPrompts/i.test(q)) reasons.push("question_instruction_leak");
+  return Array.from(new Set(reasons));
+}
+
+function isStep12QuestionQualityRisk(text: string): boolean {
+  return getStep12QuestionRiskReasons(text).length > 0;
 }
 
 function getRandomQuestionFromBank(session: SessionState, key: string): string | undefined {
@@ -576,6 +597,7 @@ async function generateStep12Feedback(
   llmAttempts: number;
   usedFallback: boolean;
   fallbackErrorCategory?: PersistedErrorCategory;
+  fallbackDebugTrace?: Step12FallbackDebugTrace;
 }> {
   const context = buildStep12StepContext(session, step, userId);
   const fallback = buildStep12FallbackFeedback(session, step, context.currentSubstepKey);
@@ -603,8 +625,9 @@ async function generateStep12Feedback(
         `本步驟最近對話：\n${context.sameStepRecent || "(無)"}\n\n` +
         `課程歷史（節錄）：\n${context.crossStepContext || "(無)"}\n\n` +
         `目前事件：all members answered step ${step} substep ${context.currentSubstepKey}`
-    }
+      }
   ];
+  const originalPrompt = truncateForTrace(buildOriginalPromptText(baseMessages));
 
   if (!isLlmConfigured()) {
     return {
@@ -612,12 +635,24 @@ async function generateStep12Feedback(
       source: "fallback",
       llmAttempts: 0,
       usedFallback: true,
-      fallbackErrorCategory: "other"
+      fallbackErrorCategory: "other",
+      fallbackDebugTrace: {
+        at: now(),
+        step,
+        kind: "step12_feedback",
+        substepKey: context.currentSubstepKey,
+        originalQuestion: context.currentQuestion,
+        originalPrompt,
+        originalResponse: "(llm_not_configured)",
+        rejectionReasons: ["llm_not_configured"],
+        errorCategory: "other"
+      }
     };
   }
 
   let llmAttempts = 0;
   let fallbackErrorCategory: PersistedErrorCategory | undefined;
+  let fallbackDebugTrace: Step12FallbackDebugTrace | undefined;
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     llmAttempts = attempt;
     try {
@@ -628,12 +663,35 @@ async function generateStep12Feedback(
         telemetry: { sessionId: session.id, activityId: session.activityId, step, label: "step12_feedback" }
       });
       const normalized = sanitizeStep12Feedback(raw, fallback);
-      if (!isStep12FeedbackQualityRisk(normalized, step, context.currentSubstepKey)) {
+      const rejectionReasons = getStep12FeedbackRiskReasons(normalized, step, context.currentSubstepKey);
+      if (rejectionReasons.length === 0) {
         return { feedbackText: normalized, source: "llm", llmAttempts, usedFallback: false };
       }
       fallbackErrorCategory = fallbackErrorCategory ?? "other";
+      fallbackDebugTrace = {
+        at: now(),
+        step,
+        kind: "step12_feedback",
+        substepKey: context.currentSubstepKey,
+        originalQuestion: context.currentQuestion,
+        originalPrompt,
+        originalResponse: truncateForTrace(raw),
+        rejectionReasons,
+        errorCategory: "other"
+      };
     } catch (error) {
       fallbackErrorCategory = classifyLlmError(error);
+      fallbackDebugTrace = {
+        at: now(),
+        step,
+        kind: "step12_feedback",
+        substepKey: context.currentSubstepKey,
+        originalQuestion: context.currentQuestion,
+        originalPrompt,
+        originalResponse: `(llm_error:${fallbackErrorCategory})`,
+        rejectionReasons: ["llm_call_failed"],
+        errorCategory: fallbackErrorCategory
+      };
       // Continue to next attempt; fallback handled after loop.
     }
   }
@@ -643,7 +701,20 @@ async function generateStep12Feedback(
     source: "fallback",
     llmAttempts,
     usedFallback: true,
-    fallbackErrorCategory: fallbackErrorCategory ?? "other"
+    fallbackErrorCategory: fallbackErrorCategory ?? "other",
+    fallbackDebugTrace:
+      fallbackDebugTrace ??
+      {
+        at: now(),
+        step,
+        kind: "step12_feedback",
+        substepKey: context.currentSubstepKey,
+        originalQuestion: context.currentQuestion,
+        originalPrompt,
+        originalResponse: "(no_response_captured)",
+        rejectionReasons: ["unknown_fallback_reason"],
+        errorCategory: fallbackErrorCategory ?? "other"
+      }
   };
 }
 
@@ -659,7 +730,9 @@ async function generateStep12NextQuestion(
   llmAttempts: number;
   usedFallback: boolean;
   fallbackErrorCategory?: PersistedErrorCategory;
+  fallbackDebugTrace?: Step12FallbackDebugTrace;
 }> {
+  const context = buildStep12StepContext(session, step, userId);
   const subStepPrompt = session.promptConfig.subStepPrompts?.[nextSubstepKey]?.trim() ?? "";
   if (!subStepPrompt) {
     const bankQuestion = getRandomQuestionFromBank(session, nextSubstepKey);
@@ -671,7 +744,18 @@ async function generateStep12NextQuestion(
       source: "fallback",
       llmAttempts: 0,
       usedFallback: true,
-      fallbackErrorCategory: "other"
+      fallbackErrorCategory: "other",
+      fallbackDebugTrace: {
+        at: now(),
+        step,
+        kind: "step12_next_question",
+        substepKey: nextSubstepKey,
+        originalQuestion: context.currentQuestion,
+        originalPrompt: "(no_llm_request_substep_prompt_missing)",
+        originalResponse: "(no_llm_response_substep_prompt_missing)",
+        rejectionReasons: ["substep_prompt_missing_and_question_bank_empty"],
+        errorCategory: "other"
+      }
     };
   }
 
@@ -682,11 +766,21 @@ async function generateStep12NextQuestion(
       source: "fallback",
       llmAttempts: 0,
       usedFallback: true,
-      fallbackErrorCategory: "other"
+      fallbackErrorCategory: "other",
+      fallbackDebugTrace: {
+        at: now(),
+        step,
+        kind: "step12_next_question",
+        substepKey: nextSubstepKey,
+        originalQuestion: context.currentQuestion,
+        originalPrompt: "(llm_not_configured_prompt_not_sent)",
+        originalResponse: "(llm_not_configured)",
+        rejectionReasons: ["llm_not_configured"],
+        errorCategory: "other"
+      }
     };
   }
 
-  const context = buildStep12StepContext(session, step, userId);
   const stepPrompt = session.promptConfig.stepPrompts[String(step)] ?? "";
   const baseMessages: LlmChatMessage[] = [
     {
@@ -707,9 +801,11 @@ async function generateStep12NextQuestion(
         `請產生下一題（僅一個完整問句，需以「？」結尾）。`
     }
   ];
+  const originalPrompt = truncateForTrace(buildOriginalPromptText(baseMessages));
 
   let llmAttempts = 0;
   let fallbackErrorCategory: PersistedErrorCategory | undefined;
+  let fallbackDebugTrace: Step12FallbackDebugTrace | undefined;
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     llmAttempts = attempt;
     try {
@@ -721,12 +817,35 @@ async function generateStep12NextQuestion(
       });
       const parsed = parseStructuredStepAiResponse(raw) ?? splitAiFeedbackAndQuestion(raw);
       const nextQuestion = compactWhitespace(parsed.nextQuestion ?? "");
-      if (!isStep12QuestionQualityRisk(nextQuestion)) {
+      const rejectionReasons = getStep12QuestionRiskReasons(nextQuestion);
+      if (rejectionReasons.length === 0) {
         return { nextQuestion, source: "subStepPrompt_llm", llmAttempts, usedFallback: false };
       }
       fallbackErrorCategory = fallbackErrorCategory ?? "other";
+      fallbackDebugTrace = {
+        at: now(),
+        step,
+        kind: "step12_next_question",
+        substepKey: nextSubstepKey,
+        originalQuestion: context.currentQuestion,
+        originalPrompt,
+        originalResponse: truncateForTrace(raw),
+        rejectionReasons,
+        errorCategory: "other"
+      };
     } catch (error) {
       fallbackErrorCategory = classifyLlmError(error);
+      fallbackDebugTrace = {
+        at: now(),
+        step,
+        kind: "step12_next_question",
+        substepKey: nextSubstepKey,
+        originalQuestion: context.currentQuestion,
+        originalPrompt,
+        originalResponse: `(llm_error:${fallbackErrorCategory})`,
+        rejectionReasons: ["llm_call_failed"],
+        errorCategory: fallbackErrorCategory
+      };
       // Continue to retry.
     }
   }
@@ -736,7 +855,20 @@ async function generateStep12NextQuestion(
     source: "fallback",
     llmAttempts,
     usedFallback: true,
-    fallbackErrorCategory: fallbackErrorCategory ?? "other"
+    fallbackErrorCategory: fallbackErrorCategory ?? "other",
+    fallbackDebugTrace:
+      fallbackDebugTrace ??
+      {
+        at: now(),
+        step,
+        kind: "step12_next_question",
+        substepKey: nextSubstepKey,
+        originalQuestion: context.currentQuestion,
+        originalPrompt,
+        originalResponse: "(no_response_captured)",
+        rejectionReasons: ["unknown_fallback_reason"],
+        errorCategory: fallbackErrorCategory ?? "other"
+      }
   };
 }
 
@@ -745,6 +877,14 @@ function appendStep12RoundLog(session: SessionState, log: Step12RoundLog): void 
   session.step12RoundLogs.push(log);
   if (session.step12RoundLogs.length > 60) {
     session.step12RoundLogs.splice(0, session.step12RoundLogs.length - 60);
+  }
+}
+
+function appendStep12FallbackDebugTrace(session: SessionState, trace: Step12FallbackDebugTrace): void {
+  session.step12FallbackDebugTraces = session.step12FallbackDebugTraces ?? [];
+  session.step12FallbackDebugTraces.push(trace);
+  if (session.step12FallbackDebugTraces.length > 120) {
+    session.step12FallbackDebugTraces.splice(0, session.step12FallbackDebugTraces.length - 120);
   }
 }
 
@@ -1371,6 +1511,7 @@ export async function sendStudentMessage(
         let llmAttemptCountQuestion = 0;
         let questionUsedFallback = false;
         let questionFallbackErrorCategory: PersistedErrorCategory | undefined;
+        let questionFallbackDebugTrace: Step12FallbackDebugTrace | undefined;
         let nextQuestion: string | undefined;
 
         if (nextSubStepKey) {
@@ -1385,6 +1526,7 @@ export async function sendStudentMessage(
           llmAttemptCountQuestion = questionResult.llmAttempts;
           questionUsedFallback = questionResult.usedFallback;
           questionFallbackErrorCategory = questionResult.fallbackErrorCategory;
+          questionFallbackDebugTrace = questionResult.fallbackDebugTrace;
           nextQuestion = questionResult.nextQuestion;
         }
 
@@ -1427,6 +1569,9 @@ export async function sendStudentMessage(
           createdAt: roundCompletedAt
         }).catch(() => undefined);
         if (feedbackResult.usedFallback) {
+          if (feedbackResult.fallbackDebugTrace) {
+            appendStep12FallbackDebugTrace(result.session, feedbackResult.fallbackDebugTrace);
+          }
           void recordLearningEvent({
             sessionId: result.session.id,
             activityId: result.session.activityId,
@@ -1438,6 +1583,9 @@ export async function sendStudentMessage(
           }).catch(() => undefined);
         }
         if (questionUsedFallback) {
+          if (questionFallbackDebugTrace) {
+            appendStep12FallbackDebugTrace(result.session, questionFallbackDebugTrace);
+          }
           void recordLearningEvent({
             sessionId: result.session.id,
             activityId: result.session.activityId,

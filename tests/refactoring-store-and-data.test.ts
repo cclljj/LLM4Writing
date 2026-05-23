@@ -51,13 +51,27 @@ test("store behavior: save/get/count/list roundtrip works", async () => {
   const sid = `t-store-${Date.now()}-${Math.random()}`;
   const session = makeSession(sid, {
     activityId: "oc-test-store",
-    messages: [{ id: "m1", role: "student", userId: "s1", step: 1, text: "hello", at: new Date().toISOString() }]
+    messages: [{ id: "m1", role: "student", userId: "s1", step: 1, text: "hello", at: new Date().toISOString() }],
+    step12FallbackDebugTraces: [
+      {
+        at: new Date().toISOString(),
+        step: 1,
+        kind: "step12_feedback",
+        substepKey: "1-1",
+        originalQuestion: "子步驟 1-1：這篇文章的文體是什麼？",
+        originalPrompt: "[system]...\n[user]...",
+        originalResponse: "已收到大家回覆，請繼續下一題",
+        rejectionReasons: ["generic_feedback_template"],
+        errorCategory: "other"
+      }
+    ]
   });
 
   await saveSession(session);
   const fetched = await getSession(sid);
   assert.ok(fetched, "session should be retrievable after save");
   assert.equal(fetched?.id, sid);
+  assert.equal(fetched?.step12FallbackDebugTraces?.length, 1, "fallback debug traces should roundtrip through store");
 
   const all = await listSessions({ limit: 1, offset: 0 });
   assert.ok(all.length >= 1);

@@ -15,6 +15,11 @@ export type RecentFallbackTrace = {
   sampleErrorSource: FallbackTraceErrorSource;
   reconstructionSource: FallbackTraceReconstructionSource;
   reconstructedPrompt: string;
+  originalQuestion: string | null;
+  originalPrompt: string | null;
+  originalResponse: string | null;
+  rejectionReasons: string[];
+  debugTraceSource: "session_event" | "none";
 };
 
 function truncate(text: string, maxChars: number): string {
@@ -137,6 +142,31 @@ function buildReconstructedPrompt(fallbackEvent: PersistedEventRow, session?: Se
   };
 }
 
+function matchFallbackDebugTrace(
+  session: SessionState | undefined,
+  fallbackEvent: PersistedEventRow
+): NonNullable<SessionState["step12FallbackDebugTraces"]>[number] | undefined {
+  const traces = Array.isArray(session?.step12FallbackDebugTraces) ? session.step12FallbackDebugTraces : [];
+  if (traces.length === 0) return undefined;
+  const fallbackKinds =
+    fallbackEvent.kind === "step12_round"
+      ? (["step12_feedback", "step12_next_question"] as const)
+      : ([fallbackEvent.kind] as const);
+  const fallbackMs = fallbackEvent.created_at.getTime();
+  return traces
+    .filter((trace) => fallbackKinds.includes(trace.kind))
+    .filter((trace) => trace.step === fallbackEvent.step)
+    .filter((trace) => {
+      const traceMs = new Date(trace.at).getTime();
+      return Number.isFinite(traceMs) && Math.abs(traceMs - fallbackMs) <= 5 * 60 * 1000;
+    })
+    .sort((a, b) => {
+      const aDiff = Math.abs(new Date(a.at).getTime() - fallbackMs);
+      const bDiff = Math.abs(new Date(b.at).getTime() - fallbackMs);
+      return aDiff - bDiff;
+    })[0];
+}
+
 export function buildRecentFallbackTraces(input: {
   learningEvents: PersistedEventRow[];
   llmEvents: PersistedEventRow[];
@@ -176,6 +206,7 @@ export function buildRecentFallbackTraces(input: {
 
     const session = fallbackEvent.session_id ? sessionById.get(fallbackEvent.session_id) : undefined;
     const reconstructed = buildReconstructedPrompt(fallbackEvent, session);
+    const matchedDebugTrace = matchFallbackDebugTrace(session, fallbackEvent);
     return {
       at: fallbackEvent.created_at.toISOString(),
       step: fallbackEvent.step ?? null,
@@ -186,7 +217,12 @@ export function buildRecentFallbackTraces(input: {
       matchedLlmErrorCategory: ownCategory ?? matched?.error_category ?? null,
       sampleErrorSource: ownCategory ? "learning_event" : matched?.error_category ? "matched_llm_event" : "none",
       reconstructionSource: reconstructed.source,
-      reconstructedPrompt: reconstructed.prompt
+      reconstructedPrompt: reconstructed.prompt,
+      originalQuestion: matchedDebugTrace?.originalQuestion ?? null,
+      originalPrompt: matchedDebugTrace?.originalPrompt ?? null,
+      originalResponse: matchedDebugTrace?.originalResponse ?? null,
+      rejectionReasons: matchedDebugTrace?.rejectionReasons ?? [],
+      debugTraceSource: matchedDebugTrace ? "session_event" : "none"
     };
   });
 }

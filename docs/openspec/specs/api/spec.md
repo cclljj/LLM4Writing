@@ -228,6 +228,13 @@ The system SHALL expose admin/course management APIs with role-sensitive visibil
 - **AND** reconstructed prompt text is explicitly marked as reconstruction (not guaranteed to be provider raw request body)
 - **AND** when session context is unavailable, the trace still returns event-only reconstruction metadata
 
+#### Scenario: Recent fallback traces include original prompt/response and rejection reasons when available
+
+- **GIVEN** Step1/2 fallback debug traces are persisted in session events
+- **WHEN** diagnostics recent fallback traces are assembled
+- **THEN** each matched trace includes `originalQuestion`, `originalPrompt`, `originalResponse`, and `rejectionReasons`
+- **AND** `debugTraceSource` reports `session_event` when matched, otherwise `none`
+
 #### Scenario: Step3 teacher advance backfills legacy completion evidence
 
 - **GIVEN** a Step3 group was completed before newer gate signals were introduced

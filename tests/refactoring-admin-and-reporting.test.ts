@@ -82,8 +82,11 @@ test("source-guard: diagnostics route still exposes fallbackMetricsSource field"
   const { fileURLToPath } = await import("node:url");
   const thisDir = dirname(fileURLToPath(import.meta.url));
   const src = readFileSync(resolve(thisDir, "../app/api/admin/diagnostics/route.ts"), "utf8");
+  const traceBuilder = readFileSync(resolve(thisDir, "../src/lib/diagnostics-fallback-traces.ts"), "utf8");
   assert.ok(src.includes("fallbackMetricsSource"));
   assert.ok(src.includes("buildRecentFallbackTraces"), "diagnostics should construct recent fallback traces");
   assert.ok(src.includes("sampleErrorSource"), "fallback sample should expose category source");
   assert.ok(src.includes("recentFallbackTraces"), "diagnostics response should expose reconstructed trace list");
+  assert.ok(traceBuilder.includes("originalPrompt"), "diagnostics trace should include original prompt text when available");
+  assert.ok(traceBuilder.includes("rejectionReasons"), "diagnostics trace should include rejection reasons when available");
 });

@@ -648,6 +648,7 @@ test("engine source includes two-stage Step1/2 observability and question source
   assert.ok(src.includes("generateStep12NextQuestion"), "engine should have stage-2 question generator");
   assert.ok(src.includes('"questionBank_random"'), "engine should track questionBank_random source");
   assert.ok(src.includes("step12RoundLogs"), "engine should record step12RoundLogs observability fields");
+  assert.ok(src.includes("step12FallbackDebugTraces"), "engine should maintain step12 fallback debug trace fields");
   assert.ok(src.includes("step12RoundState"), "engine should keep step12RoundState for re-entry guard");
 });
 

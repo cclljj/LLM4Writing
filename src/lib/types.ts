@@ -79,6 +79,18 @@ export interface Step12RoundLog {
   at: string;
 }
 
+export interface Step12FallbackDebugTrace {
+  at: string;
+  step: 1 | 2;
+  kind: "step12_feedback" | "step12_next_question";
+  substepKey: string;
+  originalQuestion: string;
+  originalPrompt: string;
+  originalResponse: string;
+  rejectionReasons: string[];
+  errorCategory?: "timeout" | "truncation" | "parse_fail" | "other";
+}
+
 export interface Step12RoundState {
   inFlightGateKey?: string;
   completedGateKeys?: string[];
@@ -96,6 +108,7 @@ export interface SessionState {
   qualitySignals?: QualitySignals;
   artifactSignals?: ArtifactSignals;
   step12RoundLogs?: Step12RoundLog[];
+  step12FallbackDebugTraces?: Step12FallbackDebugTrace[];
   step12RoundState?: Step12RoundState;
   groupGate: Record<string, string[]>;
   reflectionIndex: Record<string, number>;

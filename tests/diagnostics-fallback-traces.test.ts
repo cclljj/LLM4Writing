@@ -20,6 +20,19 @@ function makeSession(): SessionState {
     qualitySignals: { rejectedAnswerCounts: {}, rejectedAnswerLastAt: {} },
     artifactSignals: { outlineUpdatedAt: {}, draftStep6UpdatedAt: {}, draftStep8UpdatedAt: {} },
     step12RoundLogs: [],
+    step12FallbackDebugTraces: [
+      {
+        at: "2026-05-23T10:03:59.000Z",
+        step: 1,
+        kind: "step12_feedback",
+        substepKey: "1-2",
+        originalQuestion: "子步驟 1-2：請找出三個關鍵字。",
+        originalPrompt: "[system]\n你是國小寫作老師\n\n[user]\n請針對本輪內容給回饋",
+        originalResponse: "已收到大家回覆，請繼續下一題",
+        rejectionReasons: ["generic_feedback_template", "feedback_contains_question"],
+        errorCategory: "other"
+      }
+    ],
     step12RoundState: { completedGateKeys: [] },
     groupGate: { "1-2": [] },
     reflectionIndex: { stu1: 0, stu2: 0 },
@@ -79,6 +92,10 @@ test("diagnostics fallback traces: reconstructs readable prompt from session con
   assert.ok(traces[0]?.reconstructedPrompt.includes("[user]"));
   assert.ok(traces[0]?.reconstructedPrompt.includes("手機使用與自律"));
   assert.ok(traces[0]?.reconstructedPrompt.includes("子步驟 1-2"));
+  assert.equal(traces[0]?.debugTraceSource, "session_event");
+  assert.equal(traces[0]?.originalQuestion, "子步驟 1-2：請找出三個關鍵字。");
+  assert.equal(traces[0]?.originalResponse, "已收到大家回覆，請繼續下一題");
+  assert.deepEqual(traces[0]?.rejectionReasons, ["generic_feedback_template", "feedback_contains_question"]);
 });
 
 test("diagnostics fallback traces: keeps event-only trace when session is unavailable", () => {
@@ -92,4 +109,5 @@ test("diagnostics fallback traces: keeps event-only trace when session is unavai
   assert.equal(traces.length, 1);
   assert.equal(traces[0]?.reconstructionSource, "event_only");
   assert.ok(traces[0]?.reconstructedPrompt.includes("[reconstructed=false]"));
+  assert.equal(traces[0]?.debugTraceSource, "none");
 });
