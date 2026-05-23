@@ -8,7 +8,6 @@ export function getStep12FeedbackRiskReasons(text: string, step?: 1 | 2, substep
   if (/^已收到.*回覆.*整理得很好.*下一題/.test(trimmed)) reasons.push("generic_feedback_template");
   if (/```|^\{+|\}+$/m.test(trimmed)) reasons.push("json_shell_or_code_fence");
   if (/"feedback"|nextQuestion|\"question\"|json/i.test(trimmed)) reasons.push("json_key_leak");
-  if (/[？?]/.test(trimmed)) reasons.push("feedback_contains_question");
   if (/請回答以下問題|nextQuestion|子步驟\s*\d-\d/.test(trimmed)) reasons.push("instruction_leak");
   if (/[，、：；]$/.test(trimmed)) reasons.push("incomplete_ending_punctuation");
   if (/(而且|並且|所以|但是|例如|像是|包含|以及)$/.test(trimmed)) reasons.push("incomplete_connective_ending");
