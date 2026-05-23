@@ -6,6 +6,7 @@ import { requireStudentInSession } from "@/src/lib/api-helpers";
 import { buildStep10LlmInput, generateStep10ReportChunkedText, recordStep10Report } from "@/src/lib/engine";
 import { recordStreamingCall } from "@/src/lib/llm-stats";
 import { classifyLlmError } from "@/src/lib/llm-observability";
+import { appendFallbackDebugTrace, buildPromptText, truncateTraceText } from "@/src/lib/fallback-debug-trace";
 
 /**
  * SSE-streamed endpoint for the Step 10 final report (#241).
@@ -55,12 +56,22 @@ export async function POST(request: NextRequest) {
         }
 
         const { messages, fallback } = buildStep10LlmInput(session, user.username);
+        const originalPrompt = truncateTraceText(buildPromptText(messages));
         const collected: string[] = [];
 
         if (!isLlmConfigured()) {
           send({ type: "chunk", text: fallback });
           collected.push(fallback);
           usedFallback = true;
+          appendFallbackDebugTrace(session, {
+            at: new Date().toISOString(),
+            step: 10,
+            kind: "fallback",
+            originalPrompt,
+            originalResponse: "(llm_not_configured)",
+            rejectionReasons: ["llm_not_configured"],
+            errorCategory: "other"
+          });
           void recordLearningEvent({
             sessionId: session.id,
             activityId: session.activityId,
@@ -87,13 +98,23 @@ export async function POST(request: NextRequest) {
               collected.push(fallback);
               send({ type: "chunk", text: fallback });
               usedFallback = true;
+              const category = classifyLlmError(error);
+              appendFallbackDebugTrace(session, {
+                at: new Date().toISOString(),
+                step: 10,
+                kind: "fallback",
+                originalPrompt,
+                originalResponse: `(llm_error:${category})`,
+                rejectionReasons: ["llm_call_failed"],
+                errorCategory: category
+              });
               void recordLearningEvent({
                 sessionId: session.id,
                 activityId: session.activityId,
                 step: 10,
                 kind: "fallback",
                 fallbackUsed: true,
-                errorCategory: classifyLlmError(error)
+                errorCategory: category
               }).catch(() => undefined);
             }
           }
@@ -116,10 +137,37 @@ export async function POST(request: NextRequest) {
         // Hard guarantee for Step 10: even when LLM/streaming fails, persist a
         // readable fallback so students never end up at Step 10 with empty output.
         try {
-          const { fallback } = buildStep10LlmInput(session, user.username);
+          const { messages, fallback } = buildStep10LlmInput(session, user.username);
+          const category = classifyLlmError(err);
+          appendFallbackDebugTrace(session, {
+            at: new Date().toISOString(),
+            step: 10,
+            kind: "fallback",
+            originalPrompt: truncateTraceText(buildPromptText(messages)),
+            originalResponse: `(route_stream_error:${category})`,
+            rejectionReasons: ["step10_stream_route_error"],
+            errorCategory: category
+          });
           const safeReport = normalizeFormalLlmText(fallback, { fallback });
           recordStep10Report(session, user.username, safeReport);
           await saveSession(session);
+          void recordLearningEvent({
+            sessionId: session.id,
+            activityId: session.activityId,
+            step: 10,
+            kind: "fallback",
+            fallbackUsed: true,
+            errorCategory: category
+          }).catch(() => undefined);
+          void recordLearningEvent({
+            sessionId: session.id,
+            activityId: session.activityId,
+            step: 10,
+            kind: "step10_report",
+            latencyMs: Date.now() - startedAt,
+            fallbackUsed: true,
+            errorCategory: category
+          }).catch(() => undefined);
           send({ type: "chunk", text: safeReport });
           send({ type: "done", session });
         } catch {

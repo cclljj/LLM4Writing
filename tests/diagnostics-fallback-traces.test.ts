@@ -111,3 +111,42 @@ test("diagnostics fallback traces: keeps event-only trace when session is unavai
   assert.ok(traces[0]?.reconstructedPrompt.includes("[reconstructed=false]"));
   assert.equal(traces[0]?.debugTraceSource, "none");
 });
+
+test("diagnostics fallback traces: non-step1/2 fallback event can attach nearest generic fallback debug trace", () => {
+  const session = makeSession();
+  session.step12FallbackDebugTraces = [
+    {
+      at: "2026-05-23T10:05:30.000Z",
+      step: 3,
+      kind: "fallback",
+      originalPrompt: "[system]\nstep3",
+      originalResponse: "(llm_error:timeout)",
+      rejectionReasons: ["llm_call_failed"],
+      errorCategory: "timeout"
+    }
+  ];
+  const learningEvents: PersistedEventRow[] = [
+    {
+      id: "ev-3",
+      session_id: "s-1",
+      activity_id: "ac-1",
+      step: 3,
+      kind: "step3_response",
+      latency_ms: 2000,
+      fallback_used: true,
+      error_category: "timeout",
+      created_at: new Date("2026-05-23T10:06:00.000Z")
+    }
+  ];
+  const traces = buildRecentFallbackTraces({
+    learningEvents,
+    llmEvents: [],
+    sessions: [session],
+    limit: 5
+  });
+
+  assert.equal(traces.length, 1);
+  assert.equal(traces[0]?.debugTraceSource, "session_event");
+  assert.equal(traces[0]?.originalResponse, "(llm_error:timeout)");
+  assert.deepEqual(traces[0]?.rejectionReasons, ["llm_call_failed"]);
+});

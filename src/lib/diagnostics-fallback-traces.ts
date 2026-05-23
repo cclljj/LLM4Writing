@@ -148,23 +148,35 @@ function matchFallbackDebugTrace(
 ): NonNullable<SessionState["step12FallbackDebugTraces"]>[number] | undefined {
   const traces = Array.isArray(session?.step12FallbackDebugTraces) ? session.step12FallbackDebugTraces : [];
   if (traces.length === 0) return undefined;
-  const fallbackKinds =
-    fallbackEvent.kind === "step12_round"
-      ? (["step12_feedback", "step12_next_question"] as const)
-      : ([fallbackEvent.kind] as const);
   const fallbackMs = fallbackEvent.created_at.getTime();
-  return traces
-    .filter((trace) => fallbackKinds.includes(trace.kind))
+  const stepMatched = traces
     .filter((trace) => trace.step === fallbackEvent.step)
     .filter((trace) => {
       const traceMs = new Date(trace.at).getTime();
       return Number.isFinite(traceMs) && Math.abs(traceMs - fallbackMs) <= 5 * 60 * 1000;
+    });
+  if (stepMatched.length === 0) return undefined;
+
+  const scored = stepMatched
+    .map((trace) => {
+      const diff = Math.abs(new Date(trace.at).getTime() - fallbackMs);
+      let kindScore = 0;
+      if (fallbackEvent.kind === "step12_round") {
+        if (trace.kind === "step12_feedback" || trace.kind === "step12_next_question") kindScore = 3;
+      } else if (trace.kind === fallbackEvent.kind) {
+        kindScore = 4;
+      } else if (fallbackEvent.kind !== "fallback" && trace.kind === "fallback") {
+        kindScore = 2;
+      } else if (fallbackEvent.kind === "fallback") {
+        kindScore = 1;
+      }
+      return { trace, diff, kindScore };
     })
     .sort((a, b) => {
-      const aDiff = Math.abs(new Date(a.at).getTime() - fallbackMs);
-      const bDiff = Math.abs(new Date(b.at).getTime() - fallbackMs);
-      return aDiff - bDiff;
-    })[0];
+      if (a.kindScore !== b.kindScore) return b.kindScore - a.kindScore;
+      return a.diff - b.diff;
+    });
+  return scored[0]?.trace;
 }
 
 export function buildRecentFallbackTraces(input: {

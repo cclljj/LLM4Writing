@@ -11,6 +11,8 @@ import { buildStudentCourseContext } from "@/src/lib/llm-context";
 import { hasStep6SuggestionQualityRisk, normalizeStep6SuggestionText } from "@/src/lib/llm-response";
 import { requireStudentInSession, validateTextInput } from "@/src/lib/api-helpers";
 import { recordStreamingCall } from "@/src/lib/llm-stats";
+import { classifyLlmError } from "@/src/lib/llm-observability";
+import { appendFallbackDebugTrace, buildPromptText, truncateTraceText } from "@/src/lib/fallback-debug-trace";
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -149,26 +151,37 @@ export async function POST(request: NextRequest) {
       let usedFallback = false;
       const collected: string[] = [];
       try {
+        const promptMessages = buildSuggestMessages(
+          session.promptConfig?.stepPrompts?.["6"],
+          draft,
+          session.activityTitle ?? "",
+          crossStepContext
+        );
+        const originalPrompt = truncateTraceText(buildPromptText(promptMessages));
         if (!isLlmConfigured()) {
           send({ type: "chunk", text: FALLBACK_SUGGESTION });
           collected.push(FALLBACK_SUGGESTION);
           usedFallback = true;
+          appendFallbackDebugTrace(session, {
+            at: nowIso(),
+            step: 6,
+            kind: "fallback",
+            originalPrompt,
+            originalResponse: "(llm_not_configured)",
+            rejectionReasons: ["llm_not_configured"],
+            errorCategory: "other"
+          });
           void recordLearningEvent({
             sessionId: session.id,
             activityId: session.activityId,
             step: 6,
             kind: "fallback",
-            fallbackUsed: true
+            fallbackUsed: true,
+            errorCategory: "other"
           }).catch(() => undefined);
         } else {
-          const messages = buildSuggestMessages(
-            session.promptConfig?.stepPrompts?.["6"],
-            draft,
-            session.activityTitle ?? "",
-            crossStepContext
-          );
           try {
-            const normalized = await generateStep6SuggestionText(messages, {
+            const normalized = await generateStep6SuggestionText(promptMessages, {
               sessionId: session.id,
               activityId: session.activityId,
               step: 6,
@@ -179,17 +192,28 @@ export async function POST(request: NextRequest) {
             for (let i = 0; i < normalized.length; i += chunkSize) {
               send({ type: "chunk", text: normalized.slice(i, i + chunkSize) });
             }
-          } catch {
+          } catch (error) {
             if (collected.length === 0) {
               collected.push(FALLBACK_SUGGESTION);
               send({ type: "chunk", text: FALLBACK_SUGGESTION });
               usedFallback = true;
+              const category = classifyLlmError(error);
+              appendFallbackDebugTrace(session, {
+                at: nowIso(),
+                step: 6,
+                kind: "fallback",
+                originalPrompt,
+                originalResponse: `(llm_error:${category})`,
+                rejectionReasons: ["llm_call_failed"],
+                errorCategory: category
+              });
               void recordLearningEvent({
                 sessionId: session.id,
                 activityId: session.activityId,
                 step: 6,
                 kind: "fallback",
-                fallbackUsed: true
+                fallbackUsed: true,
+                errorCategory: category
               }).catch(() => undefined);
             }
           }

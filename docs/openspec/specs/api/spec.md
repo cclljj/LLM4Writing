@@ -235,6 +235,12 @@ The system SHALL expose admin/course management APIs with role-sensitive visibil
 - **THEN** each matched trace includes `originalQuestion`, `originalPrompt`, `originalResponse`, and `rejectionReasons`
 - **AND** `debugTraceSource` reports `session_event` when matched, otherwise `none`
 
+#### Scenario: Non-Step1/2 fallback traces are also persisted for diagnostics
+
+- **GIVEN** fallback occurs in Step3/6/7/10 flows
+- **WHEN** fallback debug traces are written
+- **THEN** diagnostics can surface original prompt/response and fallback reasons for those steps as well
+
 #### Scenario: Step3 teacher advance backfills legacy completion evidence
 
 - **GIVEN** a Step3 group was completed before newer gate signals were introduced

@@ -13,6 +13,7 @@ import { requireStudentInSession, validateTextInput } from "@/src/lib/api-helper
 import { validateStudentAnswer } from "@/src/lib/answer-validation";
 import { recordStreamingCall } from "@/src/lib/llm-stats";
 import { classifyLlmError } from "@/src/lib/llm-observability";
+import { appendFallbackDebugTrace, buildPromptText, truncateTraceText } from "@/src/lib/fallback-debug-trace";
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -159,10 +160,28 @@ export async function POST(request: NextRequest) {
       let usedFallback = false;
       const collected: string[] = [];
       try {
+        const promptMessages = buildStep3Messages(
+          session.promptConfig?.systemPrompt,
+          session.promptConfig?.stepPrompts?.["3"],
+          session.activityTitle ?? "",
+          sameStepRecent,
+          crossStepContext,
+          studentText
+        );
+        const originalPrompt = truncateTraceText(buildPromptText(promptMessages));
         if (!isLlmConfigured()) {
           collected.push(FALLBACK_STEP3);
           send({ type: "chunk", text: FALLBACK_STEP3 });
           usedFallback = true;
+          appendFallbackDebugTrace(session, {
+            at: nowIso(),
+            step: 3,
+            kind: "fallback",
+            originalPrompt,
+            originalResponse: "(llm_not_configured)",
+            rejectionReasons: ["llm_not_configured"],
+            errorCategory: "other"
+          });
           void recordLearningEvent({
             sessionId: session.id,
             activityId: session.activityId,
@@ -172,16 +191,8 @@ export async function POST(request: NextRequest) {
             errorCategory: "other"
           }).catch(() => undefined);
         } else {
-          const messages = buildStep3Messages(
-            session.promptConfig?.systemPrompt,
-            session.promptConfig?.stepPrompts?.["3"],
-            session.activityTitle ?? "",
-            sameStepRecent,
-            crossStepContext,
-            studentText
-          );
           try {
-            const normalized = await generateStep3ReplyText(messages, FALLBACK_STEP3, {
+            const normalized = await generateStep3ReplyText(promptMessages, FALLBACK_STEP3, {
               sessionId: session.id,
               activityId: session.activityId,
               step: 3,
@@ -199,13 +210,23 @@ export async function POST(request: NextRequest) {
               collected.push(FALLBACK_STEP3);
               send({ type: "chunk", text: FALLBACK_STEP3 });
               usedFallback = true;
+              const category = classifyLlmError(error);
+              appendFallbackDebugTrace(session, {
+                at: nowIso(),
+                step: 3,
+                kind: "fallback",
+                originalPrompt,
+                originalResponse: `(llm_error:${category})`,
+                rejectionReasons: ["llm_call_failed"],
+                errorCategory: category
+              });
               void recordLearningEvent({
                 sessionId: session.id,
                 activityId: session.activityId,
                 step: 3,
                 kind: "fallback",
                 fallbackUsed: true,
-                errorCategory: classifyLlmError(error)
+                errorCategory: category
               }).catch(() => undefined);
             }
           }

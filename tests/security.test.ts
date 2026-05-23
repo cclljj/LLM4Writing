@@ -254,19 +254,22 @@ test("session start route: validates participant scope for teacher/admin", async
   assert.ok(route.includes("invalid_participants_scope"), "invalid/out-of-scope participants should be rejected");
 });
 
-test("fallback learning events persist errorCategory for diagnostics (step3/7/10)", async () => {
+test("fallback learning events persist errorCategory for diagnostics (step3/6/7/10)", async () => {
   const { readFileSync } = await import("node:fs");
   const { resolve, dirname } = await import("node:path");
   const { fileURLToPath } = await import("node:url");
   const thisDir = dirname(fileURLToPath(import.meta.url));
 
   const step3Route = readFileSync(resolve(thisDir, "../app/api/session/step3/stream/route.ts"), "utf8");
+  const step6SuggestRoute = readFileSync(resolve(thisDir, "../app/api/session/step6/suggest/route.ts"), "utf8");
   const step6CompleteRoute = readFileSync(resolve(thisDir, "../app/api/session/step6/complete/route.ts"), "utf8");
   const step10Route = readFileSync(resolve(thisDir, "../app/api/session/step10/stream/route.ts"), "utf8");
 
   assert.ok(step3Route.includes("errorCategory"), "step3 fallback events should carry errorCategory");
+  assert.ok(step6SuggestRoute.includes("errorCategory"), "step6 fallback events should carry errorCategory");
   assert.ok(step6CompleteRoute.includes("errorCategory"), "step7 fallback events should carry errorCategory");
   assert.ok(step10Route.includes("errorCategory"), "step10 fallback events should carry errorCategory");
+  assert.ok(step10Route.includes("step10_stream_route_error"), "step10 route-level fallback should leave a debug trace reason");
 });
 
 test("next config: defines baseline security headers and CSP", async () => {

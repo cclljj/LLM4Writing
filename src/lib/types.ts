@@ -79,17 +79,19 @@ export interface Step12RoundLog {
   at: string;
 }
 
-export interface Step12FallbackDebugTrace {
+export interface FallbackDebugTrace {
   at: string;
-  step: 1 | 2;
-  kind: "step12_feedback" | "step12_next_question";
-  substepKey: string;
-  originalQuestion: string;
+  step: number;
+  kind: string;
+  substepKey?: string;
+  originalQuestion?: string;
   originalPrompt: string;
   originalResponse: string;
   rejectionReasons: string[];
   errorCategory?: "timeout" | "truncation" | "parse_fail" | "other";
 }
+
+export type Step12FallbackDebugTrace = FallbackDebugTrace;
 
 export interface Step12RoundState {
   inFlightGateKey?: string;
