@@ -82,6 +82,14 @@ Gate members are resolved from joined members first and fall back to assigned pa
 - **WHEN** Step1/2 gate completion is evaluated
 - **THEN** the system checks completion against joined members first and does not block waiting for absent non-joined users
 
+#### Scenario: Joined-member list stays append-only during Step1/2
+
+- **GIVEN** one or more members already joined a session and were recorded in `joinedUsers`
+- **WHEN** another member submits an answer or the gate snapshot is refreshed
+- **THEN** `joinedUsers` keeps already joined valid members and only appends newly joined members
+- **AND** members are not removed just because they have not answered yet
+- **AND** this prevents false all-answered judgments that can skip other students to the next substep
+
 #### Scenario: Group privacy before gate completion
 
 - **GIVEN** a student has not completed the current Step1/2 gate
