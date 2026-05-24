@@ -52,6 +52,34 @@ function resolveMaxTokens(model: string, maxTokens?: number): number {
   return Math.min(bounded, modelCap);
 }
 
+function needsMaxCompletionTokensFallback(status: number, raw: string): boolean {
+  if (status !== 400) return false;
+  const lower = raw.toLowerCase();
+  return (
+    lower.includes("unsupported parameter") &&
+    lower.includes("max_tokens") &&
+    lower.includes("max_completion_tokens")
+  );
+}
+
+function buildChatBody(input: {
+  model: string;
+  messages: LlmChatMessage[];
+  temperature: number;
+  maxTokens: number;
+  stream?: boolean;
+  useMaxCompletionTokens?: boolean;
+}): Record<string, unknown> {
+  const tokenKey = input.useMaxCompletionTokens ? "max_completion_tokens" : "max_tokens";
+  return {
+    model: input.model,
+    messages: input.messages,
+    temperature: input.temperature,
+    [tokenKey]: input.maxTokens,
+    ...(input.stream ? { stream: true } : {})
+  };
+}
+
 export function getLlmConfig(): LlmConfig | null {
   const url = readEnv("LLM_URL");
   const key = readEnv("LLM_KEY") ?? readEnv("LLM_key"); // tolerate common casing mistake
@@ -93,26 +121,47 @@ export async function llmChatCompletionText(input: {
 
   try {
     for (let round = 0; round <= continuationMaxRounds; round += 1) {
-      const res = await fetch(cfg.url, {
+      const headers = {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${cfg.key}`,
+        // These are harmless for non-OpenRouter providers; OpenRouter may use them for analytics/rate limits.
+        "X-Title": "llm4writing",
+        "HTTP-Referer": "https://vercel.app"
+      };
+      const maxTokenValue = resolveMaxTokens(cfg.model, input.maxTokens);
+      const requestBody = buildChatBody({
+        model: cfg.model,
+        messages,
+        temperature: input.temperature ?? 0.7,
+        maxTokens: maxTokenValue
+      });
+
+      let res = await fetch(cfg.url, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${cfg.key}`,
-          // These are harmless for non-OpenRouter providers; OpenRouter may use them for analytics/rate limits.
-          "X-Title": "llm4writing",
-          "HTTP-Referer": "https://vercel.app"
-        },
-        body: JSON.stringify({
-          model: cfg.model,
-          messages,
-          temperature: input.temperature ?? 0.7,
-          max_tokens: resolveMaxTokens(cfg.model, input.maxTokens)
-        }),
+        headers,
+        body: JSON.stringify(requestBody),
         signal: controller.signal
       });
 
       // Avoid "Unexpected end of JSON input" by reading as text first.
-      const raw = await res.text();
+      let raw = await res.text();
+      if (!res.ok && needsMaxCompletionTokensFallback(res.status, raw)) {
+        res = await fetch(cfg.url, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(
+            buildChatBody({
+              model: cfg.model,
+              messages,
+              temperature: input.temperature ?? 0.7,
+              maxTokens: maxTokenValue,
+              useMaxCompletionTokens: true
+            })
+          ),
+          signal: controller.signal
+        });
+        raw = await res.text();
+      }
       if (!res.ok) {
         throw new Error(`llm_http_${res.status}:${raw.slice(0, 300)}`);
       }
@@ -194,24 +243,52 @@ export async function* llmChatCompletionStream(input: {
   let emittedChunks = 0;
 
   try {
-    const res = await fetch(cfg.url, {
+    const headers = {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${cfg.key}`,
+      Accept: "text/event-stream",
+      "X-Title": "llm4writing",
+      "HTTP-Referer": "https://vercel.app"
+    };
+    const maxTokenValue = resolveMaxTokens(cfg.model, input.maxTokens);
+
+    let res = await fetch(cfg.url, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${cfg.key}`,
-        Accept: "text/event-stream",
-        "X-Title": "llm4writing",
-        "HTTP-Referer": "https://vercel.app"
-      },
-      body: JSON.stringify({
-        model: cfg.model,
-        messages: input.messages,
-        temperature: input.temperature ?? 0.7,
-        max_tokens: resolveMaxTokens(cfg.model, input.maxTokens),
-        stream: true
-      }),
+      headers,
+      body: JSON.stringify(
+        buildChatBody({
+          model: cfg.model,
+          messages: input.messages,
+          temperature: input.temperature ?? 0.7,
+          maxTokens: maxTokenValue,
+          stream: true
+        })
+      ),
       signal: controller.signal
     });
+
+    if (!res.ok) {
+      const firstRaw = await res.text().catch(() => "");
+      if (needsMaxCompletionTokensFallback(res.status, firstRaw)) {
+        res = await fetch(cfg.url, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(
+            buildChatBody({
+              model: cfg.model,
+              messages: input.messages,
+              temperature: input.temperature ?? 0.7,
+              maxTokens: maxTokenValue,
+              stream: true,
+              useMaxCompletionTokens: true
+            })
+          ),
+          signal: controller.signal
+        });
+      } else {
+        throw new Error(`llm_http_${res.status}:${firstRaw.slice(0, 300)}`);
+      }
+    }
 
     if (!res.ok || !res.body) {
       const raw = await res.text().catch(() => "");
