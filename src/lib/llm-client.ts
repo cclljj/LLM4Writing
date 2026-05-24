@@ -13,18 +13,43 @@ export type LlmConfig = {
   model: string;
 };
 
-const MIN_LLM_MAX_TOKENS = 50_000;
+const DEFAULT_LLM_MAX_TOKENS = 12_000;
+const MIN_LLM_MAX_TOKENS = 256;
 
 function readEnv(name: string): string | undefined {
   const v = process.env[name];
   return typeof v === "string" && v.trim() ? v.trim() : undefined;
 }
 
-function resolveMaxTokens(maxTokens?: number): number {
-  if (typeof maxTokens !== "number" || !Number.isFinite(maxTokens)) {
-    return MIN_LLM_MAX_TOKENS;
-  }
-  return Math.max(MIN_LLM_MAX_TOKENS, Math.round(maxTokens));
+function parseIntegerEnv(name: string): number | undefined {
+  const raw = readEnv(name);
+  if (!raw) return undefined;
+  const value = Number.parseInt(raw, 10);
+  if (!Number.isFinite(value)) return undefined;
+  return value;
+}
+
+function getModelOutputTokenCap(model: string): number | undefined {
+  const normalized = model.trim().toLowerCase();
+  if (!normalized) return undefined;
+
+  // Keep this conservative and explicit: only cap when we know a stable limit.
+  if (normalized.startsWith("gpt-4o-mini")) return 16_384;
+  if (normalized.startsWith("gpt-4o")) return 16_384;
+  if (normalized.startsWith("gpt-4.1")) return 32_768;
+  if (normalized.startsWith("gpt-4")) return 8_192;
+  return undefined;
+}
+
+function resolveMaxTokens(model: string, maxTokens?: number): number {
+  const requested =
+    typeof maxTokens === "number" && Number.isFinite(maxTokens)
+      ? Math.round(maxTokens)
+      : parseIntegerEnv("LLM_MAX_TOKENS") ?? DEFAULT_LLM_MAX_TOKENS;
+  const bounded = Math.max(MIN_LLM_MAX_TOKENS, requested);
+  const modelCap = getModelOutputTokenCap(model);
+  if (typeof modelCap !== "number") return bounded;
+  return Math.min(bounded, modelCap);
 }
 
 export function getLlmConfig(): LlmConfig | null {
@@ -81,7 +106,7 @@ export async function llmChatCompletionText(input: {
           model: cfg.model,
           messages,
           temperature: input.temperature ?? 0.7,
-          max_tokens: resolveMaxTokens(input.maxTokens)
+          max_tokens: resolveMaxTokens(cfg.model, input.maxTokens)
         }),
         signal: controller.signal
       });
@@ -182,7 +207,7 @@ export async function* llmChatCompletionStream(input: {
         model: cfg.model,
         messages: input.messages,
         temperature: input.temperature ?? 0.7,
-        max_tokens: resolveMaxTokens(input.maxTokens),
+        max_tokens: resolveMaxTokens(cfg.model, input.maxTokens),
         stream: true
       }),
       signal: controller.signal

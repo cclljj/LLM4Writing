@@ -374,6 +374,24 @@ function truncateForTrace(text: string, maxChars = 6000): string {
   return `${normalized.slice(0, maxChars - 1)}…`;
 }
 
+function summarizeLlmCallError(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error ?? "unknown_error");
+  return truncateForTrace(raw, 800);
+}
+
+function buildLlmCallFailureTraceResponse(errorCategory: PersistedErrorCategory, error: unknown): string {
+  const summary = summarizeLlmCallError(error);
+  return truncateForTrace(`(llm_error:${errorCategory}) ${summary}`, 1200);
+}
+
+function buildLlmCallFailureReasons(error: unknown): string[] {
+  const summary = summarizeLlmCallError(error).toLowerCase();
+  const reasons = ["llm_call_failed"];
+  const codeMatch = summary.match(/llm_http_\d{3}/);
+  if (codeMatch?.[0]) reasons.push(codeMatch[0]);
+  return reasons;
+}
+
 function buildOriginalPromptText(messages: LlmChatMessage[]): string {
   return messages
     .map((message) => `[${message.role}]\n${message.content}`)
@@ -688,8 +706,8 @@ async function generateStep12Feedback(
         substepKey: context.currentSubstepKey,
         originalQuestion: context.currentQuestion,
         originalPrompt,
-        originalResponse: `(llm_error:${fallbackErrorCategory})`,
-        rejectionReasons: ["llm_call_failed"],
+        originalResponse: buildLlmCallFailureTraceResponse(fallbackErrorCategory, error),
+        rejectionReasons: buildLlmCallFailureReasons(error),
         errorCategory: fallbackErrorCategory
       };
       // Continue to next attempt; fallback handled after loop.
@@ -842,8 +860,8 @@ async function generateStep12NextQuestion(
         substepKey: nextSubstepKey,
         originalQuestion: context.currentQuestion,
         originalPrompt,
-        originalResponse: `(llm_error:${fallbackErrorCategory})`,
-        rejectionReasons: ["llm_call_failed"],
+        originalResponse: buildLlmCallFailureTraceResponse(fallbackErrorCategory, error),
+        rejectionReasons: buildLlmCallFailureReasons(error),
         errorCategory: fallbackErrorCategory
       };
       // Continue to retry.
