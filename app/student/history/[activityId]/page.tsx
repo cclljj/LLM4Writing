@@ -122,6 +122,10 @@ export default function StudentCourseHistoryPage() {
     const steps = new Set(history.latestSession.messages.map((m) => m.step));
     if (history.latestWork.step3SubmittedOutline) steps.add(3);
     if (history.latestWork.step4Outline) steps.add(4);
+    if (history.latestWork.draftStep6) steps.add(6);
+    if (history.latestWork.step7Report) steps.add(7);
+    if (history.latestWork.draftStep8) steps.add(8);
+    if (history.latestWork.step10Report) steps.add(10);
     return Array.from(steps).sort((a, b) => a - b);
   }, [history]);
 
@@ -258,6 +262,42 @@ export default function StudentCourseHistoryPage() {
                           <div style={{ marginTop: 12, borderTop: "1px solid #e5e7eb", paddingTop: 10 }}>
                             <strong>步驟四修正後結構樹</strong>
                             <OutlineSvg compact mermaidText={history.latestWork.step4Outline} />
+                          </div>
+                        ) : null}
+                        {step === 6 && history.latestWork.draftStep6 ? (
+                          <div style={{ marginTop: 12, borderTop: "1px solid #e5e7eb", paddingTop: 10 }}>
+                            <strong>步驟六初稿</strong>
+                            <div
+                              style={{ marginTop: 4 }}
+                              dangerouslySetInnerHTML={{ __html: renderMessageHtml(history.latestWork.draftStep6) }}
+                            />
+                          </div>
+                        ) : null}
+                        {step === 7 && history.latestWork.step7Report ? (
+                          <div style={{ marginTop: 12, borderTop: "1px solid #e5e7eb", paddingTop: 10 }}>
+                            <strong>步驟七分析回饋</strong>
+                            <div
+                              style={{ marginTop: 4 }}
+                              dangerouslySetInnerHTML={{ __html: renderMessageHtml(history.latestWork.step7Report) }}
+                            />
+                          </div>
+                        ) : null}
+                        {step === 8 && history.latestWork.draftStep8 ? (
+                          <div style={{ marginTop: 12, borderTop: "1px solid #e5e7eb", paddingTop: 10 }}>
+                            <strong>步驟八潤飾稿</strong>
+                            <div
+                              style={{ marginTop: 4 }}
+                              dangerouslySetInnerHTML={{ __html: renderMessageHtml(history.latestWork.draftStep8) }}
+                            />
+                          </div>
+                        ) : null}
+                        {step === 10 && history.latestWork.step10Report ? (
+                          <div style={{ marginTop: 12, borderTop: "1px solid #e5e7eb", paddingTop: 10 }}>
+                            <strong>步驟十總結報告</strong>
+                            <div
+                              style={{ marginTop: 4 }}
+                              dangerouslySetInnerHTML={{ __html: renderMessageHtml(history.latestWork.step10Report) }}
+                            />
                           </div>
                         ) : null}
                       </>
