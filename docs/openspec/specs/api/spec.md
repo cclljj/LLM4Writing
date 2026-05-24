@@ -235,6 +235,14 @@ The system SHALL expose admin/course management APIs with role-sensitive visibil
 - **THEN** each matched trace includes `originalQuestion`, `originalPrompt`, `originalResponse`, and `rejectionReasons`
 - **AND** `debugTraceSource` reports `session_event` when matched, otherwise `none`
 
+#### Scenario: LLM call failure traces retain concrete provider error hints
+
+- **GIVEN** a fallback debug trace is recorded because an upstream LLM call failed
+- **WHEN** diagnostics renders `recentFallbackTraces`
+- **THEN** `rejectionReasons` still includes `llm_call_failed`
+- **AND** when available, `rejectionReasons` also includes an HTTP-status hint token such as `llm_http_400`
+- **AND** `originalResponse` keeps a compact provider-failure summary for root-cause analysis
+
 #### Scenario: Non-Step1/2 fallback traces are also persisted for diagnostics
 
 - **GIVEN** fallback occurs in Step3/6/7/10 flows

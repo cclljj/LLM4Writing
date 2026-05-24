@@ -109,7 +109,8 @@ The system SHALL call a remote OpenAI-compatible LLM only when `LLM_URL`, `LLM_K
 
 - **GIVEN** workflow LLM calls are generated through chat or stream paths
 - **WHEN** requests are sent to the model provider
-- **THEN** the system applies a high minimum output-token budget to lower truncation probability while keeping continuation safeguards
+- **THEN** the system applies model-aware output-token safety bounds before sending requests, so configured budgets do not exceed model/provider output limits
+- **AND** default output-token budget can be overridden by environment configuration while still respecting model safety bounds
 
 ### Requirement: LLM Context Assembly Efficiency
 
