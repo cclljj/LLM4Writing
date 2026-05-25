@@ -4,12 +4,19 @@ export type OutlineNode = {
   text: string;
   x: number;
   y: number;
+  w?: number;
+  h?: number;
+  lines?: string[];
 };
 
 export type OutlinePreview = {
   nodes: OutlineNode[];
   width: number;
   height: number;
+};
+
+type BuildOutlinePreviewOptions = {
+  compact?: boolean;
 };
 
 export function extractMermaidText(text: string): string | null {
@@ -104,13 +111,133 @@ export function fromMermaid(text: string): OutlineNode[] {
   return nodes;
 }
 
-export function buildOutlinePreview(mermaidText: string): OutlinePreview | null {
+function wrapByChars(line: string, maxChars: number): string[] {
+  const trimmed = line.trim();
+  if (!trimmed) return [""];
+  const chunks: string[] = [];
+  let cursor = 0;
+  while (cursor < trimmed.length) {
+    chunks.push(trimmed.slice(cursor, cursor + maxChars));
+    cursor += maxChars;
+  }
+  return chunks;
+}
+
+function wrapNodeText(text: string, maxCharsPerLine: number, maxLines: number): string[] {
+  const sourceLines = text.split("\n");
+  const wrapped: string[] = [];
+  for (const src of sourceLines) {
+    const chunks = wrapByChars(src, maxCharsPerLine);
+    for (const c of chunks) {
+      wrapped.push(c);
+      if (wrapped.length >= maxLines) {
+        const last = wrapped[maxLines - 1] ?? "";
+        wrapped[maxLines - 1] = last.length >= maxCharsPerLine ? `${last.slice(0, Math.max(0, maxCharsPerLine - 1))}…` : `${last}…`;
+        return wrapped.slice(0, maxLines);
+      }
+    }
+  }
+  return wrapped.length > 0 ? wrapped : [""];
+}
+
+export function buildOutlinePreview(mermaidText: string, options: BuildOutlinePreviewOptions = {}): OutlinePreview | null {
   const nodes = fromMermaid(mermaidText).map((node) => ({ ...node }));
   if (nodes.length === 0) return null;
-  const minX = Math.min(...nodes.map((node) => node.x));
-  const minY = Math.min(...nodes.map((node) => node.y));
-  const normalized = nodes.map((node) => ({ ...node, x: node.x - minX + 20, y: node.y - minY + 20 }));
-  const maxX = Math.max(...normalized.map((node) => node.x + 130));
-  const maxY = Math.max(...normalized.map((node) => node.y + 80));
-  return { nodes: normalized, width: Math.max(520, maxX + 20), height: Math.max(240, maxY + 20) };
+
+  const compact = options.compact ?? false;
+  const maxCharsPerLine = compact ? 12 : 16;
+  const maxLines = compact ? 4 : 5;
+  const charPx = compact ? 11 : 12;
+  const linePx = compact ? 15 : 16;
+  const padX = compact ? 12 : 14;
+  const padY = compact ? 10 : 12;
+  const nodeMinW = compact ? 160 : 180;
+  const nodeMaxW = compact ? 240 : 280;
+  const nodeMinH = compact ? 72 : 84;
+  const hGap = compact ? 28 : 34;
+  const vGap = compact ? 38 : 46;
+
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const children = new Map<string, string[]>();
+  const roots: string[] = [];
+  for (const n of nodes) {
+    if (!n.parentId || !byId.has(n.parentId)) {
+      roots.push(n.id);
+      continue;
+    }
+    const bucket = children.get(n.parentId) ?? [];
+    bucket.push(n.id);
+    children.set(n.parentId, bucket);
+  }
+  roots.sort();
+  for (const bucket of children.values()) bucket.sort();
+
+  const depthById = new Map<string, number>();
+  const setDepth = (id: string, depth: number): void => {
+    if ((depthById.get(id) ?? 0) >= depth) return;
+    depthById.set(id, depth);
+    for (const childId of children.get(id) ?? []) setDepth(childId, depth + 1);
+  };
+  for (const rootId of roots) setDepth(rootId, 1);
+  for (const n of nodes) if (!depthById.has(n.id)) depthById.set(n.id, 1);
+
+  for (const n of nodes) {
+    const lines = wrapNodeText(n.text, maxCharsPerLine, maxLines);
+    const maxLen = Math.max(...lines.map((line) => line.length), 1);
+    const w = Math.min(nodeMaxW, Math.max(nodeMinW, padX * 2 + maxLen * charPx));
+    const h = Math.max(nodeMinH, padY * 2 + lines.length * linePx);
+    n.lines = lines;
+    n.w = w;
+    n.h = h;
+  }
+
+  const order: string[] = [];
+  const walk = (id: string): void => {
+    const childIds = children.get(id) ?? [];
+    if (childIds.length === 0) {
+      order.push(id);
+      return;
+    }
+    childIds.forEach((childId) => walk(childId));
+  };
+  roots.forEach((rootId) => walk(rootId));
+  for (const n of nodes) if (!order.includes(n.id)) order.push(n.id);
+
+  const centerX = new Map<string, number>();
+  let cursor = 0;
+  for (const id of order) {
+    const n = byId.get(id);
+    if (!n) continue;
+    centerX.set(id, cursor + (n.w ?? nodeMinW) / 2);
+    cursor += (n.w ?? nodeMinW) + hGap;
+  }
+  const placeParent = (id: string): number => {
+    const childIds = children.get(id) ?? [];
+    if (childIds.length === 0) return centerX.get(id) ?? 0;
+    const childCenters = childIds.map((childId) => placeParent(childId)).sort((a, b) => a - b);
+    const center = (childCenters[0]! + childCenters[childCenters.length - 1]!) / 2;
+    centerX.set(id, center);
+    return center;
+  };
+  roots.forEach((rootId) => placeParent(rootId));
+
+  let minX = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = 0;
+  for (const n of nodes) {
+    const cx = centerX.get(n.id) ?? 0;
+    const w = n.w ?? nodeMinW;
+    const h = n.h ?? nodeMinH;
+    n.x = cx - w / 2;
+    n.y = ((depthById.get(n.id) ?? 1) - 1) * (nodeMinH + vGap);
+    minX = Math.min(minX, n.x);
+    maxX = Math.max(maxX, n.x + w);
+    maxY = Math.max(maxY, n.y + h);
+  }
+
+  const normLeft = 20 - minX;
+  const normalized = nodes.map((n) => ({ ...n, x: n.x + normLeft, y: n.y + 20 }));
+  const width = Math.max(620, Math.ceil(maxX - minX + 40));
+  const height = Math.max(280, Math.ceil(maxY + 40));
+  return { nodes: normalized, width, height };
 }

@@ -10,13 +10,14 @@ type Props = {
 };
 
 export default function OutlineSvg({ mermaidText, label, compact = false }: Props) {
-  const preview = buildOutlinePreview(mermaidText);
+  const preview = buildOutlinePreview(mermaidText, { compact });
   if (!preview) return null;
 
-  const nodeW = compact ? 110 : 130;
-  const nodeH = compact ? 64 : 80;
-  const centerX = nodeW / 2;
-  const edgeY = Math.floor(nodeH / 2);
+  const nodeDefaultW = compact ? 160 : 180;
+  const nodeDefaultH = compact ? 72 : 84;
+  const lineHeight = compact ? 15 : 16;
+  const textTopPad = compact ? 14 : 18;
+  const elbowGap = compact ? 10 : 12;
 
   return (
     <div
@@ -42,37 +43,51 @@ export default function OutlineSvg({ mermaidText, label, compact = false }: Prop
           .map((node) => {
             const parent = preview.nodes.find((item) => item.id === node.parentId);
             if (!parent) return null;
+            const parentW = parent.w ?? nodeDefaultW;
+            const parentH = parent.h ?? nodeDefaultH;
+            const childW = node.w ?? nodeDefaultW;
+            const parentCx = parent.x + parentW / 2;
+            const childCx = node.x + childW / 2;
+            const startY = parent.y + parentH;
+            const endY = node.y;
+            const midY = Math.floor((startY + endY) / 2);
             return (
-              <line
+              <polyline
                 key={`${parent.id}-${node.id}`}
-                x1={parent.x + centerX}
-                y1={parent.y + edgeY}
-                x2={node.x + centerX}
-                y2={node.y}
+                points={`${parentCx},${startY} ${parentCx},${Math.min(startY + elbowGap, midY)} ${childCx},${midY} ${childCx},${endY}`}
                 stroke="#94a3b8"
                 strokeWidth="2"
+                fill="none"
               />
             );
           })}
         {preview.nodes.map((node) => (
           <g key={node.id}>
-            <rect x={node.x} y={node.y} width={nodeW} height={nodeH} rx="10" fill={compact ? "#f8fafc" : "#fff"} stroke={compact ? "#94a3b8" : "#64748b"} />
+            <rect
+              x={node.x}
+              y={node.y}
+              width={node.w ?? nodeDefaultW}
+              height={node.h ?? nodeDefaultH}
+              rx="10"
+              fill={compact ? "#f8fafc" : "#fff"}
+              stroke={compact ? "#94a3b8" : "#64748b"}
+            />
             <text
-              x={node.x + centerX}
-              y={node.y + (compact ? Math.floor(nodeH / 2) + 4 : 28)}
+              x={node.x + (node.w ?? nodeDefaultW) / 2}
+              y={node.y + textTopPad}
               textAnchor="middle"
               fontSize="12"
               fill="#0f172a"
             >
-              {compact ? (
-                node.text.length > 20 ? `${node.text.slice(0, 20)}...` : node.text
-              ) : (
-                node.text.split("\n").map((line, idx) => (
-                  <tspan key={`${node.id}-${idx}`} x={node.x + centerX} dy={idx === 0 ? 0 : 16}>
-                    {line}
-                  </tspan>
-                ))
-              )}
+              {(node.lines && node.lines.length > 0 ? node.lines : node.text.split("\n")).map((line, idx) => (
+                <tspan
+                  key={`${node.id}-${idx}`}
+                  x={node.x + (node.w ?? nodeDefaultW) / 2}
+                  dy={idx === 0 ? 0 : lineHeight}
+                >
+                  {line}
+                </tspan>
+              ))}
             </text>
           </g>
         ))}

@@ -157,6 +157,14 @@ The system SHALL provide an editable personal structure tree in Step3 based on t
 - **WHEN** the student edits nodes
 - **THEN** first-level and second-level nodes keep the configured restrictions, while third-level and deeper nodes may be edited according to the documented rules
 
+#### Scenario: Structure tree readability in review/history rendering
+
+- **GIVEN** Step3/Step4 structure trees are rendered in student review/history surfaces
+- **WHEN** node labels are long or the tree is dense
+- **THEN** node text wraps within node bounds without overflowing
+- **AND** node labels do not overlap neighboring node labels in common cases
+- **AND** connector routing avoids crossing unrelated node text areas in common cases
+
 #### Scenario: Server-side Step3 completion lock
 
 - **GIVEN** a student has completed Step3 and has not reopened editing
