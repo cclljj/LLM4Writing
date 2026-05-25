@@ -5,7 +5,7 @@ import OutlineSvg from "@/app/_components/OutlineSvg";
 import { renderMessageHtml } from "@/app/student/_components/renderMessageHtml";
 import { deferStateUpdate } from "@/src/lib/defer-state-update";
 import { ActivityRow, MonitorSession, OpenClassRow, UserRow } from "./types";
-import { generateCourseImplementationPdf } from "./courseImplementationPdf";
+import { generateCourseImplementationPdf } from "@/src/lib/courseImplementationPdf";
 
 type CourseImplementationReportTabProps = {
   loginRole: "teacher" | "admin";
@@ -46,6 +46,20 @@ type PersonalMessage = {
   step: number;
   text: string;
   at: string;
+};
+
+type ClassExportJob = {
+  id: string;
+  totalStudents: number;
+  completedStudents: number;
+  failedStudents: number;
+  currentStudent: string;
+  currentAttempt: number;
+  maxAttempts: number;
+  status: "queued" | "running" | "retrying" | "packaging" | "succeeded" | "failed" | "canceled";
+  zipFileName: string;
+  error?: string;
+  cancelRequested: boolean;
 };
 
 const PAGE_SIZE = 10;
@@ -120,6 +134,9 @@ export default function CourseImplementationReportTab({
   const [selectedStudent, setSelectedStudent] = useState("");
   const [loadingStudentLog, setLoadingStudentLog] = useState(false);
   const [downloadingStudent, setDownloadingStudent] = useState("");
+  const [classExportJobId, setClassExportJobId] = useState("");
+  const [classExportJob, setClassExportJob] = useState<ClassExportJob | null>(null);
+  const [startingClassExport, setStartingClassExport] = useState(false);
   const [personalMessages, setPersonalMessages] = useState<PersonalMessage[]>([]);
   const [userOutline, setUserOutline] = useState("");
   const [userStep3SubmittedOutline, setUserStep3SubmittedOutline] = useState("");
@@ -269,6 +286,8 @@ export default function CourseImplementationReportTab({
     setUserOutline("");
     setUserStep3SubmittedOutline("");
     setPersonalStepExpanded({});
+    setClassExportJobId("");
+    setClassExportJob(null);
     setReportSessions([]);
     setLoadingReport(true);
     try {
@@ -413,6 +432,75 @@ export default function CourseImplementationReportTab({
     }
   }
 
+  async function startClassExport() {
+    setError("");
+    if (!selectedCourse) {
+      setError("尚未選擇課程，無法下載全班報告。");
+      return;
+    }
+    setStartingClassExport(true);
+    try {
+      const response = await fetch("/api/teacher/course-report-exports", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ activityId: selectedCourse.activityId, classNumber: selectedCourse.classNumber }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setError(data.error ?? "class_export_start_failed");
+        return;
+      }
+      setClassExportJobId(data.jobId ?? "");
+    } catch {
+      setError("class_export_start_failed");
+    } finally {
+      setStartingClassExport(false);
+    }
+  }
+
+  async function cancelClassExport() {
+    if (!classExportJobId) return;
+    try {
+      await fetch(`/api/teacher/course-report-exports/${encodeURIComponent(classExportJobId)}/cancel`, { method: "POST" });
+    } catch {
+      setError("class_export_cancel_failed");
+    }
+  }
+
+  async function downloadClassZip() {
+    if (!classExportJobId || classExportJob?.status !== "succeeded") return;
+    const url = `/api/teacher/course-report-exports/${encodeURIComponent(classExportJobId)}/download`;
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = classExportJob.zipFileName || `${selectedCourse?.activityId ?? "course"}_${selectedCourse?.classNumber ?? "class"}_course-report-v1.zip`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+
+  useEffect(() => {
+    if (!classExportJobId) return;
+    let cancelled = false;
+    const timer = setInterval(() => {
+      fetch(`/api/teacher/course-report-exports/${encodeURIComponent(classExportJobId)}`, { cache: "no-store" })
+        .then((response) => response.json().then((data) => ({ ok: response.ok, data })))
+        .then(({ ok, data }) => {
+          if (cancelled || !ok) return;
+          const job = (data.job ?? null) as ClassExportJob | null;
+          setClassExportJob(job);
+          const done = job && ["succeeded", "failed", "canceled"].includes(job.status);
+          if (done) {
+            clearInterval(timer);
+          }
+        })
+        .catch(() => undefined);
+    }, 1200);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [classExportJobId]);
+
   useEffect(() => {
     if (page > totalPages) {
       deferStateUpdate(() => setPage(totalPages));
@@ -544,6 +632,38 @@ export default function CourseImplementationReportTab({
           <small style={{ display: "block", marginBottom: 10 }}>
             {selectedCourse.school} / {selectedCourse.classNumber} / {selectedCourse.title}
           </small>
+          <div className="row" style={{ alignItems: "center", gap: 8, marginBottom: 10 }}>
+            <div style={{ width: 210 }}>
+              <button type="button" className="secondary" onClick={() => startClassExport().catch(() => undefined)} disabled={startingClassExport}>
+                {startingClassExport ? "建立匯出作業中..." : "一鍵下載全班 ZIP"}
+              </button>
+            </div>
+            {classExportJob && ["queued", "running", "retrying", "packaging"].includes(classExportJob.status) ? (
+              <div style={{ width: 100 }}>
+                <button type="button" className="secondary" onClick={() => cancelClassExport().catch(() => undefined)}>取消</button>
+              </div>
+            ) : null}
+            {classExportJob?.status === "succeeded" ? (
+              <div style={{ width: 100 }}>
+                <button type="button" className="secondary" onClick={() => downloadClassZip().catch(() => undefined)}>下載 ZIP</button>
+              </div>
+            ) : null}
+          </div>
+          {classExportJob ? (
+            <small style={{ display: "block", marginBottom: 10 }}>
+              {classExportJob.status === "queued" ? "已加入佇列，準備開始..." : null}
+              {classExportJob.status === "running" ? `正在產生報告：${classExportJob.completedStudents}/${classExportJob.totalStudents}` : null}
+              {classExportJob.status === "retrying"
+                ? `重試中：${classExportJob.currentStudent || "—"}（第 ${classExportJob.currentAttempt}/${classExportJob.maxAttempts} 次）`
+                : null}
+              {classExportJob.status === "packaging" ? "正在壓縮 ZIP，請稍候..." : null}
+              {classExportJob.status === "succeeded" ? `匯出完成，可下載 ${classExportJob.zipFileName}` : null}
+              {classExportJob.status === "failed"
+                ? `匯出失敗：${classExportJob.failedStudents} 位學生未成功產出，請重新執行。`
+                : null}
+              {classExportJob.status === "canceled" ? "匯出已取消。" : null}
+            </small>
+          ) : null}
 
           <div style={{ overflowX: "auto" }}>
             <table className="pro-table">

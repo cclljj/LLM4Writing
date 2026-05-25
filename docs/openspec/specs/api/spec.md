@@ -302,3 +302,10 @@ The system SHALL expose admin/course management APIs with role-sensitive visibil
 - **GIVEN** a teacher or admin submits user CSV data
 - **WHEN** the CSV does not use `classnumber` as the first column or has an invalid column count
 - **THEN** the API rejects the import
+
+#### Scenario: Teacher class report export APIs
+
+- **GIVEN** a teacher or admin calls class report export APIs
+- **WHEN** requesting `start`, `status`, `download`, or `cancel`
+- **THEN** each endpoint enforces teacher/admin authorization and ownership scoping
+- **AND** successful class ZIP downloads are only available after export job status is `succeeded`

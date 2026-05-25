@@ -1,5 +1,3 @@
-"use client";
-
 import { jsPDF } from "jspdf";
 import { buildOutlinePreview } from "@/src/lib/outline-utils";
 
@@ -542,4 +540,10 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
   );
 
   return doc.output("blob");
+}
+
+export async function generateCourseImplementationPdfBytes(input: CourseImplementationPdfInput): Promise<Uint8Array> {
+  const blob = await generateCourseImplementationPdf(input);
+  const buffer = await blob.arrayBuffer();
+  return new Uint8Array(buffer);
 }

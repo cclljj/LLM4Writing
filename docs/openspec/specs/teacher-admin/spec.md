@@ -204,6 +204,20 @@ The course management area SHALL provide ended-course reports and student-level 
 - **WHEN** PDF export is requested
 - **THEN** the UI/API prevents an empty PDF and shows a readable error
 
+#### Scenario: Class ZIP export job lifecycle
+
+- **GIVEN** a teacher or admin starts class-level report export
+- **WHEN** the backend processes student PDFs and packages ZIP
+- **THEN** the UI shows asynchronous status transitions (`queued`, `running`, `retrying`, `packaging`, `succeeded`, `failed`, `canceled`) with progress counters
+
+#### Scenario: Class ZIP export retry and success policy
+
+- **GIVEN** at least one student's PDF generation fails transiently
+- **WHEN** class-level export is running
+- **THEN** the backend retries retryable failures (up to configured attempts with backoff)
+- **AND** only when all students succeed does the API provide ZIP download
+- **AND** if any student still fails after retries, the job ends as `failed` and ZIP is not provided
+
 ### Requirement: Admin Diagnostics
 
 The admin console SHALL provide Prompt/LLM diagnostics, KPI trends, and non-sensitive system health signals.
