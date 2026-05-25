@@ -145,6 +145,81 @@ function stepName(step: number): string {
   return names[step] ?? "";
 }
 
+let mermaidInitDone = false;
+
+async function renderMermaidSvg(mermaidText: string): Promise<string | null> {
+  const normalized = sanitize(mermaidText);
+  if (!normalized) return null;
+  if (typeof window === "undefined" || typeof document === "undefined") return null;
+
+  const mermaidModule = await import("mermaid");
+  const mermaid = mermaidModule.default;
+  if (!mermaidInitDone) {
+    mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: "loose",
+      theme: "default",
+      flowchart: {
+        htmlLabels: false,
+        useMaxWidth: false,
+      },
+    });
+    mermaidInitDone = true;
+  }
+
+  const container = document.createElement("div");
+  container.style.position = "fixed";
+  container.style.left = "-10000px";
+  container.style.top = "0";
+  container.style.width = "1px";
+  container.style.height = "1px";
+  document.body.appendChild(container);
+  try {
+    const id = `mermaid-pdf-${Math.random().toString(36).slice(2, 10)}`;
+    const { svg } = await mermaid.render(id, normalized, container);
+    return svg;
+  } finally {
+    container.remove();
+  }
+}
+
+async function svgToPngDataUrl(svg: string): Promise<{ dataUrl: string; width: number; height: number } | null> {
+  if (typeof window === "undefined" || typeof document === "undefined") return null;
+  const parser = new DOMParser();
+  const parsed = parser.parseFromString(svg, "image/svg+xml");
+  const root = parsed.documentElement;
+  const widthAttr = Number(root.getAttribute("width") ?? "");
+  const heightAttr = Number(root.getAttribute("height") ?? "");
+  const viewBoxAttr = root.getAttribute("viewBox") ?? "";
+  const viewBoxParts = viewBoxAttr.split(/\s+/).map((n) => Number(n));
+  const vbWidth = viewBoxParts.length === 4 ? viewBoxParts[2] : NaN;
+  const vbHeight = viewBoxParts.length === 4 ? viewBoxParts[3] : NaN;
+  const width = Number.isFinite(widthAttr) && widthAttr > 0 ? widthAttr : Number.isFinite(vbWidth) ? vbWidth : 1200;
+  const height = Number.isFinite(heightAttr) && heightAttr > 0 ? heightAttr : Number.isFinite(vbHeight) ? vbHeight : 800;
+
+  const blob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => resolve(image);
+      image.onerror = () => reject(new Error("svg_image_load_failed"));
+      image.src = url;
+    });
+    const scale = 2;
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(width * scale));
+    canvas.height = Math.max(1, Math.round(height * scale));
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    return { dataUrl: canvas.toDataURL("image/png"), width, height };
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 export async function generateCourseImplementationPdf(input: CourseImplementationPdfInput): Promise<Blob> {
   const doc = new jsPDF({ unit: "pt", format: "a4" });
   const contentWidth = PAGE.width - PAGE.marginX * 2;
@@ -323,7 +398,7 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
     return COLORS.systemBg;
   }
 
-  function drawOutlineGraph(step: 3 | 4, mermaidText: string): void {
+  function drawOutlineGraphFallback(step: 3 | 4, mermaidText: string): void {
     const preview = buildOutlinePreview(mermaidText);
     if (!preview) return;
 
@@ -387,6 +462,41 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
     y += graphH + 18;
   }
 
+  async function drawOutlineGraph(step: 3 | 4, mermaidText: string): Promise<void> {
+    const title = step === 3 ? "步驟三完成結構樹（圖形）" : "步驟四修正後結構樹（圖形）";
+    writeSectionHeader(title);
+
+    try {
+      const svg = await renderMermaidSvg(mermaidText);
+      if (!svg) {
+        // Fallback to deterministic local preview graph when Mermaid SVG rendering is unavailable.
+        y -= 34;
+        drawOutlineGraphFallback(step, mermaidText);
+        return;
+      }
+      const png = await svgToPngDataUrl(svg);
+      if (!png) {
+        y -= 34;
+        drawOutlineGraphFallback(step, mermaidText);
+        return;
+      }
+
+      const graphScale = Math.min((contentWidth - 24) / png.width, 1);
+      const graphW = png.width * graphScale;
+      const graphH = png.height * graphScale;
+      const boxX = PAGE.marginX + (contentWidth - graphW) / 2;
+      ensureSpacePx(graphH + 18);
+      setFillColor([248, 250, 252]);
+      setDrawColor(COLORS.sectionStroke);
+      doc.roundedRect(PAGE.marginX, y - 6, contentWidth, graphH + 12, 8, 8, "FD");
+      doc.addImage(png.dataUrl, "PNG", boxX, y, graphW, graphH);
+      y += graphH + 18;
+    } catch {
+      y -= 34;
+      drawOutlineGraphFallback(step, mermaidText);
+    }
+  }
+
   function drawMessageCard(msg: PdfMessage, index: number): void {
     const header = `#${String(index).padStart(3, "0")} · ${formatRole(msg.role)} · ${new Date(msg.at).toLocaleString("zh-TW")}`;
     const cardX = PAGE.marginX;
@@ -410,7 +520,7 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
     y += 8;
   }
 
-  function renderTimeline(messages: PdfMessage[]): void {
+  async function renderTimeline(messages: PdfMessage[]): Promise<void> {
     writeSectionHeader("完整互動歷程");
 
     if (messages.length === 0) {
@@ -457,22 +567,22 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
         y += 30;
 
         if (step === 3 && step3Outline && !insertedStep3) {
-          drawOutlineGraph(3, step3Outline);
+          await drawOutlineGraph(3, step3Outline);
           insertedStep3 = true;
         }
         if (step === 4 && hasStep4Outline && !insertedStep4) {
-          drawOutlineGraph(4, step4Outline);
+          await drawOutlineGraph(4, step4Outline);
           insertedStep4 = true;
         }
       }
 
       if (item.type === "outline") {
         if (step === 3 && step3Outline && !insertedStep3) {
-          drawOutlineGraph(3, step3Outline);
+          await drawOutlineGraph(3, step3Outline);
           insertedStep3 = true;
         }
         if (step === 4 && hasStep4Outline && !insertedStep4) {
-          drawOutlineGraph(4, step4Outline);
+          await drawOutlineGraph(4, step4Outline);
           insertedStep4 = true;
         }
         continue;
@@ -485,10 +595,10 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
 
     // Fallback placement in case outlines exist but step messages are absent.
     if (step3Outline && !insertedStep3) {
-      drawOutlineGraph(3, step3Outline);
+      await drawOutlineGraph(3, step3Outline);
     }
     if (hasStep4Outline && !insertedStep4) {
-      drawOutlineGraph(4, step4Outline);
+      await drawOutlineGraph(4, step4Outline);
     }
   }
 
@@ -526,7 +636,7 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
     11
   );
 
-  renderTimeline(input.timelineMessages);
+  await renderTimeline(input.timelineMessages);
 
   writeSectionHeader("版本註記");
   renderMarkdown(
