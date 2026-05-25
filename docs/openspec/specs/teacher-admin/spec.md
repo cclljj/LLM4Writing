@@ -170,6 +170,13 @@ The classroom dashboard SHALL show all sessions for the selected course and prio
 
 The learning monitor SHALL provide group and personal records organized by step.
 
+#### Scenario: Class joined-status table sorting
+
+- **GIVEN** a teacher or admin is viewing the class joined-status table in learning management
+- **WHEN** the user clicks an ascending or descending control for `姓名 (帳號)`, `所在組別`, `目前進度`, or `發言數`
+- **THEN** rows are sorted immediately by the selected column and direction
+- **AND** `姓名 (帳號)` uses account (`username`) as the sort key rather than display name
+
 #### Scenario: Group conversation detail
 
 - **GIVEN** a teacher selects a group session

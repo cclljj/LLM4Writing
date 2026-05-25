@@ -29,6 +29,8 @@ void (null as unknown as _QS);
 void (null as unknown as _AD);
 
 type MonitorMessage = { id: string; role: string; userId?: string; step: number; text: string; at: string };
+type ClassJoinSortColumn = "username" | "groupName" | "step" | "messageCount";
+type SortDirection = "asc" | "desc";
 
 const stepNameMap: Record<number, string> = {
   1: "審視題目",
@@ -92,6 +94,10 @@ export default function LearningMonitorTab({
   const [learningPage, setLearningPage] = useState(1);
   const [learningJumpPage, setLearningJumpPage] = useState("1");
   const [progressStatsPage, setProgressStatsPage] = useState(1);
+  const [classJoinSort, setClassJoinSort] = useState<{ column: ClassJoinSortColumn; direction: SortDirection }>({
+    column: "username",
+    direction: "asc"
+  });
   const monitorPollingBusyRef = useRef(false);
   // Anchor for "查看對話" jump-to-section behavior (#246).
   const groupLogRef = useRef<HTMLDivElement | null>(null);
@@ -316,6 +322,30 @@ export default function LearningMonitorTab({
       };
     });
   }, [selectedLearningActivity, filteredMonitorSessions, users]);
+
+  const sortedClassJoinRows = useMemo(() => {
+    const rows = classJoinRows.slice();
+    const dir = classJoinSort.direction === "asc" ? 1 : -1;
+    const keyOf = (row: (typeof classJoinRows)[number]): string | number => {
+      if (classJoinSort.column === "username") return row.username;
+      if (classJoinSort.column === "groupName") return row.groupName ?? "";
+      if (classJoinSort.column === "step") return row.step ?? -1;
+      return row.messageCount;
+    };
+    rows.sort((a, b) => {
+      const av = keyOf(a);
+      const bv = keyOf(b);
+      if (typeof av === "number" && typeof bv === "number") {
+        return (av - bv) * dir;
+      }
+      return String(av).localeCompare(String(bv), "zh-Hant") * dir;
+    });
+    return rows;
+  }, [classJoinRows, classJoinSort]);
+
+  function setClassJoinSortBy(column: ClassJoinSortColumn, direction: SortDirection) {
+    setClassJoinSort({ column, direction });
+  }
 
   // Per-session analytics cache (#242): each session's hint+risk only depend on its
   // own content; cache keyed by a cheap content signature so unchanged sessions skip
@@ -1396,17 +1426,33 @@ export default function LearningMonitorTab({
                 <thead>
                   <tr>
                     <th>序號</th>
-                    <th>姓名 (帳號)</th>
+                    <th>
+                      姓名 (帳號)
+                      <button type="button" className="secondary" style={{ marginLeft: 6, width: "auto", padding: "0 4px", minWidth: 0, color: classJoinSort.column === "username" && classJoinSort.direction === "asc" ? "#0f172a" : "#94a3b8" }} onClick={() => setClassJoinSortBy("username", "asc")} aria-label="姓名帳號升冪排序">↑</button>
+                      <button type="button" className="secondary" style={{ marginLeft: 2, width: "auto", padding: "0 4px", minWidth: 0, color: classJoinSort.column === "username" && classJoinSort.direction === "desc" ? "#0f172a" : "#94a3b8" }} onClick={() => setClassJoinSortBy("username", "desc")} aria-label="姓名帳號降冪排序">↓</button>
+                    </th>
                     <th>加入狀態</th>
-                    <th>所在組別</th>
-                    <th>目前進度</th>
-                    <th>發言數</th>
+                    <th>
+                      所在組別
+                      <button type="button" className="secondary" style={{ marginLeft: 6, width: "auto", padding: "0 4px", minWidth: 0, color: classJoinSort.column === "groupName" && classJoinSort.direction === "asc" ? "#0f172a" : "#94a3b8" }} onClick={() => setClassJoinSortBy("groupName", "asc")} aria-label="所在組別升冪排序">↑</button>
+                      <button type="button" className="secondary" style={{ marginLeft: 2, width: "auto", padding: "0 4px", minWidth: 0, color: classJoinSort.column === "groupName" && classJoinSort.direction === "desc" ? "#0f172a" : "#94a3b8" }} onClick={() => setClassJoinSortBy("groupName", "desc")} aria-label="所在組別降冪排序">↓</button>
+                    </th>
+                    <th>
+                      目前進度
+                      <button type="button" className="secondary" style={{ marginLeft: 6, width: "auto", padding: "0 4px", minWidth: 0, color: classJoinSort.column === "step" && classJoinSort.direction === "asc" ? "#0f172a" : "#94a3b8" }} onClick={() => setClassJoinSortBy("step", "asc")} aria-label="目前進度升冪排序">↑</button>
+                      <button type="button" className="secondary" style={{ marginLeft: 2, width: "auto", padding: "0 4px", minWidth: 0, color: classJoinSort.column === "step" && classJoinSort.direction === "desc" ? "#0f172a" : "#94a3b8" }} onClick={() => setClassJoinSortBy("step", "desc")} aria-label="目前進度降冪排序">↓</button>
+                    </th>
+                    <th>
+                      發言數
+                      <button type="button" className="secondary" style={{ marginLeft: 6, width: "auto", padding: "0 4px", minWidth: 0, color: classJoinSort.column === "messageCount" && classJoinSort.direction === "asc" ? "#0f172a" : "#94a3b8" }} onClick={() => setClassJoinSortBy("messageCount", "asc")} aria-label="發言數升冪排序">↑</button>
+                      <button type="button" className="secondary" style={{ marginLeft: 2, width: "auto", padding: "0 4px", minWidth: 0, color: classJoinSort.column === "messageCount" && classJoinSort.direction === "desc" ? "#0f172a" : "#94a3b8" }} onClick={() => setClassJoinSortBy("messageCount", "desc")} aria-label="發言數降冪排序">↓</button>
+                    </th>
                     <th>最後發言時間</th>
                     <th>動作</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {classJoinRows.map((row, idx) => {
+                  {sortedClassJoinRows.map((row, idx) => {
                     const progressKey = row.sessionId ? `progress:${row.sessionId}:${row.username}` : "";
                     const isProgressLoading = learningActionKey === progressKey;
                     return (
@@ -1444,7 +1490,7 @@ export default function LearningMonitorTab({
                 </tbody>
               </table>
             </div>
-            {classJoinRows.length === 0 ? <small>此課程目前沒有可見學生名單。</small> : null}
+            {sortedClassJoinRows.length === 0 ? <small>此課程目前沒有可見學生名單。</small> : null}
             {selectedProgressUser ? <small style={{ display: "block", marginTop: 8 }}>目前檢視個人對話：{selectedProgressUser}</small> : null}
           </div>
 
