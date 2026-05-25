@@ -59,7 +59,6 @@ type ClassExportJob = {
   status: "queued" | "running" | "retrying" | "packaging" | "succeeded" | "failed" | "canceled";
   zipFileName: string;
   error?: string;
-  cancelRequested: boolean;
 };
 
 const PAGE_SIZE = 10;
@@ -458,24 +457,25 @@ export default function CourseImplementationReportTab({
     }
   }
 
-  async function cancelClassExport() {
-    if (!classExportJobId) return;
-    try {
-      await fetch(`/api/teacher/course-report-exports/${encodeURIComponent(classExportJobId)}/cancel`, { method: "POST" });
-    } catch {
-      setError("class_export_cancel_failed");
-    }
-  }
-
   async function downloadClassZip() {
     if (!classExportJobId || classExportJob?.status !== "succeeded") return;
     const url = `/api/teacher/course-report-exports/${encodeURIComponent(classExportJobId)}/download`;
+    const response = await fetch(url, { cache: "no-store" });
+    const contentType = response.headers.get("content-type") ?? "";
+    if (!response.ok || !contentType.includes("application/zip")) {
+      const data = await response.json().catch(() => null);
+      setError(data?.error ?? "class_export_download_failed");
+      return;
+    }
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url;
+    a.href = objectUrl;
     a.download = classExportJob.zipFileName || `${selectedCourse?.activityId ?? "course"}_${selectedCourse?.classNumber ?? "class"}_course-report-v1.zip`;
     document.body.appendChild(a);
     a.click();
     a.remove();
+    URL.revokeObjectURL(objectUrl);
   }
 
   useEffect(() => {
@@ -638,11 +638,6 @@ export default function CourseImplementationReportTab({
                 {startingClassExport ? "建立匯出作業中..." : "一鍵下載全班 ZIP"}
               </button>
             </div>
-            {classExportJob && ["queued", "running", "retrying", "packaging"].includes(classExportJob.status) ? (
-              <div style={{ width: 100 }}>
-                <button type="button" className="secondary" onClick={() => cancelClassExport().catch(() => undefined)}>取消</button>
-              </div>
-            ) : null}
             {classExportJob?.status === "succeeded" ? (
               <div style={{ width: 100 }}>
                 <button type="button" className="secondary" onClick={() => downloadClassZip().catch(() => undefined)}>下載 ZIP</button>
