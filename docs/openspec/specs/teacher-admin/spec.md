@@ -139,6 +139,12 @@ The classroom dashboard SHALL show all sessions for the selected course and prio
 - **WHEN** the dashboard renders current progress
 - **THEN** it shows the minimum personal step and Step5-10 distribution counts
 
+#### Scenario: Detailed substep progress labels in monitor views
+
+- **GIVEN** a session is currently in Step1 or Step2 and includes substep state
+- **WHEN** teacher/admin views current progress in dashboard, class joined-status, group progress, or personal progress tables
+- **THEN** the progress label shows detailed step code (for example `1-1`, `1-3-2`, `2-1-3`) instead of only coarse `Step 1` or `Step 2`
+
 #### Scenario: Step3 advance gate uses joined members first
 
 - **GIVEN** a Step3 session has assigned participants but not all assigned users have actually joined the session

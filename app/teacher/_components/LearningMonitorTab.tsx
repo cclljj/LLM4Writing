@@ -316,6 +316,10 @@ export default function LearningMonitorTab({
         displayName: userRecord?.name?.trim() || username,
         joined: onlineUserSet.has(username),
         step: latestPersonalStep ?? latestSession?.currentStep ?? null,
+        stepLabel:
+          latestSession && (latestPersonalStep ?? latestSession.currentStep)
+            ? getDetailedStepCode(latestSession, latestPersonalStep ?? latestSession.currentStep)
+            : null,
         groupName: latestSession?.groupName ?? null,
         sessionId: latestSession?.sessionId ?? null,
         messageCount,
@@ -330,7 +334,7 @@ export default function LearningMonitorTab({
     const keyOf = (row: (typeof classJoinRows)[number]): string | number => {
       if (classJoinSort.column === "username") return row.username;
       if (classJoinSort.column === "groupName") return row.groupName ?? "";
-      if (classJoinSort.column === "step") return row.step ?? -1;
+      if (classJoinSort.column === "step") return row.stepLabel ?? "";
       return row.messageCount;
     };
     rows.sort((a, b) => {
@@ -466,7 +470,10 @@ export default function LearningMonitorTab({
       stuckCount,
       watchCount,
       riskRows: riskRows.map((row) => ({
-        session: row.session,
+        session: {
+          ...row.session,
+          currentStepLabel: getDetailedStepCode(row.session, row.groupCurrentStep)
+        },
         risk: row.risk,
         hint: row.hint,
         groupCurrentStep: row.groupCurrentStep,
@@ -539,6 +546,7 @@ export default function LearningMonitorTab({
       groupName: session.groupName ?? session.groupId ?? "未命名組",
       membersText: (session.participants ?? []).join("、") || "—",
       currentStep: getGroupCurrentStep(session),
+      currentStepLabel: getDetailedStepCode(session, getGroupCurrentStep(session)),
       stepDurationsText: formatStepDurationsText(computeSessionStepDurations(session)),
       totalSpeechCount: session.messages.filter((m) => m.role === "student").length
     }));
@@ -552,6 +560,7 @@ export default function LearningMonitorTab({
       displayName: string;
       groupName: string;
       currentStep: number;
+      currentStepLabel: string;
       stepDurationsText: string;
       totalSpeechCount: number;
     }> = [];
@@ -566,6 +575,7 @@ export default function LearningMonitorTab({
           displayName: user?.name?.trim() || username,
           groupName,
           currentStep: session.personalSteps?.[username] ?? session.currentStep,
+          currentStepLabel: getDetailedStepCode(session, session.personalSteps?.[username] ?? session.currentStep),
           stepDurationsText: formatStepDurationsText(computeUserStepDurations(session, username)),
           totalSpeechCount: ownMessages.length
         });
@@ -820,6 +830,22 @@ export default function LearningMonitorTab({
     return null;
   }
 
+  function getDetailedStepCode(session: MonitorSession, step: number = session.currentStep): string {
+    if (step !== session.currentStep) return String(step);
+    if (step === 1) {
+      const sub = session.stepState?.step1Substep ?? 1;
+      if (sub === 3) return `1-3-${session.stepState?.step1Substep3Question ?? 1}`;
+      if (sub === 4) return `1-4-${session.stepState?.step1Substep4Question ?? 1}`;
+      return `1-${sub}`;
+    }
+    if (step === 2) {
+      const sub = session.stepState?.step2Substep ?? 1;
+      if (sub === 1) return `2-1-${session.stepState?.step2Substep1Question ?? 1}`;
+      return `2-${sub}`;
+    }
+    return String(step);
+  }
+
   function getSessionLastEventAt(session: MonitorSession): Date | null {
     if (session.lastMessageAt) {
       const parsed = new Date(session.lastMessageAt);
@@ -881,7 +907,7 @@ export default function LearningMonitorTab({
         ? { ready: true, text: "全部組員已完成步驟 1，建議切換到 Step 2。", nextStep }
         : {
             ready: false,
-            text: `步驟 1 進行中（目前子步驟 1-${session.stepState?.step1Substep ?? 1}），等待全部組員完成。`
+            text: `步驟 1 進行中（目前子步驟 ${getDetailedStepCode(session, 1)}），等待全部組員完成。`
           };
     }
 
@@ -893,7 +919,7 @@ export default function LearningMonitorTab({
         ? { ready: true, text: "全部組員已完成步驟 2，建議切換到 Step 3。", nextStep }
         : {
             ready: false,
-            text: `步驟 2 進行中（目前子步驟 2-${session.stepState?.step2Substep ?? 1}），等待全部組員完成。`
+            text: `步驟 2 進行中（目前子步驟 ${getDetailedStepCode(session, 2)}），等待全部組員完成。`
           };
     }
 
@@ -1462,7 +1488,7 @@ export default function LearningMonitorTab({
                       <td>{row.displayName} ({row.username})</td>
                       <td>{row.joined ? "已加入" : "未加入"}</td>
                       <td>{row.groupName ?? "—"}</td>
-                      <td>{row.step ? `Step ${row.step}` : "—"}</td>
+                      <td>{row.stepLabel ? `Step ${row.stepLabel}` : "—"}</td>
                       <td>{row.messageCount}</td>
                       <td>{row.lastMessageAt ? formatTaipeiDateTime(row.lastMessageAt) : "—"}</td>
                       <td>
@@ -1518,7 +1544,7 @@ export default function LearningMonitorTab({
                     <tr key={`group-progress-${row.sessionId}`}>
                       <td>{row.groupName}</td>
                       <td>{row.membersText}</td>
-                      <td>Step {row.currentStep}</td>
+                      <td>Step {row.currentStepLabel}</td>
                       <td>{row.stepDurationsText}</td>
                       <td>{row.totalSpeechCount}</td>
                     </tr>
@@ -1545,7 +1571,7 @@ export default function LearningMonitorTab({
                     <tr key={`personal-progress-${row.sessionId}-${row.username}`}>
                       <td>{row.displayName} ({row.username})</td>
                       <td>{row.groupName}</td>
-                      <td>Step {row.currentStep}</td>
+                      <td>Step {row.currentStepLabel}</td>
                       <td>{row.stepDurationsText}</td>
                       <td>{row.totalSpeechCount}</td>
                     </tr>

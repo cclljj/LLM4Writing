@@ -49,6 +49,7 @@ export type MonitorSession = {
   joinedUsers?: string[];
   onlineUsers?: string[];
   currentStep: number;
+  currentStepLabel?: string;
   personalSteps?: Record<string, number>;
   groupGate?: Record<string, string[]>;
   stepState?: {

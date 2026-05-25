@@ -5,6 +5,7 @@ export type DashboardSession = {
   groupId?: string;
   groupName?: string;
   currentStep: number;
+  currentStepLabel?: string;
 };
 
 export type DashboardRisk = {
@@ -162,7 +163,7 @@ export default function TeacherDashboard<TSession extends DashboardSession>({
                     {row.membersText || "—"}
                   </small>
                 </td>
-                <td>Step {row.groupCurrentStep}</td>
+                <td>{row.session.currentStepLabel ? `Step ${row.session.currentStepLabel}` : `Step ${row.groupCurrentStep}`}</td>
                 <td>
                   <small>{row.step5To10Text || "—"}</small>
                 </td>
