@@ -172,6 +172,13 @@ The classroom dashboard SHALL show all sessions for the selected course and prio
 - **WHEN** the UI shows loading state
 - **THEN** only the relevant row, button, or detail region is locked
 
+#### Scenario: Manual refresh also updates selected records
+
+- **GIVEN** teacher/admin is viewing selected group log or personal record in learning management
+- **WHEN** the user clicks `重新整理` for the current course
+- **THEN** monitor summary data refreshes
+- **AND** the currently selected group log and personal record are reloaded from latest backend data instead of keeping stale content
+
 ### Requirement: Conversation And Progress Records
 
 The learning monitor SHALL provide group and personal records organized by step.

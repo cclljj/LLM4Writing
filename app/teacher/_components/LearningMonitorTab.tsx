@@ -764,6 +764,22 @@ export default function LearningMonitorTab({
     return mergedSessions;
   }
 
+  async function syncSelectedRecordsAfterMonitorRefresh(latestSessions: MonitorSession[]) {
+    const selectedSessionId = monitorSelected?.sessionId;
+    if (selectedSessionId && latestSessions.some((session) => session.sessionId === selectedSessionId)) {
+      await loadMonitorSessionDetail(selectedSessionId);
+    }
+
+    if (progressSessionId && selectedProgressUser) {
+      const progressSessionExists = latestSessions.some((session) => session.sessionId === progressSessionId);
+      if (progressSessionExists) {
+        await loadProgress(progressSessionId, selectedProgressUser);
+      } else {
+        setPersonalMessages([]);
+      }
+    }
+  }
+
   async function loadMonitorSessionDetail(sessionId: string): Promise<MonitorSession | null> {
     setDetailLoadingSessionId(sessionId);
     try {
@@ -1139,7 +1155,7 @@ export default function LearningMonitorTab({
       if (username) {
         q.set("username", username);
       }
-      const response = await fetch(`/api/teacher/personal-progress?${q.toString()}`);
+      const response = await fetch(`/api/teacher/personal-progress?${q.toString()}`, { cache: "no-store" });
       const data = await response.json();
       if (!response.ok) {
         setError(formatUserError(data.error ?? "progress_failed"));
@@ -1327,7 +1343,10 @@ export default function LearningMonitorTab({
                             setSelectedLearningActivityId(activity.id);
                             runLearningAction(`course:${activity.id}:refresh`, "系統正在重新整理課程資料，請稍候...", async () => {
                               await onRefreshData();
-                              if (showCourseStatusView) await refreshMonitor(activity.id);
+                              if (showCourseStatusView) {
+                                const latestSessions = await refreshMonitor(activity.id);
+                                await syncSelectedRecordsAfterMonitorRefresh(latestSessions);
+                              }
                             });
                           }}
                         >
