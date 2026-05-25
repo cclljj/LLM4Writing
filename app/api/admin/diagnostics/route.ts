@@ -8,7 +8,7 @@ import {
   listSessions,
   type PersistedEventRow
 } from "@/src/lib/store";
-import { findActivity } from "@/src/lib/activity-store";
+import { findActivity, hydrateDomainState } from "@/src/lib/activity-store";
 import { getLlmCallStats } from "@/src/lib/llm-observability";
 import { getDatabaseHost, isDatabaseEnabled } from "@/src/lib/db-config";
 import type { SessionState } from "@/src/lib/types";
@@ -1220,6 +1220,7 @@ function buildLlmErrorTaxonomy(llmEvents?: PersistedEventRow[]) {
 }
 
 async function buildDiagnosticsPayload(selectedWindow: DiagnosticsWindow, nowMs: number): Promise<DiagnosticsPayload> {
+  await hydrateDomainState();
   const config = systemPromptConfig as Record<string, unknown>;
   const cutoffMs = nowMs - WINDOW_MS[selectedWindow];
   const cutoffIso = new Date(cutoffMs).toISOString();
