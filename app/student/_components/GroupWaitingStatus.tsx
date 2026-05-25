@@ -1,6 +1,8 @@
 type GroupWaitingStatusProps = {
   currentStep: number;
   activeGateKey: string | null;
+  groupLabel: string;
+  memberNames: string[];
   title: string;
   tone: "" | "warning" | "success";
   submittedCount: number;
@@ -11,6 +13,8 @@ type GroupWaitingStatusProps = {
 export default function GroupWaitingStatus({
   currentStep,
   activeGateKey,
+  groupLabel,
+  memberNames,
   title,
   tone,
   submittedCount,
@@ -21,6 +25,9 @@ export default function GroupWaitingStatus({
     <div className={`card status-panel ${tone}`}>
       <h2 style={{ marginBottom: 6 }}>小組等待狀態</h2>
       <p style={{ margin: 0, fontWeight: 700 }}>{title}</p>
+      <p style={{ margin: "6px 0 0" }}>
+        組別：{groupLabel} / 組員：{memberNames.length > 0 ? memberNames.join("、") : "—"}
+      </p>
       <p style={{ margin: "6px 0 0" }}>
         {currentStep === 4 ? "完成確認" : activeGateKey ? `目前題目：${activeGateKey}` : "目前題目：—"} / 已完成 {submittedCount} / {totalCount}
       </p>

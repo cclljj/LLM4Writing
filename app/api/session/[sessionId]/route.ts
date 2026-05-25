@@ -10,6 +10,7 @@ import { resolveStructureTreeTemplate } from "@/src/lib/genre-resolver";
 import { getCurrentUser } from "@/src/lib/auth-server";
 import { markUserOnline } from "@/src/lib/session-presence";
 import { canAccessTeacherSession } from "@/src/lib/teacher-session-access";
+import { listUsersStore } from "@/src/lib/user-store";
 
 function makeMessage(input: Omit<ChatMessage, "id" | "at">): ChatMessage {
   return {
@@ -154,7 +155,16 @@ export async function GET(request: Request, context: { params: Promise<{ session
     await saveSession(session);
   }
 
-  const response = NextResponse.json(session);
+  const allUsers = await listUsersStore();
+  const userNameMap = new Map(allUsers.map((account) => [account.username, account.name?.trim() || account.username]));
+  const responsePayload = {
+    ...session,
+    participantDisplayNames: session.participants.reduce((acc, username) => {
+      acc[username] = userNameMap.get(username) || username;
+      return acc;
+    }, {} as Record<string, string>)
+  };
+  const response = NextResponse.json(responsePayload);
   response.headers.set("ETag", changed ? `"${new Date().toISOString()}"` : etag);
   return response;
 }

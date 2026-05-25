@@ -6,6 +6,7 @@ import { loadActivityWithConfig } from "@/src/lib/prompt-config";
 import { resolveStructureTreeTemplate } from "@/src/lib/genre-resolver";
 import { listSessions, saveSession } from "@/src/lib/store";
 import { markUserOnline } from "@/src/lib/session-presence";
+import { listUsersStore } from "@/src/lib/user-store";
 
 function isSingleNodeOutline(outline: string): boolean {
   const raw = outline.trim();
@@ -77,6 +78,15 @@ export async function POST(request: NextRequest) {
     }
 
     const sessions = await listSessions();
+    const allUsers = await listUsersStore();
+    const userNameMap = new Map(allUsers.map((account) => [account.username, account.name?.trim() || account.username]));
+    const toSessionResponse = <T extends { participants: string[] }>(payload: T) => ({
+      ...payload,
+      participantDisplayNames: payload.participants.reduce((acc, username) => {
+        acc[username] = userNameMap.get(username) || username;
+        return acc;
+      }, {} as Record<string, string>)
+    });
     const existing = sessions.find(
       (s) => s.workflow === "spec10" && s.activityId === activity.id && s.participants.includes(user.username)
     );
@@ -130,7 +140,7 @@ export async function POST(request: NextRequest) {
       } else {
         await saveSession(existing);
       }
-      return NextResponse.json(existing);
+      return NextResponse.json(toSessionResponse(existing));
     }
 
     const session = createSession({
@@ -155,7 +165,7 @@ export async function POST(request: NextRequest) {
     await markUserOnline(session.id, user.username);
 
     await saveSession(session);
-    return NextResponse.json(session, { status: 201 });
+    return NextResponse.json(toSessionResponse(session), { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "student_join_failed";
     return NextResponse.json({ error: "student_join_failed", detail: message }, { status: 500 });

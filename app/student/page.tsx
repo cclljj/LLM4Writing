@@ -52,6 +52,7 @@ type SessionState = {
   groupName?: string;
   workflow: string;
   participants: string[];
+  participantDisplayNames?: Record<string, string>;
   groupGate?: Record<string, string[]>;
   stepState: {
     step1Substep: number;
@@ -217,16 +218,23 @@ export default function StudentPage() {
     setSession((prev) => {
       if (!prev || !loginUser) return incoming;
       if (prev.id !== incoming.id) return incoming;
+      const mergedIncoming =
+        incoming.participantDisplayNames && Object.keys(incoming.participantDisplayNames).length > 0
+          ? incoming
+          : {
+              ...incoming,
+              participantDisplayNames: prev.participantDisplayNames
+            };
       const prevOwnStep = getOwnStepFromSession(prev, loginUser);
-      const nextOwnStep = getOwnStepFromSession(incoming, loginUser);
+      const nextOwnStep = getOwnStepFromSession(mergedIncoming, loginUser);
       const prevMessageCount = prev.messages?.length ?? 0;
-      const nextMessageCount = incoming.messages?.length ?? 0;
+      const nextMessageCount = mergedIncoming.messages?.length ?? 0;
       // Guard against out-of-order polling responses that would roll the user
       // back to an earlier personal step with no newer payload.
       if (nextOwnStep < prevOwnStep && nextMessageCount <= prevMessageCount) {
         return prev;
       }
-      return incoming;
+      return mergedIncoming;
     });
   }, [loginUser]);
 
@@ -540,6 +548,8 @@ export default function StudentPage() {
   const lastInteractive = interactiveMessages[interactiveMessages.length - 1];
   const lastIsQuestion = lastInteractive?.kind === "question";
   const activeGateKey = getActiveGroupGateKey(session, currentStep);
+  const usernameToName = useMemo(() => session?.participantDisplayNames ?? {}, [session?.participantDisplayNames]);
+  const toDisplayName = useCallback((username: string) => usernameToName[username] || username, [usernameToName]);
   const responders = activeGateKey ? session?.groupGate?.[activeGateKey] ?? [] : [];
   const step3CompletedUsers = session?.groupGate?.["3-complete"] ?? [];
   const step4CompletedUsers = useMemo(() => session?.groupGate?.["4-complete"] ?? [], [session?.groupGate]);
@@ -597,6 +607,15 @@ export default function StudentPage() {
     !session.participants.every((p) => step3CompletedUsers.includes(p));
   const groupStatusResponders = currentStep === 4 ? step4CompletedUsers : responders;
   const groupPendingMembers = session?.participants.filter((p) => !groupStatusResponders.includes(p)) ?? [];
+  const groupPendingMemberNames = useMemo(
+    () => groupPendingMembers.map((username) => toDisplayName(username)),
+    [groupPendingMembers, toDisplayName]
+  );
+  const groupMemberNames = useMemo(
+    () => (session?.participants ?? []).map((username) => toDisplayName(username)),
+    [session?.participants, toDisplayName]
+  );
+  const groupLabel = session?.groupName ? `第 ${session.groupName} 組` : "—";
   const groupSubmittedCount = Math.min(groupStatusResponders.length, session?.participants.length ?? 0);
   const groupTotalCount = session?.participants.length ?? 0;
   const groupStatusAllDone = currentStep === 4 ? allStep4Completed : allRespondedThisTurn;
@@ -644,7 +663,7 @@ export default function StudentPage() {
     isSendingMessage,
     waitingAiForGroup,
     waitingGroupMembers,
-    waitingGroupMemberNames: groupPendingMembers,
+    waitingGroupMemberNames: groupPendingMemberNames,
     step1CompletedWaitingTeacher,
     step2CompletedWaitingTeacher,
     step3CompletedByMe,
@@ -1361,7 +1380,7 @@ export default function StudentPage() {
               班級：{currentActivity?.classNumber ?? "—"} / 組別：{session.groupName ?? "—"}
             </p>
             <p style={{ margin: "4px 0 0", lineHeight: 1.5 }}>
-              組員名單：{session.participants.length > 0 ? session.participants.join("、") : "—"}
+              組員名單：{groupMemberNames.length > 0 ? groupMemberNames.join("、") : "—"}
             </p>
             <div style={{ marginTop: 10 }}>
               <p style={{ margin: 0 }}><strong>引導說明</strong></p>
@@ -1439,11 +1458,13 @@ export default function StudentPage() {
             <GroupWaitingStatus
               currentStep={currentStep}
               activeGateKey={activeGateKey}
+              groupLabel={groupLabel}
+              memberNames={groupMemberNames}
               title={groupStatusTitle}
               tone={groupStatusTone}
               submittedCount={groupSubmittedCount}
               totalCount={groupTotalCount}
-              pendingMembers={groupPendingMembers}
+              pendingMembers={groupPendingMemberNames}
             />
           ) : null}
 

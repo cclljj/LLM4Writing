@@ -344,6 +344,13 @@ The student UI SHALL keep course progress, previous-step review, next-action gui
 - **WHEN** the progress rail and course cards render
 - **THEN** they use the student's personal step when available instead of only the group session step
 
+#### Scenario: Group waiting card shows member names
+
+- **GIVEN** a student is in Step1/2/4 group interaction and the waiting-status card is shown
+- **WHEN** the card renders group information and pending members
+- **THEN** it shows group label plus all members using display names instead of usernames
+- **AND** the `尚未完成` list also uses display names, falling back to username only when a name is unavailable
+
 #### Scenario: History view hides not-yet-reached step artifacts
 
 - **GIVEN** a student has not reached Step4 yet
