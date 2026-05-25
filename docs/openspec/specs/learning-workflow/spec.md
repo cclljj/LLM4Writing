@@ -351,6 +351,13 @@ The student UI SHALL keep course progress, previous-step review, next-action gui
 - **THEN** it shows group label plus all members using display names instead of usernames
 - **AND** the `尚未完成` list also uses display names, falling back to username only when a name is unavailable
 
+#### Scenario: Step1/2 interaction student labels use name(account)
+
+- **GIVEN** a student is viewing Step1 or Step2 interaction messages
+- **WHEN** a peer student message is rendered
+- **THEN** the speaker label uses `姓名(帳號)` instead of username-only
+- **AND** if display name data is unavailable, the label falls back to username
+
 #### Scenario: History view hides not-yet-reached step artifacts
 
 - **GIVEN** a student has not reached Step4 yet

@@ -17,6 +17,7 @@ type InteractionPanelProps = {
   currentStep: number;
   currentMode: string;
   interactiveMessages: InteractiveItem[];
+  participantDisplayNames?: Record<string, string>;
   text: string;
   onTextChange: (value: string) => void;
   onSendMessage: (e: FormEvent) => void;
@@ -42,6 +43,12 @@ type InteractionPanelProps = {
   error: string;
 };
 
+function formatStudentIdentity(userId: string | undefined, participantDisplayNames?: Record<string, string>): string {
+  if (!userId) return "學生";
+  const name = participantDisplayNames?.[userId]?.trim();
+  return name ? `${name}(${userId})` : userId;
+}
+
 function formatUtc8Title(iso: string): string {
   const text = formatTaipeiDateTime(iso);
   if (text === "—") return "互動時間：未知";
@@ -66,6 +73,7 @@ export default function InteractionPanel({
   currentStep,
   currentMode,
   interactiveMessages,
+  participantDisplayNames,
   text,
   onTextChange,
   onSendMessage,
@@ -146,7 +154,7 @@ export default function InteractionPanel({
           <div key={message.id} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
             {currentStep === 4 && message.kind === "student" ? (
               <p style={{ margin: 0 }}>
-                <strong>{message.userId || "學生"}：</strong>
+                <strong>{formatStudentIdentity(message.userId, participantDisplayNames)}：</strong>
                 <span style={{ marginLeft: 4, whiteSpace: "pre-wrap" }}>{message.text}</span>
                 <small style={{ marginLeft: 6 }}>({message.at})</small>
               </p>
@@ -192,7 +200,7 @@ export default function InteractionPanel({
                   {message.kind === "question"
                     ? "問題"
                     : message.kind === "student"
-                      ? `學生${message.userId ? `(${message.userId})` : ""}`
+                      ? formatStudentIdentity(message.userId, participantDisplayNames)
                       : "AI 回覆"}
                 </strong>
                 <div

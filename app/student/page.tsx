@@ -1632,6 +1632,7 @@ export default function StudentPage() {
               currentStep={currentStep}
               currentMode={currentMode}
               interactiveMessages={interactiveMessages}
+              participantDisplayNames={usernameToName}
               text={text}
               onTextChange={setText}
               onSendMessage={sendMessage}
