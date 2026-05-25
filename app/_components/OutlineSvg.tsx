@@ -38,29 +38,39 @@ export default function OutlineSvg({ mermaidText, label, compact = false }: Prop
         role="img"
         aria-label={label}
       >
-        {preview.nodes
-          .filter((node) => node.parentId)
-          .map((node) => {
-            const parent = preview.nodes.find((item) => item.id === node.parentId);
-            if (!parent) return null;
-            const parentW = parent.w ?? nodeDefaultW;
-            const parentH = parent.h ?? nodeDefaultH;
-            const childW = node.w ?? nodeDefaultW;
-            const parentCx = parent.x + parentW / 2;
-            const childCx = node.x + childW / 2;
-            const startY = parent.y + parentH;
-            const endY = node.y;
-            const midY = Math.floor((startY + endY) / 2);
-            return (
-              <polyline
-                key={`${parent.id}-${node.id}`}
-                points={`${parentCx},${startY} ${parentCx},${Math.min(startY + elbowGap, midY)} ${childCx},${midY} ${childCx},${endY}`}
-                stroke="#94a3b8"
-                strokeWidth="2"
-                fill="none"
-              />
-            );
-          })}
+        {preview.edges.length > 0
+          ? preview.edges.map((edge) => (
+            <polyline
+              key={`${edge.fromId}-${edge.toId}`}
+              points={edge.points.map((p) => `${p.x},${p.y}`).join(" ")}
+              stroke="#94a3b8"
+              strokeWidth="2"
+              fill="none"
+            />
+          ))
+          : preview.nodes
+            .filter((node) => node.parentId)
+            .map((node) => {
+              const parent = preview.nodes.find((item) => item.id === node.parentId);
+              if (!parent) return null;
+              const parentW = parent.w ?? nodeDefaultW;
+              const parentH = parent.h ?? nodeDefaultH;
+              const childW = node.w ?? nodeDefaultW;
+              const parentCx = parent.x + parentW / 2;
+              const childCx = node.x + childW / 2;
+              const startY = parent.y + parentH;
+              const endY = node.y;
+              const midY = Math.floor((startY + endY) / 2);
+              return (
+                <polyline
+                  key={`${parent.id}-${node.id}`}
+                  points={`${parentCx},${startY} ${parentCx},${Math.min(startY + elbowGap, midY)} ${childCx},${midY} ${childCx},${endY}`}
+                  stroke="#94a3b8"
+                  strokeWidth="2"
+                  fill="none"
+                />
+              );
+            })}
         {preview.nodes.map((node) => (
           <g key={node.id}>
             <rect

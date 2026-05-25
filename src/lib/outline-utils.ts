@@ -1,3 +1,5 @@
+import dagre from "@dagrejs/dagre";
+
 export type OutlineNode = {
   id: string;
   parentId: string | null;
@@ -9,8 +11,15 @@ export type OutlineNode = {
   lines?: string[];
 };
 
+export type OutlineEdge = {
+  fromId: string;
+  toId: string;
+  points: Array<{ x: number; y: number }>;
+};
+
 export type OutlinePreview = {
   nodes: OutlineNode[];
+  edges: OutlineEdge[];
   width: number;
   height: number;
 };
@@ -157,30 +166,6 @@ export function buildOutlinePreview(mermaidText: string, options: BuildOutlinePr
   const hGap = compact ? 28 : 34;
   const vGap = compact ? 38 : 46;
 
-  const byId = new Map(nodes.map((n) => [n.id, n]));
-  const children = new Map<string, string[]>();
-  const roots: string[] = [];
-  for (const n of nodes) {
-    if (!n.parentId || !byId.has(n.parentId)) {
-      roots.push(n.id);
-      continue;
-    }
-    const bucket = children.get(n.parentId) ?? [];
-    bucket.push(n.id);
-    children.set(n.parentId, bucket);
-  }
-  roots.sort();
-  for (const bucket of children.values()) bucket.sort();
-
-  const depthById = new Map<string, number>();
-  const setDepth = (id: string, depth: number): void => {
-    if ((depthById.get(id) ?? 0) >= depth) return;
-    depthById.set(id, depth);
-    for (const childId of children.get(id) ?? []) setDepth(childId, depth + 1);
-  };
-  for (const rootId of roots) setDepth(rootId, 1);
-  for (const n of nodes) if (!depthById.has(n.id)) depthById.set(n.id, 1);
-
   for (const n of nodes) {
     const lines = wrapNodeText(n.text, maxCharsPerLine, maxLines);
     const maxLen = Math.max(...lines.map((line) => line.length), 1);
@@ -191,53 +176,51 @@ export function buildOutlinePreview(mermaidText: string, options: BuildOutlinePr
     n.h = h;
   }
 
-  const order: string[] = [];
-  const walk = (id: string): void => {
-    const childIds = children.get(id) ?? [];
-    if (childIds.length === 0) {
-      order.push(id);
-      return;
-    }
-    childIds.forEach((childId) => walk(childId));
-  };
-  roots.forEach((rootId) => walk(rootId));
-  for (const n of nodes) if (!order.includes(n.id)) order.push(n.id);
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const graph = new dagre.graphlib.Graph();
+  graph.setGraph({
+    rankdir: "TB",
+    ranksep: nodeMinH + vGap,
+    nodesep: hGap,
+    marginx: 20,
+    marginy: 20,
+    ranker: "tight-tree",
+  });
+  graph.setDefaultEdgeLabel(() => ({}));
 
-  const centerX = new Map<string, number>();
-  let cursor = 0;
-  for (const id of order) {
-    const n = byId.get(id);
-    if (!n) continue;
-    centerX.set(id, cursor + (n.w ?? nodeMinW) / 2);
-    cursor += (n.w ?? nodeMinW) + hGap;
-  }
-  const placeParent = (id: string): number => {
-    const childIds = children.get(id) ?? [];
-    if (childIds.length === 0) return centerX.get(id) ?? 0;
-    const childCenters = childIds.map((childId) => placeParent(childId)).sort((a, b) => a - b);
-    const center = (childCenters[0]! + childCenters[childCenters.length - 1]!) / 2;
-    centerX.set(id, center);
-    return center;
-  };
-  roots.forEach((rootId) => placeParent(rootId));
-
-  let minX = Number.POSITIVE_INFINITY;
-  let maxX = Number.NEGATIVE_INFINITY;
-  let maxY = 0;
   for (const n of nodes) {
-    const cx = centerX.get(n.id) ?? 0;
-    const w = n.w ?? nodeMinW;
-    const h = n.h ?? nodeMinH;
-    n.x = cx - w / 2;
-    n.y = ((depthById.get(n.id) ?? 1) - 1) * (nodeMinH + vGap);
-    minX = Math.min(minX, n.x);
-    maxX = Math.max(maxX, n.x + w);
-    maxY = Math.max(maxY, n.y + h);
+    graph.setNode(n.id, { width: n.w ?? nodeMinW, height: n.h ?? nodeMinH });
   }
 
-  const normLeft = 20 - minX;
-  const normalized = nodes.map((n) => ({ ...n, x: n.x + normLeft, y: n.y + 20 }));
-  const width = Math.max(620, Math.ceil(maxX - minX + 40));
-  const height = Math.max(280, Math.ceil(maxY + 40));
-  return { nodes: normalized, width, height };
+  for (const n of nodes) {
+    if (!n.parentId || !byId.has(n.parentId)) continue;
+    graph.setEdge(n.parentId, n.id);
+  }
+
+  dagre.layout(graph);
+
+  const positioned = nodes.map((n) => {
+    const gnode = graph.node(n.id) as { x: number; y: number; width: number; height: number } | undefined;
+    if (!gnode) return n;
+    return {
+      ...n,
+      w: gnode.width,
+      h: gnode.height,
+      x: gnode.x - gnode.width / 2,
+      y: gnode.y - gnode.height / 2,
+    };
+  });
+
+  const edges: OutlineEdge[] = [];
+  for (const n of nodes) {
+    if (!n.parentId || !byId.has(n.parentId)) continue;
+    const edge = graph.edge(n.parentId, n.id) as { points?: Array<{ x: number; y: number }> } | undefined;
+    if (!edge?.points || edge.points.length === 0) continue;
+    edges.push({ fromId: n.parentId, toId: n.id, points: edge.points.map((p) => ({ x: p.x, y: p.y })) });
+  }
+
+  const graphMeta = graph.graph() as { width?: number; height?: number };
+  const width = Math.max(620, Math.ceil((graphMeta.width ?? 0) + 40));
+  const height = Math.max(280, Math.ceil((graphMeta.height ?? 0) + 40));
+  return { nodes: positioned, edges, width, height };
 }
