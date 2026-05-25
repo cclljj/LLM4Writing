@@ -19,6 +19,7 @@ import {
   TEACHER_MONITOR_FAST_POLL_MS,
   TEACHER_MONITOR_MIN_POLL_MS
 } from "@/src/lib/teacher-monitor-polling";
+import { formatTaipeiDateTime } from "@/src/lib/time-format";
 import TeacherDashboard, { TeacherDashboardData } from "./TeacherDashboard";
 import { ActivityRow, MonitorSession, UserRow } from "./types";
 
@@ -1463,7 +1464,7 @@ export default function LearningMonitorTab({
                       <td>{row.groupName ?? "—"}</td>
                       <td>{row.step ? `Step ${row.step}` : "—"}</td>
                       <td>{row.messageCount}</td>
-                      <td>{row.lastMessageAt ? new Date(row.lastMessageAt).toLocaleString("zh-TW") : "—"}</td>
+                      <td>{row.lastMessageAt ? formatTaipeiDateTime(row.lastMessageAt) : "—"}</td>
                       <td>
                         <button
                           type="button"

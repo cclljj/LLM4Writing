@@ -145,6 +145,17 @@ The system MUST sanitize AI-generated text before showing it to students.
 - **WHEN** the response is prepared for a student-facing view
 - **THEN** the system removes development-format residue or falls back to a safe readable message
 
+### Requirement: Display Timezone Consistency
+
+All user-facing timestamps SHALL render in Taipei timezone (`Asia/Taipei`, `UTC+8`).
+
+#### Scenario: Timestamp rendering in UI and reports
+
+- **GIVEN** timestamp data is stored as ISO strings
+- **WHEN** student/teacher/admin UI or generated reports render time values
+- **THEN** displayed time is converted to `Asia/Taipei` consistently
+- **AND** this includes history records, monitor/audit diagnostics views, and report content
+
 ### Requirement: Durable Invariants
 
 The system MUST preserve the core invariants documented by the implementation spec.

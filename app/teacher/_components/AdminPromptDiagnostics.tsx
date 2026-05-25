@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { deferStateUpdate } from "@/src/lib/defer-state-update";
+import { formatTaipeiDateTime } from "@/src/lib/time-format";
 type DiagnosticsWindow = "24h" | "7d" | "14d" | "30d";
 const WINDOW_OPTIONS: DiagnosticsWindow[] = ["24h", "7d", "14d", "30d"];
 
@@ -660,7 +661,7 @@ export default function AdminPromptDiagnostics() {
                 <tbody>
                   {data.recentFallbackSamples.map((sample) => (
                     <tr key={`${sample.at}:${sample.sessionId ?? ""}:${sample.kind}`}>
-                      <td>{new Date(sample.at).toLocaleString("zh-TW", { hour12: false })}</td>
+                      <td>{formatTaipeiDateTime(sample.at, { hour12: false })}</td>
                       <td>{sample.step ?? "—"}</td>
                       <td>{sample.kind}</td>
                       <td>{sample.matchedLlmErrorCategory ?? "—"}</td>
@@ -692,7 +693,7 @@ export default function AdminPromptDiagnostics() {
                 <tbody>
                   {data.recentFallbackTraces.map((trace) => (
                     <tr key={`trace:${trace.at}:${trace.sessionId ?? ""}:${trace.kind}`}>
-                      <td>{new Date(trace.at).toLocaleString("zh-TW", { hour12: false })}</td>
+                      <td>{formatTaipeiDateTime(trace.at, { hour12: false })}</td>
                       <td>{`Step ${trace.step ?? "—"} / ${trace.kind}`}</td>
                       <td>{trace.matchedLlmErrorCategory ?? "—"}</td>
                       <td>{trace.originalQuestion ?? "—"}</td>
@@ -882,14 +883,14 @@ export default function AdminPromptDiagnostics() {
                       <td>{fmtNum(session.currentStepDwellMinutes)} 分</td>
                       <td>{session.groupStepDistribution || "—"}</td>
                       <td>{fmtNum(session.rejectedAnswerCount)}</td>
-                      <td>{new Date(session.lastMessageAt).toLocaleString("zh-TW")}</td>
+                      <td>{formatTaipeiDateTime(session.lastMessageAt)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
             {data.sessions.recent.length === 0 ? <small style={{ display: "block", marginTop: 8 }}>目前沒有可診斷的 session。</small> : null}
-            <small style={{ display: "block", marginTop: 8 }}>更新時間：{new Date(data.generatedAt).toLocaleString("zh-TW")}</small>
+            <small style={{ display: "block", marginTop: 8 }}>更新時間：{formatTaipeiDateTime(data.generatedAt)}</small>
           </div>
         </>
       ) : null}

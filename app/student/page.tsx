@@ -7,6 +7,7 @@ import { getStep9QuestionsFromConfig } from "@/src/lib/spec";
 import { validateDraftContent } from "@/src/lib/answer-validation";
 import { appendErrorHint, formatUserError } from "@/src/lib/error-messages";
 import { deferStateUpdate } from "@/src/lib/defer-state-update";
+import { formatTaipeiTime } from "@/src/lib/time-format";
 import OutlineSvg from "@/app/_components/OutlineSvg";
 import GroupWaitingStatus from "./_components/GroupWaitingStatus";
 import NextActionCard from "./_components/NextActionCard";
@@ -631,7 +632,7 @@ export default function StudentPage() {
     if (draftSaveError) return { state: "error" as const, text: draftSaveError };
     if (currentUnsavedDraftChars > 0) return { state: "dirty" as const, text: `尚有 ${currentUnsavedDraftChars} 字未保存` };
     if (lastDraftSavedAt) {
-      const time = new Date(lastDraftSavedAt).toLocaleTimeString("zh-TW", { hour: "2-digit", minute: "2-digit" });
+      const time = formatTaipeiTime(lastDraftSavedAt, { withSeconds: false });
       return { state: "saved" as const, text: `已自動保存於 ${time}` };
     }
     return { state: "saved" as const, text: "目前內容已保存" };

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ChatMessage } from "@/src/lib/types";
 import { deferStateUpdate } from "@/src/lib/defer-state-update";
+import { formatTaipeiDateTime } from "@/src/lib/time-format";
 import OutlineSvg from "@/app/_components/OutlineSvg";
 import { renderMessageHtml } from "@/app/student/_components/renderMessageHtml";
 
@@ -310,7 +311,7 @@ export default function StudentCourseHistoryPage() {
           <div className="card">
             <h2>參與摘要</h2>
             <small>
-              共參與 {history.summary.sessionCount} 次，最近一次：{new Date(history.summary.lastParticipatedAt).toLocaleString("zh-TW")}（
+              共參與 {history.summary.sessionCount} 次，最近一次：{formatTaipeiDateTime(history.summary.lastParticipatedAt)}（
               {history.summary.lastSessionId}）
             </small>
             <div style={{ marginTop: 8 }}>
@@ -323,7 +324,7 @@ export default function StudentCourseHistoryPage() {
               {history.sessions.map((item) => (
                 <div key={item.sessionId} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
                   <small>
-                    {new Date(item.createdAt).toLocaleString("zh-TW")} / 最後進度 Step {item.currentStep}
+                    {formatTaipeiDateTime(item.createdAt)} / 最後進度 Step {item.currentStep}
                     {stepNameMap[item.currentStep] ? `（${stepNameMap[item.currentStep]}）` : ""} / 個人發言 {item.ownMessageCount} 則
                   </small>
                 </div>

@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { deferStateUpdate } from "@/src/lib/defer-state-update";
+import { formatTaipeiDateTime } from "@/src/lib/time-format";
 import { renderMessageHtml } from "./renderMessageHtml";
 
 type InteractiveItem = {
@@ -42,20 +43,9 @@ type InteractionPanelProps = {
 };
 
 function formatUtc8Title(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "互動時間：未知";
-  const fmt = new Intl.DateTimeFormat("sv-SE", {
-    timeZone: "Asia/Taipei",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false
-  }).format(date);
-  const normalized = fmt.replace(" ", " ").replace(/:/g, "-");
-  return `互動時間：${normalized} (UTC+8)`;
+  const text = formatTaipeiDateTime(iso);
+  if (text === "—") return "互動時間：未知";
+  return `互動時間：${text} (UTC+8)`;
 }
 
 function parseStep6Suggestion(text: string): { draft: string; suggestion: string } | null {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { formatTaipeiDateTime } from "@/src/lib/time-format";
 
 type Course = {
   id: string;
@@ -127,7 +128,7 @@ export default function StudentLobby({
                 <strong>{course.title}</strong>（班級 {course.classNumber}）
                 <div>
                   <small>
-                    最近參與：{new Date(course.lastParticipatedAt).toLocaleString("zh-TW")} / 最近步驟 Step {course.lastStep} / 參與次數 {course.sessionCount}
+                    最近參與：{formatTaipeiDateTime(course.lastParticipatedAt)} / 最近步驟 Step {course.lastStep} / 參與次數 {course.sessionCount}
                   </small>
                 </div>
               </div>

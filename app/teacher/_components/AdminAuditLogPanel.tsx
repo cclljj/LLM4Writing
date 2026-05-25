@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { deferStateUpdate } from "@/src/lib/defer-state-update";
+import { formatTaipeiDate, formatTaipeiTime } from "@/src/lib/time-format";
 
 type AuditLogEntry = {
   id: string;
@@ -60,7 +61,7 @@ export default function AdminAuditLogPanel() {
   const grouped = useMemo(() => {
     const groups = new Map<string, AuditLogEntry[]>();
     for (const log of logs) {
-      const day = new Date(log.createdAt).toLocaleDateString("zh-TW");
+      const day = formatTaipeiDate(log.createdAt);
       const bucket = groups.get(day) ?? [];
       bucket.push(log);
       groups.set(day, bucket);
@@ -115,7 +116,7 @@ export default function AdminAuditLogPanel() {
               <tbody>
                 {entries.map((entry) => (
                   <tr key={entry.id}>
-                    <td>{new Date(entry.createdAt).toLocaleTimeString("zh-TW", { hour12: false })}</td>
+                    <td>{formatTaipeiTime(entry.createdAt, { hour12: false })}</td>
                     <td>{entry.actorUsername} ({entry.actorRole})</td>
                     <td>{mapActionLabel(entry.action)}</td>
                     <td>{entry.targetType}:{entry.targetLabel || entry.targetId || "—"}</td>

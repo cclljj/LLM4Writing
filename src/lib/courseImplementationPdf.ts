@@ -1,5 +1,6 @@
 import { jsPDF } from "jspdf";
 import { buildOutlinePreview } from "@/src/lib/outline-utils";
+import { formatTaipeiDateTime } from "@/src/lib/time-format";
 
 export type PdfStudentMetric = {
   stars: number;
@@ -498,7 +499,7 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
   }
 
   function drawMessageCard(msg: PdfMessage, index: number): void {
-    const header = `#${String(index).padStart(3, "0")} · ${formatRole(msg.role)} · ${new Date(msg.at).toLocaleString("zh-TW")}`;
+    const header = `#${String(index).padStart(3, "0")} · ${formatRole(msg.role)} · ${formatTaipeiDateTime(msg.at)}`;
     const cardX = PAGE.marginX;
     const cardW = contentWidth;
 
@@ -617,7 +618,7 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
   doc.text("Version: 1.0", PAGE.marginX + 18, y + 42);
   setTextColor(COLORS.text);
   doc.setFontSize(11);
-  doc.text(`產出時間：${new Date(input.generatedAtIso).toLocaleString("zh-TW")}`, PAGE.marginX + 18, y + 62);
+  doc.text(`產出時間：${formatTaipeiDateTime(input.generatedAtIso)}`, PAGE.marginX + 18, y + 62);
   doc.text(`${input.school} / ${input.classNumber} / ${input.title}`, PAGE.marginX + 18, y + 80);
   y += 108;
 
@@ -629,7 +630,7 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
       `- 班級：${input.classNumber}`,
       `- 校名：${input.school}`,
       `- 課程 ID：${input.activityId}`,
-      `- 完成課程日期時間：${input.completedAtIso ? new Date(input.completedAtIso).toLocaleString("zh-TW") : "—"}`,
+      `- 完成課程日期時間：${input.completedAtIso ? formatTaipeiDateTime(input.completedAtIso) : "—"}`,
     ].join("\n"),
     PAGE.marginX,
     contentWidth,
