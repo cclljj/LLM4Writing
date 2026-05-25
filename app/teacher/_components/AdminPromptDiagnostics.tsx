@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { deferStateUpdate } from "@/src/lib/defer-state-update";
 import { formatTaipeiDateTime } from "@/src/lib/time-format";
 type DiagnosticsWindow = "24h" | "7d" | "14d" | "30d";
@@ -109,27 +109,44 @@ type DiagnosticsPayload = {
       waitSamples: number;
     }
   >;
-  trends: {
-    byCourse: Array<{
-      key: string;
-      school: string;
-      classNumber: string;
-      activityTitle: string;
-      points: Array<{
-        date: string;
+  courseKpis: Array<{
+    key: string;
+    activityId: string;
+    school: string;
+    classNumber: string;
+    activityTitle: string;
+    totalAi: number;
+    successes: number;
+    fallbacks: number;
+    acceptedAnswers: number;
+    rejectedAnswers: number;
+    waitSamples: number;
+    successRate: number;
+    fallbackRate: number;
+    refusalRate: number;
+    avgWaitMs: number;
+    riskScore: number;
+  }>;
+  courseStepKpis: Record<
+    string,
+    Record<
+      string,
+      {
         totalAi: number;
         successes: number;
         fallbacks: number;
         acceptedAnswers: number;
         rejectedAnswers: number;
         waitSamples: number;
-        avgWaitMs: number;
         successRate: number;
         fallbackRate: number;
         refusalRate: number;
-      }>;
-    }>;
-    byClass: Array<{
+        avgWaitMs: number;
+      }
+    >
+  >;
+  trends: {
+    byCourse: Array<{
       key: string;
       school: string;
       classNumber: string;
@@ -246,7 +263,37 @@ export default function AdminPromptDiagnostics() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [timeWindow, setTimeWindow] = useState<DiagnosticsWindow>("7d");
+  const [selectedCourseKey, setSelectedCourseKey] = useState("");
+  const [selectedStepKey, setSelectedStepKey] = useState("");
   const [migrationMessage, setMigrationMessage] = useState("");
+
+  const selectedCourse = useMemo(() => {
+    if (!data) return null;
+    return data.courseKpis.find((course) => course.key === selectedCourseKey) ?? null;
+  }, [data, selectedCourseKey]);
+
+  const selectedCourseStepKpis = useMemo(() => {
+    if (!data || !selectedCourseKey) return {};
+    return data.courseStepKpis[selectedCourseKey] ?? {};
+  }, [data, selectedCourseKey]);
+
+  const selectedStepFallbackSamples = useMemo(() => {
+    if (!data || !selectedCourse) return [];
+    return data.recentFallbackSamples.filter((sample) => {
+      if (!sample.activityId || sample.activityId !== selectedCourse.activityId) return false;
+      if (!selectedStepKey) return true;
+      return String(sample.step ?? "") === selectedStepKey;
+    });
+  }, [data, selectedCourse, selectedStepKey]);
+
+  const selectedStepFallbackTraces = useMemo(() => {
+    if (!data || !selectedCourse) return [];
+    return data.recentFallbackTraces.filter((trace) => {
+      if (!trace.activityId || trace.activityId !== selectedCourse.activityId) return false;
+      if (!selectedStepKey) return true;
+      return String(trace.step ?? "") === selectedStepKey;
+    });
+  }, [data, selectedCourse, selectedStepKey]);
 
   const loadDiagnostics = useCallback(async (window: DiagnosticsWindow = timeWindow) => {
     setLoading(true);
@@ -273,6 +320,14 @@ export default function AdminPromptDiagnostics() {
       loadDiagnostics(timeWindow).catch(() => undefined);
     });
   }, [loadDiagnostics, timeWindow]);
+
+  useEffect(() => {
+    if (!data) return;
+    if (!selectedCourseKey || !data.courseKpis.some((course) => course.key === selectedCourseKey)) {
+      setSelectedCourseKey(data.courseKpis[0]?.key ?? "");
+      setSelectedStepKey("");
+    }
+  }, [data, selectedCourseKey]);
 
   async function runStoreMigration() {
     setMigrationMessage("執行中...");
@@ -471,9 +526,59 @@ export default function AdminPromptDiagnostics() {
             ) : null}
 
             <hr style={{ border: 0, borderTop: "1px solid #e2e8f0", margin: "14px 0" }} />
-            <h4 style={{ marginBottom: 6 }}>每步驟 KPI（成功率 / fallback 率 / 拒答率 / 平均等待）</h4>
+            <h4 style={{ marginBottom: 6 }}>課程排行（課程維度）</h4>
             <small style={{ display: "block", marginBottom: 8, color: "#64748b" }}>
-              範圍：最近 {data.timeWindow}。成功率以 AI 回覆是否為 fallback 估算；拒答率為拒答次數 /（已送出+拒答）。
+              範圍：最近 {data.timeWindow}。依風險分數排序（fallback / 拒答 / 等待時間），作為優先排查順序。
+            </small>
+            <div style={{ overflowX: "auto" }}>
+              <table className="pro-table">
+                <thead>
+                  <tr>
+                    <th>課程</th>
+                    <th>學校</th>
+                    <th>班級</th>
+                    <th>成功率</th>
+                    <th>Fallback 率</th>
+                    <th>拒答率</th>
+                    <th>平均等待</th>
+                    <th>AI 回覆</th>
+                    <th>拒答次數</th>
+                    <th>風險分數</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.courseKpis.map((course) => (
+                    <tr
+                      key={course.key}
+                      style={{ background: selectedCourseKey === course.key ? "#eff6ff" : undefined, cursor: "pointer" }}
+                      onClick={() => {
+                        setSelectedCourseKey(course.key);
+                        setSelectedStepKey("");
+                      }}
+                    >
+                      <td>{course.activityTitle}</td>
+                      <td>{course.school}</td>
+                      <td>{course.classNumber}</td>
+                      <td>{fmtPct(course.successRate)}</td>
+                      <td style={{ color: fallbackToneColor(course.fallbackRate) }}>{fmtPct(course.fallbackRate)}</td>
+                      <td>{fmtPct(course.refusalRate)}</td>
+                      <td>{fmtMs(course.avgWaitMs)}</td>
+                      <td>{fmtNum(course.totalAi)}</td>
+                      <td>{fmtNum(course.rejectedAnswers)}</td>
+                      <td>{course.riskScore.toFixed(3)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {data.courseKpis.length === 0 ? <small>尚無課程 KPI 樣本。</small> : null}
+
+            <hr style={{ border: 0, borderTop: "1px solid #e2e8f0", margin: "14px 0" }} />
+            <h4 style={{ marginBottom: 6 }}>
+              課程步驟分析（{selectedCourse ? `${selectedCourse.activityTitle} / ${selectedCourse.classNumber}` : "—"}）
+            </h4>
+            <small style={{ display: "block", marginBottom: 8, color: "#64748b" }}>
+              先選課程，再看 Step1~10 的成功率 / fallback 率 / 拒答率 / 平均等待。點步驟可篩選下方追查樣本。
             </small>
             <div style={{ overflowX: "auto" }}>
               <table className="pro-table">
@@ -490,10 +595,14 @@ export default function AdminPromptDiagnostics() {
                   </tr>
                 </thead>
                 <tbody>
-                  {Object.entries(data.stepKpis)
+                  {Object.entries(selectedCourseStepKpis)
                     .sort((a, b) => Number(a[0]) - Number(b[0]))
                     .map(([step, kpi]) => (
-                      <tr key={step}>
+                      <tr
+                        key={step}
+                        style={{ background: selectedStepKey === step ? "#f8fafc" : undefined, cursor: "pointer" }}
+                        onClick={() => setSelectedStepKey((prev) => (prev === step ? "" : step))}
+                      >
                         <td>Step {step}</td>
                         <td>{fmtPct(kpi.successRate)}</td>
                         <td style={{ color: fallbackToneColor(kpi.fallbackRate) }}>{fmtPct(kpi.fallbackRate)}</td>
@@ -507,14 +616,13 @@ export default function AdminPromptDiagnostics() {
                 </tbody>
               </table>
             </div>
-            {Object.keys(data.stepKpis).length === 0 ? <small>尚無步驟 KPI 樣本。</small> : null}
+            {Object.keys(selectedCourseStepKpis).length === 0 ? <small>此課程目前沒有可用步驟樣本。</small> : null}
 
             <hr style={{ border: 0, borderTop: "1px solid #e2e8f0", margin: "14px 0" }} />
-            <h4 style={{ marginBottom: 6 }}>課程 / 班級趨勢</h4>
+            <h4 style={{ marginBottom: 6 }}>課程趨勢</h4>
             <small style={{ display: "block", marginBottom: 8, color: "#64748b" }}>
               日粒度趨勢（最近 {data.timeWindow}）：顯示成功率、fallback 率、拒答率、平均等待時間。
             </small>
-            <h5 style={{ marginBottom: 6 }}>課程維度</h5>
             <div style={{ overflowX: "auto" }}>
               <table className="pro-table">
                 <thead>
@@ -549,40 +657,6 @@ export default function AdminPromptDiagnostics() {
               </table>
             </div>
             {data.trends.byCourse.length === 0 ? <small>尚無課程趨勢資料。</small> : null}
-
-            <h5 style={{ marginBottom: 6, marginTop: 12 }}>班級維度</h5>
-            <div style={{ overflowX: "auto" }}>
-              <table className="pro-table">
-                <thead>
-                  <tr>
-                    <th>學校</th>
-                    <th>班級</th>
-                    <th>日期點</th>
-                    <th>成功率趨勢</th>
-                    <th>Fallback 趨勢</th>
-                    <th>拒答率趨勢</th>
-                    <th>最近平均等待</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.trends.byClass.map((series) => {
-                    const latest = series.points.at(-1);
-                    return (
-                      <tr key={series.key}>
-                        <td>{series.school}</td>
-                        <td>{series.classNumber}</td>
-                        <td>{series.points.length}</td>
-                        <td>{trendValuesText(series.points.map((point) => point.successRate))}</td>
-                        <td>{trendValuesText(series.points.map((point) => point.fallbackRate))}</td>
-                        <td>{trendValuesText(series.points.map((point) => point.refusalRate))}</td>
-                        <td>{latest ? fmtMs(latest.avgWaitMs) : "—"}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            {data.trends.byClass.length === 0 ? <small>尚無班級趨勢資料。</small> : null}
 
             <hr style={{ border: 0, borderTop: "1px solid #e2e8f0", margin: "14px 0" }} />
             <h4 style={{ marginBottom: 6 }}>LLM 錯誤分類（timeout / truncation / parse fail）</h4>
@@ -642,9 +716,11 @@ export default function AdminPromptDiagnostics() {
               </table>
             </div>
             <hr style={{ border: 0, borderTop: "1px solid #e2e8f0", margin: "14px 0" }} />
-            <h4 style={{ marginBottom: 6 }}>最近 fallback 樣本</h4>
+            <h4 style={{ marginBottom: 6 }}>
+              追查樣本（{selectedCourse ? selectedCourse.activityTitle : "請先選課程"}{selectedStepKey ? ` / Step ${selectedStepKey}` : ""}）
+            </h4>
             <small style={{ display: "block", marginBottom: 8, color: "#64748b" }}>
-              顯示最近 fallback 事件。優先使用 fallback 事件本身的分類，缺失時再對齊鄰近 LLM 錯誤分類，快速定位 timeout/parse 等來源。
+              顯示選定課程（與可選定步驟）的 fallback 事件。優先使用 fallback 事件本身的分類，缺失時再對齊鄰近 LLM 錯誤分類。
             </small>
             <div style={{ overflowX: "auto" }}>
               <table className="pro-table">
@@ -659,7 +735,7 @@ export default function AdminPromptDiagnostics() {
                   </tr>
                 </thead>
                 <tbody>
-                  {data.recentFallbackSamples.map((sample) => (
+                  {selectedStepFallbackSamples.map((sample) => (
                     <tr key={`${sample.at}:${sample.sessionId ?? ""}:${sample.kind}`}>
                       <td>{formatTaipeiDateTime(sample.at, { hour12: false })}</td>
                       <td>{sample.step ?? "—"}</td>
@@ -672,7 +748,7 @@ export default function AdminPromptDiagnostics() {
                 </tbody>
               </table>
             </div>
-            {data.recentFallbackSamples.length === 0 ? <small>目前時間窗內沒有 fallback 樣本。</small> : null}
+            {selectedStepFallbackSamples.length === 0 ? <small>目前篩選條件下沒有 fallback 樣本。</small> : null}
             <h4 style={{ margin: "12px 0 6px" }}>最近 fallback 近似送出內容（重建）</h4>
             <small style={{ display: "block", marginBottom: 8, color: "#64748b" }}>
               這裡顯示的是重建版本（由事件 + session 訊息 + prompt 設定推估），不是 provider 原始 request body。可用來快速定位哪一段上下文容易觸發 fallback。
@@ -691,7 +767,7 @@ export default function AdminPromptDiagnostics() {
                   </tr>
                 </thead>
                 <tbody>
-                  {data.recentFallbackTraces.map((trace) => (
+                  {selectedStepFallbackTraces.map((trace) => (
                     <tr key={`trace:${trace.at}:${trace.sessionId ?? ""}:${trace.kind}`}>
                       <td>{formatTaipeiDateTime(trace.at, { hour12: false })}</td>
                       <td>{`Step ${trace.step ?? "—"} / ${trace.kind}`}</td>
@@ -746,7 +822,7 @@ export default function AdminPromptDiagnostics() {
                 </tbody>
               </table>
             </div>
-            {data.recentFallbackTraces.length === 0 ? <small>目前沒有可重建的 fallback trace。</small> : null}
+            {selectedStepFallbackTraces.length === 0 ? <small>目前篩選條件下沒有可重建的 fallback trace。</small> : null}
 
             <hr style={{ border: 0, borderTop: "1px solid #e2e8f0", margin: "14px 0" }} />
             <h4 style={{ marginBottom: 6 }}>作品 Artifact 健康度</h4>

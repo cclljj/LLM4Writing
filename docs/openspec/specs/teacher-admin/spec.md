@@ -254,6 +254,25 @@ The admin console SHALL provide Prompt/LLM diagnostics, KPI trends, and non-sens
 - **WHEN** the diagnostics API is called
 - **THEN** KPI, fallback, rejection, latency, trend, artifact health, and estimated token metrics are recomputed for that window
 
+#### Scenario: Admin diagnostics uses course-first hierarchy
+
+- **GIVEN** an admin opens diagnostics
+- **WHEN** KPI analysis is rendered
+- **THEN** the panel shows global health first, then course ranking, then selected-course step KPIs, then fallback investigation details
+- **AND** class-dimension trend blocks are not rendered
+
+#### Scenario: Selected course drives step KPI table
+
+- **GIVEN** an admin selects a course from diagnostics ranking
+- **WHEN** the per-step KPI section renders
+- **THEN** it shows only the selected course's Step1~10 KPI rows instead of global cross-course aggregates
+
+#### Scenario: Step drill-down filters fallback investigation
+
+- **GIVEN** an admin selects a course and then selects a step row
+- **WHEN** fallback samples/traces render
+- **THEN** the list is filtered by the selected course and selected step
+
 #### Scenario: Secret redaction
 
 - **GIVEN** diagnostics include LLM and storage status

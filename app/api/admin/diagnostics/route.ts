@@ -629,6 +629,31 @@ type TrendBaseMeta = {
   activityTitle: string;
 };
 
+type CourseAggregate = {
+  key: string;
+  activityId: string;
+  school: string;
+  classNumber: string;
+  activityTitle: string;
+  totalAi: number;
+  successes: number;
+  fallbacks: number;
+  acceptedAnswers: number;
+  rejectedAnswers: number;
+  waitTotalMs: number;
+  waitSamples: number;
+};
+
+type CourseStepAggregate = {
+  totalAi: number;
+  successes: number;
+  fallbacks: number;
+  acceptedAnswers: number;
+  rejectedAnswers: number;
+  waitTotalMs: number;
+  waitSamples: number;
+};
+
 function isTrendMetaPlaceholder(value: string | undefined): boolean {
   const normalized = (value ?? "").trim();
   return !normalized || normalized === "—" || normalized === "未命名課程";
@@ -704,6 +729,159 @@ function buildSessionTrendMetaMaps(sessions: SessionState[]): {
     }
   }
   return { bySessionId, byActivityId };
+}
+
+function resolveCourseMeta(session: SessionState): {
+  key: string;
+  activityId: string;
+  school: string;
+  classNumber: string;
+  activityTitle: string;
+} {
+  const activity = session.activityId ? findActivity(session.activityId) : undefined;
+  const activityId = session.activityId ?? "__unknown_activity__";
+  const school = activity?.school ?? "—";
+  const classNumber = activity?.classNumber ?? "—";
+  const activityTitle = activity?.title ?? session.activityTitle ?? session.activityId ?? "未命名課程";
+  return {
+    key: `activity::${activityId}`,
+    activityId,
+    school,
+    classNumber,
+    activityTitle
+  };
+}
+
+function buildCourseAndStepKpisFromSessions(
+  sessions: SessionState[],
+  cutoffMs: number
+): {
+  courseKpis: Array<CourseAggregate & { successRate: number; fallbackRate: number; refusalRate: number; avgWaitMs: number; riskScore: number }>;
+  courseStepKpis: Record<string, Record<string, CourseStepAggregate & { successRate: number; fallbackRate: number; refusalRate: number; avgWaitMs: number }>>;
+} {
+  const courseMap = new Map<string, CourseAggregate>();
+  const stepMap = new Map<string, Record<string, CourseStepAggregate>>();
+  const waitTracker = new Map<string, string | null>();
+
+  for (const session of sessions) {
+    const meta = resolveCourseMeta(session);
+    const course = courseMap.get(meta.key) ?? {
+      ...meta,
+      totalAi: 0,
+      successes: 0,
+      fallbacks: 0,
+      acceptedAnswers: 0,
+      rejectedAnswers: 0,
+      waitTotalMs: 0,
+      waitSamples: 0
+    };
+    const stepBuckets = stepMap.get(meta.key) ?? {};
+
+    for (const message of session.messages) {
+      const atMs = new Date(message.at).getTime();
+      if (!Number.isFinite(atMs) || atMs < cutoffMs) continue;
+      const stepKey = String(message.step);
+      const stepBucket = stepBuckets[stepKey] ?? {
+        totalAi: 0,
+        successes: 0,
+        fallbacks: 0,
+        acceptedAnswers: 0,
+        rejectedAnswers: 0,
+        waitTotalMs: 0,
+        waitSamples: 0
+      };
+
+      if (message.role === "student") {
+        course.acceptedAnswers += 1;
+        stepBucket.acceptedAnswers += 1;
+        waitTracker.set(`${session.id}::${meta.key}::${message.step}`, message.at);
+      } else if (message.role === "ai") {
+        course.totalAi += 1;
+        stepBucket.totalAi += 1;
+        if (isFallbackText(message.text ?? "")) {
+          course.fallbacks += 1;
+          stepBucket.fallbacks += 1;
+        } else {
+          course.successes += 1;
+          stepBucket.successes += 1;
+        }
+        const waitKey = `${session.id}::${meta.key}::${message.step}`;
+        const lastStudentAt = waitTracker.get(waitKey);
+        if (lastStudentAt) {
+          const diff = new Date(message.at).getTime() - new Date(lastStudentAt).getTime();
+          if (Number.isFinite(diff) && diff > 0 && diff < 5 * 60 * 1000) {
+            course.waitTotalMs += diff;
+            course.waitSamples += 1;
+            stepBucket.waitTotalMs += diff;
+            stepBucket.waitSamples += 1;
+          }
+          waitTracker.set(waitKey, null);
+        }
+      }
+
+      stepBuckets[stepKey] = stepBucket;
+    }
+
+    const rejectedCounts = session.qualitySignals?.rejectedAnswerCounts ?? {};
+    const rejectedLastAt = session.qualitySignals?.rejectedAnswerLastAt ?? {};
+    for (const [scope, count] of Object.entries(rejectedCounts)) {
+      const rejectedAt = rejectedLastAt[scope];
+      const ts = new Date(rejectedAt ?? "").getTime();
+      if (!Number.isFinite(ts) || ts < cutoffMs) continue;
+      const stepKey = parseStepFromScope(scope) ?? String(session.currentStep);
+      const stepBucket = stepBuckets[stepKey] ?? {
+        totalAi: 0,
+        successes: 0,
+        fallbacks: 0,
+        acceptedAnswers: 0,
+        rejectedAnswers: 0,
+        waitTotalMs: 0,
+        waitSamples: 0
+      };
+      const rejected = Number.isFinite(count) ? count : 0;
+      course.rejectedAnswers += rejected;
+      stepBucket.rejectedAnswers += rejected;
+      stepBuckets[stepKey] = stepBucket;
+    }
+
+    courseMap.set(meta.key, course);
+    stepMap.set(meta.key, stepBuckets);
+  }
+
+  const courseKpis = Array.from(courseMap.values()).map((bucket) => {
+    const successRate = bucket.totalAi > 0 ? bucket.successes / bucket.totalAi : 0;
+    const fallbackRate = bucket.totalAi > 0 ? bucket.fallbacks / bucket.totalAi : 0;
+    const refusalRate =
+      bucket.acceptedAnswers + bucket.rejectedAnswers > 0
+        ? bucket.rejectedAnswers / (bucket.acceptedAnswers + bucket.rejectedAnswers)
+        : 0;
+    const avgWaitMs = bucket.waitSamples > 0 ? Math.round(bucket.waitTotalMs / bucket.waitSamples) : 0;
+    const waitNormalized = Math.min(1, avgWaitMs / 60_000);
+    const riskScore = fallbackRate * 0.5 + refusalRate * 0.3 + waitNormalized * 0.2;
+    return { ...bucket, successRate, fallbackRate, refusalRate, avgWaitMs, riskScore };
+  }).sort((a, b) => b.riskScore - a.riskScore || b.fallbackRate - a.fallbackRate || b.refusalRate - a.refusalRate);
+
+  const courseStepKpis = Object.fromEntries(
+    Array.from(stepMap.entries()).map(([courseKey, steps]) => {
+      const stepKpis = Object.fromEntries(
+        Object.entries(steps)
+          .map(([step, bucket]) => {
+            const successRate = bucket.totalAi > 0 ? bucket.successes / bucket.totalAi : 0;
+            const fallbackRate = bucket.totalAi > 0 ? bucket.fallbacks / bucket.totalAi : 0;
+            const refusalRate =
+              bucket.acceptedAnswers + bucket.rejectedAnswers > 0
+                ? bucket.rejectedAnswers / (bucket.acceptedAnswers + bucket.rejectedAnswers)
+                : 0;
+            const avgWaitMs = bucket.waitSamples > 0 ? Math.round(bucket.waitTotalMs / bucket.waitSamples) : 0;
+            return [step, { ...bucket, successRate, fallbackRate, refusalRate, avgWaitMs }];
+          })
+          .sort((a, b) => Number(a[0]) - Number(b[0]))
+      );
+      return [courseKey, stepKpis];
+    })
+  );
+
+  return { courseKpis, courseStepKpis };
 }
 
 function computeTrendSeries(
@@ -1115,11 +1293,9 @@ async function buildDiagnosticsPayload(selectedWindow: DiagnosticsWindow, nowMs:
   const trends = {
     byCourse: hasEventMetrics
       ? computeTrendSeriesFromLearningEvents(learningEvents, "course", trendMetaMaps)
-      : computeTrendSeries(windowedSpecSessions, cutoffMs, "course"),
-    byClass: hasEventMetrics
-      ? computeTrendSeriesFromLearningEvents(learningEvents, "class", trendMetaMaps)
-      : computeTrendSeries(windowedSpecSessions, cutoffMs, "class")
+      : computeTrendSeries(windowedSpecSessions, cutoffMs, "course")
   };
+  const { courseKpis, courseStepKpis } = buildCourseAndStepKpisFromSessions(windowedSpecSessions, cutoffMs);
   const llmErrorTaxonomy = buildLlmErrorTaxonomy(llmEvents);
   const recentFallbackTraces = buildRecentFallbackTraces({
     learningEvents,
@@ -1181,6 +1357,8 @@ async function buildDiagnosticsPayload(selectedWindow: DiagnosticsWindow, nowMs:
     llmResponseTime,
     fallbackRate,
     stepKpis,
+    courseKpis,
+    courseStepKpis,
     trends,
     llmErrorTaxonomy,
     recentFallbackSamples,

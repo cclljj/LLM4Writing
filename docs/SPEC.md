@@ -1122,8 +1122,10 @@ Loading 規則（#270）：
 - 近期 spec10 session 摘要。
 - LLM 回應時間（依步驟），過大閒置間隔需濾除。
 - LLM fallback 觸發率；> 5% 紅燈，1~5% 黃燈，< 1% 綠燈。
-- 每步驟 KPI：成功率、fallback 率、拒答率、平均等待時間。
-- 課程維度與班級維度趨勢（至少日粒度）：成功率、fallback 率、拒答率、平均等待時間。
+- 課程維度 KPI 排行：成功率、fallback 率、拒答率、平均等待時間、風險分數。
+- 每步驟 KPI 改為課程內維度：先選課程，再顯示該課程 Step1~10 的成功率、fallback 率、拒答率、平均等待時間。
+- 趨勢僅保留課程維度（至少日粒度）：成功率、fallback 率、拒答率、平均等待時間。
+- fallback 樣本與 trace 需支援依「已選課程 / 步驟」篩選，便於 drill-down 追查。
 - LLM 錯誤分類：`timeout`、`truncation`、`parse fail`（其餘歸 `other`）。
 - 作品 artifact 健康度：Step3 結構樹、Step6 初稿、Step8 潤飾稿、Step10 報告完成率與平均字元數（以所選時間窗內有活動之 spec10 sessions 計算）。
 - Token 使用量（估算 completion tokens）：整體與分步驟統計，需隨 `24h/7d/14d/30d` 時間窗切換更新。
