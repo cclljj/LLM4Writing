@@ -80,6 +80,14 @@ export default function StudentAccountTab({
     });
   }, [users, schoolFilter]);
 
+  const teacherNameByUsername = useMemo(() => {
+    const map = new Map<string, string>();
+    teacherUsers.forEach((teacher) => {
+      map.set(teacher.username, teacher.name || teacher.username);
+    });
+    return map;
+  }, [teacherUsers]);
+
   const filteredUsers = useMemo(() => {
     const keyword = userQuery.trim().toLowerCase();
     return users.filter((user) => {
@@ -967,7 +975,13 @@ export default function StudentAccountTab({
                           {user.role === "teacher" ? "教師" : user.role === "admin" ? "管理員" : "學生"}
                         </span>
                       </td>
-                      <td>{user.role === "student" ? user.ownerTeacherUsername ?? "—" : "—"}</td>
+                      <td>
+                        {user.role === "student"
+                          ? user.ownerTeacherUsername
+                            ? `${teacherNameByUsername.get(user.ownerTeacherUsername) ?? user.ownerTeacherUsername} (${user.ownerTeacherUsername})`
+                            : "—"
+                          : "—"}
+                      </td>
                       <td>
                         {user.role === "admin" ? (
                           <small>系統保留帳號</small>
