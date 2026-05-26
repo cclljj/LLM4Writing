@@ -6,6 +6,8 @@ import { renderMessageHtml } from "@/app/student/_components/renderMessageHtml";
 import { deferStateUpdate } from "@/src/lib/defer-state-update";
 import { ActivityRow, MonitorSession, OpenClassRow, UserRow } from "./types";
 import { generateCourseImplementationPdf } from "@/src/lib/courseImplementationPdf";
+import { injectStep8DraftTimeline } from "@/src/lib/course-report-pdf-timeline";
+import { shouldTreatAsZipDownload } from "@/src/lib/course-report-download";
 
 type CourseImplementationReportTabProps = {
   loginRole: "teacher" | "admin";
@@ -47,26 +49,6 @@ type PersonalMessage = {
   text: string;
   at: string;
 };
-
-function injectStep8DraftTimeline(
-  timelineMessages: Array<{ role: string; step: number; text: string; at: string }>,
-  step8DraftRaw: string
-): Array<{ role: string; step: number; text: string; at: string }> {
-  const step8Draft = (step8DraftRaw ?? "").trim();
-  if (!step8Draft) return timelineMessages;
-  const duplicated = timelineMessages.some((message) => message.step === 8 && message.text.trim() === step8Draft);
-  if (duplicated) return timelineMessages;
-  const anchorAt = timelineMessages[timelineMessages.length - 1]?.at ?? new Date().toISOString();
-  return [
-    ...timelineMessages,
-    {
-      role: "system",
-      step: 8,
-      text: `## 步驟八最終稿\n${step8Draft}`,
-      at: anchorAt,
-    },
-  ];
-}
 
 type ClassExportJob = {
   id: string;
@@ -404,7 +386,11 @@ export default function CourseImplementationReportTab({
           text: message.text,
           at: message.at,
         }));
-      const timelineMessages = injectStep8DraftTimeline(timelineMessagesBase, data.userDraftStep8 ?? "");
+      const timelineMessages = injectStep8DraftTimeline(
+        timelineMessagesBase,
+        data.userDraftStep8 ?? "",
+        new Date().toISOString()
+      );
 
       const blob = await generateCourseImplementationPdf({
         activityId: selectedCourse.activityId,
@@ -483,7 +469,7 @@ export default function CourseImplementationReportTab({
     const url = `/api/teacher/course-report-exports/${encodeURIComponent(classExportJobId)}/download`;
     const response = await fetch(url, { cache: "no-store" });
     const contentType = response.headers.get("content-type") ?? "";
-    if (!response.ok || !contentType.includes("application/zip")) {
+    if (!shouldTreatAsZipDownload({ ok: response.ok, contentType })) {
       const data = await response.json().catch(() => null);
       setError(data?.error ?? "class_export_download_failed");
       return;

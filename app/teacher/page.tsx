@@ -7,20 +7,9 @@ import StudentAccountTab from "./_components/StudentAccountTab";
 import LearningMonitorTab from "./_components/LearningMonitorTab";
 import CourseManagementTab from "./_components/CourseManagementTab";
 import AdminAuditLogPanel from "./_components/AdminAuditLogPanel";
-import OutlineSvg from "@/app/_components/OutlineSvg";
 import { formatUserError } from "@/src/lib/error-messages";
 import { deferStateUpdate } from "@/src/lib/defer-state-update";
-import { ActivityRow, EssayRow, MonitorSession, OpenClassRow, UserRow } from "./_components/types";
-
-// The following type fields are declared in _components/types.ts and reproduced
-// here for test-source scanning (tests/teacher-outlines.test.ts checks page.tsx).
-// MonitorSession includes:
-//   outlines?: Record<string, string>
-//   step3SubmittedOutlines?: Record<string, string>
-// LearningMonitorTab tracks: userOutline, userStep3SubmittedOutline, step3SubmittedOutlines?.[p], outlines?.[p]
-// UI labels: 步驟三完成結構樹, 步驟四對比修正後
-void (null as unknown as MonitorSession);
-void (null as unknown as typeof OutlineSvg);
+import { ActivityRow, EssayRow, OpenClassRow, UserRow } from "./_components/types";
 
 const TEACHER_TAB_STORAGE_KEY = "teacher:activeTab";
 const ADMIN_TAB_STORAGE_KEY = "admin:activeTab";

@@ -6,6 +6,7 @@ import { getUsersVisibleToTeacherStore, listUsersStore } from "@/src/lib/user-st
 import { isSessionInActivityGroupScope } from "@/src/lib/monitor-session-scope";
 import { generateCourseImplementationPdfBytes, type CourseImplementationPdfInput } from "@/src/lib/courseImplementationPdf";
 import { recordAuditLog } from "@/src/lib/audit-log-store";
+import { injectStep8DraftTimeline } from "@/src/lib/course-report-pdf-timeline";
 
 export type ExportJobStatus = "queued" | "running" | "retrying" | "packaging" | "succeeded" | "failed" | "canceled";
 
@@ -216,26 +217,6 @@ function toTimelineMessages(session: SessionState, username: string): CourseImpl
     .map((message) => ({ role: message.role, step: message.step, text: message.text, at: message.at }));
 }
 
-function injectStep8DraftTimeline(
-  timelineMessages: CourseImplementationPdfInput["timelineMessages"],
-  step8DraftRaw: string
-): CourseImplementationPdfInput["timelineMessages"] {
-  const step8Draft = (step8DraftRaw ?? "").trim();
-  if (!step8Draft) return timelineMessages;
-  const duplicated = timelineMessages.some((message) => message.step === 8 && message.text.trim() === step8Draft);
-  if (duplicated) return timelineMessages;
-  const anchorAt = timelineMessages[timelineMessages.length - 1]?.at ?? nowIso();
-  return [
-    ...timelineMessages,
-    {
-      role: "system",
-      step: 8,
-      text: `## 步驟八最終稿\n${step8Draft}`,
-      at: anchorAt,
-    },
-  ];
-}
-
 async function generateStudentPdfBytes(input: {
   activityId: string;
   school: string;
@@ -259,7 +240,8 @@ async function generateStudentPdfBytes(input: {
   if (!session) throw new Error("session_not_found");
   const timelineMessages = injectStep8DraftTimeline(
     toTimelineMessages(session, input.username),
-    session.draftStep8?.[input.username] ?? ""
+    session.draftStep8?.[input.username] ?? "",
+    nowIso()
   );
   const step3SubmittedOutline = session.step3SubmittedOutlines?.[input.username] ?? "";
   const step4RevisedOutline = session.outlines?.[input.username] ?? "";
