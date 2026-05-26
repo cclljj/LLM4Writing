@@ -79,6 +79,13 @@ The system SHALL let authorized users create, edit, group, paginate, filter, and
 - **WHEN** any student remains unassigned or no group exists
 - **THEN** the UI/API flow rejects the save until grouping is complete
 
+#### Scenario: Group assignment student labels
+
+- **GIVEN** teacher/admin is assigning students to groups in task setup
+- **WHEN** student entries render in unassigned and grouped lists
+- **THEN** each student is shown as `姓名(帳號)` rather than username-only
+- **AND** if name is unavailable, the UI falls back to username
+
 ### Requirement: Course Control
 
 The learning management UI SHALL expose course state controls consistent with the current course status.

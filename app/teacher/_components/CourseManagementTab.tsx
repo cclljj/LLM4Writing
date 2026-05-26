@@ -272,6 +272,12 @@ export default function CourseManagementTab({
       .map((u) => u.username);
   }
 
+  function formatStudentLabel(username: string): string {
+    const student = users.find((u) => u.username === username);
+    const name = student?.name?.trim();
+    return name ? `${name}(${username})` : username;
+  }
+
   // Delete task entirely (#254). Only callable when no student activity exists yet.
   // Reuses the existing /api/admin/activities DELETE endpoint, which removes
   // the openClass, its groups, and any related sessions.
@@ -890,7 +896,7 @@ export default function CourseManagementTab({
                     onDragStart={onDragStart(username, "unassigned")}
                     style={{ padding: "6px 8px", marginTop: 6, border: "1px solid #cbd5e1", borderRadius: 6 }}
                   >
-                    {username}
+                    {formatStudentLabel(username)}
                   </div>
                 ))}
               </div>
@@ -922,7 +928,7 @@ export default function CourseManagementTab({
                       onDragStart={onDragStart(username, group.groupId)}
                       style={{ padding: "6px 8px", marginTop: 6, border: "1px solid #cbd5e1", borderRadius: 6 }}
                     >
-                      {username}
+                      {formatStudentLabel(username)}
                     </div>
                   ))}
                 </div>
