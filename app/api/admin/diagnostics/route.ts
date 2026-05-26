@@ -13,7 +13,7 @@ import { getLlmCallStats } from "@/src/lib/llm-observability";
 import { getDatabaseHost, isDatabaseEnabled } from "@/src/lib/db-config";
 import type { SessionState } from "@/src/lib/types";
 import { buildRecentFallbackTraces } from "@/src/lib/diagnostics-fallback-traces";
-type DiagnosticsWindow = "24h" | "7d" | "14d" | "30d";
+type DiagnosticsWindow = "2h" | "24h" | "7d" | "14d" | "30d";
 type DiagnosticsPayload = Record<string, unknown>;
 type DiagnosticsCacheEntry = {
   expiresAt: number;
@@ -23,6 +23,7 @@ type DiagnosticsCacheEntry = {
 const DIAGNOSTICS_CACHE_KEY = "__llm4writing_admin_diagnostics_cache__";
 const DIAGNOSTICS_CACHE_TTL_MS = 60_000;
 const WINDOW_MS: Record<DiagnosticsWindow, number> = {
+  "2h": 2 * 60 * 60 * 1000,
   "24h": 24 * 60 * 60 * 1000,
   "7d": 7 * 24 * 60 * 60 * 1000,
   "14d": 14 * 24 * 60 * 60 * 1000,
@@ -1379,7 +1380,7 @@ export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
   const windowParam = requestUrl.searchParams.get("window");
   const selectedWindow: DiagnosticsWindow =
-    windowParam === "24h" || windowParam === "7d" || windowParam === "14d" || windowParam === "30d"
+    windowParam === "2h" || windowParam === "24h" || windowParam === "7d" || windowParam === "14d" || windowParam === "30d"
       ? windowParam
       : "7d";
   const nowMs = Date.now();

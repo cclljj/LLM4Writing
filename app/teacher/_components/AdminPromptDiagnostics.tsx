@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { deferStateUpdate } from "@/src/lib/defer-state-update";
 import { formatTaipeiDateTime } from "@/src/lib/time-format";
-type DiagnosticsWindow = "24h" | "7d" | "14d" | "30d";
-const WINDOW_OPTIONS: DiagnosticsWindow[] = ["24h", "7d", "14d", "30d"];
+type DiagnosticsWindow = "2h" | "24h" | "7d" | "14d" | "30d";
+const WINDOW_OPTIONS: DiagnosticsWindow[] = ["2h", "24h", "7d", "14d", "30d"];
 
 type ResponseTimeBucket = {
   median: number;
@@ -451,80 +451,6 @@ export default function AdminPromptDiagnostics() {
               ))}
             </div>
 
-            <h4 style={{ marginBottom: 6 }}>LLM 回應時間（依步驟）</h4>
-            <small style={{ display: "block", marginBottom: 8, color: "#64748b" }}>
-              範圍：最近 {data.timeWindow}。從訊息 timestamp 估算（student → 接續 ai 同步驟）；異常值（&gt; 5 分鐘）已濾除。
-            </small>
-            <div style={{ overflowX: "auto" }}>
-              <table className="pro-table">
-                <thead>
-                  <tr>
-                    <th>步驟</th>
-                    <th>中位數</th>
-                    <th>平均</th>
-                    <th>樣本數</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {Object.entries(data.llmResponseTime)
-                    .sort((a, b) => Number(a[0]) - Number(b[0]))
-                    .map(([step, bucket]) => (
-                      <tr key={step}>
-                        <td>Step {step}</td>
-                        <td>{fmtMs(bucket.median)}</td>
-                        <td>{fmtMs(bucket.avg)}</td>
-                        <td>{bucket.samples}</td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
-            {Object.keys(data.llmResponseTime).length === 0 ? (
-              <small>尚無可用樣本。</small>
-            ) : null}
-
-            <hr style={{ border: 0, borderTop: "1px solid #e2e8f0", margin: "14px 0" }} />
-            <h4 style={{ marginBottom: 6 }}>LLM Fallback 觸發率</h4>
-            <small style={{ display: "block", marginBottom: 8, color: "#64748b" }}>
-              範圍：最近 {data.timeWindow}。ai 訊息含 fallback 標誌字串的比例。&gt; 5% 紅燈、1-5% 黃燈、&lt; 1% 綠燈。
-            </small>
-            <div style={{ display: "flex", gap: 16, marginBottom: 10, flexWrap: "wrap" }}>
-              <div>
-                <small style={{ color: "#475569" }}>整體</small>
-                <div style={{ fontSize: 18, fontWeight: 600, color: fallbackToneColor(data.fallbackRate.overall.rate) }}>
-                  {fmtPct(data.fallbackRate.overall.rate)}
-                </div>
-                <small>{data.fallbackRate.overall.fallbacks} / {data.fallbackRate.overall.totalAi}</small>
-              </div>
-            </div>
-            <div style={{ overflowX: "auto" }}>
-              <table className="pro-table">
-                <thead>
-                  <tr>
-                    <th>步驟</th>
-                    <th>AI 訊息總數</th>
-                    <th>Fallback 數</th>
-                    <th>觸發率</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {Object.entries(data.fallbackRate.byStep)
-                    .sort((a, b) => Number(a[0]) - Number(b[0]))
-                    .map(([step, bucket]) => (
-                      <tr key={step}>
-                        <td>Step {step}</td>
-                        <td>{bucket.totalAi}</td>
-                        <td>{bucket.fallbacks}</td>
-                        <td style={{ color: fallbackToneColor(bucket.rate) }}>{fmtPct(bucket.rate)}</td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
-            {Object.keys(data.fallbackRate.byStep).length === 0 ? (
-              <small>尚無 ai 訊息可供分析。</small>
-            ) : null}
-
             <hr style={{ border: 0, borderTop: "1px solid #e2e8f0", margin: "14px 0" }} />
             <h4 style={{ marginBottom: 6 }}>課程排行（課程維度）</h4>
             <small style={{ display: "block", marginBottom: 8, color: "#64748b" }}>
@@ -765,6 +691,81 @@ export default function AdminPromptDiagnostics() {
               </table>
             </div>
             {data.trends.byCourse.length === 0 ? <small>尚無課程趨勢資料。</small> : null}
+
+            <hr style={{ border: 0, borderTop: "1px solid #e2e8f0", margin: "14px 0" }} />
+            <h4 style={{ marginBottom: 6 }}>LLM 回應時間（依步驟）</h4>
+            <small style={{ display: "block", marginBottom: 8, color: "#64748b" }}>
+              範圍：最近 {data.timeWindow}。從訊息 timestamp 估算（student → 接續 ai 同步驟）；異常值（&gt; 5 分鐘）已濾除。
+            </small>
+            <div style={{ overflowX: "auto" }}>
+              <table className="pro-table">
+                <thead>
+                  <tr>
+                    <th>步驟</th>
+                    <th>中位數</th>
+                    <th>平均</th>
+                    <th>樣本數</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(data.llmResponseTime)
+                    .sort((a, b) => Number(a[0]) - Number(b[0]))
+                    .map(([step, bucket]) => (
+                      <tr key={step}>
+                        <td>Step {step}</td>
+                        <td>{fmtMs(bucket.median)}</td>
+                        <td>{fmtMs(bucket.avg)}</td>
+                        <td>{bucket.samples}</td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+            {Object.keys(data.llmResponseTime).length === 0 ? (
+              <small>尚無可用樣本。</small>
+            ) : null}
+
+            <hr style={{ border: 0, borderTop: "1px solid #e2e8f0", margin: "14px 0" }} />
+            <h4 style={{ marginBottom: 6 }}>LLM Fallback 觸發率</h4>
+            <small style={{ display: "block", marginBottom: 8, color: "#64748b" }}>
+              範圍：最近 {data.timeWindow}。ai 訊息含 fallback 標誌字串的比例。&gt; 5% 紅燈、1-5% 黃燈、&lt; 1% 綠燈。
+            </small>
+            <div style={{ display: "flex", gap: 16, marginBottom: 10, flexWrap: "wrap" }}>
+              <div>
+                <small style={{ color: "#475569" }}>整體</small>
+                <div style={{ fontSize: 18, fontWeight: 600, color: fallbackToneColor(data.fallbackRate.overall.rate) }}>
+                  {fmtPct(data.fallbackRate.overall.rate)}
+                </div>
+                <small>{data.fallbackRate.overall.fallbacks} / {data.fallbackRate.overall.totalAi}</small>
+              </div>
+            </div>
+            <div style={{ overflowX: "auto" }}>
+              <table className="pro-table">
+                <thead>
+                  <tr>
+                    <th>步驟</th>
+                    <th>AI 訊息總數</th>
+                    <th>Fallback 數</th>
+                    <th>觸發率</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(data.fallbackRate.byStep)
+                    .sort((a, b) => Number(a[0]) - Number(b[0]))
+                    .map(([step, bucket]) => (
+                      <tr key={step}>
+                        <td>Step {step}</td>
+                        <td>{bucket.totalAi}</td>
+                        <td>{bucket.fallbacks}</td>
+                        <td style={{ color: fallbackToneColor(bucket.rate) }}>{fmtPct(bucket.rate)}</td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+            {Object.keys(data.fallbackRate.byStep).length === 0 ? (
+              <small>尚無 ai 訊息可供分析。</small>
+            ) : null}
 
             <hr style={{ border: 0, borderTop: "1px solid #e2e8f0", margin: "14px 0" }} />
             <h4 style={{ marginBottom: 6 }}>LLM 錯誤分類（timeout / truncation / parse fail）</h4>
