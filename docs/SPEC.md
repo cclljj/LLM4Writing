@@ -1513,7 +1513,7 @@ Request:
 - 權限：teacher/admin。
 - `activityId` 選填；若提供，session 必須屬於該課程，否則回傳 `session_not_found`。
 - 回傳 participant 個人進度統計。
-- `username` 有值時回傳個人訊息、`userOutline`、`userStep3SubmittedOutline`。
+- `username` 有值時回傳個人訊息、`userOutline`、`userStep3SubmittedOutline`、`userDraftStep8`。
 
 #### `POST /api/teacher/course-control`
 

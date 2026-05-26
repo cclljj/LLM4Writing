@@ -48,6 +48,26 @@ type PersonalMessage = {
   at: string;
 };
 
+function injectStep8DraftTimeline(
+  timelineMessages: Array<{ role: string; step: number; text: string; at: string }>,
+  step8DraftRaw: string
+): Array<{ role: string; step: number; text: string; at: string }> {
+  const step8Draft = (step8DraftRaw ?? "").trim();
+  if (!step8Draft) return timelineMessages;
+  const duplicated = timelineMessages.some((message) => message.step === 8 && message.text.trim() === step8Draft);
+  if (duplicated) return timelineMessages;
+  const anchorAt = timelineMessages[timelineMessages.length - 1]?.at ?? new Date().toISOString();
+  return [
+    ...timelineMessages,
+    {
+      role: "system",
+      step: 8,
+      text: `## 步驟八最終稿\n${step8Draft}`,
+      at: anchorAt,
+    },
+  ];
+}
+
 type ClassExportJob = {
   id: string;
   totalStudents: number;
@@ -376,7 +396,7 @@ export default function CourseImplementationReportTab({
         return false;
       });
 
-      const timelineMessages = scopedMessages
+      const timelineMessagesBase = scopedMessages
         .filter((message) => Boolean(message.text?.trim()))
         .map((message) => ({
           role: message.role,
@@ -384,6 +404,7 @@ export default function CourseImplementationReportTab({
           text: message.text,
           at: message.at,
         }));
+      const timelineMessages = injectStep8DraftTimeline(timelineMessagesBase, data.userDraftStep8 ?? "");
 
       const blob = await generateCourseImplementationPdf({
         activityId: selectedCourse.activityId,

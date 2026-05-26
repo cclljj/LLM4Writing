@@ -216,6 +216,26 @@ function toTimelineMessages(session: SessionState, username: string): CourseImpl
     .map((message) => ({ role: message.role, step: message.step, text: message.text, at: message.at }));
 }
 
+function injectStep8DraftTimeline(
+  timelineMessages: CourseImplementationPdfInput["timelineMessages"],
+  step8DraftRaw: string
+): CourseImplementationPdfInput["timelineMessages"] {
+  const step8Draft = (step8DraftRaw ?? "").trim();
+  if (!step8Draft) return timelineMessages;
+  const duplicated = timelineMessages.some((message) => message.step === 8 && message.text.trim() === step8Draft);
+  if (duplicated) return timelineMessages;
+  const anchorAt = timelineMessages[timelineMessages.length - 1]?.at ?? nowIso();
+  return [
+    ...timelineMessages,
+    {
+      role: "system",
+      step: 8,
+      text: `## 步驟八最終稿\n${step8Draft}`,
+      at: anchorAt,
+    },
+  ];
+}
+
 async function generateStudentPdfBytes(input: {
   activityId: string;
   school: string;
@@ -237,7 +257,10 @@ async function generateStudentPdfBytes(input: {
 }): Promise<Uint8Array> {
   const session = await getSession(input.sessionId);
   if (!session) throw new Error("session_not_found");
-  const timelineMessages = toTimelineMessages(session, input.username);
+  const timelineMessages = injectStep8DraftTimeline(
+    toTimelineMessages(session, input.username),
+    session.draftStep8?.[input.username] ?? ""
+  );
   const step3SubmittedOutline = session.step3SubmittedOutlines?.[input.username] ?? "";
   const step4RevisedOutline = session.outlines?.[input.username] ?? "";
   const completedAtIso = session.messages

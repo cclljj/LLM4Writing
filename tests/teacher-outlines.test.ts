@@ -22,10 +22,10 @@ test("#225: monitor route source includes outlines and step3SubmittedOutlines fi
 });
 
 // ---------------------------------------------------------------------------
-// personal-progress route exposes userOutline and userStep3SubmittedOutline
+// personal-progress route exposes userOutline, userStep3SubmittedOutline, and userDraftStep8
 // ---------------------------------------------------------------------------
 
-test("#225: personal-progress route source includes userOutline and userStep3SubmittedOutline fields", async () => {
+test("#225: personal-progress route source includes userOutline/userStep3SubmittedOutline/userDraftStep8 fields", async () => {
   const { readFileSync } = await import("node:fs");
   const { resolve, dirname } = await import("node:path");
   const { fileURLToPath } = await import("node:url");
@@ -34,6 +34,7 @@ test("#225: personal-progress route source includes userOutline and userStep3Sub
   const src = readFileSync(resolve(thisDir, "../app/api/teacher/personal-progress/route.ts"), "utf8");
   assert.ok(src.includes("userOutline:"), "personal-progress route must include userOutline field");
   assert.ok(src.includes("userStep3SubmittedOutline:"), "personal-progress route must include userStep3SubmittedOutline field");
+  assert.ok(src.includes("userDraftStep8:"), "personal-progress route must include userDraftStep8 field");
 });
 
 // ---------------------------------------------------------------------------

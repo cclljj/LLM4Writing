@@ -107,6 +107,7 @@ export async function GET(request: NextRequest) {
     progress,
     personalMessages,
     userOutline: username ? (session.outlines?.[username] ?? "") : undefined,
-    userStep3SubmittedOutline: username ? (session.step3SubmittedOutlines?.[username] ?? "") : undefined
+    userStep3SubmittedOutline: username ? (session.step3SubmittedOutlines?.[username] ?? "") : undefined,
+    userDraftStep8: username ? (session.draftStep8?.[username] ?? "") : undefined
   });
 }
