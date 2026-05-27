@@ -393,6 +393,7 @@ function toActivity(openClass: OpenClassTask): Activity {
     school: openClass.school,
     classNumber: openClass.classNumber,
     essayId: openClass.essayId,
+    ownerTeacherUsername: openClass.ownerTeacherUsername,
     title: detail.essayTitle,
     genre: detail.essayGenre,
     essayDescription: essay?.description ?? "",

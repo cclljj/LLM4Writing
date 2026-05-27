@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   computeNextOpenClassId,
   endCourse,
+  findActivity,
   getCourseStatus,
   startCourse,
   togglePauseOrResumeCourse,
@@ -52,6 +53,29 @@ test("activity store behavior: course state transitions are valid", () => {
   const ended = endCourse(activityId);
   assert.equal(ended.ok, true);
   assert.equal(getCourseStatus(activityId), "ended");
+});
+
+test("activity store behavior: owner teacher username is preserved on activity projection", () => {
+  const essay = upsertEssay({
+    title: `owner-teacher-essay-${Date.now()}`,
+    genre: "議論文",
+    description: "owner teacher projection test",
+    enabled: true
+  });
+  const created = upsertOpenClass({
+    school: "Demo High",
+    classNumber: `8${String(Date.now()).slice(-2)}`,
+    essayId: essay.id,
+    durationMinutes: 30,
+    supplemental: "",
+    ownerTeacherUsername: "teacher"
+  });
+  assert.equal(created.ok, true);
+  if (!created.ok) return;
+
+  const activity = findActivity(created.saved.id);
+  assert.ok(activity);
+  assert.equal(activity?.ownerTeacherUsername, "teacher");
 });
 
 // single source-guard for this topic file
