@@ -8,7 +8,8 @@ import {
   listSessions,
   type PersistedEventRow
 } from "@/src/lib/store";
-import { findActivity, getUsers, hydrateDomainState } from "@/src/lib/activity-store";
+import { findActivity, hydrateDomainState } from "@/src/lib/activity-store";
+import { listUsersStore } from "@/src/lib/user-store";
 import { getLlmCallStats } from "@/src/lib/llm-observability";
 import { getDatabaseHost, isDatabaseEnabled } from "@/src/lib/db-config";
 import type { SessionState } from "@/src/lib/types";
@@ -768,7 +769,8 @@ function resolveCourseMeta(
 
 function buildCourseAndStepKpisFromSessions(
   sessions: SessionState[],
-  cutoffMs: number
+  cutoffMs: number,
+  teacherNameByUsername: Map<string, string>
 ): {
   courseKpis: Array<CourseAggregate & { successRate: number; fallbackRate: number; refusalRate: number; avgWaitMs: number; riskScore: number }>;
   courseStepKpis: Record<string, Record<string, CourseStepAggregate & { successRate: number; fallbackRate: number; refusalRate: number; avgWaitMs: number }>>;
@@ -776,11 +778,6 @@ function buildCourseAndStepKpisFromSessions(
   const courseMap = new Map<string, CourseAggregate>();
   const stepMap = new Map<string, Record<string, CourseStepAggregate>>();
   const waitTracker = new Map<string, string | null>();
-  const teacherNameByUsername = new Map(
-    getUsers()
-      .filter((user) => user.role === "teacher")
-      .map((user) => [user.username, user.name])
-  );
 
   for (const session of sessions) {
     const meta = resolveCourseMeta(session, teacherNameByUsername);
@@ -1251,6 +1248,12 @@ async function buildDiagnosticsPayload(selectedWindow: DiagnosticsWindow, nowMs:
   const specSessions = sessions.filter((session) => session.workflow === "spec10");
   const windowedSpecSessions = specSessions.filter((session) => hasRecentActivity(session, cutoffMs));
   const trendMetaMaps = buildSessionTrendMetaMaps(specSessions);
+  const usersFromStore = await listUsersStore();
+  const teacherNameByUsername = new Map(
+    usersFromStore
+      .filter((user) => user.role === "teacher")
+      .map((user) => [user.username, user.name])
+  );
   const recentSessions = windowedSpecSessions
     .slice()
     .sort((a, b) => {
@@ -1315,7 +1318,11 @@ async function buildDiagnosticsPayload(selectedWindow: DiagnosticsWindow, nowMs:
       ? computeTrendSeriesFromLearningEvents(learningEvents, "course", trendMetaMaps)
       : computeTrendSeries(windowedSpecSessions, cutoffMs, "course")
   };
-  const { courseKpis, courseStepKpis } = buildCourseAndStepKpisFromSessions(windowedSpecSessions, cutoffMs);
+  const { courseKpis, courseStepKpis } = buildCourseAndStepKpisFromSessions(
+    windowedSpecSessions,
+    cutoffMs,
+    teacherNameByUsername
+  );
   const llmErrorTaxonomy = buildLlmErrorTaxonomy(llmEvents);
   const recentFallbackTraces = buildRecentFallbackTraces({
     learningEvents,
