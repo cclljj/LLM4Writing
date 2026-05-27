@@ -8,7 +8,7 @@ import {
   listSessions,
   type PersistedEventRow
 } from "@/src/lib/store";
-import { findActivity, hydrateDomainState } from "@/src/lib/activity-store";
+import { findActivity, getUsers, hydrateDomainState } from "@/src/lib/activity-store";
 import { getLlmCallStats } from "@/src/lib/llm-observability";
 import { getDatabaseHost, isDatabaseEnabled } from "@/src/lib/db-config";
 import type { SessionState } from "@/src/lib/types";
@@ -636,6 +636,8 @@ type CourseAggregate = {
   school: string;
   classNumber: string;
   activityTitle: string;
+  ownerTeacherName: string;
+  ownerTeacherUsername: string;
   totalAi: number;
   successes: number;
   fallbacks: number;
@@ -732,24 +734,35 @@ function buildSessionTrendMetaMaps(sessions: SessionState[]): {
   return { bySessionId, byActivityId };
 }
 
-function resolveCourseMeta(session: SessionState): {
+function resolveCourseMeta(
+  session: SessionState,
+  teacherNameByUsername: Map<string, string>
+): {
   key: string;
   activityId: string;
   school: string;
   classNumber: string;
   activityTitle: string;
+  ownerTeacherName: string;
+  ownerTeacherUsername: string;
 } {
   const activity = session.activityId ? findActivity(session.activityId) : undefined;
   const activityId = session.activityId ?? "__unknown_activity__";
   const school = activity?.school ?? "—";
   const classNumber = activity?.classNumber ?? "—";
   const activityTitle = activity?.title ?? session.activityTitle ?? session.activityId ?? "未命名課程";
+  const ownerTeacherUsername = activity?.ownerTeacherUsername ?? "";
+  const ownerTeacherName = ownerTeacherUsername
+    ? (teacherNameByUsername.get(ownerTeacherUsername) ?? ownerTeacherUsername)
+    : "";
   return {
     key: `activity::${activityId}`,
     activityId,
     school,
     classNumber,
-    activityTitle
+    activityTitle,
+    ownerTeacherName,
+    ownerTeacherUsername
   };
 }
 
@@ -763,9 +776,14 @@ function buildCourseAndStepKpisFromSessions(
   const courseMap = new Map<string, CourseAggregate>();
   const stepMap = new Map<string, Record<string, CourseStepAggregate>>();
   const waitTracker = new Map<string, string | null>();
+  const teacherNameByUsername = new Map(
+    getUsers()
+      .filter((user) => user.role === "teacher")
+      .map((user) => [user.username, user.name])
+  );
 
   for (const session of sessions) {
-    const meta = resolveCourseMeta(session);
+    const meta = resolveCourseMeta(session, teacherNameByUsername);
     const course = courseMap.get(meta.key) ?? {
       ...meta,
       totalAi: 0,

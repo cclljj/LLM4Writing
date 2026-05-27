@@ -171,6 +171,10 @@ export default function CourseManagementTab({
     const start = (listPage - 1) * TASK_LIST_PAGE_SIZE;
     return filteredOpenClasses.slice(start, start + TASK_LIST_PAGE_SIZE);
   }, [filteredOpenClasses, listPage]);
+  const teacherNameByUsername = useMemo(
+    () => new Map(users.filter((user) => user.role === "teacher").map((user) => [user.username, user.name])),
+    [users]
+  );
 
   useEffect(() => {
     deferStateUpdate(() => setListPage(1));
@@ -1044,6 +1048,7 @@ export default function CourseManagementTab({
                 <th>學校</th>
                 <th>班級</th>
                 <th>主題</th>
+                <th>教師</th>
                 <th>時長 (分鐘)</th>
                 <th>補充資料</th>
                 <th>操作</th>
@@ -1056,6 +1061,11 @@ export default function CourseManagementTab({
                   <td>{openClass.school}</td>
                   <td>{openClass.classNumber}</td>
                   <td>{openClass.essayTitle}</td>
+                  <td>
+                    {openClass.ownerTeacherUsername
+                      ? `${teacherNameByUsername.get(openClass.ownerTeacherUsername) ?? openClass.ownerTeacherUsername}(${openClass.ownerTeacherUsername})`
+                      : "未指派"}
+                  </td>
                   <td>{openClass.durationMinutes}</td>
                   <td>{openClass.supplemental || "—"}</td>
                   <td>

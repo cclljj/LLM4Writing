@@ -187,6 +187,7 @@ export interface Activity {
   essayDescription?: string;
   durationMinutes: number;
   supplemental: string;
+  ownerTeacherUsername?: string;
   groups: ActivityGroup[];
   courseStatus?: "not_started" | "in_progress" | "paused" | "ended";
 }

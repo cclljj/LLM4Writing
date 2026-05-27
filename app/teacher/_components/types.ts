@@ -32,6 +32,7 @@ export type ActivityRow = {
   genre: string;
   durationMinutes: number;
   supplemental: string;
+  ownerTeacherUsername?: string;
   groups: ActivityGroup[];
   studentCandidates?: string[];
   courseStatus?: "not_started" | "in_progress" | "paused" | "ended";

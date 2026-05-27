@@ -187,6 +187,10 @@ export default function LearningMonitorTab({
     () => activities.find((activity) => activity.id === selectedLearningActivityId),
     [activities, selectedLearningActivityId]
   );
+  const teacherNameByUsername = useMemo(
+    () => new Map(users.filter((user) => user.role === "teacher").map((user) => [user.username, user.name])),
+    [users]
+  );
 
   // 各區塊 header 的上下文後綴 (#258)：「學校 / 班級 / 文章題目」
   const contextLabel = useMemo(() => {
@@ -1263,6 +1267,7 @@ export default function LearningMonitorTab({
                 <th>學校</th>
                 <th>班級</th>
                 <th>課程</th>
+                <th>教師</th>
                 <th>目前狀態</th>
                 <th>操作</th>
               </tr>
@@ -1293,6 +1298,11 @@ export default function LearningMonitorTab({
                     <td>{activity.school}</td>
                     <td>{activity.classNumber}</td>
                     <td>{activity.title}</td>
+                    <td>
+                      {activity.ownerTeacherUsername
+                        ? `${teacherNameByUsername.get(activity.ownerTeacherUsername) ?? activity.ownerTeacherUsername}(${activity.ownerTeacherUsername})`
+                        : "未指派"}
+                    </td>
                     <td>{getCourseStatusLabel(status)}</td>
                     <td>
                       <div className="row" style={{ gap: 8 }}>

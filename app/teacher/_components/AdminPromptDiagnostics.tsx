@@ -115,6 +115,8 @@ type DiagnosticsPayload = {
     school: string;
     classNumber: string;
     activityTitle: string;
+    ownerTeacherName: string;
+    ownerTeacherUsername: string;
     totalAi: number;
     successes: number;
     fallbacks: number;
@@ -463,6 +465,7 @@ export default function AdminPromptDiagnostics() {
                     <th>課程</th>
                     <th>學校</th>
                     <th>班級</th>
+                    <th>教師</th>
                     <th>成功率</th>
                     <th>Fallback 率</th>
                     <th>拒答率</th>
@@ -485,6 +488,11 @@ export default function AdminPromptDiagnostics() {
                       <td>{course.activityTitle}</td>
                       <td>{course.school}</td>
                       <td>{course.classNumber}</td>
+                      <td>
+                        {course.ownerTeacherUsername
+                          ? `${course.ownerTeacherName || course.ownerTeacherUsername}(${course.ownerTeacherUsername})`
+                          : "未指派"}
+                      </td>
                       <td>{fmtPct(course.successRate)}</td>
                       <td style={{ color: fallbackToneColor(course.fallbackRate) }}>{fmtPct(course.fallbackRate)}</td>
                       <td>{fmtPct(course.refusalRate)}</td>
