@@ -34,11 +34,21 @@ function isOriginGuardedApiPath(pathname: string): boolean {
 }
 
 function getExpectedOrigin(request: NextRequest): string | null {
-  const forwardedProto = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
-  const forwardedHost = request.headers.get("x-forwarded-host")?.split(",")[0]?.trim();
-  const host = forwardedHost || request.headers.get("host") || request.nextUrl.host;
+  const configured = process.env.APP_ORIGIN?.trim();
+  if (configured) {
+    try {
+      const parsed = new URL(configured);
+      return `${parsed.protocol}//${parsed.host}`.toLowerCase();
+    } catch {
+      return null;
+    }
+  }
+
+  // Fall back to runtime host/protocol only; avoid trusting forwarded host/proto
+  // headers as CSRF baseline source.
+  const host = request.headers.get("host") || request.nextUrl.host;
   if (!host) return null;
-  const protocol = forwardedProto || request.nextUrl.protocol.replace(":", "");
+  const protocol = request.nextUrl.protocol.replace(":", "");
   if (!protocol) return null;
   return `${protocol.toLowerCase()}://${host.toLowerCase()}`;
 }

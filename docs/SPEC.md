@@ -1140,7 +1140,9 @@ Loading 規則（#270）：
 
 - `proxy.ts` 對 `POST/PUT/PATCH/DELETE` 且路徑為 `/api/admin/*`、`/api/teacher/*`、`/api/session/*` 的請求執行同源驗證。
 - 驗證規則：
-  - 優先檢查 `Origin` 是否與當前 `Host`/`x-forwarded-host`（含 protocol）一致。
+  - 先以 `APP_ORIGIN`（若有設定）作為 canonical target origin（只比較 `scheme://host[:port]`）。
+  - 若 `APP_ORIGIN` 未設定，fallback 以 request runtime 的 `host + protocol` 推導 target origin。
+  - `x-forwarded-host` / `x-forwarded-proto` 不得作為 expected origin 的主要來源。
   - 若缺少 `Origin`，允許以 `Referer` 做同源比對。
   - 兩者皆缺失時回 `403 { error: "missing_origin" }`。
   - 有值但不同源時回 `403 { error: "invalid_origin" }`。
@@ -1818,7 +1820,11 @@ Auth session 必須是 server 簽章 token，格式為 `v1.<payload>.<signature>
 ### 10.4 CSRF / Origin Validation
 
 - `proxy.ts` 必須攔截 `/api/admin/*`、`/api/teacher/*`、`/api/session/*` 的狀態改動請求（`POST`/`PUT`/`PATCH`/`DELETE`）。
-- 檢查 `Origin`（或 fallback `Referer`）與當前 request host/protocol 是否同源。
+- 檢查 `Origin`（或 fallback `Referer`）與 expected origin 是否同源。
+- expected origin 推導規則：
+  - 優先使用 `APP_ORIGIN`（若設定，且需為可解析 URL）。
+  - 否則使用 runtime request `host + protocol`。
+  - 不以 `x-forwarded-host` / `x-forwarded-proto` 作為主要來源。
 - 驗證失敗回 `403`，錯誤碼僅允許：
   - `missing_origin`
   - `invalid_origin`

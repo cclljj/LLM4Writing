@@ -382,6 +382,12 @@ test("proxy: enforces origin checks for mutating admin/teacher/session APIs", as
   assert.ok(proxySrc.includes("validateStateChangeOrigin"));
   assert.ok(proxySrc.includes("missing_origin"));
   assert.ok(proxySrc.includes("invalid_origin"));
+  assert.ok(proxySrc.includes("process.env.APP_ORIGIN"), "proxy should support configured canonical origin");
+  assert.equal(
+    proxySrc.includes("x-forwarded-host") || proxySrc.includes("x-forwarded-proto"),
+    false,
+    "proxy should not use forwarded host/proto headers as CSRF expected-origin baseline"
+  );
 });
 
 test("proxy: returns 429 JSON shape", () => {

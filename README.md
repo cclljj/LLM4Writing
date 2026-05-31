@@ -83,6 +83,7 @@ npm run dev
 | `SUPABASE_DB_URL` | 優先使用，建議使用 Transaction Pooler（port 6543） |
 | `POSTGRES_URL` / `DATABASE_URL` | Fallback |
 | `SUPABASE_POOL_MODE` | `transaction` 或 `session`（可選，自動偵測） |
+| `APP_ORIGIN` | CSRF 同源檢查的 canonical origin（建議設定，如 `https://your-domain.example.com`） |
 
 ### LLM（選填）
 
@@ -174,7 +175,7 @@ proxy.ts                  Next.js middleware（auth guard、rate limit、nonce C
 
 - **認證**：HMAC-SHA256 server-signed session token（`llm4w_session`），`httpOnly + sameSite=strict`
 - **授權**：所有 API 路由皆有角色守門（student / teacher / admin），`/api/session/start` 要求 teacher/admin
-- **CSRF**：`sameSite=strict` cookie + Origin/Referer 同源驗證（`proxy.ts`）
+- **CSRF**：`sameSite=strict` cookie + Origin/Referer 同源驗證（`proxy.ts`，建議搭配 `APP_ORIGIN`）
 - **Rate Limit**：`/api/auth/login` 逐帳號失敗計數，10 次後鎖定 10 分鐘（HTTP 429）
 - **CSP**：per-request nonce（`proxy.ts`），`script-src 'nonce-…' 'strict-dynamic'`，無 `unsafe-inline`
 - **XSS 防護**：`renderMessageHtml()` 輸出通過 `isomorphic-dompurify` 白名單過濾
