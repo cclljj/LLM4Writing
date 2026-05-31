@@ -80,10 +80,23 @@ The system SHALL enforce student, teacher, and admin data boundaries.
 
 The system MUST validate same-origin requests for mutating admin, teacher, and session API routes.
 
+#### Scenario: Canonical expected origin from configuration
+
+- **GIVEN** `APP_ORIGIN` is configured to a valid URL
+- **WHEN** the proxy validates a protected mutating request
+- **THEN** expected origin is derived from `APP_ORIGIN` (`scheme://host[:port]`) for `Origin`/`Referer` comparison
+
+#### Scenario: Runtime fallback without forwarded-origin trust
+
+- **GIVEN** `APP_ORIGIN` is not configured
+- **WHEN** the proxy validates a protected mutating request
+- **THEN** expected origin is derived from runtime request host and protocol
+- **AND** `x-forwarded-host` and `x-forwarded-proto` are not used as the primary expected-origin baseline
+
 #### Scenario: Valid origin
 
 - **GIVEN** a `POST`, `PUT`, `PATCH`, or `DELETE` request targets `/api/admin/*`, `/api/teacher/*`, or `/api/session/*`
-- **WHEN** `Origin` or `Referer` matches the current request host and protocol
+- **WHEN** `Origin` or `Referer` matches the expected origin baseline
 - **THEN** the request may proceed to route handling
 
 #### Scenario: Missing origin information
