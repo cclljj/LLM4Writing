@@ -51,3 +51,14 @@ test("source-guard: learning monitor uses outline labels and participant mapping
   assert.ok(src.includes("setUserOutline"), "learning monitor should track userOutline state updates");
   assert.ok(src.includes("setUserStep3SubmittedOutline"), "learning monitor should track userStep3SubmittedOutline state updates");
 });
+
+test("source-guard: student route keeps classroom bootstrap failures recoverable", async () => {
+  const src = await read("../app/student/page.tsx");
+  assert.ok(src.includes("fetchStudentJson"), "student page should use a retrying JSON fetch helper");
+  assert.ok(src.includes("STUDENT_FETCH_TIMEOUT_MS"), "student page should bound classroom bootstrap fetches with a timeout");
+  assert.ok(src.includes("StudentFetchError"), "student page should classify retryable student fetch failures");
+  assert.ok(src.includes("setAuthError(getStudentRetryableMessage(\"auth\"))"), "auth bootstrap failures should show recoverable UI");
+  assert.ok(src.includes("error.status === 401"), "only confirmed unauthenticated auth responses should redirect to login");
+  assert.ok(src.includes("重新確認登入"), "student page should expose a retry action when auth bootstrap is transiently unavailable");
+  assert.ok(src.includes("重新整理課程清單"), "student overview failures should expose a retry action");
+});

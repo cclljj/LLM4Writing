@@ -305,6 +305,21 @@ The student UI SHALL keep course progress, previous-step review, next-action gui
 - **WHEN** the student refreshes the page
 - **THEN** the frontend restores the same `activityId` context when the course remains joinable instead of always falling back to the lobby
 
+#### Scenario: Classroom bootstrap failures are recoverable
+
+- **GIVEN** an authenticated student opens `/student` during a live classroom session
+- **WHEN** current-user or course-overview loading fails because of a transient network, timeout, rate-limit, or server error
+- **THEN** the frontend retries the request with a bounded timeout
+- **AND** if loading still fails, it shows a student-readable retry state instead of a blank page or silent failure
+- **AND** it redirects to `/login` only when authentication is explicitly rejected, such as a 401 current-user response
+
+#### Scenario: Course join transient failure is actionable
+
+- **GIVEN** a student presses a course entry action
+- **WHEN** `/api/student/join` fails transiently after bounded retry
+- **THEN** the frontend keeps the student on the page and shows a retryable classroom message
+- **AND** documented course-state errors such as not started, paused, ended, or not in group still show their specific student-facing messages
+
 #### Scenario: Step6 and Step8 draft editors allow paste
 
 - **GIVEN** a student is writing or polishing essay drafts in Step6 or Step8

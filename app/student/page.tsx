@@ -109,6 +109,90 @@ const stepNameMap: Record<number, string> = {
 };
 
 const LAST_ACTIVITY_STORAGE_KEY = "student:lastActivityId";
+const STUDENT_FETCH_TIMEOUT_MS = 8000;
+const STUDENT_FETCH_RETRY_DELAYS_MS = [500, 1200];
+
+class StudentFetchError extends Error {
+  status?: number;
+  code: "http" | "network" | "timeout" | "parse";
+
+  constructor(message: string, code: StudentFetchError["code"], status?: number) {
+    super(message);
+    this.name = "StudentFetchError";
+    this.code = code;
+    this.status = status;
+  }
+}
+
+type FetchJsonOptions = {
+  timeoutMs?: number;
+  retryDelaysMs?: number[];
+};
+
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+function isRetryableStudentFetchError(error: unknown): boolean {
+  if (!(error instanceof StudentFetchError)) return true;
+  if (error.code === "network" || error.code === "timeout" || error.code === "parse") return true;
+  return Boolean(error.status && (error.status === 429 || error.status >= 500));
+}
+
+async function fetchStudentJson<T>(
+  input: RequestInfo | URL,
+  init: RequestInit = {},
+  options: FetchJsonOptions = {}
+): Promise<{ data: T; response: Response }> {
+  const timeoutMs = options.timeoutMs ?? STUDENT_FETCH_TIMEOUT_MS;
+  const retryDelaysMs = options.retryDelaysMs ?? STUDENT_FETCH_RETRY_DELAYS_MS;
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt <= retryDelaysMs.length; attempt++) {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(input, { ...init, signal: controller.signal });
+      const raw = await response.text();
+      let data: T;
+      try {
+        data = raw ? (JSON.parse(raw) as T) : ({} as T);
+      } catch {
+        throw new StudentFetchError("student_json_parse_failed", "parse", response.status);
+      }
+      if (!response.ok) {
+        const errorCode = typeof (data as { error?: unknown }).error === "string"
+          ? (data as { error: string }).error
+          : "student_request_failed";
+        throw new StudentFetchError(errorCode, "http", response.status);
+      }
+      return { data, response };
+    } catch (error) {
+      const normalizedError =
+        error instanceof StudentFetchError
+          ? error
+          : new StudentFetchError(
+              error instanceof DOMException && error.name === "AbortError" ? "student_request_timeout" : "student_network_failed",
+              error instanceof DOMException && error.name === "AbortError" ? "timeout" : "network"
+            );
+      lastError = normalizedError;
+      if (attempt >= retryDelaysMs.length || !isRetryableStudentFetchError(normalizedError)) {
+        throw normalizedError;
+      }
+      await sleep(retryDelaysMs[attempt]!);
+    } finally {
+      window.clearTimeout(timeout);
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new StudentFetchError("student_request_failed", "network");
+}
+
+function getStudentRetryableMessage(target: "auth" | "overview" | "join"): string {
+  if (target === "auth") return "目前無法確認登入狀態，可能是網路或伺服器暫時忙碌。請稍候再試；如果全班都遇到這個畫面，請老師通知管理者。";
+  if (target === "join") return "目前無法進入課程，可能是網路或伺服器暫時忙碌。請再按一次進入課程；如果仍失敗，請先通知老師。";
+  return "目前無法載入課程清單，可能是網路或伺服器暫時忙碌。請按重新整理課程清單再試；如果全班都遇到這個畫面，請老師通知管理者。";
+}
 
 function getMode(step: number): InteractionMode {
   if ([1, 2, 4].includes(step)) return "group_interaction";
@@ -154,6 +238,8 @@ export default function StudentPage() {
   const router = useRouter();
   const [showDebugLog, setShowDebugLog] = useState(false);
   const [authReady, setAuthReady] = useState(false);
+  const [authError, setAuthError] = useState("");
+  const [authRetryNonce, setAuthRetryNonce] = useState(0);
   const [loginUser, setLoginUser] = useState("");
   const [profile, setProfile] = useState<{ name?: string; school?: string; classNumber?: string; ownerTeacherUsername?: string } | null>(null);
   const [missingFields, setMissingFields] = useState<string[]>([]);
@@ -239,22 +325,34 @@ export default function StudentPage() {
   }, [loginUser]);
 
   useEffect(() => {
-    fetch("/api/auth/me", { cache: "no-store" })
-      .then((res) => res.json())
-      .then((data) => {
+    let canceled = false;
+    fetchStudentJson<{ authenticated?: boolean; user?: { username?: string } }>("/api/auth/me", { cache: "no-store" })
+      .then(({ data }) => {
+        if (canceled) return;
         if (data?.authenticated && data?.user?.username) {
           setLoginUser(data.user.username);
+          setAuthError("");
         } else {
           setLoginUser("");
           router.push("/login");
         }
       })
-      .catch(() => {
+      .catch((error) => {
+        if (canceled) return;
         setLoginUser("");
-        router.push("/login");
+        if (error instanceof StudentFetchError && error.status === 401) {
+          router.push("/login");
+          return;
+        }
+        setAuthError(getStudentRetryableMessage("auth"));
       })
-      .finally(() => setAuthReady(true));
-  }, [router]);
+      .finally(() => {
+        if (!canceled) setAuthReady(true);
+      });
+    return () => {
+      canceled = true;
+    };
+  }, [authRetryNonce, router]);
 
   useEffect(() => {
     if (!authReady || !loginUser) return;
@@ -606,10 +704,11 @@ export default function StudentPage() {
     step3CompletedByMe &&
     !session.participants.every((p) => step3CompletedUsers.includes(p));
   const groupStatusResponders = currentStep === 4 ? step4CompletedUsers : responders;
-  const groupPendingMembers = session?.participants.filter((p) => !groupStatusResponders.includes(p)) ?? [];
   const groupPendingMemberNames = useMemo(
-    () => groupPendingMembers.map((username) => toDisplayName(username)),
-    [groupPendingMembers, toDisplayName]
+    () => (session?.participants ?? [])
+      .filter((username) => !groupStatusResponders.includes(username))
+      .map((username) => toDisplayName(username)),
+    [groupStatusResponders, session?.participants, toDisplayName]
   );
   const groupMemberNames = useMemo(
     () => (session?.participants ?? []).map((username) => toDisplayName(username)),
@@ -690,9 +789,15 @@ export default function StudentPage() {
   async function refreshOverview() {
     setIsLoadingOverview(true);
     try {
-      const response = await fetch("/api/student/overview", { cache: "no-store" });
-      const data = await response.json();
-      if (!response.ok) { setError(formatUserError(data.error ?? "overview_failed")); return; }
+      const { data } = await fetchStudentJson<{
+        profile?: { name?: string; school?: string; classNumber?: string; ownerTeacherUsername?: string } | null;
+        missingFields?: string[];
+        classCourses?: Course[];
+        upcomingCourses?: Course[];
+        activeCourses?: Course[];
+        pausedCourses?: Course[];
+        participatedCourses?: ParticipatedCourse[];
+      }>("/api/student/overview", { cache: "no-store" });
       setProfile(data.profile ?? null);
       setMissingFields(data.missingFields ?? []);
       setClassCourses(data.classCourses ?? []);
@@ -712,15 +817,15 @@ export default function StudentPage() {
       }, {} as Record<string, "not_started" | "in_progress" | "paused" | "ended">);
       setActivityStatusMap(statusMap);
       setError("");
+    } catch {
+      setError(getStudentRetryableMessage("overview"));
     } finally {
       setIsLoadingOverview(false);
     }
   }
 
   async function refreshActivityStatuses() {
-    const response = await fetch("/api/student/activities", { cache: "no-store" });
-    const data = await response.json();
-    if (!response.ok) return;
+    const { data } = await fetchStudentJson<{ activities?: Course[] }>("/api/student/activities", { cache: "no-store" });
     const list: Course[] = data.activities ?? [];
     const statusMap = list.reduce((acc, course) => {
       if (course.id && course.courseStatus) acc[course.id] = course.courseStatus;
@@ -732,35 +837,37 @@ export default function StudentPage() {
   async function joinActivity(activityId: string, options?: { silent?: boolean }) {
     if (!loginUser) { setError(formatUserError("auth_not_ready")); return; }
     if (!options?.silent) setError("");
-    const response = await fetch("/api/student/join", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ activityId })
-    });
-    const raw = await response.text();
-    let data: Record<string, unknown> = {};
-    if (raw) {
-      try { data = JSON.parse(raw) as Record<string, unknown>; } catch { data = {}; }
-    }
-    if (!response.ok) {
+    try {
+      const { data } = await fetchStudentJson<SessionState>("/api/student/join", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ activityId })
+      }, { retryDelaysMs: [700] });
+      applySessionSafely(data);
+      rememberLastActivity(activityId);
+      syncActivityQuery(activityId);
+      setPreparingCourse(null);
+      await refreshOverview();
+    } catch (error) {
       if (options?.silent) return;
-      if (data.error === "course_not_started") { setError(formatUserError("course_not_started")); return; }
-      if (data.error === "course_ended") { setError(formatUserError("course_ended")); return; }
-      if (data.error === "course_paused") { setError(formatUserError("course_paused")); return; }
-      if (data.error === "not_group_member") { setError(formatUserError("not_group_member")); return; }
-      if (data.error === "student_join_failed") {
-        const detail = typeof data.detail === "string" ? data.detail : "unknown";
-        setError(`進入課程失敗：${detail}。建議：請重新整理後再試，或請教師確認課程設定。`);
+      if (error instanceof StudentFetchError) {
+        if (error.message === "course_not_started") { setError(formatUserError("course_not_started")); return; }
+        if (error.message === "course_ended") { setError(formatUserError("course_ended")); return; }
+        if (error.message === "course_paused") { setError(formatUserError("course_paused")); return; }
+        if (error.message === "not_group_member") { setError(formatUserError("not_group_member")); return; }
+        if (error.message === "student_join_failed") {
+          setError("進入課程失敗。建議：請重新整理後再試，或請教師確認課程設定。");
+          return;
+        }
+        if (error.code === "http" && error.status && error.status < 500 && error.status !== 429) {
+          setError(formatUserError(error.message || "join_failed"));
+          return;
+        }
+        setError(getStudentRetryableMessage("join"));
         return;
       }
-      setError(formatUserError(typeof data.error === "string" ? data.error : "join_failed"));
-      return;
+      setError(getStudentRetryableMessage("join"));
     }
-    applySessionSafely(data as SessionState);
-    rememberLastActivity(activityId);
-    syncActivityQuery(activityId);
-    setPreparingCourse(null);
-    await refreshOverview();
   }
 
   useEffect(() => {
@@ -1296,11 +1403,56 @@ export default function StudentPage() {
     }
   }
 
+  if (!authReady) {
+    return (
+      <main>
+        <div className="card" style={{ borderColor: "#bfdbfe", background: "#eff6ff" }}>
+          <h2>正在確認登入狀態</h2>
+          <small>系統正在連線，請稍候...</small>
+        </div>
+      </main>
+    );
+  }
+
+  if (authError && !loginUser) {
+    return (
+      <main>
+        <div className="card" style={{ borderColor: "#fecaca", background: "#fff1f2" }}>
+          <h2>暫時無法進入學生端</h2>
+          <small>{authError}</small>
+          <div className="row" style={{ marginTop: 12 }}>
+            <div style={{ width: 180 }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthReady(false);
+                  setAuthError("");
+                  setAuthRetryNonce((value) => value + 1);
+                }}
+              >
+                重新確認登入
+              </button>
+            </div>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main>
       {error ? (
         <div className="card" style={{ borderColor: "#fecaca", background: "#fff1f2" }}>
           <small>{error}</small>
+          {!session && loginUser ? (
+            <div className="row" style={{ marginTop: 12 }}>
+              <div style={{ width: 180 }}>
+                <button type="button" className="secondary" onClick={() => refreshOverview()}>
+                  重新整理課程清單
+                </button>
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
