@@ -82,6 +82,51 @@ export type PersonalProgressRow = {
   lastMessageAt: string | null;
 };
 
+export type CourseStepDuration = {
+  step: number;
+  averageMs: number;
+  sampleCount: number;
+};
+
+export type CourseDiagnosticsSession = {
+  sessionId: string;
+  date: string;
+  startedAt: string;
+  endedAt: string | null;
+  groupName: string;
+  participantCount: number;
+  latestStep: number;
+  acceptedAnswers: number;
+  totalAi: number;
+  fallbackCount: number;
+  fallbackRate: number;
+  rejectionCount: number;
+  rejectionRate: number;
+  averageStepDurationMs: number;
+  stepDurations: CourseStepDuration[];
+  riskiestSteps: number[];
+};
+
+export type CourseDiagnosticsPayload = {
+  activityId: string;
+  source: "persisted_learning_events" | "estimated_from_session_messages";
+  estimationNotes: string[];
+  summary: {
+    totalSessions: number;
+    totalFallbacks: number;
+    totalRejections: number;
+    totalAi: number;
+    acceptedAnswers: number;
+    fallbackRate: number;
+    rejectionRate: number;
+    slowestStep: number | null;
+    highestFallbackStep: number | null;
+    highestRejectionStep: number | null;
+    averageStepDurations: CourseStepDuration[];
+  };
+  sessions: CourseDiagnosticsSession[];
+};
+
 export const genreOptions = ["議論文", "記敘文", "說明文", "抒情文", "其他"];
 export const groupInteractionSteps = [1, 2, 4];
 export type CourseTab = "essay" | "openclass" | "group";

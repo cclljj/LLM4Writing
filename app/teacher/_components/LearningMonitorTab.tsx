@@ -19,9 +19,10 @@ import {
   TEACHER_MONITOR_FAST_POLL_MS,
   TEACHER_MONITOR_MIN_POLL_MS
 } from "@/src/lib/teacher-monitor-polling";
+import { fetchJsonWithRetry } from "@/src/lib/client-retry-fetch";
 import { formatTaipeiDateTime } from "@/src/lib/time-format";
 import TeacherDashboard, { TeacherDashboardData } from "./TeacherDashboard";
-import { ActivityRow, MonitorSession, UserRow } from "./types";
+import { ActivityRow, CourseDiagnosticsPayload, MonitorSession, UserRow } from "./types";
 
 // Re-export QualitySignals/ArtifactDiagnostics usage via types import
 type _QS = QualitySignals;
@@ -83,6 +84,9 @@ export default function LearningMonitorTab({
   const [learningActionKey, setLearningActionKey] = useState("");
   const [detailLoadingSessionId, setDetailLoadingSessionId] = useState("");
   const [learningWarning, setLearningWarning] = useState("");
+  const [courseDiagnostics, setCourseDiagnostics] = useState<CourseDiagnosticsPayload | null>(null);
+  const [courseDiagnosticsLoading, setCourseDiagnosticsLoading] = useState(false);
+  const [courseDiagnosticsError, setCourseDiagnosticsError] = useState("");
   const [selectedProgressUser, setSelectedProgressUser] = useState("");
   const [personalMessages, setPersonalMessages] = useState<{ id: string; role: string; userId?: string; step: number; text: string; at: string }[]>([]);
   const [userOutline, setUserOutline] = useState("");
@@ -617,6 +621,8 @@ export default function LearningMonitorTab({
       setProgressSessionId("");
       setUserOutline("");
       setUserStep3SubmittedOutline("");
+      setCourseDiagnostics(null);
+      setCourseDiagnosticsError("");
     });
   }, [selectedLearningActivityId]);
 
@@ -766,6 +772,27 @@ export default function LearningMonitorTab({
         : TEACHER_MONITOR_MIN_POLL_MS; // reset on activity
     }
     return mergedSessions;
+  }
+
+  async function loadCourseDiagnostics(activityIdOverride?: string): Promise<CourseDiagnosticsPayload | null> {
+    const targetActivityId = activityIdOverride ?? selectedLearningActivityId;
+    if (!targetActivityId) return null;
+    setCourseDiagnosticsLoading(true);
+    setCourseDiagnosticsError("");
+    try {
+      const { data } = await fetchJsonWithRetry<CourseDiagnosticsPayload>(
+        `/api/teacher/course-diagnostics?activityId=${encodeURIComponent(targetActivityId)}`,
+        { cache: "no-store" }
+      );
+      setCourseDiagnostics(data);
+      return data;
+    } catch {
+      setCourseDiagnosticsError("課程診斷摘要載入失敗，請稍後再試。");
+      setCourseDiagnostics(null);
+      return null;
+    } finally {
+      setCourseDiagnosticsLoading(false);
+    }
   }
 
   async function syncSelectedRecordsAfterMonitorRefresh(latestSessions: MonitorSession[]) {
@@ -1025,7 +1052,10 @@ export default function LearningMonitorTab({
     setSelectedLearningActivityId(activityId);
     setShowCourseStatusView(true);
     await runLearningAction(`course:${activityId}:view`, "系統正在載入課程狀態，請稍候...", async () => {
-      const sessions = await refreshMonitor(activityId);
+      const [sessions] = await Promise.all([
+        refreshMonitor(activityId),
+        loadCourseDiagnostics(activityId)
+      ]);
       const targetSessions = sessions.filter((item: MonitorSession) => item.activityId === activityId);
       if (targetSessions.length > 0) {
         const first = targetSessions[0]!;
@@ -1068,7 +1098,10 @@ export default function LearningMonitorTab({
       }
       setError("");
       await onRefreshData();
-      if (showCourseStatusView) await refreshMonitor(selectedLearningActivityId);
+      if (showCourseStatusView) {
+        await refreshMonitor(selectedLearningActivityId);
+        await loadCourseDiagnostics(selectedLearningActivityId);
+      }
     });
   }
 
@@ -1088,7 +1121,10 @@ export default function LearningMonitorTab({
         return;
       }
       await onRefreshData();
-      if (showCourseStatusView) await refreshMonitor(selectedLearningActivityId);
+      if (showCourseStatusView) {
+        await refreshMonitor(selectedLearningActivityId);
+        await loadCourseDiagnostics(selectedLearningActivityId);
+      }
       if (selectedLearningActivityId === activityId) {
         setShowCourseStatusView(false);
         setSelectedLearningActivityId("");
@@ -1191,6 +1227,31 @@ export default function LearningMonitorTab({
       if (m.role === "system") return !m.userId || m.userId === username;
       return false;
     });
+  }
+
+  function formatPercent(value: number): string {
+    if (!Number.isFinite(value)) return "0%";
+    return `${Math.round(value * 1000) / 10}%`;
+  }
+
+  function formatDuration(ms: number): string {
+    if (!Number.isFinite(ms) || ms <= 0) return "—";
+    const totalSeconds = Math.round(ms / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    if (minutes >= 60) {
+      const hours = Math.floor(minutes / 60);
+      const restMinutes = minutes % 60;
+      return restMinutes > 0 ? `${hours}小時${restMinutes}分` : `${hours}小時`;
+    }
+    return minutes > 0 ? `${minutes}分${seconds.toString().padStart(2, "0")}秒` : `${seconds}秒`;
+  }
+
+  function formatStepDurationList(items: Array<{ step: number; averageMs: number; sampleCount: number }>): string {
+    if (items.length === 0) return "—";
+    return items
+      .map((item) => `S${item.step}: ${formatDuration(item.averageMs)} (${item.sampleCount})`)
+      .join(" / ");
   }
 
   // suppress unused var warnings for functions that are defined but referenced only via void
@@ -1355,6 +1416,7 @@ export default function LearningMonitorTab({
                               await onRefreshData();
                               if (showCourseStatusView) {
                                 const latestSessions = await refreshMonitor(activity.id);
+                                await loadCourseDiagnostics(activity.id);
                                 await syncSelectedRecordsAfterMonitorRefresh(latestSessions);
                               }
                             });
@@ -1471,6 +1533,91 @@ export default function LearningMonitorTab({
               }, 0);
             }}
           />
+
+          <div className="card">
+            <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+              <h2 style={{ marginBottom: 0 }}>
+                課程診斷摘要
+                {contextLabel ? <span style={{ fontSize: 14, color: "#64748b", fontWeight: 400, marginLeft: 8 }}>— {contextLabel}</span> : null}
+              </h2>
+              <button
+                type="button"
+                className="secondary"
+                style={{ width: "auto" }}
+                disabled={courseDiagnosticsLoading}
+                onClick={() => loadCourseDiagnostics(selectedLearningActivityId)}
+              >
+                {courseDiagnosticsLoading ? "載入中..." : "重新整理診斷"}
+              </button>
+            </div>
+            {courseDiagnosticsLoading ? <small style={{ display: "block", marginTop: 10 }}>課程診斷資料載入中...</small> : null}
+            {courseDiagnosticsError ? <small style={{ display: "block", marginTop: 10, color: "#b91c1c" }}>{courseDiagnosticsError}</small> : null}
+            {courseDiagnostics ? (
+              <>
+                <div className="row" style={{ gap: 10, marginTop: 12 }}>
+                  <div style={{ flex: 1, padding: 12, border: "1px solid #e5e7eb", borderRadius: 8, background: "#f8fafc" }}>
+                    <small>上課場次</small>
+                    <h3 style={{ margin: "4px 0 0" }}>{courseDiagnostics.summary.totalSessions}</h3>
+                  </div>
+                  <div style={{ flex: 1, padding: 12, border: "1px solid #e5e7eb", borderRadius: 8, background: "#f8fafc" }}>
+                    <small>Fallback</small>
+                    <h3 style={{ margin: "4px 0 0" }}>{courseDiagnostics.summary.totalFallbacks}（{formatPercent(courseDiagnostics.summary.fallbackRate)}）</h3>
+                  </div>
+                  <div style={{ flex: 1, padding: 12, border: "1px solid #e5e7eb", borderRadius: 8, background: "#f8fafc" }}>
+                    <small>拒答</small>
+                    <h3 style={{ margin: "4px 0 0" }}>{courseDiagnostics.summary.totalRejections}（{formatPercent(courseDiagnostics.summary.rejectionRate)}）</h3>
+                  </div>
+                  <div style={{ flex: 1, padding: 12, border: "1px solid #e5e7eb", borderRadius: 8, background: "#f8fafc" }}>
+                    <small>最久停留步驟</small>
+                    <h3 style={{ margin: "4px 0 0" }}>{courseDiagnostics.summary.slowestStep ? `Step ${courseDiagnostics.summary.slowestStep}` : "—"}</h3>
+                  </div>
+                </div>
+                <small style={{ display: "block", marginTop: 10 }}>
+                  指標來源：{courseDiagnostics.source === "persisted_learning_events" ? "事件表（較精準）" : "session 訊息估算"}
+                </small>
+                <div style={{ overflowX: "auto", marginTop: 12 }}>
+                  <table className="pro-table">
+                    <thead>
+                      <tr>
+                        <th>日期</th>
+                        <th>組別/場次</th>
+                        <th>開始時間</th>
+                        <th>學生數</th>
+                        <th>最新步驟</th>
+                        <th>Fallback</th>
+                        <th>拒答</th>
+                        <th>平均停留</th>
+                        <th>風險步驟</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {courseDiagnostics.sessions.map((session) => (
+                        <tr key={session.sessionId}>
+                          <td>{session.date || "—"}</td>
+                          <td>{session.groupName || session.sessionId}</td>
+                          <td>{formatTaipeiDateTime(session.startedAt)}</td>
+                          <td>{session.participantCount}</td>
+                          <td>Step {session.latestStep}</td>
+                          <td>{session.fallbackCount} / {session.totalAi}（{formatPercent(session.fallbackRate)}）</td>
+                          <td>{session.rejectionCount} / {session.acceptedAnswers + session.rejectionCount}（{formatPercent(session.rejectionRate)}）</td>
+                          <td>{formatDuration(session.averageStepDurationMs)}</td>
+                          <td>{session.riskiestSteps.length > 0 ? session.riskiestSteps.map((step) => `S${step}`).join("、") : "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {courseDiagnostics.sessions.length === 0 ? <small style={{ display: "block", marginTop: 8 }}>此課程目前沒有可統計的上課場次。</small> : null}
+                <h3 style={{ marginTop: 14 }}>每步平均停留時間</h3>
+                <small>{formatStepDurationList(courseDiagnostics.summary.averageStepDurations)}</small>
+                <ul style={{ marginTop: 10 }}>
+                  {courseDiagnostics.estimationNotes.map((note) => (
+                    <li key={note}><small>{note}</small></li>
+                  ))}
+                </ul>
+              </>
+            ) : null}
+          </div>
 
           <div className="card">
             <h2>

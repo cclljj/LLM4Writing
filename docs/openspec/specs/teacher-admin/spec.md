@@ -186,6 +186,21 @@ The classroom dashboard SHALL show all sessions for the selected course and prio
 - **THEN** monitor summary data refreshes
 - **AND** the currently selected group log and personal record are reloaded from latest backend data instead of keeping stale content
 
+#### Scenario: Course diagnostics in status view
+
+- **GIVEN** teacher/admin selects `查看狀態` for a visible course
+- **WHEN** the status view loads
+- **THEN** it shows a course diagnostics summary for that `activityId`
+- **AND** each session/run includes fallback count/rate, rejection count/rate, average step dwell time, and riskiest steps
+- **AND** the summary includes cross-session average dwell time by step
+- **AND** the UI identifies whether fallback/rejection metrics come from persisted `learning_events` or session-message estimation
+
+#### Scenario: Course diagnostics scope
+
+- **GIVEN** a teacher requests course diagnostics
+- **WHEN** the target course or session is outside the teacher's visible class and current activity group scope
+- **THEN** the API does not expose that diagnostic data
+
 ### Requirement: Conversation And Progress Records
 
 The learning monitor SHALL provide group and personal records organized by step.

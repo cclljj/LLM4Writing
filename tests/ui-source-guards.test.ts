@@ -77,3 +77,15 @@ test("source-guard: teacher/admin route keeps management bootstrap failures reco
   assert.ok(helperSrc.includes("CLIENT_FETCH_TIMEOUT_MS"), "shared client fetch helper should bound requests with a timeout");
   assert.ok(helperSrc.includes("status === 429 || error.status >= 500"), "shared client fetch helper should retry transient HTTP failures");
 });
+
+test("source-guard: learning management renders course diagnostics status", async () => {
+  const uiSrc = await read("../app/teacher/_components/LearningMonitorTab.tsx");
+  const routeSrc = await read("../app/api/teacher/course-diagnostics/route.ts");
+  assert.ok(uiSrc.includes("課程診斷摘要"), "learning management should render a course diagnostics card");
+  assert.ok(uiSrc.includes("/api/teacher/course-diagnostics?activityId="), "learning management should load course diagnostics by activity");
+  assert.ok(uiSrc.includes("Fallback"), "course diagnostics UI should surface fallback stats");
+  assert.ok(uiSrc.includes("拒答"), "course diagnostics UI should surface rejection stats");
+  assert.ok(uiSrc.includes("每步平均停留時間"), "course diagnostics UI should surface step dwell-time stats");
+  assert.ok(routeSrc.includes("getUsersVisibleToTeacherStore"), "course diagnostics route should enforce teacher visibility scope");
+  assert.ok(routeSrc.includes("isSessionInActivityGroupScope"), "course diagnostics route should scope sessions to the activity groups");
+});

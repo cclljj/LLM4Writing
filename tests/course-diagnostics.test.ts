@@ -1,0 +1,78 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { buildCourseDiagnostics } from "../src/lib/course-diagnostics";
+import type { PersistedEventRow } from "../src/lib/store";
+import type { SessionState } from "../src/lib/types";
+
+function makeSession(overrides: Partial<SessionState> = {}): SessionState {
+  return {
+    id: "s1",
+    createdAt: "2026-06-01T01:00:00.000Z",
+    currentStep: 3,
+    participants: ["stu1", "stu2"],
+    joinedUsers: ["stu1", "stu2"],
+    messages: [
+      { id: "m1", role: "student", userId: "stu1", step: 1, text: "我想到責任、選擇、後果。", at: "2026-06-01T01:00:00.000Z" },
+      { id: "m2", role: "ai", step: 1, text: "請繼續討論。", at: "2026-06-01T01:01:00.000Z" },
+      { id: "m3", role: "student", userId: "stu2", step: 2, text: "我找到一個生活例子。", at: "2026-06-01T01:05:00.000Z" },
+      { id: "m4", role: "ai", step: 2, text: "AI 建議：已收到你的草稿", at: "2026-06-01T01:06:00.000Z" }
+    ],
+    qualitySignals: {
+      rejectedAnswerCounts: { "stu1::step-2": 2 },
+      rejectedAnswerLastAt: { "stu1::step-2": "2026-06-01T01:05:30.000Z" }
+    },
+    groupGate: {},
+    reflectionIndex: {},
+    workflow: "spec10",
+    phaseMax: 10,
+    activityId: "oc-1",
+    activityTitle: "測試課程",
+    groupId: "g1",
+    groupName: "1",
+    promptConfig: { stepPrompts: {}, subStepPrompts: {}, questionBanks: {} },
+    stepState: { step1Substep: 1, step2Substep: 1 },
+    outlines: {},
+    draftStep6: {},
+    draftStep8: {},
+    reports: { step5: {}, step7: {}, step10: {} },
+    ...overrides
+  };
+}
+
+function makeEvent(overrides: Partial<PersistedEventRow>): PersistedEventRow {
+  return {
+    id: "e1",
+    session_id: "s1",
+    activity_id: "oc-1",
+    step: 2,
+    kind: "step6_suggest",
+    latency_ms: 1000,
+    fallback_used: true,
+    error_category: null,
+    created_at: new Date("2026-06-01T01:06:00.000Z"),
+    ...overrides
+  };
+}
+
+test("course diagnostics estimates fallback, rejection, and dwell time from session messages", () => {
+  const diagnostics = buildCourseDiagnostics("oc-1", [makeSession()]);
+  assert.equal(diagnostics.source, "estimated_from_session_messages");
+  assert.equal(diagnostics.summary.totalSessions, 1);
+  assert.equal(diagnostics.summary.totalFallbacks, 1);
+  assert.equal(diagnostics.summary.totalRejections, 2);
+  assert.equal(diagnostics.summary.highestFallbackStep, 2);
+  assert.equal(diagnostics.summary.highestRejectionStep, 2);
+  assert.ok((diagnostics.summary.averageStepDurations.find((item) => item.step === 1)?.averageMs ?? 0) > 0);
+});
+
+test("course diagnostics prefers persisted learning events when available", () => {
+  const diagnostics = buildCourseDiagnostics("oc-1", [makeSession()], [
+    makeEvent({ id: "e1", kind: "step3_response", step: 3, fallback_used: true }),
+    makeEvent({ id: "e2", kind: "student_rejection", step: 3, fallback_used: false })
+  ]);
+  assert.equal(diagnostics.source, "persisted_learning_events");
+  assert.equal(diagnostics.summary.totalFallbacks, 1);
+  assert.equal(diagnostics.summary.totalRejections, 1);
+  assert.equal(diagnostics.summary.highestFallbackStep, 3);
+  assert.equal(diagnostics.summary.highestRejectionStep, 3);
+});
