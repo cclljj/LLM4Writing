@@ -87,6 +87,7 @@ export default function LearningMonitorTab({
   const [courseDiagnostics, setCourseDiagnostics] = useState<CourseDiagnosticsPayload | null>(null);
   const [courseDiagnosticsLoading, setCourseDiagnosticsLoading] = useState(false);
   const [courseDiagnosticsError, setCourseDiagnosticsError] = useState("");
+  const [courseDiagnosticsPage, setCourseDiagnosticsPage] = useState(1);
   const [selectedProgressUser, setSelectedProgressUser] = useState("");
   const [personalMessages, setPersonalMessages] = useState<{ id: string; role: string; userId?: string; step: number; text: string; at: string }[]>([]);
   const [userOutline, setUserOutline] = useState("");
@@ -598,6 +599,13 @@ export default function LearningMonitorTab({
     const start = (progressStatsPage - 1) * personalProgressStatsPageSize;
     return personalProgressStatsRows.slice(start, start + personalProgressStatsPageSize);
   }, [personalProgressStatsRows, progressStatsPage]);
+  const courseDiagnosticsPageSize = 10;
+  const courseDiagnosticsRows = useMemo(() => courseDiagnostics?.sessions ?? [], [courseDiagnostics]);
+  const courseDiagnosticsTotalPages = Math.max(1, Math.ceil(courseDiagnosticsRows.length / courseDiagnosticsPageSize));
+  const pagedCourseDiagnosticsRows = useMemo(() => {
+    const start = (courseDiagnosticsPage - 1) * courseDiagnosticsPageSize;
+    return courseDiagnosticsRows.slice(start, start + courseDiagnosticsPageSize);
+  }, [courseDiagnosticsRows, courseDiagnosticsPage]);
 
   useEffect(() => {
     if (!monitorSelected) return;
@@ -623,6 +631,7 @@ export default function LearningMonitorTab({
       setUserStep3SubmittedOutline("");
       setCourseDiagnostics(null);
       setCourseDiagnosticsError("");
+      setCourseDiagnosticsPage(1);
     });
   }, [selectedLearningActivityId]);
 
@@ -706,6 +715,12 @@ export default function LearningMonitorTab({
   }, [progressStatsPage, personalProgressStatsTotalPages]);
 
   useEffect(() => {
+    if (courseDiagnosticsPage > courseDiagnosticsTotalPages) {
+      deferStateUpdate(() => setCourseDiagnosticsPage(courseDiagnosticsTotalPages));
+    }
+  }, [courseDiagnosticsPage, courseDiagnosticsTotalPages]);
+
+  useEffect(() => {
     if (learningPage > totalLearningPages) {
       deferStateUpdate(() => setLearningPage(totalLearningPages));
     }
@@ -785,6 +800,7 @@ export default function LearningMonitorTab({
         { cache: "no-store" }
       );
       setCourseDiagnostics(data);
+      setCourseDiagnosticsPage(1);
       return data;
     } catch {
       setCourseDiagnosticsError("課程診斷摘要載入失敗，請稍後再試。");
@@ -1592,7 +1608,7 @@ export default function LearningMonitorTab({
                       </tr>
                     </thead>
                     <tbody>
-                      {courseDiagnostics.sessions.map((session) => (
+                      {pagedCourseDiagnosticsRows.map((session) => (
                         <tr key={session.runId}>
                           <td>{session.date || "—"}</td>
                           <td>{session.groupName || session.runId}</td>
@@ -1609,6 +1625,33 @@ export default function LearningMonitorTab({
                     </tbody>
                   </table>
                 </div>
+                {courseDiagnostics.sessions.length > 0 ? (
+                  <div className="row" style={{ justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
+                    <small>
+                      第 {courseDiagnosticsPage} / {courseDiagnosticsTotalPages} 頁，共 {courseDiagnostics.sessions.length} 列（每頁 10 列）
+                    </small>
+                    <div className="row" style={{ gap: 8 }}>
+                      <button
+                        type="button"
+                        className="secondary"
+                        style={{ width: "auto" }}
+                        disabled={courseDiagnosticsPage <= 1}
+                        onClick={() => setCourseDiagnosticsPage((page) => Math.max(1, page - 1))}
+                      >
+                        上一頁
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary"
+                        style={{ width: "auto" }}
+                        disabled={courseDiagnosticsPage >= courseDiagnosticsTotalPages}
+                        onClick={() => setCourseDiagnosticsPage((page) => Math.min(courseDiagnosticsTotalPages, page + 1))}
+                      >
+                        下一頁
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
                 {courseDiagnostics.sessions.length === 0 ? <small style={{ display: "block", marginTop: 8 }}>此課程目前沒有可統計的上課場次。</small> : null}
                 <h3 style={{ marginTop: 14 }}>每步平均停留時間</h3>
                 <small>{formatStepDurationList(courseDiagnostics.summary.averageStepDurations)}</small>

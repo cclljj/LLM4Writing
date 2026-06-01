@@ -88,6 +88,8 @@ test("source-guard: learning management renders course diagnostics status", asyn
   assert.ok(uiSrc.includes("每步平均停留時間"), "course diagnostics UI should surface step dwell-time stats");
   assert.ok(uiSrc.includes("session.runId"), "course diagnostics UI should render grouped run rows");
   assert.ok(uiSrc.includes("session.sessionIds.length"), "course diagnostics UI should expose aggregated session count per run");
+  assert.ok(uiSrc.includes("pagedCourseDiagnosticsRows"), "course diagnostics UI should paginate grouped run rows");
+  assert.ok(uiSrc.includes("每頁 10 列"), "course diagnostics pagination should disclose the 10-row page size");
   assert.ok(routeSrc.includes("getUsersVisibleToTeacherStore"), "course diagnostics route should enforce teacher visibility scope");
   assert.ok(routeSrc.includes("isSessionInActivityGroupScope"), "course diagnostics route should scope sessions to the activity groups");
 });

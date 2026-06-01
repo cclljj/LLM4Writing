@@ -121,3 +121,52 @@ test("course diagnostics groups same-day sessions by group and splits different 
   assert.equal(june1.totalAi, 2);
   assert.deepEqual(june2.sessionIds, ["s-c"]);
 });
+
+test("course diagnostics splits a single session by Taipei implementation dates", () => {
+  const spanningSession = makeSession({
+    id: "s-span",
+    createdAt: "2026-06-01T15:20:00.000Z",
+    currentStep: 4,
+    messages: [
+      { id: "d1", role: "student", userId: "stu1", step: 1, text: "第一天回答", at: "2026-06-01T15:30:00.000Z" },
+      { id: "d2", role: "ai", step: 1, text: "AI 建議：已收到你的草稿", at: "2026-06-01T15:31:00.000Z" },
+      { id: "d3", role: "student", userId: "stu2", step: 3, text: "第二天繼續", at: "2026-06-01T16:30:00.000Z" },
+      { id: "d4", role: "ai", step: 3, text: "正常回覆", at: "2026-06-01T16:31:00.000Z" }
+    ],
+    qualitySignals: {
+      rejectedAnswerCounts: { "stu2::step-3": 1 },
+      rejectedAnswerLastAt: { "stu2::step-3": "2026-06-01T16:30:30.000Z" }
+    }
+  });
+
+  const diagnostics = buildCourseDiagnostics("oc-1", [spanningSession]);
+  assert.equal(diagnostics.sessions.length, 2);
+  const dayOne = diagnostics.sessions.find((session) => session.date === "2026-06-01");
+  const dayTwo = diagnostics.sessions.find((session) => session.date === "2026-06-02");
+  assert.ok(dayOne);
+  assert.ok(dayTwo);
+  assert.deepEqual(dayOne.sessionIds, ["s-span"]);
+  assert.deepEqual(dayTwo.sessionIds, ["s-span"]);
+  assert.equal(dayOne.fallbackCount, 1);
+  assert.equal(dayOne.totalAi, 1);
+  assert.equal(dayTwo.rejectionCount, 1);
+  assert.equal(dayTwo.totalAi, 1);
+  assert.equal(dayOne.stepDurations.find((item) => item.step === 1)?.averageMs, 60_000);
+  assert.equal(dayOne.stepDurations.some((item) => item.averageMs > 60 * 60 * 1000), false);
+});
+
+test("course diagnostics groups by Taipei date instead of UTC date", () => {
+  const lateNight = makeSession({
+    id: "s-late",
+    createdAt: "2026-06-01T16:20:00.000Z",
+    messages: [
+      { id: "late-1", role: "student", userId: "stu1", step: 1, text: "台北凌晨回答", at: "2026-06-01T16:30:00.000Z" },
+      { id: "late-2", role: "ai", step: 1, text: "正常回覆", at: "2026-06-01T16:31:00.000Z" }
+    ],
+    qualitySignals: { rejectedAnswerCounts: {}, rejectedAnswerLastAt: {} }
+  });
+
+  const diagnostics = buildCourseDiagnostics("oc-1", [lateNight]);
+  assert.equal(diagnostics.sessions.length, 1);
+  assert.equal(diagnostics.sessions[0]?.date, "2026-06-02");
+});

@@ -1,4 +1,5 @@
 import type { PersistedEventRow } from "@/src/lib/store";
+import { getTaipeiDateKey } from "@/src/lib/time-format";
 import type { SessionState } from "@/src/lib/types";
 
 const FALLBACK_MARKERS = [
@@ -58,18 +59,9 @@ export type CourseDiagnosticsPayload = {
   sessions: CourseDiagnosticsSession[];
 };
 
-type SessionMetricBucket = {
-  totalAi: number;
-  fallbacks: number;
-  acceptedAnswers: number;
-  rejectedAnswers: number;
-  fallbackByStep: Record<number, number>;
-  rejectedByStep: Record<number, number>;
-};
-
 type RunBucket = {
   runId: string;
-  sessionIds: string[];
+  sessionIds: Set<string>;
   date: string;
   groupName: string;
   startedAt: string;
@@ -85,14 +77,20 @@ type RunBucket = {
   rejectedByStep: Record<number, number>;
 };
 
+type StepDurationSample = {
+  step: number;
+  date: string;
+  startedAt: string;
+  durationMs: number;
+};
+
 function toMs(iso?: string | null): number {
   const ms = new Date(iso ?? "").getTime();
   return Number.isFinite(ms) ? ms : 0;
 }
 
 function dayKey(iso: string): string {
-  const ms = toMs(iso);
-  return ms > 0 ? new Date(ms).toISOString().slice(0, 10) : "";
+  return getTaipeiDateKey(iso);
 }
 
 function isFallbackText(text: string): boolean {
@@ -138,108 +136,36 @@ function getSessionEndedAt(session: SessionState): string | null {
   return lastMessageAt ?? session.createdAt ?? null;
 }
 
-function computeStepDurations(session: SessionState): CourseStepDuration[] {
-  const firstAtByStep = new Map<number, number>();
-  const lastAtByStep = new Map<number, number>();
+function computeStepDurationSamples(session: SessionState): StepDurationSample[] {
+  const byDate = new Map<string, Map<number, { firstMs: number; firstIso: string; lastMs: number }>>();
   for (const message of session.messages) {
     if (!Number.isFinite(message.step) || message.step < 1) continue;
     const ms = toMs(message.at);
     if (ms <= 0) continue;
-    const currentFirst = firstAtByStep.get(message.step);
-    if (!currentFirst || ms < currentFirst) firstAtByStep.set(message.step, ms);
-    const currentLast = lastAtByStep.get(message.step);
-    if (!currentLast || ms > currentLast) lastAtByStep.set(message.step, ms);
+    const date = dayKey(message.at);
+    if (!date) continue;
+    const stepMap = byDate.get(date) ?? new Map<number, { firstMs: number; firstIso: string; lastMs: number }>();
+    const current = stepMap.get(message.step);
+    stepMap.set(message.step, {
+      firstMs: current ? Math.min(current.firstMs, ms) : ms,
+      firstIso: current && current.firstMs <= ms ? current.firstIso : message.at,
+      lastMs: current ? Math.max(current.lastMs, ms) : ms
+    });
+    byDate.set(date, stepMap);
   }
 
-  const steps = Array.from(firstAtByStep.keys()).sort((a, b) => a - b);
-  return steps.flatMap((step, index) => {
-    const start = firstAtByStep.get(step) ?? 0;
-    const nextStep = steps[index + 1];
-    const nextStart = nextStep ? firstAtByStep.get(nextStep) ?? 0 : 0;
-    const end = nextStart > start ? nextStart : lastAtByStep.get(step) ?? 0;
-    const duration = end > start ? end - start : 0;
-    return duration > 0 ? [{ step, averageMs: duration, sampleCount: 1 }] : [];
+  return Array.from(byDate.entries()).flatMap(([date, stepMap]) => {
+    const steps = Array.from(stepMap.keys()).sort((a, b) => a - b);
+    return steps.flatMap((step, index) => {
+      const current = stepMap.get(step);
+      const nextStep = steps[index + 1];
+      const nextStart = nextStep ? stepMap.get(nextStep)?.firstMs ?? 0 : 0;
+      const start = current?.firstMs ?? 0;
+      const end = nextStart > start ? nextStart : current?.lastMs ?? 0;
+      const duration = end > start ? end - start : 0;
+      return duration > 0 && current ? [{ step, date, startedAt: current.firstIso, durationMs: duration }] : [];
+    });
   });
-}
-
-function buildMetricsFromEvents(sessions: SessionState[], events: PersistedEventRow[]): Map<string, SessionMetricBucket> {
-  const sessionIds = new Set(sessions.map((session) => session.id));
-  const buckets = new Map<string, SessionMetricBucket>();
-  const getBucket = (sessionId: string) => {
-    const existing = buckets.get(sessionId);
-    if (existing) return existing;
-    const created: SessionMetricBucket = {
-      totalAi: 0,
-      fallbacks: 0,
-      acceptedAnswers: 0,
-      rejectedAnswers: 0,
-      fallbackByStep: {},
-      rejectedByStep: {}
-    };
-    buckets.set(sessionId, created);
-    return created;
-  };
-
-  for (const session of sessions) {
-    const bucket = getBucket(session.id);
-    bucket.acceptedAnswers = session.messages.filter((message) => message.role === "student").length;
-  }
-
-  for (const event of events) {
-    const sessionId = event.session_id ?? "";
-    if (!sessionIds.has(sessionId)) continue;
-    const bucket = getBucket(sessionId);
-    const step = parseStepFromEvent(event) ?? 0;
-    if (event.kind === "student_rejection") {
-      bucket.rejectedAnswers += 1;
-      if (step > 0) bucket.rejectedByStep[step] = (bucket.rejectedByStep[step] ?? 0) + 1;
-      continue;
-    }
-    if (!LLM_RESPONSE_EVENT_KINDS.has(event.kind)) continue;
-    bucket.totalAi += 1;
-    if (event.fallback_used) {
-      bucket.fallbacks += 1;
-      if (step > 0) bucket.fallbackByStep[step] = (bucket.fallbackByStep[step] ?? 0) + 1;
-    }
-  }
-  return buckets;
-}
-
-function buildMetricsFromSessions(sessions: SessionState[]): Map<string, SessionMetricBucket> {
-  const buckets = new Map<string, SessionMetricBucket>();
-  for (const session of sessions) {
-    const bucket: SessionMetricBucket = {
-      totalAi: 0,
-      fallbacks: 0,
-      acceptedAnswers: 0,
-      rejectedAnswers: 0,
-      fallbackByStep: {},
-      rejectedByStep: {}
-    };
-    for (const message of session.messages) {
-      if (message.role === "student") {
-        bucket.acceptedAnswers += 1;
-      } else if (message.role === "ai") {
-        bucket.totalAi += 1;
-        if (isFallbackText(message.text ?? "")) {
-          bucket.fallbacks += 1;
-          bucket.fallbackByStep[message.step] = (bucket.fallbackByStep[message.step] ?? 0) + 1;
-        }
-      }
-    }
-    const rejectedCounts = session.qualitySignals?.rejectedAnswerCounts ?? {};
-    const rejectedLastAt = session.qualitySignals?.rejectedAnswerLastAt ?? {};
-    for (const [key, count] of Object.entries(rejectedCounts)) {
-      const rejected = Number.isFinite(count) ? count : 0;
-      bucket.rejectedAnswers += rejected;
-      const scope = key.split("::").slice(1).join("::");
-      const step = parseStepFromScope(scope);
-      if (step) bucket.rejectedByStep[step] = (bucket.rejectedByStep[step] ?? 0) + rejected;
-      void rejectedLastAt;
-    }
-    buckets.set(session.id, bucket);
-  }
-  return buckets;
 }
 
 function topSteps(record: Record<number, number>, limit = 3): number[] {
@@ -259,67 +185,124 @@ function getSessionGroupName(session: SessionState): string {
   return session.groupName?.trim() || session.groupId?.trim() || "—";
 }
 
-function addRecordCounts(target: Record<number, number>, source: Record<number, number>): void {
-  Object.entries(source).forEach(([step, count]) => {
-    const key = Number(step);
-    target[key] = (target[key] ?? 0) + count;
-  });
+function ensureRun(runs: Map<string, RunBucket>, session: SessionState, date: string, occurredAt: string): RunBucket {
+  const safeDate = date || dayKey(occurredAt) || dayKey(getSessionStartedAt(session));
+  const groupKey = getSessionGroupKey(session);
+  const runKey = `${safeDate}::${groupKey}`;
+  const existing = runs.get(runKey);
+  const run = existing ?? {
+    runId: runKey,
+    sessionIds: new Set<string>(),
+    date: safeDate,
+    groupName: getSessionGroupName(session),
+    startedAt: occurredAt || getSessionStartedAt(session),
+    endedAt: null,
+    participantUsernames: new Set<string>(),
+    latestStep: 0,
+    acceptedAnswers: 0,
+    totalAi: 0,
+    fallbackCount: 0,
+    rejectionCount: 0,
+    stepDurationsByStep: {},
+    fallbackByStep: {},
+    rejectedByStep: {}
+  };
+
+  run.sessionIds.add(session.id);
+  session.participants.forEach((participant) => run.participantUsernames.add(participant));
+  if (occurredAt && (!run.startedAt || occurredAt.localeCompare(run.startedAt) < 0)) run.startedAt = occurredAt;
+  if (occurredAt && (!run.endedAt || occurredAt.localeCompare(run.endedAt) > 0)) run.endedAt = occurredAt;
+  runs.set(runKey, run);
+  return run;
 }
 
-function buildDiagnosticsRuns(sessions: SessionState[], metrics: Map<string, SessionMetricBucket>): CourseDiagnosticsSession[] {
+function addRunStep(run: RunBucket, step: number): void {
+  if (Number.isFinite(step) && step > 0) {
+    run.latestStep = Math.max(run.latestStep, Math.round(step));
+  }
+}
+
+function buildDiagnosticsRunBuckets(
+  sessions: SessionState[],
+  events: PersistedEventRow[],
+  hasEventMetrics: boolean
+): RunBucket[] {
   const runs = new Map<string, RunBucket>();
+  const sessionsById = new Map(sessions.map((session) => [session.id, session]));
 
   for (const session of sessions) {
-    const startedAt = getSessionStartedAt(session);
-    const date = dayKey(startedAt);
-    const groupKey = getSessionGroupKey(session);
-    const runKey = `${date}::${groupKey}`;
-    const bucket = metrics.get(session.id) ?? {
-      totalAi: 0,
-      fallbacks: 0,
-      acceptedAnswers: 0,
-      rejectedAnswers: 0,
-      fallbackByStep: {},
-      rejectedByStep: {}
-    };
-    const existing = runs.get(runKey);
-    const run = existing ?? {
-      runId: runKey,
-      sessionIds: [],
-      date,
-      groupName: getSessionGroupName(session),
-      startedAt,
-      endedAt: null,
-      participantUsernames: new Set<string>(),
-      latestStep: 0,
-      acceptedAnswers: 0,
-      totalAi: 0,
-      fallbackCount: 0,
-      rejectionCount: 0,
-      stepDurationsByStep: {},
-      fallbackByStep: {},
-      rejectedByStep: {}
-    };
+    for (const message of session.messages) {
+      const date = dayKey(message.at);
+      if (!date) continue;
+      const run = ensureRun(runs, session, date, message.at);
+      addRunStep(run, message.step);
+      if (message.role === "student") {
+        run.acceptedAnswers += 1;
+      } else if (!hasEventMetrics && message.role === "ai") {
+        run.totalAi += 1;
+        if (isFallbackText(message.text ?? "")) {
+          run.fallbackCount += 1;
+          if (message.step > 0) run.fallbackByStep[message.step] = (run.fallbackByStep[message.step] ?? 0) + 1;
+        }
+      }
+    }
 
-    run.sessionIds.push(session.id);
-    session.participants.forEach((participant) => run.participantUsernames.add(participant));
-    run.latestStep = Math.max(run.latestStep, session.currentStep);
-    run.acceptedAnswers += bucket.acceptedAnswers;
-    run.totalAi += bucket.totalAi;
-    run.fallbackCount += bucket.fallbacks;
-    run.rejectionCount += bucket.rejectedAnswers;
-    addRecordCounts(run.fallbackByStep, bucket.fallbackByStep);
-    addRecordCounts(run.rejectedByStep, bucket.rejectedByStep);
-    if (startedAt.localeCompare(run.startedAt) < 0) run.startedAt = startedAt;
-    const endedAt = getSessionEndedAt(session);
-    if (endedAt && (!run.endedAt || endedAt.localeCompare(run.endedAt) > 0)) run.endedAt = endedAt;
-    computeStepDurations(session).forEach((duration) => {
-      (run.stepDurationsByStep[duration.step] ??= []).push(duration.averageMs);
+    if (!hasEventMetrics) {
+      const rejectedCounts = session.qualitySignals?.rejectedAnswerCounts ?? {};
+      const rejectedLastAt = session.qualitySignals?.rejectedAnswerLastAt ?? {};
+      for (const [key, count] of Object.entries(rejectedCounts)) {
+        const rejected = Number.isFinite(count) ? count : 0;
+        const occurredAt = rejectedLastAt[key] ?? getSessionEndedAt(session) ?? getSessionStartedAt(session);
+        const date = dayKey(occurredAt);
+        if (rejected <= 0 || !date) continue;
+        const run = ensureRun(runs, session, date, occurredAt);
+        run.rejectionCount += rejected;
+        const scope = key.split("::").slice(1).join("::");
+        const step = parseStepFromScope(scope);
+        if (step) {
+          addRunStep(run, step);
+          run.rejectedByStep[step] = (run.rejectedByStep[step] ?? 0) + rejected;
+        }
+      }
+    }
+
+    computeStepDurationSamples(session).forEach((duration) => {
+      const run = ensureRun(runs, session, duration.date, duration.startedAt);
+      addRunStep(run, duration.step);
+      (run.stepDurationsByStep[duration.step] ??= []).push(duration.durationMs);
     });
-    runs.set(runKey, run);
   }
 
-  return Array.from(runs.values())
+  if (hasEventMetrics) {
+    for (const event of events) {
+      const sessionId = event.session_id ?? "";
+      const session = sessionsById.get(sessionId);
+      if (!session) continue;
+      const occurredAt = event.created_at.toISOString();
+      const date = dayKey(occurredAt);
+      if (!date) continue;
+      const run = ensureRun(runs, session, date, occurredAt);
+      const step = parseStepFromEvent(event) ?? 0;
+      addRunStep(run, step);
+      if (event.kind === "student_rejection") {
+        run.rejectionCount += 1;
+        if (step > 0) run.rejectedByStep[step] = (run.rejectedByStep[step] ?? 0) + 1;
+        continue;
+      }
+      if (!LLM_RESPONSE_EVENT_KINDS.has(event.kind)) continue;
+      run.totalAi += 1;
+      if (event.fallback_used) {
+        run.fallbackCount += 1;
+        if (step > 0) run.fallbackByStep[step] = (run.fallbackByStep[step] ?? 0) + 1;
+      }
+    }
+  }
+
+  return Array.from(runs.values());
+}
+
+function serializeDiagnosticsRuns(runs: RunBucket[]): CourseDiagnosticsSession[] {
+  return runs
     .map((run) => {
       const stepDurations = Object.entries(run.stepDurationsByStep)
         .map(([step, durations]) => ({
@@ -331,7 +314,7 @@ function buildDiagnosticsRuns(sessions: SessionState[], metrics: Map<string, Ses
       const riskiestSteps = Array.from(new Set([...topSteps(run.fallbackByStep, 2), ...topSteps(run.rejectedByStep, 2)])).slice(0, 3);
       return {
         runId: run.runId,
-        sessionIds: run.sessionIds.sort(),
+        sessionIds: Array.from(run.sessionIds).sort(),
         date: run.date,
         startedAt: run.startedAt,
         endedAt: run.endedAt,
@@ -365,44 +348,31 @@ export function buildCourseDiagnostics(
     .sort((a, b) => getSessionStartedAt(b).localeCompare(getSessionStartedAt(a)));
   const events = learningEventsInput.filter((event) => event.activity_id === activityId);
   const hasEventMetrics = events.some((event) => event.kind === "student_rejection" || LLM_RESPONSE_EVENT_KINDS.has(event.kind));
-  const metrics = hasEventMetrics ? buildMetricsFromEvents(sessions, events) : buildMetricsFromSessions(sessions);
-
+  const runBuckets = buildDiagnosticsRunBuckets(sessions, events, hasEventMetrics);
+  const diagnosticsSessions = serializeDiagnosticsRuns(runBuckets);
   const allStepDurations: Record<number, number[]> = {};
-  let totalFallbacks = 0;
-  let totalRejections = 0;
-  let totalAi = 0;
-  let acceptedAnswers = 0;
   const fallbackByStep: Record<number, number> = {};
   const rejectionByStep: Record<number, number> = {};
 
-  const diagnosticsSessions = buildDiagnosticsRuns(sessions, metrics);
-
-  sessions.forEach((session) => {
-    const bucket = metrics.get(session.id) ?? {
-      totalAi: 0,
-      fallbacks: 0,
-      acceptedAnswers: 0,
-      rejectedAnswers: 0,
-      fallbackByStep: {},
-      rejectedByStep: {}
-    };
-    const stepDurations = computeStepDurations(session);
-    stepDurations.forEach((duration) => {
-      (allStepDurations[duration.step] ??= []).push(duration.averageMs);
+  runBuckets.forEach((run) => {
+    Object.entries(run.stepDurationsByStep).forEach(([step, durations]) => {
+      const key = Number(step);
+      (allStepDurations[key] ??= []).push(...durations);
     });
-    totalFallbacks += bucket.fallbacks;
-    totalRejections += bucket.rejectedAnswers;
-    totalAi += bucket.totalAi;
-    acceptedAnswers += bucket.acceptedAnswers;
-    Object.entries(bucket.fallbackByStep).forEach(([step, count]) => {
+    Object.entries(run.fallbackByStep).forEach(([step, count]) => {
       const key = Number(step);
       fallbackByStep[key] = (fallbackByStep[key] ?? 0) + count;
     });
-    Object.entries(bucket.rejectedByStep).forEach(([step, count]) => {
+    Object.entries(run.rejectedByStep).forEach(([step, count]) => {
       const key = Number(step);
       rejectionByStep[key] = (rejectionByStep[key] ?? 0) + count;
     });
   });
+
+  const totalFallbacks = diagnosticsSessions.reduce((sum, item) => sum + item.fallbackCount, 0);
+  const totalRejections = diagnosticsSessions.reduce((sum, item) => sum + item.rejectionCount, 0);
+  const totalAi = diagnosticsSessions.reduce((sum, item) => sum + item.totalAi, 0);
+  const acceptedAnswers = diagnosticsSessions.reduce((sum, item) => sum + item.acceptedAnswers, 0);
 
   const averageStepDurations = Object.entries(allStepDurations)
     .map(([step, durations]) => ({

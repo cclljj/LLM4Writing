@@ -36,6 +36,21 @@ export function formatTaipeiDate(iso: string): string {
   }).format(date));
 }
 
+export function getTaipeiDateKey(iso: string): string {
+  const date = new Date(iso);
+  if (!Number.isFinite(date.getTime())) return "";
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: TAIPEI_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const year = parts.find((part) => part.type === "year")?.value ?? "";
+  const month = parts.find((part) => part.type === "month")?.value ?? "";
+  const day = parts.find((part) => part.type === "day")?.value ?? "";
+  return year && month && day ? `${year}-${month}-${day}` : "";
+}
+
 export function formatTaipeiTime(iso: string, options: { withSeconds?: boolean; hour12?: boolean } = {}): string {
   const date = new Date(iso);
   if (!Number.isFinite(date.getTime())) return "—";
