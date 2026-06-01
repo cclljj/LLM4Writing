@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AUTH_COOKIE_SESSION, verifyAuthSessionToken } from "@/src/lib/auth";
 import { checkRateLimit } from "@/src/lib/rate-limit";
+import { generateCspNonce } from "@/src/lib/csp-nonce";
 
 function getClientIp(req: NextRequest): string {
   return (
@@ -110,7 +111,7 @@ function buildNonceCsp(nonce: string): string {
  * the response headers (enforced by the browser).
  */
 function nextWithNonce(request: NextRequest): NextResponse {
-  const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
+  const nonce = generateCspNonce();
   const csp = buildNonceCsp(nonce);
 
   const requestHeaders = new Headers(request.headers);
