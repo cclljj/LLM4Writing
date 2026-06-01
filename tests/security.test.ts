@@ -388,6 +388,9 @@ test("proxy: enforces origin checks for mutating admin/teacher/session APIs", as
     false,
     "proxy should not use forwarded host/proto headers as CSRF expected-origin baseline"
   );
+  assert.ok(proxySrc.includes("x-request-id"), "proxy should attach request correlation id header");
+  assert.ok(proxySrc.includes("x-proxy-fallback"), "proxy should mark page fail-open fallback path");
+  assert.ok(proxySrc.includes("PROXY_DISABLE_NONCE_CSP"), "proxy should support emergency nonce CSP disable flag");
 });
 
 test("proxy: returns 429 JSON shape", () => {

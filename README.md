@@ -84,6 +84,7 @@ npm run dev
 | `POSTGRES_URL` / `DATABASE_URL` | Fallback |
 | `SUPABASE_POOL_MODE` | `transaction` 或 `session`（可選，自動偵測） |
 | `APP_ORIGIN` | CSRF 同源檢查的 canonical origin（建議設定，如 `https://your-domain.example.com`） |
+| `PROXY_DISABLE_NONCE_CSP` | 緊急開關；設為 `1` 時暫停 proxy nonce CSP 注入（事件緩解用） |
 
 ### LLM（選填）
 

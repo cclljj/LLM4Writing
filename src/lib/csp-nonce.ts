@@ -28,6 +28,16 @@ export function generateCspNonce(byteLength: number = 16): string {
   }
 
   const bytes = new Uint8Array(byteLength);
-  crypto.getRandomValues(bytes);
+  // Runtime hardening: if Web Crypto is unavailable in a specific edge/node
+  // environment, fall back to non-cryptographic randomness so proxy does not
+  // fail closed with 500 on page routes.
+  const cryptoApi = globalThis.crypto;
+  if (cryptoApi?.getRandomValues) {
+    cryptoApi.getRandomValues(bytes);
+  } else {
+    for (let i = 0; i < bytes.length; i += 1) {
+      bytes[i] = Math.floor(Math.random() * 256);
+    }
+  }
   return bytesToBase64(bytes);
 }

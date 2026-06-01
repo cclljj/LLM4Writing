@@ -1828,6 +1828,8 @@ Auth session 必須是 server 簽章 token，格式為 `v1.<payload>.<signature>
 - 驗證失敗回 `403`，錯誤碼僅允許：
   - `missing_origin`
   - `invalid_origin`
+- proxy 回應應附帶 `x-request-id` 以利跨層追查。
+- page route proxy 發生內部錯誤時，允許 fail-open 並附帶 `x-proxy-fallback: 1`（避免 silent 500 放大）。
 
 ### 10.5 Password Storage
 
@@ -1857,6 +1859,7 @@ Auth session 必須是 server 簽章 token，格式為 `v1.<payload>.<signature>
 - 設定 `script-src 'self' 'nonce-{nonce}' 'strict-dynamic'`（production 不得含 `'unsafe-eval'`）。
 - 透過 `x-nonce` request header 將 nonce 傳遞給 layout。
 - **不得**在 `script-src` 中使用 `'unsafe-inline'`。
+- 可透過 `PROXY_DISABLE_NONCE_CSP=1` 啟用事件緩解模式，暫停 nonce CSP 注入（僅限 incident 期間使用）。
 
 ### 10.6.1 DOMPurify 最後防護層（#387）
 

@@ -111,6 +111,18 @@ The system MUST validate same-origin requests for mutating admin, teacher, and s
 - **WHEN** the proxy validates the request
 - **THEN** it returns `403 { error: "invalid_origin" }`
 
+#### Scenario: Proxy correlation id
+
+- **GIVEN** a request passes through proxy routing
+- **WHEN** proxy returns a response
+- **THEN** the response includes an `x-request-id` header for incident correlation
+
+#### Scenario: Page-route proxy fail-open on internal proxy error
+
+- **GIVEN** a non-API page request triggers an internal proxy exception
+- **WHEN** proxy catches the error
+- **THEN** it returns a pass-through response with `x-proxy-fallback: 1` instead of a silent 500
+
 ### Requirement: API Rate Limiting
 
 The system SHALL rate-limit `/api/*` requests with Redis-backed state when available and memory fallback otherwise.

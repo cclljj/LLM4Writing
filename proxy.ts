@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { AUTH_COOKIE_SESSION, verifyAuthSessionToken } from "@/src/lib/auth";
 import { checkRateLimit } from "@/src/lib/rate-limit";
 import { generateCspNonce } from "@/src/lib/csp-nonce";
+const DISABLE_NONCE_CSP = process.env.PROXY_DISABLE_NONCE_CSP === "1";
 
 function getClientIp(req: NextRequest): string {
   return (
@@ -111,6 +112,9 @@ function buildNonceCsp(nonce: string): string {
  * the response headers (enforced by the browser).
  */
 function nextWithNonce(request: NextRequest): NextResponse {
+  if (DISABLE_NONCE_CSP) {
+    return NextResponse.next();
+  }
   const nonce = generateCspNonce();
   const csp = buildNonceCsp(nonce);
 
@@ -123,94 +127,129 @@ function nextWithNonce(request: NextRequest): NextResponse {
   return response;
 }
 
+function buildRequestId(): string {
+  try {
+    return crypto.randomUUID();
+  } catch {
+    return `rid-${Date.now()}-${Math.floor(Math.random() * 1e9)}`;
+  }
+}
+
+function withRequestId(response: NextResponse, requestId: string): NextResponse {
+  response.headers.set("x-request-id", requestId);
+  return response;
+}
+
 // ---------------------------------------------------------------------------
 // Proxy
 // ---------------------------------------------------------------------------
 
 export async function proxy(request: NextRequest) {
+  const requestId = buildRequestId();
   const pathname = request.nextUrl.pathname;
 
-  // Rate limit API routes first
-  if (pathname.startsWith("/api/")) {
-    const ip = getClientIp(request);
-    const { allowed, retryAfterSeconds } = await checkRateLimit(ip, pathname);
-    if (!allowed) {
-      return NextResponse.json(
-        { error: "rate_limit_exceeded", retryAfterSeconds },
-        {
-          status: 429,
-          headers: { "Retry-After": String(retryAfterSeconds) }
+  try {
+    // Rate limit API routes first
+    if (pathname.startsWith("/api/")) {
+      const ip = getClientIp(request);
+      const { allowed, retryAfterSeconds } = await checkRateLimit(ip, pathname);
+      if (!allowed) {
+        return withRequestId(
+          NextResponse.json(
+            { error: "rate_limit_exceeded", retryAfterSeconds },
+            {
+              status: 429,
+              headers: { "Retry-After": String(retryAfterSeconds) }
+            }
+          ),
+          requestId
+        );
+      }
+
+      if (MUTATING_METHODS.has(request.method.toUpperCase()) && isOriginGuardedApiPath(pathname)) {
+        const originValidation = validateStateChangeOrigin(request);
+        if (!originValidation.ok) {
+          return withRequestId(NextResponse.json({ error: originValidation.error }, { status: 403 }), requestId);
         }
-      );
+      }
+
+      return withRequestId(NextResponse.next(), requestId);
     }
 
-    if (MUTATING_METHODS.has(request.method.toUpperCase()) && isOriginGuardedApiPath(pathname)) {
-      const originValidation = validateStateChangeOrigin(request);
-      if (!originValidation.ok) {
-        return NextResponse.json({ error: originValidation.error }, { status: 403 });
+    // Auth guard for page routes
+    const sessionToken = request.cookies.get(AUTH_COOKIE_SESSION)?.value ?? "";
+    const authedUser = sessionToken ? await verifyAuthSessionToken(sessionToken) : null;
+    const role = authedUser?.role;
+    const isAuthed = Boolean(authedUser);
+
+    if (pathname === "/login" && isAuthed) {
+      const url = request.nextUrl.clone();
+      url.pathname = role === "student" ? "/student" : role === "admin" ? "/admin" : "/teacher";
+      url.search = "";
+      return withRequestId(NextResponse.redirect(url), requestId);
+    }
+
+    if (isStudentPath(pathname)) {
+      if (!isAuthed) {
+        const url = request.nextUrl.clone();
+        url.pathname = "/login";
+        return withRequestId(NextResponse.redirect(url), requestId);
+      }
+
+      if (role !== "student") {
+        const url = request.nextUrl.clone();
+        url.pathname = "/teacher";
+        return withRequestId(NextResponse.redirect(url), requestId);
       }
     }
 
-    return NextResponse.next();
+    if (isTeacherPath(pathname)) {
+      if (!isAuthed) {
+        const url = request.nextUrl.clone();
+        url.pathname = "/login";
+        return withRequestId(NextResponse.redirect(url), requestId);
+      }
+
+      if (role !== "teacher" && role !== "admin") {
+        const url = request.nextUrl.clone();
+        url.pathname = "/student";
+        return withRequestId(NextResponse.redirect(url), requestId);
+      }
+    }
+
+    if (isAdminPath(pathname)) {
+      if (!isAuthed) {
+        const url = request.nextUrl.clone();
+        url.pathname = "/login";
+        return withRequestId(NextResponse.redirect(url), requestId);
+      }
+
+      if (role !== "admin") {
+        const url = request.nextUrl.clone();
+        url.pathname = role === "student" ? "/student" : "/teacher";
+        return withRequestId(NextResponse.redirect(url), requestId);
+      }
+    }
+
+    // All page routes: inject nonce-based CSP (#386)
+    return withRequestId(nextWithNonce(request), requestId);
+  } catch (error) {
+    // Incident hardening (#431): avoid silent 500 from proxy path. Fail open
+    // for page routes and keep API protection behavior unchanged.
+    console.error("[proxy_fallback]", {
+      requestId,
+      pathname,
+      method: request.method,
+      ua: request.headers.get("user-agent")?.slice(0, 120) ?? "",
+      error: error instanceof Error ? error.message : "unknown"
+    });
+    if (pathname.startsWith("/api/")) {
+      return withRequestId(NextResponse.json({ error: "proxy_invocation_failed" }, { status: 500 }), requestId);
+    }
+    const response = NextResponse.next();
+    response.headers.set("x-proxy-fallback", "1");
+    return withRequestId(response, requestId);
   }
-
-  // Auth guard for page routes
-  const sessionToken = request.cookies.get(AUTH_COOKIE_SESSION)?.value ?? "";
-  const authedUser = sessionToken ? await verifyAuthSessionToken(sessionToken) : null;
-  const role = authedUser?.role;
-  const isAuthed = Boolean(authedUser);
-
-  if (pathname === "/login" && isAuthed) {
-    const url = request.nextUrl.clone();
-    url.pathname = role === "student" ? "/student" : role === "admin" ? "/admin" : "/teacher";
-    url.search = "";
-    return NextResponse.redirect(url);
-  }
-
-  if (isStudentPath(pathname)) {
-    if (!isAuthed) {
-      const url = request.nextUrl.clone();
-      url.pathname = "/login";
-      return NextResponse.redirect(url);
-    }
-
-    if (role !== "student") {
-      const url = request.nextUrl.clone();
-      url.pathname = "/teacher";
-      return NextResponse.redirect(url);
-    }
-  }
-
-  if (isTeacherPath(pathname)) {
-    if (!isAuthed) {
-      const url = request.nextUrl.clone();
-      url.pathname = "/login";
-      return NextResponse.redirect(url);
-    }
-
-    if (role !== "teacher" && role !== "admin") {
-      const url = request.nextUrl.clone();
-      url.pathname = "/student";
-      return NextResponse.redirect(url);
-    }
-  }
-
-  if (isAdminPath(pathname)) {
-    if (!isAuthed) {
-      const url = request.nextUrl.clone();
-      url.pathname = "/login";
-      return NextResponse.redirect(url);
-    }
-
-    if (role !== "admin") {
-      const url = request.nextUrl.clone();
-      url.pathname = role === "student" ? "/student" : "/teacher";
-      return NextResponse.redirect(url);
-    }
-  }
-
-  // All page routes: inject nonce-based CSP (#386)
-  return nextWithNonce(request);
 }
 
 export const config = {
