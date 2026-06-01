@@ -22,11 +22,27 @@ The system SHALL provide separate student, teacher, and admin capabilities for t
 - **WHEN** the user enters the teacher area
 - **THEN** the user can manage visible students, visible class tasks, groups, course state, step switching, and learning monitor views
 
+#### Scenario: Teacher bootstrap failures are recoverable
+
+- **GIVEN** an authenticated teacher opens `/teacher`
+- **WHEN** current-user or initial management-data loading fails because of a transient network, timeout, rate-limit, or server error
+- **THEN** the frontend retries the request with a bounded timeout
+- **AND** if loading still fails, it shows a teacher-readable retry state instead of redirecting to `/login`
+- **AND** it redirects to `/login` only when authentication is explicitly rejected, such as a 401 current-user response
+
 #### Scenario: Admin global management
 
 - **GIVEN** an authenticated user with role `admin`
 - **WHEN** the user enters the admin area
 - **THEN** the user can manage global accounts, activities, diagnostics, and audit logs
+
+#### Scenario: Admin bootstrap failures are recoverable
+
+- **GIVEN** an authenticated admin opens `/admin`
+- **WHEN** current-user or initial management-data loading fails transiently
+- **THEN** the frontend retries the request with a bounded timeout
+- **AND** if loading still fails, it shows an admin-readable retry state and preserves any existing screen data where possible
+- **AND** explicit unauthenticated responses still redirect to `/login`
 
 ### Requirement: Dual-Mode Persistence
 

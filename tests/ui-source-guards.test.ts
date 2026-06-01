@@ -62,3 +62,18 @@ test("source-guard: student route keeps classroom bootstrap failures recoverable
   assert.ok(src.includes("重新確認登入"), "student page should expose a retry action when auth bootstrap is transiently unavailable");
   assert.ok(src.includes("重新整理課程清單"), "student overview failures should expose a retry action");
 });
+
+test("source-guard: teacher/admin route keeps management bootstrap failures recoverable", async () => {
+  const teacherSrc = await read("../app/teacher/page.tsx");
+  const adminSrc = await read("../app/admin/page.tsx");
+  const helperSrc = await read("../src/lib/client-retry-fetch.ts");
+  assert.ok(adminSrc.includes("@/app/teacher/page"), "admin should continue to share teacher/admin bootstrap logic");
+  assert.ok(teacherSrc.includes("fetchJsonWithRetry<AuthMeResponse>"), "teacher/admin auth bootstrap should use retrying JSON fetch");
+  assert.ok(teacherSrc.includes("error.status === 401"), "teacher/admin bootstrap should redirect only after explicit unauthenticated status");
+  assert.ok(teacherSrc.includes("getManagementRetryableMessage(\"auth\")"), "teacher/admin auth failures should show recoverable UI");
+  assert.ok(teacherSrc.includes("getManagementRetryableMessage(\"data\")"), "teacher/admin data failures should be user-actionable");
+  assert.ok(teacherSrc.includes("重新確認登入"), "teacher/admin auth failure UI should expose a retry action");
+  assert.ok(teacherSrc.includes("重新整理"), "teacher/admin data failure UI should expose a retry action");
+  assert.ok(helperSrc.includes("CLIENT_FETCH_TIMEOUT_MS"), "shared client fetch helper should bound requests with a timeout");
+  assert.ok(helperSrc.includes("status === 429 || error.status >= 500"), "shared client fetch helper should retry transient HTTP failures");
+});
