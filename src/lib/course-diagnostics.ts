@@ -19,7 +19,8 @@ export type CourseStepDuration = {
 };
 
 export type CourseDiagnosticsSession = {
-  sessionId: string;
+  runId: string;
+  sessionIds: string[];
   date: string;
   startedAt: string;
   endedAt: string | null;
@@ -62,6 +63,24 @@ type SessionMetricBucket = {
   fallbacks: number;
   acceptedAnswers: number;
   rejectedAnswers: number;
+  fallbackByStep: Record<number, number>;
+  rejectedByStep: Record<number, number>;
+};
+
+type RunBucket = {
+  runId: string;
+  sessionIds: string[];
+  date: string;
+  groupName: string;
+  startedAt: string;
+  endedAt: string | null;
+  participantUsernames: Set<string>;
+  latestStep: number;
+  acceptedAnswers: number;
+  totalAi: number;
+  fallbackCount: number;
+  rejectionCount: number;
+  stepDurationsByStep: Record<number, number[]>;
   fallbackByStep: Record<number, number>;
   rejectedByStep: Record<number, number>;
 };
@@ -232,6 +251,110 @@ function topSteps(record: Record<number, number>, limit = 3): number[] {
     .map((item) => item.step);
 }
 
+function getSessionGroupKey(session: SessionState): string {
+  return session.groupId?.trim() || session.groupName?.trim() || session.participants.slice().sort().join(",");
+}
+
+function getSessionGroupName(session: SessionState): string {
+  return session.groupName?.trim() || session.groupId?.trim() || "—";
+}
+
+function addRecordCounts(target: Record<number, number>, source: Record<number, number>): void {
+  Object.entries(source).forEach(([step, count]) => {
+    const key = Number(step);
+    target[key] = (target[key] ?? 0) + count;
+  });
+}
+
+function buildDiagnosticsRuns(sessions: SessionState[], metrics: Map<string, SessionMetricBucket>): CourseDiagnosticsSession[] {
+  const runs = new Map<string, RunBucket>();
+
+  for (const session of sessions) {
+    const startedAt = getSessionStartedAt(session);
+    const date = dayKey(startedAt);
+    const groupKey = getSessionGroupKey(session);
+    const runKey = `${date}::${groupKey}`;
+    const bucket = metrics.get(session.id) ?? {
+      totalAi: 0,
+      fallbacks: 0,
+      acceptedAnswers: 0,
+      rejectedAnswers: 0,
+      fallbackByStep: {},
+      rejectedByStep: {}
+    };
+    const existing = runs.get(runKey);
+    const run = existing ?? {
+      runId: runKey,
+      sessionIds: [],
+      date,
+      groupName: getSessionGroupName(session),
+      startedAt,
+      endedAt: null,
+      participantUsernames: new Set<string>(),
+      latestStep: 0,
+      acceptedAnswers: 0,
+      totalAi: 0,
+      fallbackCount: 0,
+      rejectionCount: 0,
+      stepDurationsByStep: {},
+      fallbackByStep: {},
+      rejectedByStep: {}
+    };
+
+    run.sessionIds.push(session.id);
+    session.participants.forEach((participant) => run.participantUsernames.add(participant));
+    run.latestStep = Math.max(run.latestStep, session.currentStep);
+    run.acceptedAnswers += bucket.acceptedAnswers;
+    run.totalAi += bucket.totalAi;
+    run.fallbackCount += bucket.fallbacks;
+    run.rejectionCount += bucket.rejectedAnswers;
+    addRecordCounts(run.fallbackByStep, bucket.fallbackByStep);
+    addRecordCounts(run.rejectedByStep, bucket.rejectedByStep);
+    if (startedAt.localeCompare(run.startedAt) < 0) run.startedAt = startedAt;
+    const endedAt = getSessionEndedAt(session);
+    if (endedAt && (!run.endedAt || endedAt.localeCompare(run.endedAt) > 0)) run.endedAt = endedAt;
+    computeStepDurations(session).forEach((duration) => {
+      (run.stepDurationsByStep[duration.step] ??= []).push(duration.averageMs);
+    });
+    runs.set(runKey, run);
+  }
+
+  return Array.from(runs.values())
+    .map((run) => {
+      const stepDurations = Object.entries(run.stepDurationsByStep)
+        .map(([step, durations]) => ({
+          step: Number(step),
+          averageMs: average(durations),
+          sampleCount: durations.length
+        }))
+        .sort((a, b) => a.step - b.step);
+      const riskiestSteps = Array.from(new Set([...topSteps(run.fallbackByStep, 2), ...topSteps(run.rejectedByStep, 2)])).slice(0, 3);
+      return {
+        runId: run.runId,
+        sessionIds: run.sessionIds.sort(),
+        date: run.date,
+        startedAt: run.startedAt,
+        endedAt: run.endedAt,
+        groupName: run.groupName,
+        participantCount: run.participantUsernames.size,
+        latestStep: run.latestStep,
+        acceptedAnswers: run.acceptedAnswers,
+        totalAi: run.totalAi,
+        fallbackCount: run.fallbackCount,
+        fallbackRate: run.totalAi > 0 ? run.fallbackCount / run.totalAi : 0,
+        rejectionCount: run.rejectionCount,
+        rejectionRate:
+          run.acceptedAnswers + run.rejectionCount > 0
+            ? run.rejectionCount / (run.acceptedAnswers + run.rejectionCount)
+            : 0,
+        averageStepDurationMs: average(stepDurations.map((duration) => duration.averageMs)),
+        stepDurations,
+        riskiestSteps
+      };
+    })
+    .sort((a, b) => b.date.localeCompare(a.date) || a.groupName.localeCompare(b.groupName, "zh-Hant"));
+}
+
 export function buildCourseDiagnostics(
   activityId: string,
   sessionsInput: SessionState[],
@@ -252,9 +375,9 @@ export function buildCourseDiagnostics(
   const fallbackByStep: Record<number, number> = {};
   const rejectionByStep: Record<number, number> = {};
 
-  const diagnosticsSessions = sessions.map((session) => {
-    const startedAt = getSessionStartedAt(session);
-    const endedAt = getSessionEndedAt(session);
+  const diagnosticsSessions = buildDiagnosticsRuns(sessions, metrics);
+
+  sessions.forEach((session) => {
     const bucket = metrics.get(session.id) ?? {
       totalAi: 0,
       fallbacks: 0,
@@ -279,28 +402,6 @@ export function buildCourseDiagnostics(
       const key = Number(step);
       rejectionByStep[key] = (rejectionByStep[key] ?? 0) + count;
     });
-    const riskiestSteps = Array.from(new Set([...topSteps(bucket.fallbackByStep, 2), ...topSteps(bucket.rejectedByStep, 2)])).slice(0, 3);
-    return {
-      sessionId: session.id,
-      date: dayKey(startedAt),
-      startedAt,
-      endedAt,
-      groupName: session.groupName ?? session.groupId ?? "—",
-      participantCount: session.participants.length,
-      latestStep: session.currentStep,
-      acceptedAnswers: bucket.acceptedAnswers,
-      totalAi: bucket.totalAi,
-      fallbackCount: bucket.fallbacks,
-      fallbackRate: bucket.totalAi > 0 ? bucket.fallbacks / bucket.totalAi : 0,
-      rejectionCount: bucket.rejectedAnswers,
-      rejectionRate:
-        bucket.acceptedAnswers + bucket.rejectedAnswers > 0
-          ? bucket.rejectedAnswers / (bucket.acceptedAnswers + bucket.rejectedAnswers)
-          : 0,
-      averageStepDurationMs: average(stepDurations.map((duration) => duration.averageMs)),
-      stepDurations,
-      riskiestSteps
-    };
   });
 
   const averageStepDurations = Object.entries(allStepDurations)

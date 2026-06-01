@@ -939,7 +939,7 @@ classnumber,username,name,school,role,password,ownerTeacherUsername
 - Step3/Step4 等待教師推進期間，monitor 摘要輪詢需維持低延遲（約 1 秒）以快速反映 `groupGate["3-complete"]` / `groupGate["4-complete"]` 變化；輪詢變更偵測與前端 analytics cache signature 必須納入 `groupGate` 完成名單內容，而非只看 gate key 數量。
 - monitor 列表查詢在 Postgres 模式下需使用 summary-first DB 查詢；一般情況不得回傳完整 messages/artifacts，僅為 legacy JSON-string payload 欄位回補可讀 raw payload。
 - 課堂儀表板、全班加入狀態、小組對話紀錄、個人對話紀錄四個 h2 標題後附加「— 學校 / 班級 / 文章題目」（#258）。
-- 「查看狀態」需同時顯示課程診斷摘要，內容包含同一課程各 session/場次的 Fallback 次數與比率、拒答次數與比率、平均步驟停留時間、風險步驟，以及跨場次的每步平均停留時間。
+- 「查看狀態」需同時顯示課程診斷摘要，內容以「同一天 + 同一小組」彙整同一課程的上課場次；同一組跨不同日期需分列，同一天同組若有多個 session 需合併為一列。每列包含 Fallback 次數與比率、拒答次數與比率、平均步驟停留時間、風險步驟，以及跨場次的每步平均停留時間。
 - 課程診斷摘要的 Fallback/拒答統計優先使用 `learning_events`；若事件表不可用或舊資料缺少事件，需從 session 訊息與 `qualitySignals` 估算並標示來源。步驟停留時間以同一 session 內各 step 首次訊息到下一 step 首次訊息估算；Step5 後個人步調統計需在 UI/文件中標示為彙整估算。
 
 課堂儀表板（#244）：
@@ -1520,7 +1520,7 @@ Request:
 - 權限：teacher/admin；teacher 僅可查詢自己可見班級的課程，且 session 必須符合目前活動分組 scope。
 - 回傳學習管理「查看狀態」使用的課程診斷摘要。
 - 回應包含 `source`、`estimationNotes`、`summary`、`sessions`。
-- `sessions` 以每個 session/場次為單位，至少包含日期、開始/結束時間、參與人數、最新步驟、Fallback 次數/比率、拒答次數/比率、平均步驟停留時間與風險步驟。
+- `sessions` 為診斷列，需以「日期 + 小組」彙整；同一日期同一小組的多個 session 聚合為一列，並以 `sessionIds` 回傳被聚合的 session id 清單。每列至少包含日期、開始/結束時間、session 數、參與人數、最新步驟、Fallback 次數/比率、拒答次數/比率、平均步驟停留時間與風險步驟。
 - `summary.averageStepDurations` 回傳 Step1~10 可估算的跨場次平均停留時間與樣本數。
 - Fallback/拒答優先由 `learning_events` 計算；若不可用則回退 session 訊息與 `qualitySignals` 估算，並於 `source`/`estimationNotes` 標明限制。
 

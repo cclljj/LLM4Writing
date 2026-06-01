@@ -191,7 +191,10 @@ The classroom dashboard SHALL show all sessions for the selected course and prio
 - **GIVEN** teacher/admin selects `查看狀態` for a visible course
 - **WHEN** the status view loads
 - **THEN** it shows a course diagnostics summary for that `activityId`
-- **AND** each session/run includes fallback count/rate, rejection count/rate, average step dwell time, and riskiest steps
+- **AND** diagnostic rows are grouped by same-day date plus group
+- **AND** the same group on different dates appears as separate rows
+- **AND** multiple sessions for the same group on the same date are aggregated into one row with a `sessionIds` list
+- **AND** each grouped row includes fallback count/rate, rejection count/rate, average step dwell time, and riskiest steps
 - **AND** the summary includes cross-session average dwell time by step
 - **AND** the UI identifies whether fallback/rejection metrics come from persisted `learning_events` or session-message estimation
 

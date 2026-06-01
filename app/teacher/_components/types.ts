@@ -89,7 +89,8 @@ export type CourseStepDuration = {
 };
 
 export type CourseDiagnosticsSession = {
-  sessionId: string;
+  runId: string;
+  sessionIds: string[];
   date: string;
   startedAt: string;
   endedAt: string | null;

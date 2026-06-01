@@ -1580,8 +1580,9 @@ export default function LearningMonitorTab({
                     <thead>
                       <tr>
                         <th>日期</th>
-                        <th>組別/場次</th>
+                        <th>組別</th>
                         <th>開始時間</th>
+                        <th>Session 數</th>
                         <th>學生數</th>
                         <th>最新步驟</th>
                         <th>Fallback</th>
@@ -1592,10 +1593,11 @@ export default function LearningMonitorTab({
                     </thead>
                     <tbody>
                       {courseDiagnostics.sessions.map((session) => (
-                        <tr key={session.sessionId}>
+                        <tr key={session.runId}>
                           <td>{session.date || "—"}</td>
-                          <td>{session.groupName || session.sessionId}</td>
+                          <td>{session.groupName || session.runId}</td>
                           <td>{formatTaipeiDateTime(session.startedAt)}</td>
+                          <td>{session.sessionIds.length}</td>
                           <td>{session.participantCount}</td>
                           <td>Step {session.latestStep}</td>
                           <td>{session.fallbackCount} / {session.totalAi}（{formatPercent(session.fallbackRate)}）</td>

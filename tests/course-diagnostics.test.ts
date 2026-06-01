@@ -76,3 +76,48 @@ test("course diagnostics prefers persisted learning events when available", () =
   assert.equal(diagnostics.summary.highestFallbackStep, 3);
   assert.equal(diagnostics.summary.highestRejectionStep, 3);
 });
+
+test("course diagnostics groups same-day sessions by group and splits different days", () => {
+  const sameDayA = makeSession({
+    id: "s-a",
+    createdAt: "2026-06-01T01:00:00.000Z",
+    messages: [
+      { id: "a1", role: "student", userId: "stu1", step: 1, text: "回答一", at: "2026-06-01T01:00:00.000Z" },
+      { id: "a2", role: "ai", step: 1, text: "AI 建議：已收到你的草稿", at: "2026-06-01T01:01:00.000Z" }
+    ],
+    qualitySignals: { rejectedAnswerCounts: {}, rejectedAnswerLastAt: {} }
+  });
+  const sameDayB = makeSession({
+    id: "s-b",
+    createdAt: "2026-06-01T02:00:00.000Z",
+    messages: [
+      { id: "b1", role: "student", userId: "stu2", step: 2, text: "回答二", at: "2026-06-01T02:00:00.000Z" },
+      { id: "b2", role: "ai", step: 2, text: "正常回覆", at: "2026-06-01T02:01:00.000Z" }
+    ],
+    qualitySignals: {
+      rejectedAnswerCounts: { "stu2::step-2": 1 },
+      rejectedAnswerLastAt: { "stu2::step-2": "2026-06-01T02:00:30.000Z" }
+    }
+  });
+  const nextDay = makeSession({
+    id: "s-c",
+    createdAt: "2026-06-02T01:00:00.000Z",
+    messages: [
+      { id: "c1", role: "student", userId: "stu1", step: 1, text: "隔天回答", at: "2026-06-02T01:00:00.000Z" },
+      { id: "c2", role: "ai", step: 1, text: "正常回覆", at: "2026-06-02T01:01:00.000Z" }
+    ],
+    qualitySignals: { rejectedAnswerCounts: {}, rejectedAnswerLastAt: {} }
+  });
+
+  const diagnostics = buildCourseDiagnostics("oc-1", [sameDayA, sameDayB, nextDay]);
+  assert.equal(diagnostics.sessions.length, 2);
+  const june1 = diagnostics.sessions.find((session) => session.date === "2026-06-01");
+  const june2 = diagnostics.sessions.find((session) => session.date === "2026-06-02");
+  assert.ok(june1);
+  assert.ok(june2);
+  assert.deepEqual(june1.sessionIds, ["s-a", "s-b"]);
+  assert.equal(june1.fallbackCount, 1);
+  assert.equal(june1.rejectionCount, 1);
+  assert.equal(june1.totalAi, 2);
+  assert.deepEqual(june2.sessionIds, ["s-c"]);
+});
