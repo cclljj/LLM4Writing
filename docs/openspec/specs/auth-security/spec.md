@@ -41,6 +41,14 @@ The system MUST store passwords as bcrypt hashes and MUST NOT expose password va
 - **GIVEN** an admin or teacher creates, resets, or updates a password
 - **WHEN** the user store persists the password
 - **THEN** the stored value is a bcrypt hash
+- **AND** the user's `payload.sessionVersion` is incremented so existing sessions are revoked
+
+#### Scenario: Production admin password fallback
+
+- **GIVEN** an operator cannot use the admin UI to reset the production `admin` password
+- **WHEN** the operator updates `llm4writing_users` directly through production database tooling
+- **THEN** the `password` value is a locally generated bcrypt hash rather than plaintext
+- **AND** `payload.sessionVersion` and `updated_at` are updated with the password change
 
 #### Scenario: Legacy plaintext migration
 

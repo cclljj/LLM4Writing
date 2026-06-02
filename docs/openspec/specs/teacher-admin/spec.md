@@ -51,6 +51,13 @@ The system SHALL support role-aware account CRUD, reset password, and CSV batch 
 - **WHEN** the password is produced in the browser
 - **THEN** it uses cryptographically secure randomness rather than `Math.random`
 
+#### Scenario: Reserved admin account password reset
+
+- **GIVEN** an authenticated admin views account management
+- **WHEN** the user row is the reserved `admin` account
+- **THEN** the UI may suppress normal row actions and show it as a system reserved account
+- **AND** the documented same-origin admin users API reset flow remains available for changing the admin password
+
 #### Scenario: Delete user feedback
 
 - **GIVEN** a user deletion is confirmed

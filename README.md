@@ -227,6 +227,54 @@ CI（`.github/workflows/vercel-deploy.yml`）先通過 quality gate 再進行 Ve
 
 ---
 
+## Production Admin Password Reset
+
+正式系統的密碼存在 production Postgres/Supabase `llm4writing_users` 表，不存在 Vercel 本身。`password` 欄位必須是 bcrypt hash；不要直接把明文密碼寫入資料庫。
+
+已登入的 admin 若需要重設 `admin` 密碼，但帳號管理列表對 admin 帳號顯示「系統保留帳號」而沒有「重設密碼」按鈕，可在正式站同源頁面開啟瀏覽器 DevTools Console，呼叫既有管理 API：
+
+```js
+fetch("/api/admin/users", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    action: "reset_password",
+    username: "admin",
+    newPassword: prompt("New admin password, at least 6 chars")
+  })
+}).then((response) => response.json()).then(console.log);
+```
+
+成功時回傳 `{ "ok": true }`。此流程會由系統自動 bcrypt hash、遞增 `payload.sessionVersion` 以撤銷既有 session，並寫入 `user_reset_password` audit log。重設後請重新登入。
+
+若無法使用已登入 admin session，才改用 Supabase SQL Editor 或 `psql` 直接更新 production DB。先在安全本機環境產生 bcrypt hash：
+
+```bash
+read -s "PW?New admin password: "; echo
+node -e 'const bcrypt=require("bcryptjs"); bcrypt.hash(process.env.PW,12).then(console.log)'
+```
+
+再將產生的 hash 填入 production SQL：
+
+```sql
+UPDATE llm4writing_users
+SET
+  password = '<貼上 bcrypt hash，不要貼明文密碼>',
+  payload = jsonb_set(
+    COALESCE(payload, '{}'::jsonb),
+    '{sessionVersion}',
+    to_jsonb(COALESCE((payload->>'sessionVersion')::int, 1) + 1),
+    true
+  ),
+  updated_at = NOW()
+WHERE username = 'admin'
+  AND payload->>'role' = 'admin';
+```
+
+避免把長期密碼貼在聊天、issue、commit 或 SQL 歷史中。
+
+---
+
 ## Local Dev Accounts
 
 > ⚠️ 以下帳號僅供本機開發，**正式部署前請務必刪除**。

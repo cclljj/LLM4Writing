@@ -303,6 +303,14 @@ The system SHALL expose admin/course management APIs with role-sensitive visibil
 - **WHEN** the CSV does not use `classnumber` as the first column or has an invalid column count
 - **THEN** the API rejects the import
 
+#### Scenario: Admin password reset API
+
+- **GIVEN** an authenticated admin calls `POST /api/admin/users`
+- **WHEN** the body is `{ "action": "reset_password", "username": "admin", "newPassword": "<valid password>" }`
+- **THEN** the API resets the `admin` password through the user store
+- **AND** it records `user_reset_password` in the audit log
+- **AND** it rejects passwords shorter than 6 characters
+
 #### Scenario: Teacher class report export APIs
 
 - **GIVEN** a teacher or admin calls class report export APIs

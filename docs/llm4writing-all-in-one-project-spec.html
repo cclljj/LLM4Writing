@@ -264,7 +264,7 @@
       <h1>LLM4Writing All-in-One Project Specification</h1>
       <p>以目前 OpenSpec 與 canonical implementation spec 整理而成的完整專案規格文件，涵蓋產品行為、系統架構、學習流程、API、教師/admin 管理、安全與營運規範。</p>
       <div class="cover-meta">
-        <div><small>Generated</small><strong>2026/06/02 22:04:00 Asia/Taipei</strong></div>
+        <div><small>Generated</small><strong>2026/06/02 22:37:52 Asia/Taipei</strong></div>
         <div><small>Source Of Truth</small><strong>docs/SPEC.md + docs/openspec/</strong></div>
         <div><small>Repository</small><strong>llm4writing</strong></div>
       </div>
@@ -1016,6 +1016,7 @@
 <li>欄位：<code>username TEXT PRIMARY KEY</code>、<code>payload JSONB</code>、<code>password TEXT</code>、<code>created_at</code>、<code>updated_at</code>。</li>
 <li><code>payload.sessionVersion</code> 預設為 <code>1</code>；每次密碼重設、密碼更新、角色更新都必須遞增，供 session 撤銷驗證。</li>
 <li><code>password</code> 必須儲存 bcrypt hash，不得儲存明文。若遇到舊明文資料，只有在使用者以正確密碼登入成功時，才立即升級寫回 hash。</li>
+<li>production admin 密碼不由 Vercel 儲存；若需直接重設，必須更新 production <code>llm4writing_users</code> row，並同時寫入 bcrypt hash、遞增 <code>payload.sessionVersion</code>、更新 <code>updated_at</code>。</li>
 <li>DB 啟動時的預設帳號 backfill 僅允許在非 production（或顯式設定 <code>ALLOW_DB_DEFAULT_USERS=true</code>）才可執行；production 預設不得自動灌入固定帳密。</li>
 <li>若 DB 不可用，退回 <code>globalThis</code> memory map。</li>
 </ul>
@@ -1642,6 +1643,7 @@
 <li>teacher/admin 依權限限制可操作資料。</li>
 <li>student 帳號必填 <code>classNumber</code>。</li>
 <li>使用者清單角色顯示中文：學生、教師、管理員。</li>
+<li>admin 帳號列在 UI 中為系統保留帳號，不顯示一般列的「修改 / 重設密碼 / 刪除」操作；已登入 admin 仍可用同源 <code>POST /api/admin/users</code> 的 <code>reset_password</code> action 重設 admin 密碼。</li>
 <li>搜尋區塊位於使用者清單上方。</li>
 <li>CSV 欄位順序固定 <code>classnumber</code> 第一欄。</li>
 <li>刪除 UX（#257）：確認後該列按鈕變灰顯示「處理中...」，頁面上方顯示藍底處理中 banner；成功後顯示綠底成功提示 5 秒。</li>
@@ -2340,7 +2342,10 @@ classnumber,username,name,school,role,password,ownerTeacherUsername</code></pre>
 <li>禁止自刪。</li>
 <li>禁止不合法角色變更。</li>
 <li>支援 CSV 批次建立，6/7 欄，且 <code>classnumber</code> 必為第一欄。</li>
-<li>重設密碼成功後需寫入 audit log（<code>action=user_reset_password</code>）。</li>
+<li>重設密碼 payload：<code>{ &quot;action&quot;: &quot;reset_password&quot;, &quot;username&quot;: &quot;&lt;target&gt;&quot;, &quot;newPassword&quot;: &quot;&lt;至少 6 碼&gt;&quot; }</code>。</li>
+<li>已登入 admin 可呼叫 reset password action 重設任一帳號，包含 UI 標示為系統保留的 <code>admin</code> 帳號；teacher 仍只能管理自己與自己學生。</li>
+<li>重設密碼成功後需寫入 audit log（<code>action=user_reset_password</code>），並由 user store 寫入 bcrypt hash、遞增 <code>payload.sessionVersion</code>、更新 <code>updated_at</code>。</li>
+<li>若無法使用已登入 admin session，可在 production Supabase SQL Editor / <code>psql</code> fallback 直接更新 <code>llm4writing_users</code>；必須先在安全環境產生 bcrypt hash，不得把明文密碼寫進 SQL，且 SQL 必須限制 <code>username = 'admin'</code> 與 admin role，避免誤改其他帳號。</li>
 </ul>
 <h2 id="docs-spec-md-8-prompt-與-llm-配置">8. Prompt 與 LLM 配置</h2>
 <h3 id="docs-spec-md-8-1-promptconfig-結構">8.1 PromptConfig 結構</h3>
@@ -2473,6 +2478,7 @@ Retry-After: &lt;秒數&gt;</code></pre>
 <li><code>validateUserCredentialStore</code> 必須以 bcrypt compare 驗證 hash。</li>
 <li>舊明文密碼只允許在登入成功時做 opportunistic migration：若明文比對成功，立即寫回 hash。</li>
 <li><code>listUsersStore</code> / <code>getUserStore</code> 回傳不得包含 password 欄位。</li>
+<li>production admin password reset 的 DB fallback 必須遵守同一規則：<code>password</code> 寫入 bcrypt hash，<code>payload.sessionVersion</code> 遞增以撤銷既有 session，<code>updated_at</code> 更新；不得在 Vercel 環境變數或資料庫中保存 admin 明文密碼。</li>
 </ul>
 <h3 id="docs-spec-md-10-6-security-headers-csp">10.6 Security Headers / CSP</h3>
 <p><strong>架構（#386）</strong>：<code>script-src</code> 由 <code>middleware.ts</code> 以 per-request nonce 管理；其他 security headers 由 <code>next.config.mjs</code> 統一設定。</p>
@@ -3214,6 +3220,14 @@ rules:
 <li><strong>GIVEN</strong> an admin or teacher creates, resets, or updates a password</li>
 <li><strong>WHEN</strong> the user store persists the password</li>
 <li><strong>THEN</strong> the stored value is a bcrypt hash</li>
+<li><strong>AND</strong> the user's <code>payload.sessionVersion</code> is incremented so existing sessions are revoked</li>
+</ul>
+<h4 id="docs-openspec-specs-auth-security-spec-md-scenario-production-admin-password-fallback">Scenario: Production admin password fallback</h4>
+<ul>
+<li><strong>GIVEN</strong> an operator cannot use the admin UI to reset the production <code>admin</code> password</li>
+<li><strong>WHEN</strong> the operator updates <code>llm4writing_users</code> directly through production database tooling</li>
+<li><strong>THEN</strong> the <code>password</code> value is a locally generated bcrypt hash rather than plaintext</li>
+<li><strong>AND</strong> <code>payload.sessionVersion</code> and <code>updated_at</code> are updated with the password change</li>
 </ul>
 <h4 id="docs-openspec-specs-auth-security-spec-md-scenario-legacy-plaintext-migration">Scenario: Legacy plaintext migration</h4>
 <ul>
@@ -3644,6 +3658,14 @@ rules:
 <li><strong>WHEN</strong> the CSV does not use <code>classnumber</code> as the first column or has an invalid column count</li>
 <li><strong>THEN</strong> the API rejects the import</li>
 </ul>
+<h4 id="docs-openspec-specs-api-spec-md-scenario-admin-password-reset-api">Scenario: Admin password reset API</h4>
+<ul>
+<li><strong>GIVEN</strong> an authenticated admin calls <code>POST /api/admin/users</code></li>
+<li><strong>WHEN</strong> the body is <code>{ &quot;action&quot;: &quot;reset_password&quot;, &quot;username&quot;: &quot;admin&quot;, &quot;newPassword&quot;: &quot;&lt;valid password&gt;&quot; }</code></li>
+<li><strong>THEN</strong> the API resets the <code>admin</code> password through the user store</li>
+<li><strong>AND</strong> it records <code>user_reset_password</code> in the audit log</li>
+<li><strong>AND</strong> it rejects passwords shorter than 6 characters</li>
+</ul>
 <h4 id="docs-openspec-specs-api-spec-md-scenario-teacher-class-report-export-apis">Scenario: Teacher class report export APIs</h4>
 <ul>
 <li><strong>GIVEN</strong> a teacher or admin calls class report export APIs</li>
@@ -3701,6 +3723,13 @@ rules:
 <li><strong>GIVEN</strong> the account management UI generates a temporary password</li>
 <li><strong>WHEN</strong> the password is produced in the browser</li>
 <li><strong>THEN</strong> it uses cryptographically secure randomness rather than <code>Math.random</code></li>
+</ul>
+<h4 id="docs-openspec-specs-teacher-admin-spec-md-scenario-reserved-admin-account-password-reset">Scenario: Reserved admin account password reset</h4>
+<ul>
+<li><strong>GIVEN</strong> an authenticated admin views account management</li>
+<li><strong>WHEN</strong> the user row is the reserved <code>admin</code> account</li>
+<li><strong>THEN</strong> the UI may suppress normal row actions and show it as a system reserved account</li>
+<li><strong>AND</strong> the documented same-origin admin users API reset flow remains available for changing the admin password</li>
 </ul>
 <h4 id="docs-openspec-specs-teacher-admin-spec-md-scenario-delete-user-feedback">Scenario: Delete user feedback</h4>
 <ul>
