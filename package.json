@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint .",
     "test": "node --test --import tsx tests/**/*.test.ts",
+    "docs:spec-pdf": "node scripts/generate-all-in-one-spec-pdf.mjs",
     "test:e2e": "playwright test"
   },
   "dependencies": {
