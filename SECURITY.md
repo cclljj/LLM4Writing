@@ -1,6 +1,6 @@
 # Security Policy
 
-本文件適用於 `llm4writing_fork`（LLM4Writing 教學系統，Next.js App Router）。
+本文件適用於 `LLM4Writing`（LLM4Writing 教學系統，Next.js App Router）。
 
 ## Supported Versions
 

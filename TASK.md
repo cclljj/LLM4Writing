@@ -43,5 +43,5 @@ PR 內必須包含：
 
 ## 5. 分支與推送規範
 
-- 只允許推送到本 fork：`cclljj/llm4writing_fork`
+- 只允許推送到本 repository：`cclljj/LLM4Writing`
 - 不可推送到上游原始 repo：`Shengche/llm4rwiting`
