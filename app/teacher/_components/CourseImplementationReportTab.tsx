@@ -138,6 +138,8 @@ export default function CourseImplementationReportTab({
   const [classExportJobId, setClassExportJobId] = useState("");
   const [classExportJob, setClassExportJob] = useState<ClassExportJob | null>(null);
   const [startingClassExport, setStartingClassExport] = useState(false);
+  const [researchIdentityMode, setResearchIdentityMode] = useState<"anonymous" | "account">("anonymous");
+  const [downloadingResearchExport, setDownloadingResearchExport] = useState(false);
   const [personalMessages, setPersonalMessages] = useState<PersonalMessage[]>([]);
   const [userOutline, setUserOutline] = useState("");
   const [userStep3SubmittedOutline, setUserStep3SubmittedOutline] = useState("");
@@ -485,6 +487,46 @@ export default function CourseImplementationReportTab({
     URL.revokeObjectURL(objectUrl);
   }
 
+  async function downloadResearchJson() {
+    setError("");
+    if (!selectedCourse) {
+      setError("尚未選擇課程，無法下載研究資料。");
+      return;
+    }
+    setDownloadingResearchExport(true);
+    try {
+      const q = new URLSearchParams({
+        activityId: selectedCourse.activityId,
+        identity: researchIdentityMode
+      });
+      const response = await fetch(`/api/teacher/research-export?${q.toString()}`, { cache: "no-store" });
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        setError(data?.error ?? "research_export_failed");
+        return;
+      }
+      const blob = await response.blob();
+      const filenameFromHeader = response.headers
+        .get("content-disposition")
+        ?.match(/filename="([^"]+)"/)?.[1];
+      const filename =
+        filenameFromHeader ||
+        `${selectedCourse.activityId}_${selectedCourse.classNumber}_research-student-inputs-${researchIdentityMode}.json`;
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objectUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      setError("research_export_failed");
+    } finally {
+      setDownloadingResearchExport(false);
+    }
+  }
+
   useEffect(() => {
     if (!classExportJobId) return;
     let cancelled = false;
@@ -650,7 +692,28 @@ export default function CourseImplementationReportTab({
                 <button type="button" className="secondary" onClick={() => downloadClassZip().catch(() => undefined)}>下載 ZIP</button>
               </div>
             ) : null}
+            <div style={{ width: 170 }}>
+              <select value={researchIdentityMode} onChange={(e) => setResearchIdentityMode(e.target.value as "anonymous" | "account")}>
+                <option value="anonymous">匿名化研究資料</option>
+                <option value="account">包含學生帳號</option>
+              </select>
+            </div>
+            <div style={{ width: 180 }}>
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => downloadResearchJson().catch(() => undefined)}
+                disabled={downloadingResearchExport}
+              >
+                {downloadingResearchExport ? "下載中..." : "下載研究資料 JSON"}
+              </button>
+            </div>
           </div>
+          {researchIdentityMode === "account" ? (
+            <small style={{ display: "block", marginBottom: 10, color: "#b45309" }}>
+              目前匯出會包含學生帳號，請確認符合 IRB/同意書使用範圍。
+            </small>
+          ) : null}
           {classExportJob ? (
             <small style={{ display: "block", marginBottom: 10 }}>
               {classExportJob.status === "queued" ? "已加入佇列，準備開始..." : null}

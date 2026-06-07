@@ -112,3 +112,15 @@ test("source-guard: learning management renders course diagnostics status", asyn
   assert.ok(routeSrc.includes("getUsersVisibleToTeacherStore"), "course diagnostics route should enforce teacher visibility scope");
   assert.ok(routeSrc.includes("isSessionInActivityGroupScope"), "course diagnostics route should scope sessions to the activity groups");
 });
+
+test("source-guard: research export is scoped, ended-only, and audited", async () => {
+  const routeSrc = await read("../app/api/teacher/research-export/route.ts");
+  const uiSrc = await read("../app/teacher/_components/CourseImplementationReportTab.tsx");
+  assert.ok(routeSrc.includes("isSessionInActivityGroupScope"), "research export should enforce activity group scope");
+  assert.ok(routeSrc.includes("course_not_ended"), "research export should reject non-ended courses");
+  assert.ok(routeSrc.includes("recordAuditLog"), "research export should write an audit log");
+  assert.ok(routeSrc.includes("research_data_export"), "research export audit action should be explicit");
+  assert.ok(uiSrc.includes("/api/teacher/research-export?"), "course report UI should call research export API");
+  assert.ok(uiSrc.includes("下載研究資料 JSON"), "course report UI should expose research JSON download");
+  assert.ok(uiSrc.includes("包含學生帳號"), "course report UI should expose explicit account identity mode");
+});
