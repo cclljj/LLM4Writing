@@ -7,46 +7,13 @@ import {
   createAuthSessionToken,
   validateCredential
 } from "@/src/lib/auth";
-
-// ---------------------------------------------------------------------------
-// #385: In-memory login brute-force protection
-// Tracks failed attempts per username. Serverless-safe: resets on cold start,
-// which is acceptable — persistent lockout requires external storage (Redis/DB).
-// Limit: 10 failures within LOCKOUT_WINDOW_MS → locked for LOCKOUT_DURATION_MS.
-// ---------------------------------------------------------------------------
-const MAX_FAILURES = 10;
-const LOCKOUT_WINDOW_MS = 10 * 60 * 1000; // 10 min sliding window
-const LOCKOUT_DURATION_MS = 10 * 60 * 1000; // 10 min lockout
-const RATE_LIMIT_DISABLED = process.env.DISABLE_LOGIN_RATE_LIMIT === "1";
-
-type LoginAttemptRecord = { failures: number; windowStart: number; lockedUntil: number };
-const loginAttempts = new Map<string, LoginAttemptRecord>();
-
-function getLoginRecord(username: string): LoginAttemptRecord {
-  const now = Date.now();
-  let rec = loginAttempts.get(username);
-  if (!rec || now - rec.windowStart > LOCKOUT_WINDOW_MS) {
-    rec = { failures: 0, windowStart: now, lockedUntil: 0 };
-    loginAttempts.set(username, rec);
-  }
-  return rec;
-}
-
-function isLockedOut(rec: LoginAttemptRecord): boolean {
-  return rec.lockedUntil > Date.now();
-}
-
-function recordFailure(rec: LoginAttemptRecord): void {
-  rec.failures += 1;
-  if (rec.failures >= MAX_FAILURES) {
-    rec.lockedUntil = Date.now() + LOCKOUT_DURATION_MS;
-  }
-}
-
-function clearFailures(username: string): void {
-  loginAttempts.delete(username);
-}
-// ---------------------------------------------------------------------------
+import {
+  checkLoginLockout,
+  clearLoginFailures,
+  isLoginRateLimitDisabled,
+  LoginRateLimitDependencyError,
+  recordLoginFailure
+} from "@/src/lib/login-rate-limit";
 
 function safeErrorDetail(error: unknown): string {
   if (!error) return "unknown";
@@ -65,26 +32,25 @@ export async function POST(request: NextRequest) {
     const username = (body.username ?? "").trim();
     const password = body.password ?? "";
 
-    // Check lockout before hitting bcrypt / DB (#385)
-    if (!RATE_LIMIT_DISABLED && username) {
-      const rec = getLoginRecord(username);
-      if (isLockedOut(rec)) {
-        const retryAfterSec = Math.ceil((rec.lockedUntil - Date.now()) / 1000);
+    // Check lockout before hitting bcrypt / DB (#385, #441).
+    if (!isLoginRateLimitDisabled() && username) {
+      const lockout = await checkLoginLockout(username);
+      if (lockout.locked) {
         return NextResponse.json(
-          { error: "too_many_attempts", retryAfterSeconds: retryAfterSec },
-          { status: 429, headers: { "Retry-After": String(retryAfterSec) } }
+          { error: "too_many_attempts", retryAfterSeconds: lockout.retryAfterSeconds },
+          { status: 429, headers: { "Retry-After": String(lockout.retryAfterSeconds) } }
         );
       }
     }
 
     const claims = await validateCredential(username, password);
     if (!claims) {
-      if (!RATE_LIMIT_DISABLED && username) recordFailure(getLoginRecord(username));
+      if (!isLoginRateLimitDisabled() && username) await recordLoginFailure(username);
       return NextResponse.json({ error: "invalid_credentials" }, { status: 401 });
     }
 
     // Success — clear failure record
-    clearFailures(username);
+    if (!isLoginRateLimitDisabled()) await clearLoginFailures(username);
 
     const user = { username: claims.username, role: claims.role };
 
@@ -120,6 +86,15 @@ export async function POST(request: NextRequest) {
 
     return response;
   } catch (error) {
+    if (error instanceof LoginRateLimitDependencyError) {
+      return NextResponse.json(
+        {
+          error: "login_rate_limit_dependency_unavailable",
+          hint: "Production login protection requires Upstash Redis. Configure UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN."
+        },
+        { status: 503 }
+      );
+    }
     return NextResponse.json(
       {
         error: "auth_service_unavailable",

@@ -6,6 +6,15 @@
  */
 import test from "node:test";
 import assert from "node:assert/strict";
+import {
+  checkLoginLockout,
+  clearLoginFailures,
+  isLoginRateLimitDisabled,
+  LoginRateLimitDependencyError,
+  LOGIN_MAX_FAILURES,
+  recordLoginFailure,
+  resetLoginRateLimitMemoryForTests
+} from "../src/lib/login-rate-limit";
 
 // ---------------------------------------------------------------------------
 // Inline the rate limit logic so we can test it without spinning up the server.
@@ -133,6 +142,85 @@ test("rate limiter: non-API path is not rate limited", () => {
   for (let i = 0; i < 200; i++) {
     assert.equal(rl.check(ip, "/student", i).allowed, true);
   }
+});
+
+async function withLoginRateLimitEnv<T>(env: {
+  nodeEnv?: string;
+  upstashUrl?: string;
+  upstashToken?: string;
+  allowInsecureMemory?: string;
+  disableLoginRateLimit?: string;
+}, fn: () => T | Promise<T>): Promise<T> {
+  const previous = {
+    NODE_ENV: process.env.NODE_ENV,
+    UPSTASH_REDIS_REST_URL: process.env.UPSTASH_REDIS_REST_URL,
+    UPSTASH_REDIS_REST_TOKEN: process.env.UPSTASH_REDIS_REST_TOKEN,
+    ALLOW_INSECURE_MEMORY_RATE_LIMIT: process.env.ALLOW_INSECURE_MEMORY_RATE_LIMIT,
+    DISABLE_LOGIN_RATE_LIMIT: process.env.DISABLE_LOGIN_RATE_LIMIT
+  };
+  process.env.NODE_ENV = env.nodeEnv;
+  if (env.upstashUrl === undefined) delete process.env.UPSTASH_REDIS_REST_URL;
+  else process.env.UPSTASH_REDIS_REST_URL = env.upstashUrl;
+  if (env.upstashToken === undefined) delete process.env.UPSTASH_REDIS_REST_TOKEN;
+  else process.env.UPSTASH_REDIS_REST_TOKEN = env.upstashToken;
+  if (env.allowInsecureMemory === undefined) delete process.env.ALLOW_INSECURE_MEMORY_RATE_LIMIT;
+  else process.env.ALLOW_INSECURE_MEMORY_RATE_LIMIT = env.allowInsecureMemory;
+  if (env.disableLoginRateLimit === undefined) delete process.env.DISABLE_LOGIN_RATE_LIMIT;
+  else process.env.DISABLE_LOGIN_RATE_LIMIT = env.disableLoginRateLimit;
+  resetLoginRateLimitMemoryForTests();
+  try {
+    return await fn();
+  } finally {
+    if (previous.NODE_ENV === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previous.NODE_ENV;
+    if (previous.UPSTASH_REDIS_REST_URL === undefined) delete process.env.UPSTASH_REDIS_REST_URL;
+    else process.env.UPSTASH_REDIS_REST_URL = previous.UPSTASH_REDIS_REST_URL;
+    if (previous.UPSTASH_REDIS_REST_TOKEN === undefined) delete process.env.UPSTASH_REDIS_REST_TOKEN;
+    else process.env.UPSTASH_REDIS_REST_TOKEN = previous.UPSTASH_REDIS_REST_TOKEN;
+    if (previous.ALLOW_INSECURE_MEMORY_RATE_LIMIT === undefined) delete process.env.ALLOW_INSECURE_MEMORY_RATE_LIMIT;
+    else process.env.ALLOW_INSECURE_MEMORY_RATE_LIMIT = previous.ALLOW_INSECURE_MEMORY_RATE_LIMIT;
+    if (previous.DISABLE_LOGIN_RATE_LIMIT === undefined) delete process.env.DISABLE_LOGIN_RATE_LIMIT;
+    else process.env.DISABLE_LOGIN_RATE_LIMIT = previous.DISABLE_LOGIN_RATE_LIMIT;
+    resetLoginRateLimitMemoryForTests();
+  }
+}
+
+test("login lockout: development memory fallback locks and clears per username", async () => {
+  await withLoginRateLimitEnv({ nodeEnv: "test" }, async () => {
+    for (let i = 0; i < LOGIN_MAX_FAILURES - 1; i++) {
+      await recordLoginFailure("StudentA", i);
+    }
+    assert.equal((await checkLoginLockout("studenta", LOGIN_MAX_FAILURES)).locked, false);
+
+    await recordLoginFailure("StudentA", LOGIN_MAX_FAILURES);
+    const locked = await checkLoginLockout("studenta", LOGIN_MAX_FAILURES + 1);
+    assert.equal(locked.locked, true);
+    assert.ok(locked.retryAfterSeconds > 0);
+
+    await clearLoginFailures("StudentA");
+    assert.equal((await checkLoginLockout("studenta", LOGIN_MAX_FAILURES + 2)).locked, false);
+  });
+});
+
+test("login lockout: production without Upstash fails closed", async () => {
+  await withLoginRateLimitEnv({ nodeEnv: "production" }, async () => {
+    await assert.rejects(
+      () => checkLoginLockout("student-a"),
+      (error) => error instanceof LoginRateLimitDependencyError
+    );
+  });
+});
+
+test("login lockout: production disable flag requires explicit insecure memory override", () => {
+  return withLoginRateLimitEnv({ nodeEnv: "production", disableLoginRateLimit: "1" }, async () => {
+    assert.equal(isLoginRateLimitDisabled(), false);
+    await withLoginRateLimitEnv(
+      { nodeEnv: "production", disableLoginRateLimit: "1", allowInsecureMemory: "1" },
+      () => {
+        assert.equal(isLoginRateLimitDisabled(), true);
+      }
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
