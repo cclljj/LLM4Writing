@@ -10,6 +10,12 @@ import {
   TEACHER_MONITOR_MAX_POLL_MS,
   TEACHER_MONITOR_MIN_POLL_MS
 } from "../src/lib/teacher-monitor-polling";
+import {
+  computeStudentSessionPayloadHash,
+  resolveStudentSessionNextPollDelay,
+  STUDENT_SESSION_FAST_POLL_MS,
+  STUDENT_SESSION_MAX_POLL_MS
+} from "../src/lib/student-session-polling";
 
 test("session presence behavior: online user appears then expires by window", async () => {
   const sessionId = `presence-${Date.now()}-${Math.random()}`;
@@ -63,6 +69,42 @@ test("teacher monitor polling behavior: hash and delay policy are deterministic"
   assert.equal(resolveTeacherMonitorNextPollDelay({ currentDelayMs: 8000, unchanged: true, hasLowLatencyGate: true }), TEACHER_MONITOR_FAST_POLL_MS);
   assert.equal(resolveTeacherMonitorNextPollDelay({ currentDelayMs: 8000, unchanged: false, hasLowLatencyGate: false }), TEACHER_MONITOR_MIN_POLL_MS);
   assert.equal(resolveTeacherMonitorNextPollDelay({ currentDelayMs: 20000, unchanged: true, hasLowLatencyGate: false }), TEACHER_MONITOR_MAX_POLL_MS);
+});
+
+test("student session polling behavior: hash and delay policy are deterministic", () => {
+  const base = {
+    id: "s1",
+    currentStep: 4,
+    personalSteps: { alice: 4, bob: 4 },
+    groupGate: { "4-complete": ["alice"] },
+    messages: [{ at: "2026-06-07T00:00:00.000Z" }],
+    draftStep8: { alice: "draft" },
+    reports: { step10: { alice: "" } }
+  };
+  const same = {
+    id: "s1",
+    currentStep: 4,
+    personalSteps: { bob: 4, alice: 4 },
+    groupGate: { "4-complete": ["alice"] },
+    messages: [{ at: "2026-06-07T00:00:00.000Z" }],
+    draftStep8: { alice: "draft" },
+    reports: { step10: { alice: "" } }
+  };
+  const changed = {
+    ...base,
+    groupGate: { "4-complete": ["alice", "bob"] }
+  };
+
+  assert.equal(computeStudentSessionPayloadHash(base, "alice"), computeStudentSessionPayloadHash(same, "alice"));
+  assert.notEqual(computeStudentSessionPayloadHash(base, "alice"), computeStudentSessionPayloadHash(changed, "alice"));
+  assert.notEqual(
+    computeStudentSessionPayloadHash(base, "alice"),
+    computeStudentSessionPayloadHash({ ...base, draftStep8: { alice: "draft changed" } }, "alice")
+  );
+
+  assert.equal(resolveStudentSessionNextPollDelay({ currentDelayMs: 5000, unchanged: false }), STUDENT_SESSION_FAST_POLL_MS);
+  assert.equal(resolveStudentSessionNextPollDelay({ currentDelayMs: 5000, unchanged: true }), 10000);
+  assert.equal(resolveStudentSessionNextPollDelay({ currentDelayMs: 20000, unchanged: true }), STUDENT_SESSION_MAX_POLL_MS);
 });
 
 // single source-guard for this topic file

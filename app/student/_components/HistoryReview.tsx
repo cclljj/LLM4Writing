@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import OutlineSvg from "@/app/_components/OutlineSvg";
 import { deferStateUpdate } from "@/src/lib/defer-state-update";
 import { renderMessageHtml } from "./renderMessageHtml";
@@ -25,7 +25,7 @@ type HistoryReviewProps = {
   step4OutlineMermaid?: string;
 };
 
-export default function HistoryReview({
+function HistoryReview({
   steps,
   step3SubmittedOutlineMermaid,
   step4OutlineMermaid,
@@ -124,3 +124,5 @@ export default function HistoryReview({
     </>
   );
 }
+
+export default memo(HistoryReview);

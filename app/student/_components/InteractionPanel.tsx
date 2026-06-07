@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, memo, useEffect, useMemo, useRef, useState } from "react";
 import { deferStateUpdate } from "@/src/lib/defer-state-update";
 import { formatTaipeiDateTime } from "@/src/lib/time-format";
 import { renderMessageHtml } from "./renderMessageHtml";
@@ -69,7 +69,7 @@ function preventTextPaste(e: { preventDefault: () => void }) {
   e.preventDefault();
 }
 
-export default function InteractionPanel({
+function InteractionPanel({
   currentStep,
   currentMode,
   interactiveMessages,
@@ -342,3 +342,5 @@ export default function InteractionPanel({
     </div>
   );
 }
+
+export default memo(InteractionPanel);

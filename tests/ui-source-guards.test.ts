@@ -63,6 +63,25 @@ test("source-guard: student route keeps classroom bootstrap failures recoverable
   assert.ok(src.includes("重新整理課程清單"), "student overview failures should expose a retry action");
 });
 
+test("source-guard: student session polling uses adaptive backoff helpers", async () => {
+  const src = await read("../app/student/page.tsx");
+  const pollingHelper = await read("../src/lib/student-session-polling.ts");
+  assert.ok(src.includes("resolveStudentSessionNextPollDelay"), "student session polling should resolve adaptive delays");
+  assert.ok(src.includes("computeStudentSessionPayloadHash"), "student session polling should hash payload changes");
+  assert.ok(src.includes("window.setTimeout(tick"), "student session polling should schedule a timeout loop");
+  assert.ok(!src.includes("fetch(`/api/session/${sessionId}`, { headers })\n        .then"), "student session polling should not use the old fixed interval promise chain");
+  assert.ok(pollingHelper.includes("STUDENT_SESSION_MAX_POLL_MS = 30000"), "student session polling should cap quiet-period backoff at 30s");
+});
+
+test("source-guard: heavy student panels are memoized", async () => {
+  const interaction = await read("../app/student/_components/InteractionPanel.tsx");
+  const step68 = await read("../app/student/_components/Step68Panel.tsx");
+  const history = await read("../app/student/_components/HistoryReview.tsx");
+  assert.ok(interaction.includes("export default memo(InteractionPanel)"), "InteractionPanel should be memoized");
+  assert.ok(step68.includes("export default memo(Step68Panel)"), "Step68Panel should be memoized");
+  assert.ok(history.includes("export default memo(HistoryReview)"), "HistoryReview should be memoized");
+});
+
 test("source-guard: teacher/admin route keeps management bootstrap failures recoverable", async () => {
   const teacherSrc = await read("../app/teacher/page.tsx");
   const adminSrc = await read("../app/admin/page.tsx");

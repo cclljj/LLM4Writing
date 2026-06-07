@@ -3,6 +3,11 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { buildStudentNextAction } from "@/src/lib/student-next-action";
+import {
+  computeStudentSessionPayloadHash,
+  resolveStudentSessionNextPollDelay,
+  STUDENT_SESSION_FAST_POLL_MS
+} from "@/src/lib/student-session-polling";
 import { getStep9QuestionsFromConfig } from "@/src/lib/spec";
 import { validateDraftContent } from "@/src/lib/answer-validation";
 import { appendErrorHint, formatUserError } from "@/src/lib/error-messages";
@@ -277,6 +282,9 @@ export default function StudentPage() {
   const [step6RefUser, setStep6RefUser] = useState("");
   const lastOwnStepRef = useRef<number | null>(null);
   const sessionEtagRef = useRef<string>("");
+  const sessionPayloadHashRef = useRef<string>("");
+  const sessionPollDelayRef = useRef<number>(STUDENT_SESSION_FAST_POLL_MS);
+  const sessionPollingBusyRef = useRef(false);
   const outlineMermaidRef = useRef<string>("");
   const restoreAttemptedRef = useRef<string>("");
 
@@ -368,25 +376,66 @@ export default function StudentPage() {
       return () => window.clearInterval(timer);
     }
     const sessionId = session.id;
-    let tick = 0;
-    const timer = window.setInterval(() => {
+    let canceled = false;
+    let timerId: number | null = null;
+    let successfulPollCount = 0;
+    sessionPollDelayRef.current = STUDENT_SESSION_FAST_POLL_MS;
+    sessionPayloadHashRef.current = "";
+
+    const scheduleNext = (delayMs: number) => {
+      if (canceled) return;
+      timerId = window.setTimeout(tick, delayMs);
+    };
+
+    const tick = async () => {
+      if (canceled) return;
+      if (sessionPollingBusyRef.current) {
+        scheduleNext(STUDENT_SESSION_FAST_POLL_MS);
+        return;
+      }
+      sessionPollingBusyRef.current = true;
       const headers: Record<string, string> = {};
       if (sessionEtagRef.current) headers["If-None-Match"] = sessionEtagRef.current;
-      fetch(`/api/session/${sessionId}`, { headers })
-        .then((res) => {
-          const newEtag = res.headers.get("ETag");
-          if (newEtag) sessionEtagRef.current = newEtag;
-          if (res.status === 304) return null;
-          return res.json();
-        })
-        .then((data) => {
-          if (data?.id) applySessionSafely(data);
-        })
-        .catch(() => undefined);
-      if (tick % 3 === 0) refreshActivityStatuses().catch(() => undefined);
-      tick++;
-    }, 5000);
-    return () => window.clearInterval(timer);
+      let unchanged = true;
+      let failed = false;
+      try {
+        const res = await fetch(`/api/session/${sessionId}`, { headers });
+        const newEtag = res.headers.get("ETag");
+        if (newEtag) sessionEtagRef.current = newEtag;
+        if (res.status !== 304) {
+          const data = await res.json();
+          if (data?.id) {
+            const nextHash = computeStudentSessionPayloadHash(data, loginUser);
+            unchanged = nextHash === sessionPayloadHashRef.current;
+            if (!unchanged) {
+              sessionPayloadHashRef.current = nextHash;
+              applySessionSafely(data);
+            }
+          }
+        }
+        successfulPollCount++;
+        if (successfulPollCount % 3 === 0) refreshActivityStatuses().catch(() => undefined);
+      } catch {
+        failed = true;
+      } finally {
+        sessionPollingBusyRef.current = false;
+      }
+      if (!canceled) {
+        sessionPollDelayRef.current = failed
+          ? STUDENT_SESSION_FAST_POLL_MS
+          : resolveStudentSessionNextPollDelay({
+              currentDelayMs: sessionPollDelayRef.current,
+              unchanged
+            });
+        scheduleNext(sessionPollDelayRef.current);
+      }
+    };
+
+    scheduleNext(STUDENT_SESSION_FAST_POLL_MS);
+    return () => {
+      canceled = true;
+      if (timerId !== null) window.clearTimeout(timerId);
+    };
   }, [applySessionSafely, authReady, loginUser, session?.id]);
 
   useEffect(() => {

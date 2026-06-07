@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import OutlineSvg from "@/app/_components/OutlineSvg";
 import { deferStateUpdate } from "@/src/lib/defer-state-update";
 
@@ -27,7 +27,7 @@ type Step68PanelProps = {
   step7StreamingText?: string;
 };
 
-export default function Step68Panel({
+function Step68Panel({
   currentStep,
   participants,
   outlines,
@@ -181,3 +181,5 @@ export default function Step68Panel({
     </div>
   );
 }
+
+export default memo(Step68Panel);
