@@ -99,16 +99,19 @@ test("source-guard: teacher/admin route keeps management bootstrap failures reco
 
 test("source-guard: learning management renders course diagnostics status", async () => {
   const uiSrc = await read("../app/teacher/_components/LearningMonitorTab.tsx");
+  const panelSrc = await read("../app/teacher/_components/CourseDiagnosticsPanel.tsx");
   const routeSrc = await read("../app/api/teacher/course-diagnostics/route.ts");
-  assert.ok(uiSrc.includes("課程診斷摘要"), "learning management should render a course diagnostics card");
+  assert.ok(uiSrc.includes("CourseDiagnosticsPanel"), "learning management should delegate course diagnostics rendering");
+  assert.ok(panelSrc.includes("課程診斷摘要"), "course diagnostics panel should render a course diagnostics card");
   assert.ok(uiSrc.includes("/api/teacher/course-diagnostics?activityId="), "learning management should load course diagnostics by activity");
-  assert.ok(uiSrc.includes("Fallback"), "course diagnostics UI should surface fallback stats");
-  assert.ok(uiSrc.includes("拒答"), "course diagnostics UI should surface rejection stats");
-  assert.ok(uiSrc.includes("每步平均停留時間"), "course diagnostics UI should surface step dwell-time stats");
-  assert.ok(uiSrc.includes("session.runId"), "course diagnostics UI should render grouped run rows");
-  assert.ok(uiSrc.includes("session.sessionIds.length"), "course diagnostics UI should expose aggregated session count per run");
+  assert.ok(panelSrc.includes("Fallback"), "course diagnostics UI should surface fallback stats");
+  assert.ok(panelSrc.includes("拒答"), "course diagnostics UI should surface rejection stats");
+  assert.ok(panelSrc.includes("每步平均停留時間"), "course diagnostics UI should surface step dwell-time stats");
+  assert.ok(panelSrc.includes("session.runId"), "course diagnostics UI should render grouped run rows");
+  assert.ok(panelSrc.includes("session.sessionIds.length"), "course diagnostics UI should expose aggregated session count per run");
   assert.ok(uiSrc.includes("pagedCourseDiagnosticsRows"), "course diagnostics UI should paginate grouped run rows");
-  assert.ok(uiSrc.includes("每頁 10 列"), "course diagnostics pagination should disclose the 10-row page size");
+  assert.ok(panelSrc.includes("每頁 10 列"), "course diagnostics pagination should disclose the 10-row page size");
+  assert.ok(panelSrc.includes("export default memo(CourseDiagnosticsPanel)"), "course diagnostics panel should be memoized");
   assert.ok(routeSrc.includes("getUsersVisibleToTeacherStore"), "course diagnostics route should enforce teacher visibility scope");
   assert.ok(routeSrc.includes("isSessionInActivityGroupScope"), "course diagnostics route should scope sessions to the activity groups");
 });
