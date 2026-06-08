@@ -75,8 +75,8 @@ npm run dev
 | 變數 | 說明 |
 |------|------|
 | `AUTH_SECRET` | Session token 簽章金鑰，建議 32 字元以上隨機字串 |
-| `UPSTASH_REDIS_REST_URL` | Production 安全依賴；供登入鎖定與 API rate limit 跨副本共享 |
-| `UPSTASH_REDIS_REST_TOKEN` | Production 安全依賴；Upstash REST token |
+| `UPSTASH_REDIS_REST_URL` | 多副本 production 建議設定；供登入鎖定、API rate limit 與 presence 跨副本共享 |
+| `UPSTASH_REDIS_REST_TOKEN` | 多副本 production 建議設定；Upstash REST token |
 
 ### 資料庫
 
@@ -87,7 +87,7 @@ npm run dev
 | `SUPABASE_POOL_MODE` | `transaction` 或 `session`（可選，自動偵測） |
 | `APP_ORIGIN` | CSRF 同源檢查的 canonical origin（建議設定，如 `https://your-domain.example.com`） |
 | `PROXY_DISABLE_NONCE_CSP` | 緊急開關；設為 `1` 時暫停 proxy nonce CSP 注入（事件緩解用） |
-| `ALLOW_INSECURE_MEMORY_RATE_LIMIT` | 緊急開關；production 設為 `1` 才允許登入鎖定退回單副本 memory，平時不得啟用 |
+| `REQUIRE_DISTRIBUTED_LOGIN_RATE_LIMIT` | 嚴格安全開關；設為 `1` 時 production 登入鎖定必須使用 Upstash，Redis 缺失/故障會拒絕登入 |
 
 ### LLM（選填）
 

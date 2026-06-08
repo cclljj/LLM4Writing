@@ -20,12 +20,12 @@ function normalizeUsername(username: string): string {
 }
 
 function shouldFailClosedInProduction(): boolean {
-  return process.env.NODE_ENV === "production" && process.env.ALLOW_INSECURE_MEMORY_RATE_LIMIT !== "1";
+  return process.env.NODE_ENV === "production" && process.env.REQUIRE_DISTRIBUTED_LOGIN_RATE_LIMIT === "1";
 }
 
 export function isLoginRateLimitDisabled(): boolean {
   if (process.env.DISABLE_LOGIN_RATE_LIMIT !== "1") return false;
-  return process.env.NODE_ENV !== "production" || process.env.ALLOW_INSECURE_MEMORY_RATE_LIMIT === "1";
+  return process.env.NODE_ENV !== "production";
 }
 
 function getMemoryRecord(username: string, now: number): LoginAttemptRecord {

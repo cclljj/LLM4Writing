@@ -12,6 +12,7 @@ const errorMessages: Record<string, string> = {
   history_fetch_failed: "歷史紀錄載入失敗。建議：請稍後再試或重新整理頁面。",
   invalid_step: "目前步驟狀態不一致。建議：請重新整理頁面後再試。",
   join_failed: "進入課程失敗。建議：請確認課程已開始，或請教師檢查分組名單。",
+  login_rate_limit_dependency_unavailable: "登入安全檢查暫時不可用。建議：請系統管理員確認 Upstash Redis 設定，或關閉嚴格分散式登入鎖定模式。",
   monitor_detail_load_failed: "對話詳情載入失敗。建議：請稍後再點一次查看。",
   monitor_load_failed: "監控資料載入失敗。建議：系統會自動重試，你也可以手動重新整理。",
   not_group_member: "你尚未被分配到此課程小組。建議：請向老師確認分組設定。",

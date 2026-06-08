@@ -157,12 +157,12 @@ LLM 上下文規則：
 
 ### 2.7 分散式執行期狀態（Rate Limit / Presence）
 
-為支援正式上線多副本部署，`rate limit` 與 `presence` 採 Upstash Redis 優先；非正式環境可退回 memory 以維持本機與測試流程：
+為支援正式上線多副本部署，`rate limit`、登入鎖定與 `presence` 採 Upstash Redis 優先；未設定 Upstash 時可退回 memory 以維持既有部署與本機測試流程：
 
 | 功能 | 主要路徑 | Redis key 範例 | fallback |
 |---|---|---|---|
 | API rate limit | `src/lib/rate-limit.ts` | `ratelimit:<rule>:<ip>:<bucket>` | `Map` sliding window |
-| login account lockout | `src/lib/login-rate-limit.ts` | `loginfail:<username>`、`loginlock:<username>` | 非 production `Map` sliding window；production 預設 fail closed |
+| login account lockout | `src/lib/login-rate-limit.ts` | `loginfail:<username>`、`loginlock:<username>` | `Map` sliding window；若 `REQUIRE_DISTRIBUTED_LOGIN_RATE_LIMIT=1` 則 production fail closed |
 | session presence | `src/lib/session-presence.ts` | `presence:<sessionId>:<username>`、`presence:<sessionId>:users` | `Map<sessionId, Map<username, iso>>` |
 
 Upstash 啟用條件：
@@ -170,7 +170,7 @@ Upstash 啟用條件：
 - `UPSTASH_REDIS_REST_URL`
 - `UPSTASH_REDIS_REST_TOKEN`
 
-任一缺失、或 Redis 暫時錯誤/逾時時，presence 與非正式環境 rate limit 會 fallback 到 in-memory，不中斷課程流程。Production 登入逐帳號鎖定屬安全關鍵防護，未配置或無法連線 Upstash 時需回傳 `login_rate_limit_dependency_unavailable`，除非明確設定緊急開關 `ALLOW_INSECURE_MEMORY_RATE_LIMIT=1`。
+任一缺失、或 Redis 暫時錯誤/逾時時，presence、rate limit 與登入逐帳號鎖定會 fallback 到 in-memory，不中斷課程流程。若部署明確設定 `REQUIRE_DISTRIBUTED_LOGIN_RATE_LIMIT=1`，production 登入鎖定必須使用 Upstash；未配置或無法連線 Upstash 時需回傳 `login_rate_limit_dependency_unavailable`。
 
 ## 3. 權限與資料邊界
 
@@ -1789,7 +1789,7 @@ Step-specific streaming / formal report endpoints 會保留原本建議預算與
 
 ### 10.1 API Rate Limiting
 
-所有 `/api/*` 路由在 `proxy.ts` 中統一走 `src/lib/rate-limit.ts` 限速，預設使用 Upstash Redis。非正式環境或非登入安全關鍵路徑可 fallback in-memory；production 登入逐帳號鎖定不得靜默降級。
+所有 `/api/*` 路由在 `proxy.ts` 中統一走 `src/lib/rate-limit.ts` 限速，預設使用 Upstash Redis；未設定 Upstash 時 fallback in-memory（僅單副本一致）。
 
 | 路徑前綴 | 上限 | 視窗 |
 |---|---|---|
@@ -1811,7 +1811,7 @@ Retry-After: <秒數>
 注意：
 
 - Upstash 可用時，限速狀態跨副本共享。
-- Upstash 未設定或短暫故障時，非 production 可退回 process memory `Map`（僅單副本一致）；production 登入鎖定預設 fail closed。
+- Upstash 未設定或短暫故障時，退回 process memory `Map`（僅單副本一致）；若設定 `REQUIRE_DISTRIBUTED_LOGIN_RATE_LIMIT=1`，production 登入鎖定改為 fail closed。
 - IP 從 `x-forwarded-for` 第一個值或 `x-real-ip` 取得。
 
 ### 10.2 Session Presence
@@ -1828,8 +1828,8 @@ Retry-After: <秒數>
   ```json
   { "error": "too_many_attempts", "retryAfterSeconds": N }
   ```
-- 鎖定計數器 production 優先儲存於 Upstash Redis，使用 `loginfail:<username>` 與 `loginlock:<username>` key；非 production 可用 in-process memory。
-- Production 未配置或無法連線 Upstash 時，登入流程需回傳 HTTP 503 `login_rate_limit_dependency_unavailable`，不得靜默使用 memory；只有明確設定 `ALLOW_INSECURE_MEMORY_RATE_LIMIT=1` 才允許緊急降級。
+- 鎖定計數器優先儲存於 Upstash Redis，使用 `loginfail:<username>` 與 `loginlock:<username>` key；未配置或 Redis 暫時不可用時退回 in-process memory，避免既有 production 部署無法登入。
+- 若 production 設定 `REQUIRE_DISTRIBUTED_LOGIN_RATE_LIMIT=1`，登入流程需在 Upstash 缺失/不可用時回傳 HTTP 503 `login_rate_limit_dependency_unavailable`，不得使用 memory fallback。
 - 登入成功後清除失敗計數。
 
 ### 10.3 Auth Session Cookie
@@ -1933,7 +1933,7 @@ Auth session 必須是 server 簽章 token，格式為 `v1.<payload>.<signature>
 1. 無 DB 環境下，domain 依賴 `.data/domain-state.json`；檔案不可寫或被清空會回預設。
 2. 群組隨機分配採前端簡單亂數，不含 seed，無法保證可重現。
 3. Prompt 變更需改檔案並重新部署，不支援線上即時編輯。
-4. 若未配置 Upstash（或 Redis 故障），非 production rate limiting 會 fallback in-memory，跨副本一致性會下降；production 登入逐帳號鎖定預設 fail closed。
+4. 若未配置 Upstash（或 Redis 故障），rate limiting 與登入鎖定會 fallback in-memory，跨副本一致性會下降；設定 `REQUIRE_DISTRIBUTED_LOGIN_RATE_LIMIT=1` 時 production 登入鎖定改為 fail closed。
 5. `/api/teacher/monitor` 未帶 `activityId` 時仍保留相容性全域掃描路徑；正式學習管理頁應帶入 `activityId` 才能使用 DB 層分頁。
 6. Presence 本質為短生命週期狀態；即使使用 Redis，也不做長期持久化，TTL 到期或服務重啟後會自然重建。
 7. diagnostics 優先讀取 `llm_events` / `learning_events`；若資料表為空（例如剛部署或 memory-only 環境）會回退到 session 推估與 process-memory 統計。

@@ -148,14 +148,14 @@ async function withLoginRateLimitEnv<T>(env: {
   nodeEnv?: string;
   upstashUrl?: string;
   upstashToken?: string;
-  allowInsecureMemory?: string;
+  requireDistributedLoginRateLimit?: string;
   disableLoginRateLimit?: string;
 }, fn: () => T | Promise<T>): Promise<T> {
   const previous = {
     NODE_ENV: process.env.NODE_ENV,
     UPSTASH_REDIS_REST_URL: process.env.UPSTASH_REDIS_REST_URL,
     UPSTASH_REDIS_REST_TOKEN: process.env.UPSTASH_REDIS_REST_TOKEN,
-    ALLOW_INSECURE_MEMORY_RATE_LIMIT: process.env.ALLOW_INSECURE_MEMORY_RATE_LIMIT,
+    REQUIRE_DISTRIBUTED_LOGIN_RATE_LIMIT: process.env.REQUIRE_DISTRIBUTED_LOGIN_RATE_LIMIT,
     DISABLE_LOGIN_RATE_LIMIT: process.env.DISABLE_LOGIN_RATE_LIMIT
   };
   process.env.NODE_ENV = env.nodeEnv;
@@ -163,8 +163,8 @@ async function withLoginRateLimitEnv<T>(env: {
   else process.env.UPSTASH_REDIS_REST_URL = env.upstashUrl;
   if (env.upstashToken === undefined) delete process.env.UPSTASH_REDIS_REST_TOKEN;
   else process.env.UPSTASH_REDIS_REST_TOKEN = env.upstashToken;
-  if (env.allowInsecureMemory === undefined) delete process.env.ALLOW_INSECURE_MEMORY_RATE_LIMIT;
-  else process.env.ALLOW_INSECURE_MEMORY_RATE_LIMIT = env.allowInsecureMemory;
+  if (env.requireDistributedLoginRateLimit === undefined) delete process.env.REQUIRE_DISTRIBUTED_LOGIN_RATE_LIMIT;
+  else process.env.REQUIRE_DISTRIBUTED_LOGIN_RATE_LIMIT = env.requireDistributedLoginRateLimit;
   if (env.disableLoginRateLimit === undefined) delete process.env.DISABLE_LOGIN_RATE_LIMIT;
   else process.env.DISABLE_LOGIN_RATE_LIMIT = env.disableLoginRateLimit;
   resetLoginRateLimitMemoryForTests();
@@ -177,8 +177,8 @@ async function withLoginRateLimitEnv<T>(env: {
     else process.env.UPSTASH_REDIS_REST_URL = previous.UPSTASH_REDIS_REST_URL;
     if (previous.UPSTASH_REDIS_REST_TOKEN === undefined) delete process.env.UPSTASH_REDIS_REST_TOKEN;
     else process.env.UPSTASH_REDIS_REST_TOKEN = previous.UPSTASH_REDIS_REST_TOKEN;
-    if (previous.ALLOW_INSECURE_MEMORY_RATE_LIMIT === undefined) delete process.env.ALLOW_INSECURE_MEMORY_RATE_LIMIT;
-    else process.env.ALLOW_INSECURE_MEMORY_RATE_LIMIT = previous.ALLOW_INSECURE_MEMORY_RATE_LIMIT;
+    if (previous.REQUIRE_DISTRIBUTED_LOGIN_RATE_LIMIT === undefined) delete process.env.REQUIRE_DISTRIBUTED_LOGIN_RATE_LIMIT;
+    else process.env.REQUIRE_DISTRIBUTED_LOGIN_RATE_LIMIT = previous.REQUIRE_DISTRIBUTED_LOGIN_RATE_LIMIT;
     if (previous.DISABLE_LOGIN_RATE_LIMIT === undefined) delete process.env.DISABLE_LOGIN_RATE_LIMIT;
     else process.env.DISABLE_LOGIN_RATE_LIMIT = previous.DISABLE_LOGIN_RATE_LIMIT;
     resetLoginRateLimitMemoryForTests();
@@ -202,8 +202,19 @@ test("login lockout: development memory fallback locks and clears per username",
   });
 });
 
-test("login lockout: production without Upstash fails closed", async () => {
+test("login lockout: production without Upstash falls back to memory by default", async () => {
   await withLoginRateLimitEnv({ nodeEnv: "production" }, async () => {
+    for (let i = 0; i < LOGIN_MAX_FAILURES; i++) {
+      await recordLoginFailure("StudentA", i);
+    }
+    const locked = await checkLoginLockout("studenta", LOGIN_MAX_FAILURES + 1);
+    assert.equal(locked.locked, true);
+    assert.ok(locked.retryAfterSeconds > 0);
+  });
+});
+
+test("login lockout: production strict mode without Upstash fails closed", async () => {
+  await withLoginRateLimitEnv({ nodeEnv: "production", requireDistributedLoginRateLimit: "1" }, async () => {
     await assert.rejects(
       () => checkLoginLockout("student-a"),
       (error) => error instanceof LoginRateLimitDependencyError
@@ -211,16 +222,21 @@ test("login lockout: production without Upstash fails closed", async () => {
   });
 });
 
-test("login lockout: production disable flag requires explicit insecure memory override", () => {
+test("login lockout: production disable flag is ignored", () => {
   return withLoginRateLimitEnv({ nodeEnv: "production", disableLoginRateLimit: "1" }, async () => {
     assert.equal(isLoginRateLimitDisabled(), false);
-    await withLoginRateLimitEnv(
-      { nodeEnv: "production", disableLoginRateLimit: "1", allowInsecureMemory: "1" },
-      () => {
-        assert.equal(isLoginRateLimitDisabled(), true);
-      }
-    );
   });
+});
+
+test("source-guard: env example documents distributed login lockout mode", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { resolve, dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const thisDir = dirname(fileURLToPath(import.meta.url));
+  const src = readFileSync(resolve(thisDir, "../.env.example"), "utf8");
+  assert.ok(src.includes("UPSTASH_REDIS_REST_URL"), "env example should document Upstash URL");
+  assert.ok(src.includes("UPSTASH_REDIS_REST_TOKEN"), "env example should document Upstash token");
+  assert.ok(src.includes("REQUIRE_DISTRIBUTED_LOGIN_RATE_LIMIT"), "env example should document strict distributed login lockout mode");
 });
 
 // ---------------------------------------------------------------------------
