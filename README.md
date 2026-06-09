@@ -215,6 +215,7 @@ CI（`.github/workflows/vercel-deploy.yml`）先通過 quality gate 再進行 Ve
 | 文件 | 說明 |
 |------|------|
 | [`docs/SPEC.md`](./docs/SPEC.md) | 系統規格書（single source of truth） |
+| [`docs/openspec/`](./docs/openspec/) | OpenSpec 文件與架構圖 |
 | [`SECURITY.md`](./SECURITY.md) | 資安政策與通報流程 |
 | [`TASK.md`](./TASK.md) | 開發任務工作流程 |
 | [`.env.example`](./.env.example) | 環境變數完整說明 |
@@ -224,7 +225,7 @@ CI（`.github/workflows/vercel-deploy.yml`）先通過 quality gate 再進行 Ve
 ## Collaboration Baseline
 
 1. 先開 issue（Traditional Chinese 標題），再實作
-2. 功能變更需同步更新 `docs/SPEC.md`
+2. 功能變更需檢查並同步更新 `docs/SPEC.md` 與 `docs/openspec/`
 3. Commit 前須通過 `npx tsc --noEmit` 與 `npm test`
 4. 確認完工後再 close issue，留下紀錄
 
