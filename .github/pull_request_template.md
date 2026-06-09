@@ -18,10 +18,10 @@ SPEC 說明：
 
 ## Validation
 
+- [ ] `npm run typecheck`
 - [ ] `npm run build`
 - [ ] 其他：
 
 ## Notes
 
 - 
-

@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
     "test": "node --test --import tsx tests/**/*.test.ts",
     "docs:spec-pdf": "node scripts/generate-all-in-one-spec-pdf.mjs",
     "test:e2e": "playwright test"

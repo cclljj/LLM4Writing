@@ -4,7 +4,7 @@ import { recordArtifactUpdateSignal } from "@/src/lib/learning-diagnostics";
 import { resolveStructureTreeTemplate } from "@/src/lib/genre-resolver";
 import { saveSession } from "@/src/lib/store";
 import { validateStep3OutlineCompletion } from "@/src/lib/step3-outline-validation";
-import { requireStudentInSession, validateTextInput } from "@/src/lib/api-helpers";
+import { requireStudentInSession } from "@/src/lib/api-helpers";
 
 export async function POST(request: NextRequest) {
   const body = (await request.json()) as { sessionId?: string; outline?: string };

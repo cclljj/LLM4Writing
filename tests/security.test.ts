@@ -145,6 +145,19 @@ test("rate limiter: non-API path is not rate limited", () => {
   }
 });
 
+function setTestEnvValue(key: string, value: string | undefined): void {
+  if (value === undefined) {
+    Reflect.deleteProperty(process.env, key);
+    return;
+  }
+  Object.defineProperty(process.env, key, {
+    value,
+    configurable: true,
+    enumerable: true,
+    writable: true
+  });
+}
+
 async function withLoginRateLimitEnv<T>(env: {
   nodeEnv?: string;
   upstashUrl?: string;
@@ -159,29 +172,20 @@ async function withLoginRateLimitEnv<T>(env: {
     REQUIRE_DISTRIBUTED_LOGIN_RATE_LIMIT: process.env.REQUIRE_DISTRIBUTED_LOGIN_RATE_LIMIT,
     DISABLE_LOGIN_RATE_LIMIT: process.env.DISABLE_LOGIN_RATE_LIMIT
   };
-  process.env.NODE_ENV = env.nodeEnv;
-  if (env.upstashUrl === undefined) delete process.env.UPSTASH_REDIS_REST_URL;
-  else process.env.UPSTASH_REDIS_REST_URL = env.upstashUrl;
-  if (env.upstashToken === undefined) delete process.env.UPSTASH_REDIS_REST_TOKEN;
-  else process.env.UPSTASH_REDIS_REST_TOKEN = env.upstashToken;
-  if (env.requireDistributedLoginRateLimit === undefined) delete process.env.REQUIRE_DISTRIBUTED_LOGIN_RATE_LIMIT;
-  else process.env.REQUIRE_DISTRIBUTED_LOGIN_RATE_LIMIT = env.requireDistributedLoginRateLimit;
-  if (env.disableLoginRateLimit === undefined) delete process.env.DISABLE_LOGIN_RATE_LIMIT;
-  else process.env.DISABLE_LOGIN_RATE_LIMIT = env.disableLoginRateLimit;
+  setTestEnvValue("NODE_ENV", env.nodeEnv);
+  setTestEnvValue("UPSTASH_REDIS_REST_URL", env.upstashUrl);
+  setTestEnvValue("UPSTASH_REDIS_REST_TOKEN", env.upstashToken);
+  setTestEnvValue("REQUIRE_DISTRIBUTED_LOGIN_RATE_LIMIT", env.requireDistributedLoginRateLimit);
+  setTestEnvValue("DISABLE_LOGIN_RATE_LIMIT", env.disableLoginRateLimit);
   resetLoginRateLimitMemoryForTests();
   try {
     return await fn();
   } finally {
-    if (previous.NODE_ENV === undefined) delete process.env.NODE_ENV;
-    else process.env.NODE_ENV = previous.NODE_ENV;
-    if (previous.UPSTASH_REDIS_REST_URL === undefined) delete process.env.UPSTASH_REDIS_REST_URL;
-    else process.env.UPSTASH_REDIS_REST_URL = previous.UPSTASH_REDIS_REST_URL;
-    if (previous.UPSTASH_REDIS_REST_TOKEN === undefined) delete process.env.UPSTASH_REDIS_REST_TOKEN;
-    else process.env.UPSTASH_REDIS_REST_TOKEN = previous.UPSTASH_REDIS_REST_TOKEN;
-    if (previous.REQUIRE_DISTRIBUTED_LOGIN_RATE_LIMIT === undefined) delete process.env.REQUIRE_DISTRIBUTED_LOGIN_RATE_LIMIT;
-    else process.env.REQUIRE_DISTRIBUTED_LOGIN_RATE_LIMIT = previous.REQUIRE_DISTRIBUTED_LOGIN_RATE_LIMIT;
-    if (previous.DISABLE_LOGIN_RATE_LIMIT === undefined) delete process.env.DISABLE_LOGIN_RATE_LIMIT;
-    else process.env.DISABLE_LOGIN_RATE_LIMIT = previous.DISABLE_LOGIN_RATE_LIMIT;
+    setTestEnvValue("NODE_ENV", previous.NODE_ENV);
+    setTestEnvValue("UPSTASH_REDIS_REST_URL", previous.UPSTASH_REDIS_REST_URL);
+    setTestEnvValue("UPSTASH_REDIS_REST_TOKEN", previous.UPSTASH_REDIS_REST_TOKEN);
+    setTestEnvValue("REQUIRE_DISTRIBUTED_LOGIN_RATE_LIMIT", previous.REQUIRE_DISTRIBUTED_LOGIN_RATE_LIMIT);
+    setTestEnvValue("DISABLE_LOGIN_RATE_LIMIT", previous.DISABLE_LOGIN_RATE_LIMIT);
     resetLoginRateLimitMemoryForTests();
   }
 }

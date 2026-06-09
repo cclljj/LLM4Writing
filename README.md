@@ -201,7 +201,8 @@ Prompt 來源檔案：[`src/config/system-prompt-config.json`](./src/config/syst
 ## Quality Gates
 
 ```bash
-npm test          # Node unit tests（96 tests）
+npm run typecheck # TypeScript no-emit validation
+npm test          # Node unit tests（140 tests）
 npm run test:e2e  # Playwright E2E
 npm run build     # Next.js build validation
 ```
@@ -226,7 +227,7 @@ CI（`.github/workflows/vercel-deploy.yml`）先通過 quality gate 再進行 Ve
 
 1. 先開 issue（Traditional Chinese 標題），再實作
 2. 功能變更需檢查並同步更新 `docs/SPEC.md` 與 `docs/openspec/`
-3. Commit 前須通過 `npx tsc --noEmit` 與 `npm test`
+3. Commit 前須通過 `npm run typecheck` 與 `npm test`
 4. 確認完工後再 close issue，留下紀錄
 
 ---

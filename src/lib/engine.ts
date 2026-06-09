@@ -534,10 +534,6 @@ function getStep12QuestionRiskReasons(text: string): string[] {
   return Array.from(new Set(reasons));
 }
 
-function isStep12QuestionQualityRisk(text: string): boolean {
-  return getStep12QuestionRiskReasons(text).length > 0;
-}
-
 function getRandomQuestionFromBank(session: SessionState, key: string): string | undefined {
   const bank = session.promptConfig.questionBanks?.[key] ?? [];
   const candidates = bank.map((item) => item.trim()).filter((item) => item.length > 0);

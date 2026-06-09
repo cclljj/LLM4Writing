@@ -39,7 +39,7 @@ PR 內必須包含：
 
 - 關聯 Issue（`Closes #<id>` 或 `Refs #<id>`）
 - `docs/SPEC.md` 檢查結論（更新 / 不更新 + 理由）
-- 驗證方式（至少 `npm run build` 或等效檢查）
+- 驗證方式（至少 `npm run typecheck` 與 `npm run build` 或等效檢查）
 
 ## 5. 分支與推送規範
 

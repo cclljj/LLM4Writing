@@ -1,22 +1,16 @@
+import type { SessionState } from "@/src/lib/types";
+
 export const STUDENT_SESSION_FAST_POLL_MS = 5000;
 export const STUDENT_SESSION_MAX_POLL_MS = 30000;
 
-type StudentPollingSession = {
-  id: string;
-  currentStep: number;
-  personalSteps?: Record<string, number>;
-  groupGate?: Record<string, string[]>;
-  messages?: Array<{ at?: string | null }>;
-  outlines?: Record<string, string>;
-  step3SubmittedOutlines?: Record<string, string>;
-  draftStep6?: Record<string, string>;
-  draftStep8?: Record<string, string>;
-  reports?: {
-    step5?: Record<string, string>;
-    step7?: Record<string, string>;
-    step10?: Record<string, string>;
+type StudentPollingSession = Pick<SessionState, "id" | "currentStep"> &
+  Partial<Pick<
+    SessionState,
+    "personalSteps" | "groupGate" | "outlines" | "step3SubmittedOutlines" | "draftStep6" | "draftStep8"
+  >> & {
+    messages?: Array<Pick<SessionState["messages"][number], "at">>;
+    reports?: Partial<SessionState["reports"]>;
   };
-};
 
 function stableStringArrayRecordSignature(record?: Record<string, string[]>): string {
   if (!record) return "";

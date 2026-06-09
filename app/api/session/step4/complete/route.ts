@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { recordArtifactUpdateSignal } from "@/src/lib/learning-diagnostics";
 import { saveSession } from "@/src/lib/store";
-import { requireStudentInSession, validateTextInput } from "@/src/lib/api-helpers";
+import { requireStudentInSession } from "@/src/lib/api-helpers";
 
 export async function POST(request: NextRequest) {
   const body = (await request.json()) as { sessionId?: string; outline?: string };

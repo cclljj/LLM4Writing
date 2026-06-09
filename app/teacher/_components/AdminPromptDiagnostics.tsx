@@ -326,8 +326,10 @@ export default function AdminPromptDiagnostics() {
   useEffect(() => {
     if (!data) return;
     if (!selectedCourseKey || !data.courseKpis.some((course) => course.key === selectedCourseKey)) {
-      setSelectedCourseKey(data.courseKpis[0]?.key ?? "");
-      setSelectedStepKey("");
+      deferStateUpdate(() => {
+        setSelectedCourseKey(data.courseKpis[0]?.key ?? "");
+        setSelectedStepKey("");
+      });
     }
   }, [data, selectedCourseKey]);
 
