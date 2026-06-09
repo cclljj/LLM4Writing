@@ -14,17 +14,7 @@ import {
   LoginRateLimitDependencyError,
   recordLoginFailure
 } from "@/src/lib/login-rate-limit";
-
-function safeErrorDetail(error: unknown): string {
-  if (!error) return "unknown";
-  if (error instanceof Error) {
-    const msg = error.message || "error";
-    // Avoid leaking URLs/secrets in error messages.
-    return msg.replace(/postgres:\/\/[^\\s]+/gi, "postgres://[redacted]").slice(0, 180);
-  }
-  if (typeof error === "string") return error.slice(0, 180);
-  return "unknown";
-}
+import { clientSafeErrorDetail } from "@/src/lib/error-redaction";
 
 export async function POST(request: NextRequest) {
   try {
@@ -95,10 +85,16 @@ export async function POST(request: NextRequest) {
         { status: 503 }
       );
     }
+    console.error("auth login service unavailable", {
+      detail: clientSafeErrorDetail(error, { isProduction: false, genericProductionDetail: "auth_service_unavailable" })
+    });
     return NextResponse.json(
       {
         error: "auth_service_unavailable",
-        detail: safeErrorDetail(error),
+        detail: clientSafeErrorDetail(error, {
+          isProduction: process.env.NODE_ENV === "production",
+          genericProductionDetail: "auth_service_unavailable"
+        }),
         hint:
           "Check DB connectivity (Supabase pooler URL/port). For serverless, prefer Supabase transaction pooler (often :6543) and set SUPABASE_POOL_MODE=transaction."
       },

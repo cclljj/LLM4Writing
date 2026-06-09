@@ -1182,6 +1182,8 @@ Error:
 - `429 { error: "rate_limit_exceeded", retryAfterSeconds: N }`
 - `503 { error: "auth_service_unavailable", detail: string, hint: string }`
 
+Production 登入服務錯誤的 `detail` 必須是通用錯誤碼（目前為 `auth_service_unavailable`），不得回傳底層 DB 例外、連線字串、帳號、密碼或 host。Development 可回傳已遮蔽的短錯誤摘要；PostgreSQL URL 必須完整遮蔽為 `postgres://[redacted]`。
+
 登入實作要求：
 
 - 資料表初始化首次失敗不可永久快取失敗狀態；後續請求必須可重試。

@@ -15,6 +15,7 @@ import {
   recordLoginFailure,
   resetLoginRateLimitMemoryForTests
 } from "../src/lib/login-rate-limit";
+import { clientSafeErrorDetail, redactConnectionStrings, safeErrorDetail } from "../src/lib/error-redaction";
 
 // ---------------------------------------------------------------------------
 // Inline the rate limit logic so we can test it without spinning up the server.
@@ -239,6 +240,41 @@ test("source-guard: env example documents distributed login lockout mode", async
   assert.ok(src.includes("REQUIRE_DISTRIBUTED_LOGIN_RATE_LIMIT"), "env example should document strict distributed login lockout mode");
 });
 
+test("error redaction: postgres connection strings are fully redacted", () => {
+  const raw = "connect failed postgres://postgres:supersecret@db.host:6543/postgres timeout";
+  const redacted = redactConnectionStrings(raw);
+
+  assert.equal(redacted, "connect failed postgres://[redacted] timeout");
+  assert.equal(redacted.includes("supersecret"), false);
+  assert.equal(redacted.includes("postgres:supersecret@db.host"), false);
+});
+
+test("error redaction: safe error detail redacts string and Error messages", () => {
+  const raw = "connect failed postgres://postgres:supersecret@db.host:6543/postgres timeout";
+
+  assert.equal(safeErrorDetail(raw), "connect failed postgres://[redacted] timeout");
+  assert.equal(safeErrorDetail(new Error(raw)), "connect failed postgres://[redacted] timeout");
+});
+
+test("login route: production service failure detail is generic", async () => {
+  const detail = clientSafeErrorDetail(
+    new Error("connect failed postgres://postgres:supersecret@db.host:6543/postgres timeout"),
+    { isProduction: true, genericProductionDetail: "auth_service_unavailable" }
+  );
+
+  assert.equal(detail, "auth_service_unavailable");
+  assert.equal(detail.includes("supersecret"), false);
+  assert.equal(detail.includes("postgres://postgres"), false);
+
+  const { readFileSync } = await import("node:fs");
+  const { resolve, dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const thisDir = dirname(fileURLToPath(import.meta.url));
+  const loginRoute = readFileSync(resolve(thisDir, "../app/api/auth/login/route.ts"), "utf8");
+  assert.ok(loginRoute.includes("clientSafeErrorDetail"), "login should use the shared safe detail helper");
+  assert.equal(loginRoute.includes("safeErrorDetail(error)"), false, "login should not return raw safeErrorDetail directly");
+});
+
 // ---------------------------------------------------------------------------
 // Cookie attribute tests (#219)
 // ---------------------------------------------------------------------------
@@ -414,7 +450,8 @@ test("health route: production response redacts low-level DB error details", asy
   const healthRoute = readFileSync(resolve(thisDir, "../app/api/health/route.ts"), "utf8");
 
   assert.ok(healthRoute.includes("isProduction"), "health route should branch by environment");
-  assert.ok(healthRoute.includes('detail = isProduction ? "db_unavailable" : safeDbDetail(error);'));
+  assert.ok(healthRoute.includes('detail = isProduction ? "db_unavailable" : safeErrorDetail(error, 220);'));
+  assert.ok(healthRoute.includes("@/src/lib/error-redaction"), "health route should use the shared redaction helper");
 });
 
 test("supabase hardening script: revokes public execute from rls_auto_enable", async () => {

@@ -22,6 +22,13 @@ The system SHALL expose login, logout, current-user, health, and public workflow
 - **WHEN** authentication fails
 - **THEN** the response is HTTP 401 with `invalid_credentials`
 
+#### Scenario: Login service failure secrecy
+
+- **GIVEN** `POST /api/auth/login` encounters a database or auth service failure in production
+- **WHEN** the response is returned to the unauthenticated client
+- **THEN** the response uses HTTP 503 with a generic detail code
+- **AND** the response does not include database credentials, raw PostgreSQL URLs, usernames, passwords, or hostnames from the underlying exception
+
 #### Scenario: Current user absent
 
 - **GIVEN** no valid authenticated session is present

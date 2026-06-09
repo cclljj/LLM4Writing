@@ -1,18 +1,8 @@
 import { NextResponse } from "next/server";
 import { getStorageMode } from "@/src/lib/store";
 import { getDatabaseUrl, isDatabaseEnabled } from "@/src/lib/db-config";
+import { safeErrorDetail } from "@/src/lib/error-redaction";
 import postgres from "postgres";
-
-function safeDbDetail(error: unknown): string {
-  if (!error) return "unknown";
-  if (error instanceof Error) {
-    return (error.message || "error")
-      .replace(/postgres:\/\/[^\\s]+/gi, "postgres://[redacted]")
-      .slice(0, 220);
-  }
-  if (typeof error === "string") return error.slice(0, 220);
-  return "unknown";
-}
 
 export async function GET() {
   const isProduction = process.env.NODE_ENV === "production";
@@ -30,7 +20,7 @@ export async function GET() {
       }
     } catch (error) {
       ok = false;
-      detail = isProduction ? "db_unavailable" : safeDbDetail(error);
+      detail = isProduction ? "db_unavailable" : safeErrorDetail(error, 220);
     }
   }
   return NextResponse.json({
