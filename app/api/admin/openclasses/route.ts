@@ -7,7 +7,7 @@ import {
   upsertOpenClass
 } from "@/src/lib/activity-store";
 import { getUserStore, getUsersVisibleToTeacherStore, listUsersStore } from "@/src/lib/user-store";
-import { listSessions } from "@/src/lib/store";
+import { listActivityIdsWithStudentMessages } from "@/src/lib/store";
 import { recordAuditLog } from "@/src/lib/audit-log-store";
 
 /**
@@ -16,16 +16,7 @@ import { recordAuditLog } from "@/src/lib/audit-log-store";
  * can decide whether to show the delete button.
  */
 async function computeActivityIdsWithStudentActivity(): Promise<Set<string>> {
-  const sessions = await listSessions().catch(() => []);
-  const ids = new Set<string>();
-  for (const s of sessions) {
-    if (!s.activityId) continue;
-    if (ids.has(s.activityId)) continue;
-    if (s.messages.some((m) => m.role === "student")) {
-      ids.add(s.activityId);
-    }
-  }
-  return ids;
+  return listActivityIdsWithStudentMessages().catch(() => new Set<string>());
 }
 
 export async function GET() {

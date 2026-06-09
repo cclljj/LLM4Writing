@@ -1251,6 +1251,8 @@ Request:
 { "activityId": "oc-001" }
 ```
 
+- 查找既有小組 session 時，必須以 `activityId + workflow` 在 DB 層過濾（例如 `listSessionsByActivityId(activityId, { workflow: "spec10" })`），不得先無上限載入全部 sessions 再過濾。
+
 行為：
 
 - 找 activity 與自己所在 group。
@@ -1515,11 +1517,18 @@ Request:
 - 支援 `?activityId=...`，僅回傳指定課程的 sessions（學習管理「查看狀態」模式使用）。
 - Postgres 啟用且帶入 `activityId` 時，需使用 `llm4writing_sessions.activity_id` / `workflow` summary columns 在 DB 層完成 `WHERE activity_id = $1 ORDER BY updated_at DESC LIMIT/OFFSET`，不得先讀全表再分頁。
 - Postgres 啟用且帶入 `activityId` 的 monitor 列表路徑需走 summary-first query（例如 `listMonitorSessionSummariesByActivityId`），以 summary columns 與必要 JSON 小欄位為主；為相容 legacy JSON-string payload，可讀 raw payload 作為缺漏欄位 fallback，但不得載入完整 messages/artifacts。
+- 未帶 `activityId` 的全域 monitor fallback 必須有明確 session 掃描上限，不得無上限呼叫 `listSessions()`。
 - 回傳前必須依活動目前分組再次過濾 session；同 `activityId` 但小組成員不符合目前分組者不得回傳。
 - 回應：`{ sessions: [...], total: N, limit: N, offset: N }`。
 - 摘要包含 `messageCount`、`lastMessageAt`、`studentMessageStats`、`stepReadyHints`、`artifactDiagnostics`。
 - 摘要中的 `groupGate` 是 Step3/Step4 教師推進按鈕的即時 readiness 依據；前端輪詢 hash 必須把各 gate 的完成者名單納入，確保同一 gate key 下新增完成者也會重置輪詢退避與重新計算可推進狀態。
 - 摘要模式需相容 legacy session payload：若 `payload` 為 JSON string 或 summary JSON 欄位缺漏，仍需解析 raw payload，並可從 `llm4writing_session_participants` split table 回補 `participants/joinedUsers`，避免教師端 Step3 gate 判定因空成員清單而無法顯示推進按鈕。
+
+#### Activity-scoped session 查詢
+
+- `research-export`、`course-diagnostics`、`student/join` 等已知 `activityId` 的路由必須使用 DB 層 activity-scoped 查詢（例如 `listSessionsByActivityId`），再依目前分組/權限做應用層安全過濾。
+- 課程刪除保護與 open class 列表若只需要判斷「是否已有學生訊息」，必須使用存在性/摘要查詢（例如 `hasStudentActivityByActivityId`、`listActivityIdsWithStudentMessages`），不得載入完整 messages/artifacts/reports。
+- 全域 admin diagnostics 若需要 session fallback 估算，必須使用明確上限的最近 sessions 查詢；優先使用 persisted learning/LLM events 作為 metrics 來源。
 - 完整小組詳情使用 `?sessionId=...&detail=full`；學習管理「查看狀態」模式應同時帶入 `activityId`，避免跨課程 session 被載入。
 - detail 模式才回傳完整 `messages`、`outlines`、`step3SubmittedOutlines`。
 - 未帶 `activityId` 的全域查詢可保留相容路徑；正式監控頁應一律帶入目前選定課程 `activityId`。

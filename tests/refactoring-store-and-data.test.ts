@@ -6,8 +6,11 @@ import {
   deleteSessionsByActivityId,
   getSession,
   getStorageMode,
+  hasStudentActivityByActivityId,
+  listActivityIdsWithStudentMessages,
   listMonitorSessionSummariesByActivityId,
   listSessions,
+  listSessionsByActivityId,
   listSessionsByParticipant,
   recordLearningEvent,
   listLearningEventsSince,
@@ -98,6 +101,39 @@ test("store behavior: participant query includes the student session", async () 
   await deleteSessionsByActivityId(activityId);
 });
 
+test("store behavior: activity query returns only scoped sessions", async () => {
+  const activityId = `oc-activity-scope-${Date.now()}`;
+  const otherActivityId = `${activityId}-other`;
+  const sid1 = `t-activity-scope-1-${Math.random()}`;
+  const sid2 = `t-activity-scope-2-${Math.random()}`;
+  const sidOther = `t-activity-scope-other-${Math.random()}`;
+
+  await saveSession(makeSession(sid1, {
+    activityId,
+    messages: [{ id: "m-activity-1", role: "student", userId: "s1", step: 1, text: "one", at: new Date().toISOString() }]
+  }));
+  await saveSession(makeSession(sid2, {
+    activityId,
+    messages: [{ id: "m-activity-2", role: "ai", step: 1, text: "two", at: new Date().toISOString() }]
+  }));
+  await saveSession(makeSession(sidOther, {
+    activityId: otherActivityId,
+    messages: [{ id: "m-other", role: "student", userId: "s1", step: 1, text: "other", at: new Date().toISOString() }]
+  }));
+
+  const scoped = await listSessionsByActivityId(activityId, { workflow: "spec10" });
+  assert.ok(scoped.some((session) => session.id === sid1));
+  assert.ok(scoped.some((session) => session.id === sid2));
+  assert.equal(scoped.some((session) => session.id === sidOther), false);
+  assert.equal(await hasStudentActivityByActivityId(activityId), true);
+  const idsWithStudentMessages = await listActivityIdsWithStudentMessages();
+  assert.equal(idsWithStudentMessages.has(activityId), true);
+  assert.equal(idsWithStudentMessages.has(otherActivityId), true);
+
+  await deleteSessionsByActivityId(activityId);
+  await deleteSessionsByActivityId(otherActivityId);
+});
+
 test("store behavior: monitor summaries are activity-scoped and paginated", async () => {
   const activityId = `oc-monitor-${Date.now()}`;
   const sid1 = `t-monitor-1-${Math.random()}`;
@@ -144,4 +180,27 @@ test("source-guard: store keeps optimistic-lock error type", async () => {
   const thisDir = dirname(fileURLToPath(import.meta.url));
   const src = readFileSync(resolve(thisDir, "../src/lib/store.ts"), "utf8");
   assert.ok(src.includes("SessionVersionConflictError"));
+});
+
+test("source-guard: activity-scoped routes avoid unbounded listSessions", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { resolve, dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const thisDir = dirname(fileURLToPath(import.meta.url));
+  const files = [
+    "../app/api/teacher/research-export/route.ts",
+    "../app/api/teacher/course-diagnostics/route.ts",
+    "../app/api/student/join/route.ts",
+    "../app/api/admin/activities/route.ts",
+    "../app/api/admin/openclasses/route.ts"
+  ];
+  for (const file of files) {
+    const src = readFileSync(resolve(thisDir, file), "utf8");
+    assert.equal(src.includes("listSessions()"), false, `${file} should not call unbounded listSessions()`);
+  }
+
+  const monitor = readFileSync(resolve(thisDir, "../app/api/teacher/monitor/route.ts"), "utf8");
+  assert.ok(monitor.includes("listSessions({ limit: GLOBAL_MONITOR_SESSION_SCAN_LIMIT"));
+  const diagnostics = readFileSync(resolve(thisDir, "../app/api/admin/diagnostics/route.ts"), "utf8");
+  assert.ok(diagnostics.includes("listSessions({ limit: DIAGNOSTICS_SESSION_SCAN_LIMIT"));
 });

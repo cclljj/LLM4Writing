@@ -23,6 +23,7 @@ type DiagnosticsCacheEntry = {
 
 const DIAGNOSTICS_CACHE_KEY = "__llm4writing_admin_diagnostics_cache__";
 const DIAGNOSTICS_CACHE_TTL_MS = 60_000;
+const DIAGNOSTICS_SESSION_SCAN_LIMIT = 1000;
 const WINDOW_MS: Record<DiagnosticsWindow, number> = {
   "2h": 2 * 60 * 60 * 1000,
   "24h": 24 * 60 * 60 * 1000,
@@ -1241,7 +1242,7 @@ async function buildDiagnosticsPayload(selectedWindow: DiagnosticsWindow, nowMs:
   const cutoffMs = nowMs - WINDOW_MS[selectedWindow];
   const cutoffIso = new Date(cutoffMs).toISOString();
   const [sessions, llmEvents, learningEvents] = await Promise.all([
-    listSessions(),
+    listSessions({ limit: DIAGNOSTICS_SESSION_SCAN_LIMIT, offset: 0 }),
     listLlmEventsSince(cutoffIso),
     listLearningEventsSince(cutoffIso)
   ]);

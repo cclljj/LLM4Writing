@@ -8,7 +8,7 @@ import {
   hydrateDomainState
 } from "@/src/lib/activity-store";
 import { getUsersVisibleToTeacherStore, listUsersStore } from "@/src/lib/user-store";
-import { deleteSessionsByActivityId, listSessions } from "@/src/lib/store";
+import { deleteSessionsByActivityId, hasStudentActivityByActivityId } from "@/src/lib/store";
 import { recordAuditLog } from "@/src/lib/audit-log-store";
 
 export async function GET() {
@@ -81,10 +81,7 @@ export async function DELETE(request: Request) {
     if (!isExplicitOwner && !inTeacherScope) {
       return NextResponse.json({ error: "not_owner" }, { status: 403 });
     }
-    const sessions = await listSessions().catch(() => []);
-    const hasActivity = sessions.some(
-      (s) => s.activityId === activityId && s.messages.some((m) => m.role === "student")
-    );
+    const hasActivity = await hasStudentActivityByActivityId(activityId).catch(() => false);
     if (hasActivity) {
       return NextResponse.json({ error: "task_has_student_activity" }, { status: 409 });
     }

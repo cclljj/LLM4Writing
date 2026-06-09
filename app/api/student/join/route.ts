@@ -4,7 +4,7 @@ import { createSession } from "@/src/lib/engine";
 import { hydrateDomainState } from "@/src/lib/activity-store";
 import { loadActivityWithConfig } from "@/src/lib/prompt-config";
 import { resolveStructureTreeTemplate } from "@/src/lib/genre-resolver";
-import { listSessions, saveSession } from "@/src/lib/store";
+import { listSessionsByActivityId, saveSession } from "@/src/lib/store";
 import { markUserOnline } from "@/src/lib/session-presence";
 import { listUsersStore } from "@/src/lib/user-store";
 
@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "not_group_member" }, { status: 403 });
     }
 
-    const sessions = await listSessions();
+    const sessions = await listSessionsByActivityId(activity.id, { workflow: "spec10" });
     const allUsers = await listUsersStore();
     const userNameMap = new Map(allUsers.map((account) => [account.username, account.name?.trim() || account.username]));
     const toSessionResponse = <T extends { participants: string[] }>(payload: T) => ({
@@ -88,7 +88,7 @@ export async function POST(request: NextRequest) {
       }, {} as Record<string, string>)
     });
     const existing = sessions.find(
-      (s) => s.workflow === "spec10" && s.activityId === activity.id && s.participants.includes(user.username)
+      (s) => s.participants.includes(user.username)
     );
     if (existing) {
       if (!existing.outlines || typeof existing.outlines !== "object") {

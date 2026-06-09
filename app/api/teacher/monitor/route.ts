@@ -8,6 +8,8 @@ import { isSessionInActivityGroupScope } from "@/src/lib/monitor-session-scope";
 import { ChatMessage, SessionState } from "@/src/lib/types";
 import type { MonitorSessionSummary } from "@/src/lib/store";
 
+const GLOBAL_MONITOR_SESSION_SCAN_LIMIT = 500;
+
 function normalizeText(text: string): string {
   return text.replace(/\r\n/g, "\n").trim();
 }
@@ -201,7 +203,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ sessions: visibleSessions, total, limit, offset });
   }
 
-  const sessions = await listSessions();
+  const sessions = await listSessions({ limit: GLOBAL_MONITOR_SESSION_SCAN_LIMIT, offset: 0 });
   const scopedSessions = sessions
     .filter((s) => s.workflow === "spec10" && Boolean(s.activityId) && visibleActivityIds.has(s.activityId!))
     .filter((s) => {

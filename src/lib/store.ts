@@ -1145,6 +1145,69 @@ export async function listSessions(opts?: { limit?: number; offset?: number }): 
     .filter((item): item is SessionState => Boolean(item));
 }
 
+export async function listSessionsByActivityId(
+  activityId: string,
+  opts?: { workflow?: string; limit?: number; offset?: number }
+): Promise<SessionState[]> {
+  const trimmedActivityId = activityId.trim();
+  if (!trimmedActivityId) return [];
+  const workflow = opts?.workflow?.trim();
+  const limit = typeof opts?.limit === "number" && opts.limit > 0 ? opts.limit : undefined;
+  const offset = typeof opts?.offset === "number" && opts.offset >= 0 ? opts.offset : 0;
+
+  if (!isDatabaseEnabled()) {
+    return Array.from(getMemoryStore().values())
+      .filter((session) => session.activityId === trimmedActivityId)
+      .filter((session) => (workflow ? session.workflow === workflow : true))
+      .sort((a, b) => {
+        const aLast = memoryUpdatedAt.get(a.id) ?? a.messages.at(-1)?.at ?? a.createdAt;
+        const bLast = memoryUpdatedAt.get(b.id) ?? b.messages.at(-1)?.at ?? b.createdAt;
+        return bLast.localeCompare(aLast);
+      })
+      .slice(offset, limit !== undefined ? offset + limit : undefined)
+      .map((session) =>
+        attachSessionStoreMeta(
+          session,
+          memoryVersion.get(session.id) ?? 1,
+          memoryUpdatedAt.get(session.id) ?? session.createdAt
+        )
+      );
+  }
+
+  await ensureSessionTable();
+  const sql = getSqlClient();
+  const rows =
+    limit !== undefined
+      ? await sql<{ id: string; payload: unknown; updated_at: Date; version: number }[]>`
+          SELECT id, payload, updated_at, version
+          FROM llm4writing_sessions
+          WHERE COALESCE(activity_id, payload->>'activityId') = ${trimmedActivityId}
+            AND (${workflow ?? null}::text IS NULL OR COALESCE(workflow, payload->>'workflow') = ${workflow ?? null})
+          ORDER BY updated_at DESC
+          LIMIT ${limit} OFFSET ${offset}
+        `
+      : await sql<{ id: string; payload: unknown; updated_at: Date; version: number }[]>`
+          SELECT id, payload, updated_at, version
+          FROM llm4writing_sessions
+          WHERE COALESCE(activity_id, payload->>'activityId') = ${trimmedActivityId}
+            AND (${workflow ?? null}::text IS NULL OR COALESCE(workflow, payload->>'workflow') = ${workflow ?? null})
+          ORDER BY updated_at DESC
+          OFFSET ${offset}
+        `;
+
+  const sessionIds = rows.map((row) => row.id);
+  const partsById = await fetchSessionPartsByIds(sql, sessionIds);
+  return rows
+    .map((row) => {
+      const core = normalizeSessionPayload(row.payload);
+      if (!core) return undefined;
+      const mergedParts = mergeLegacyPayloadParts(core, partsById[row.id] ?? defaultSessionParts());
+      const rebuilt = mergeSessionParts(buildSessionCorePayload(core) as SessionCorePayload, mergedParts);
+      return attachSessionStoreMeta(rebuilt, row.version ?? 1, row.updated_at.toISOString());
+    })
+    .filter((item): item is SessionState => Boolean(item));
+}
+
 export async function listMonitorSessionsByActivityId(
   activityId: string,
   opts?: { limit?: number; offset?: number }
@@ -1444,6 +1507,79 @@ export async function countSessions(): Promise<number> {
   const sql = getSqlClient();
   const rows = await sql<{ count: string }[]>`SELECT COUNT(*)::text AS count FROM llm4writing_sessions`;
   return parseInt(rows[0]?.count ?? "0", 10);
+}
+
+export async function hasStudentActivityByActivityId(activityId: string): Promise<boolean> {
+  const trimmedActivityId = activityId.trim();
+  if (!trimmedActivityId) return false;
+
+  if (!isDatabaseEnabled()) {
+    return Array.from(getMemoryStore().values()).some(
+      (session) => session.activityId === trimmedActivityId && session.messages.some((message) => message.role === "student")
+    );
+  }
+
+  await ensureSessionTable();
+  const sql = getSqlClient();
+  const rows = await sql<{ exists: boolean }[]>`
+    SELECT EXISTS (
+      SELECT 1
+      FROM llm4writing_sessions s
+      WHERE COALESCE(s.activity_id, s.payload->>'activityId') = ${trimmedActivityId}
+        AND (
+          EXISTS (
+            SELECT 1
+            FROM llm4writing_session_messages m
+            WHERE m.session_id = s.id
+              AND m.role = 'student'
+            LIMIT 1
+          )
+          OR EXISTS (
+            SELECT 1
+            FROM jsonb_array_elements(COALESCE(s.payload->'messages', '[]'::jsonb)) AS msg
+            WHERE msg->>'role' = 'student'
+            LIMIT 1
+          )
+        )
+      LIMIT 1
+    ) AS exists
+  `;
+  return Boolean(rows[0]?.exists);
+}
+
+export async function listActivityIdsWithStudentMessages(): Promise<Set<string>> {
+  if (!isDatabaseEnabled()) {
+    const ids = new Set<string>();
+    for (const session of getMemoryStore().values()) {
+      if (!session.activityId || ids.has(session.activityId)) continue;
+      if (session.messages.some((message) => message.role === "student")) ids.add(session.activityId);
+    }
+    return ids;
+  }
+
+  await ensureSessionTable();
+  const sql = getSqlClient();
+  const rows = await sql<{ activity_id: string }[]>`
+    SELECT DISTINCT COALESCE(s.activity_id, s.payload->>'activityId') AS activity_id
+    FROM llm4writing_sessions s
+    WHERE COALESCE(s.activity_id, s.payload->>'activityId') IS NOT NULL
+      AND (
+        EXISTS (
+          SELECT 1
+          FROM llm4writing_session_messages m
+          WHERE m.session_id = s.id
+            AND m.role = 'student'
+          LIMIT 1
+        )
+        OR EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements(COALESCE(s.payload->'messages', '[]'::jsonb)) AS msg
+          WHERE msg->>'role' = 'student'
+          LIMIT 1
+        )
+      )
+  `;
+  return new Set(rows.map((row) => row.activity_id).filter(Boolean));
 }
 
 export async function deleteSessionsByActivityId(activityId: string): Promise<number> {

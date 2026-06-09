@@ -4,7 +4,7 @@ import { getAllActivities, hydrateDomainState } from "@/src/lib/activity-store";
 import { recordAuditLog } from "@/src/lib/audit-log-store";
 import { isSessionInActivityGroupScope } from "@/src/lib/monitor-session-scope";
 import { buildResearchStudentInputExport, parseResearchExportIdentityMode } from "@/src/lib/research-export";
-import { listSessions } from "@/src/lib/store";
+import { listSessionsByActivityId } from "@/src/lib/store";
 import { getUsersVisibleToTeacherStore, listUsersStore } from "@/src/lib/user-store";
 
 function safeFilePart(value: string): string {
@@ -37,8 +37,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "course_not_ended" }, { status: 409 });
   }
 
-  const sessions = (await listSessions())
-    .filter((session) => session.workflow === "spec10" && session.activityId === activityId)
+  const sessions = (await listSessionsByActivityId(activityId, { workflow: "spec10" }))
     .filter((session) => isSessionInActivityGroupScope(session, activity));
   const payload = buildResearchStudentInputExport({ activity, sessions, identityMode });
 

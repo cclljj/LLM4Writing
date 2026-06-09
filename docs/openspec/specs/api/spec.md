@@ -42,6 +42,13 @@ The system SHALL expose login, logout, current-user, health, and public workflow
 - **THEN** the response does not include database credentials or other secrets
 - **AND** in production failure mode, `db.detail` is a generic code instead of low-level database error text
 
+#### Scenario: Activity-scoped session query efficiency
+
+- **GIVEN** an API route operates on a known `activityId`
+- **WHEN** it needs session data for research export, course diagnostics, student join, or monitor activity views
+- **THEN** it filters sessions by activity at the storage query layer before building full session payloads
+- **AND** routes that only need student-activity existence use an existence or summary query instead of loading full messages, artifacts, and reports
+
 ### Requirement: Student Activity APIs
 
 The system SHALL expose student course discovery, joining, and history APIs scoped to the authenticated student.
