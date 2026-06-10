@@ -26,6 +26,7 @@ The system SHALL implement the `spec10` writing workflow as ten ordered steps wi
 
 The system SHALL require all Step1/2 gate members to answer the current gate before AI feedback and the next question are produced.
 Gate members are resolved from joined members first and fall back to assigned participants when joined-member data is unavailable.
+Students marked as `本次不列入等待` for the current session SHALL be excluded from gate membership without deleting or blocking their input.
 
 #### Scenario: First student answers
 
@@ -81,6 +82,14 @@ Gate members are resolved from joined members first and fall back to assigned pa
 - **GIVEN** assigned participants include users who have not joined the session yet
 - **WHEN** Step1/2 gate completion is evaluated
 - **THEN** the system checks completion against joined members first and does not block waiting for absent non-joined users
+
+#### Scenario: Session waiting exclusion
+
+- **GIVEN** a teacher marks one joined student as `本次不列入等待`
+- **WHEN** Step1/2 gate completion is evaluated
+- **THEN** that student is not required for the current gate
+- **AND** any messages already submitted by that student remain in session history
+- **AND** if every participant is excluded, the gate is not auto-completed
 
 #### Scenario: Joined-member list stays append-only during Step1/2
 
@@ -178,6 +187,13 @@ The system SHALL provide an editable personal structure tree in Step3 based on t
 - **WHEN** third-level or deeper default nodes are still unchanged from the template
 - **THEN** the server rejects completion and the UI asks the student to finish editing those nodes
 
+#### Scenario: Step3 waiting exclusion creates makeup outline only when needed
+
+- **GIVEN** a teacher marks a Step3 student as `本次不列入等待`
+- **WHEN** the student has not submitted a Step3 outline
+- **THEN** the system records `需補個人結構圖`
+- **AND** it does not write `groupGate["3-complete"]`
+
 ### Requirement: Step4 Compare And Revise
 
 The system SHALL let students compare group outlines, revise their own outline, discuss, and then lock their Step4 completion.
@@ -190,9 +206,16 @@ The system SHALL let students compare group outlines, revise their own outline, 
 
 #### Scenario: Teacher readiness
 
-- **GIVEN** all participants are listed in `groupGate["4-complete"]`
+- **GIVEN** all current non-excluded gate members are listed in `groupGate["4-complete"]`
 - **WHEN** the teacher monitor evaluates the group
 - **THEN** the group is eligible to move to Step5
+
+#### Scenario: Step4 waiting exclusion creates makeup outline
+
+- **GIVEN** a teacher marks a Step4 student as `本次不列入等待`
+- **WHEN** the session state is saved
+- **THEN** the system records `需補個人結構圖`
+- **AND** it does not write `groupGate["4-complete"]`
 
 #### Scenario: Teacher readiness polling latency
 
@@ -210,6 +233,14 @@ The system SHALL let students compare group outlines, revise their own outline, 
 ### Requirement: Personal Pacing From Step5
 
 The system SHALL use personal pacing from Step5 onward.
+
+#### Scenario: Makeup outline blocks Step6 writing
+
+- **GIVEN** a student reaches personal Step6 with `需補個人結構圖`
+- **WHEN** the student opens Step6 or calls Step6 suggest/complete APIs
+- **THEN** the student must complete a personal structure tree first
+- **AND** the completed makeup outline is stored in `makeupWork.outlineEvents`
+- **AND** completing makeup does not backfill Step3/Step4 group gates
 
 #### Scenario: Individual advancement
 

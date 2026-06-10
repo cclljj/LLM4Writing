@@ -10,6 +10,7 @@ import {
   isSessionInActivityGroupScope,
   isSessionInActivityScope
 } from "@/src/lib/monitor-session-scope";
+import { excludeWaitingMembers, isWaitingExcluded } from "@/src/lib/session-attendance";
 import OutlineSvg from "@/app/_components/OutlineSvg";
 import { renderMessageHtml } from "@/app/student/_components/renderMessageHtml";
 import {
@@ -321,6 +322,14 @@ export default function LearningMonitorTab({
         }
       }
       const userRecord = userMap.get(username);
+      const waitingExcluded = Boolean(latestSession && isWaitingExcluded(latestSession, username));
+      const makeupPending = Boolean(
+        latestSession &&
+        (latestSession.makeupWork?.outlineRequiredUsernames ?? []).includes(username) &&
+        !(latestSession.makeupWork?.outlineCompletedUsernames ?? []).includes(username)
+      );
+      const makeupCompleted = Boolean(latestSession && (latestSession.makeupWork?.outlineCompletedUsernames ?? []).includes(username));
+      const hasActivityWhileExcluded = waitingExcluded && messageCount > 0;
       return {
         username,
         displayName: userRecord?.name?.trim() || username,
@@ -332,6 +341,10 @@ export default function LearningMonitorTab({
             : null,
         groupName: latestSession?.groupName ?? null,
         sessionId: latestSession?.sessionId ?? null,
+        waitingExcluded,
+        makeupPending,
+        makeupCompleted,
+        hasActivityWhileExcluded,
         messageCount,
         lastMessageAt
       };
@@ -930,22 +943,22 @@ export default function LearningMonitorTab({
 
   function resolveStepGateMembers(session: MonitorSession, gateKey: "3-complete" | "4-complete"): string[] {
     const joinedMembers = (session.joinedUsers ?? []).filter((user) => session.participants.includes(user));
-    if (joinedMembers.length > 0) return joinedMembers;
+    if (joinedMembers.length > 0) return excludeWaitingMembers(joinedMembers, session);
 
     const activeFromStats = session.participants.filter((participant) => {
       const stats = session.studentMessageStats?.[participant];
       return (stats?.count ?? 0) > 0;
     });
-    if (activeFromStats.length > 0) return activeFromStats;
+    if (activeFromStats.length > 0) return excludeWaitingMembers(activeFromStats, session);
 
     if (gateKey === "3-complete") {
       const submittedUsers = session.participants.filter((participant) => {
         return hasStep3CompletionEvidence(session, participant);
       });
-      if (submittedUsers.length > 0) return submittedUsers;
+      if (submittedUsers.length > 0) return excludeWaitingMembers(submittedUsers, session);
     }
 
-    return session.participants;
+    return excludeWaitingMembers(session.participants, session);
   }
 
   function hasStep3CompletionEvidence(
@@ -1202,6 +1215,27 @@ export default function LearningMonitorTab({
       await onRefreshData();
       await refreshMonitor(selectedLearningActivityId);
     });
+  }
+
+  async function toggleWaitingExclusion(sessionId: string, username: string, excluded: boolean) {
+    await runLearningAction(
+      `attendance:${sessionId}:${username}`,
+      excluded ? "正在標記本次不列入等待..." : "正在取消本次不列入等待...",
+      async () => {
+        setError("");
+        const response = await fetch("/api/teacher/session-attendance", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId, username, excluded })
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          setError(formatUserError(data.error ?? "session_attendance_failed"));
+          return;
+        }
+        await refreshMonitor(selectedLearningActivityId);
+      }
+    );
   }
 
   async function loadProgress(sessionTarget?: string, username?: string) {
@@ -1581,20 +1615,46 @@ export default function LearningMonitorTab({
                   </tr>
                 </thead>
                 <tbody>
-                  {sortedClassJoinRows.map((row, idx) => {
-                    const progressKey = row.sessionId ? `progress:${row.sessionId}:${row.username}` : "";
-                    const isProgressLoading = learningActionKey === progressKey;
-                    return (
-                    <tr key={row.username}>
-                      <td>{idx + 1}</td>
-                      <td>{row.displayName} ({row.username})</td>
+	                  {sortedClassJoinRows.map((row, idx) => {
+	                    const progressKey = row.sessionId ? `progress:${row.sessionId}:${row.username}` : "";
+	                    const isProgressLoading = learningActionKey === progressKey;
+	                    const attendanceKey = row.sessionId ? `attendance:${row.sessionId}:${row.username}` : "";
+	                    const isAttendanceLoading = learningActionKey === attendanceKey;
+	                    return (
+	                    <tr key={row.username}>
+	                      <td>{idx + 1}</td>
+	                      <td>
+	                        {row.displayName} ({row.username})
+	                        <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 4 }}>
+	                          {row.waitingExcluded ? (
+	                            <span className="badge" style={{ background: "#fef3c7", color: "#92400e" }}>
+	                              本次不列入等待
+	                            </span>
+	                          ) : null}
+	                          {row.makeupPending ? (
+	                            <span className="badge" style={{ background: "#fee2e2", color: "#991b1b" }}>
+	                              需補個人結構圖
+	                            </span>
+	                          ) : null}
+	                          {row.makeupCompleted ? (
+	                            <span className="badge" style={{ background: "#dcfce7", color: "#166534" }}>
+	                              已補個人結構圖
+	                            </span>
+	                          ) : null}
+	                          {row.hasActivityWhileExcluded ? (
+	                            <span className="badge" style={{ background: "#e0f2fe", color: "#075985" }}>
+	                              已請假但有活動
+	                            </span>
+	                          ) : null}
+	                        </div>
+	                      </td>
                       <td>{row.joined ? "已加入" : "未加入"}</td>
                       <td>{row.groupName ?? "—"}</td>
                       <td>{row.stepLabel ? `Step ${row.stepLabel}` : "—"}</td>
                       <td>{row.messageCount}</td>
                       <td>{row.lastMessageAt ? formatTaipeiDateTime(row.lastMessageAt) : "—"}</td>
                       <td>
-                        <button
+	                        <button
                           type="button"
                           className="secondary"
                           style={{ width: "auto" }}
@@ -1610,9 +1670,29 @@ export default function LearningMonitorTab({
                             }, 0);
                           }}
                         >
-                          {isProgressLoading ? "載入中..." : "查看"}
-                        </button>
-                      </td>
+	                          {isProgressLoading ? "載入中..." : "查看"}
+	                        </button>
+	                        {row.sessionId ? (
+	                          <button
+	                            type="button"
+	                            className="secondary"
+	                            style={{ width: "auto", marginLeft: 6 }}
+	                            disabled={isAttendanceLoading}
+	                            title={
+	                              row.waitingExcluded
+	                                ? "取消後，學生會重新納入目前小組等待判定；補做需求不會自動取消。"
+	                                : "只影響本 session 的小組等待判定，不代表正式出缺席。若在 Step3/4 標記，學生可能需要補個人結構圖。"
+	                            }
+	                            onClick={() => toggleWaitingExclusion(row.sessionId!, row.username, !row.waitingExcluded)}
+	                          >
+	                            {isAttendanceLoading
+	                              ? "處理中..."
+	                              : row.waitingExcluded
+	                                ? "取消不列入等待"
+	                                : "本次不列入等待"}
+	                          </button>
+	                        ) : null}
+	                      </td>
                     </tr>
                     );
                   })}

@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/src/lib/auth-server";
 import { recordArtifactUpdateSignal } from "@/src/lib/learning-diagnostics";
 import { getSession, saveSession } from "@/src/lib/store";
 import { markUserOnline } from "@/src/lib/session-presence";
+import { isMakeupOutlinePending } from "@/src/lib/session-attendance";
 
 export async function POST(request: NextRequest) {
   const user = await getCurrentUser();
@@ -36,7 +37,8 @@ export async function POST(request: NextRequest) {
   if (body.type === "outline") {
     const completedUsers = new Set(session.groupGate?.["3-complete"] ?? []);
     const reopenedUsers = new Set(session.groupGate?.["3-reopen"] ?? []);
-    if (completedUsers.has(user.username) && !reopenedUsers.has(user.username)) {
+    const canEditForMakeup = isMakeupOutlinePending(session, user.username);
+    if (completedUsers.has(user.username) && !reopenedUsers.has(user.username) && !canEditForMakeup) {
       return NextResponse.json({ error: "step3_outline_locked_after_completion" }, { status: 409 });
     }
     session.outlines[user.username] = body.content;

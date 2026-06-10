@@ -98,6 +98,40 @@ export interface Step12RoundState {
   completedGateKeys?: string[];
 }
 
+export type WaitingExclusionEvent = {
+  username: string;
+  excluded: boolean;
+  step: number;
+  substepKey?: string;
+  at: string;
+  by: string;
+};
+
+export type MakeupOutlineReason = "absent_step3" | "absent_step4" | "teacher_assigned";
+
+export type MakeupOutlineEvent = {
+  username: string;
+  reason: MakeupOutlineReason;
+  stepContext: number;
+  createdAt: string;
+  text: string;
+};
+
+export type SessionAttendanceOverrides = {
+  waitingExcludedUsernames: string[];
+  updatedAt?: string;
+  updatedBy?: string;
+  events?: WaitingExclusionEvent[];
+};
+
+export type SessionMakeupWork = {
+  outlineRequiredUsernames: string[];
+  outlineCompletedUsernames: string[];
+  outlineCompletedAt?: Record<string, string>;
+  outlineReasons?: Record<string, MakeupOutlineReason[]>;
+  outlineEvents?: MakeupOutlineEvent[];
+};
+
 export interface SessionState {
   id: string;
   createdAt: string;
@@ -112,6 +146,8 @@ export interface SessionState {
   step12RoundLogs?: Step12RoundLog[];
   step12FallbackDebugTraces?: Step12FallbackDebugTrace[];
   step12RoundState?: Step12RoundState;
+  attendanceOverrides?: SessionAttendanceOverrides;
+  makeupWork?: SessionMakeupWork;
   groupGate: Record<string, string[]>;
   reflectionIndex: Record<string, number>;
   workflow: SessionWorkflow;

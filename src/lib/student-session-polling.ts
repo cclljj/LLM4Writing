@@ -6,7 +6,14 @@ export const STUDENT_SESSION_MAX_POLL_MS = 30000;
 type StudentPollingSession = Pick<SessionState, "id" | "currentStep"> &
   Partial<Pick<
     SessionState,
-    "personalSteps" | "groupGate" | "outlines" | "step3SubmittedOutlines" | "draftStep6" | "draftStep8"
+    | "personalSteps"
+    | "groupGate"
+    | "outlines"
+    | "step3SubmittedOutlines"
+    | "draftStep6"
+    | "draftStep8"
+    | "attendanceOverrides"
+    | "makeupWork"
   >> & {
     messages?: Array<Pick<SessionState["messages"][number], "at">>;
     reports?: Partial<SessionState["reports"]>;
@@ -52,6 +59,16 @@ export function computeStudentSessionPayloadHash(session: StudentPollingSession,
     textLengthSignature(session.draftStep6, username),
     textLengthSignature(session.draftStep8, username)
   ].join(",");
+  const attendanceSignature = [
+    [...(session.attendanceOverrides?.waitingExcludedUsernames ?? [])].sort().join(","),
+    session.attendanceOverrides?.updatedAt ?? ""
+  ].join(",");
+  const makeupSignature = [
+    (session.makeupWork?.outlineRequiredUsernames ?? []).includes(username) ? "required" : "",
+    (session.makeupWork?.outlineCompletedUsernames ?? []).includes(username) ? "completed" : "",
+    session.makeupWork?.outlineCompletedAt?.[username] ?? "",
+    (session.makeupWork?.outlineReasons?.[username] ?? []).join(",")
+  ].join(",");
   return [
     session.id,
     session.currentStep,
@@ -61,7 +78,9 @@ export function computeStudentSessionPayloadHash(session: StudentPollingSession,
     groupGate,
     username,
     artifactSignature,
-    reportSignature
+    reportSignature,
+    attendanceSignature,
+    makeupSignature
   ].join(":");
 }
 

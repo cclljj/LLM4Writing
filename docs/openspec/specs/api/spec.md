@@ -122,6 +122,19 @@ The system SHALL expose session read, chat, artifact, and step-specific mutation
 - **WHEN** the type is `outline`, `draft6`, or `draft8`
 - **THEN** the content is saved to that participant's corresponding artifact slot
 
+#### Scenario: Makeup outline completion API
+
+- **GIVEN** a participant has pending `需補個人結構圖`
+- **WHEN** the participant calls `POST /api/session/makeup-outline/complete` with a valid structure tree
+- **THEN** the API stores the outline and appends a `makeupWork.outlineEvents` record
+- **AND** it does not write Step3 or Step4 group gate completion
+
+#### Scenario: Step6 makeup guard
+
+- **GIVEN** a participant has pending `需補個人結構圖`
+- **WHEN** the participant calls Step6 suggest or Step6 complete
+- **THEN** the API rejects the request with `makeup_outline_required`
+
 #### Scenario: Step-specific guard
 
 - **GIVEN** a student calls a step-specific endpoint outside the allowed personal or session step
@@ -178,6 +191,22 @@ The system SHALL expose course control, step switching, monitor, and personal-pr
 - **GIVEN** a teacher or admin calls monitor detail with `sessionId` and `detail=full`
 - **WHEN** the session is in the authorized activity scope
 - **THEN** the API returns full messages, outlines, and Step3 submitted outlines
+
+#### Scenario: Teacher session waiting exclusion
+
+- **GIVEN** a teacher or admin can access a session
+- **WHEN** they call `POST /api/teacher/session-attendance`
+- **THEN** the API updates only the session-level `本次不列入等待` state for the target participant
+- **AND** it records an audit log
+- **AND** Step3/4 marking may create `需補個人結構圖` without changing group membership or account data
+
+#### Scenario: Research export includes makeup outlines
+
+- **GIVEN** a course has ended and contains makeup outline records
+- **WHEN** teacher/admin exports research data
+- **THEN** the JSON schema is `research-student-inputs-v2`
+- **AND** makeup outlines are included as `type="makeup_outline"` records
+- **AND** anonymous mode does not include raw student accounts
 
 #### Scenario: Course control transition
 

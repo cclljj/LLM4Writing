@@ -1,5 +1,5 @@
 import { ArtifactDiagnostics, QualitySignals } from "@/src/lib/learning-diagnostics";
-import { ChatMessage } from "@/src/lib/types";
+import { ChatMessage, SessionAttendanceOverrides, SessionMakeupWork } from "@/src/lib/types";
 
 export type UserRow = { username: string; name: string; school: string; role: string; ownerTeacherUsername?: string; classNumber?: string };
 export type EssayRow = {
@@ -49,6 +49,8 @@ export type MonitorSession = {
   participants: string[];
   joinedUsers?: string[];
   onlineUsers?: string[];
+  attendanceOverrides?: SessionAttendanceOverrides;
+  makeupWork?: SessionMakeupWork;
   currentStep: number;
   currentStepLabel?: string;
   personalSteps?: Record<string, number>;

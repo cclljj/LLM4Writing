@@ -101,6 +101,10 @@ test("student session polling behavior: hash and delay policy are deterministic"
     computeStudentSessionPayloadHash(base, "alice"),
     computeStudentSessionPayloadHash({ ...base, draftStep8: { alice: "draft changed" } }, "alice")
   );
+  assert.notEqual(
+    computeStudentSessionPayloadHash(base, "alice"),
+    computeStudentSessionPayloadHash({ ...base, makeupWork: { outlineRequiredUsernames: ["alice"], outlineCompletedUsernames: [] } }, "alice")
+  );
 
   assert.equal(resolveStudentSessionNextPollDelay({ currentDelayMs: 5000, unchanged: false }), STUDENT_SESSION_FAST_POLL_MS);
   assert.equal(resolveStudentSessionNextPollDelay({ currentDelayMs: 5000, unchanged: true }), 10000);

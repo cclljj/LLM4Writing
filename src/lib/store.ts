@@ -307,6 +307,52 @@ function mergeReports(base: SessionState["reports"], incoming: SessionState["rep
   };
 }
 
+function mergeAttendanceOverrides(
+  base: SessionState["attendanceOverrides"],
+  incoming: SessionState["attendanceOverrides"]
+): SessionState["attendanceOverrides"] {
+  if (!base) return incoming;
+  if (!incoming) return base;
+  const useIncomingList = (incoming.updatedAt ?? "") >= (base.updatedAt ?? "");
+  return {
+    waitingExcludedUsernames: useIncomingList ? incoming.waitingExcludedUsernames : base.waitingExcludedUsernames,
+    updatedAt: useIncomingList ? incoming.updatedAt : base.updatedAt,
+    updatedBy: useIncomingList ? incoming.updatedBy : base.updatedBy,
+    events: [...(base.events ?? []), ...(incoming.events ?? [])]
+      .sort((a, b) => a.at.localeCompare(b.at))
+      .filter((event, index, events) => {
+        const previous = events[index - 1];
+        return !previous || `${previous.at}:${previous.username}:${previous.excluded}` !== `${event.at}:${event.username}:${event.excluded}`;
+      })
+  };
+}
+
+function mergeMakeupWork(base: SessionState["makeupWork"], incoming: SessionState["makeupWork"]): SessionState["makeupWork"] {
+  if (!base) return incoming;
+  if (!incoming) return base;
+  const outlineReasons: NonNullable<SessionState["makeupWork"]>["outlineReasons"] = {};
+  const usernames = new Set<string>([...Object.keys(base.outlineReasons ?? {}), ...Object.keys(incoming.outlineReasons ?? {})]);
+  for (const username of usernames) {
+    outlineReasons[username] = Array.from(new Set([...(base.outlineReasons?.[username] ?? []), ...(incoming.outlineReasons?.[username] ?? [])]));
+  }
+  return {
+    outlineRequiredUsernames: Array.from(new Set([...(base.outlineRequiredUsernames ?? []), ...(incoming.outlineRequiredUsernames ?? [])])),
+    outlineCompletedUsernames: Array.from(new Set([...(base.outlineCompletedUsernames ?? []), ...(incoming.outlineCompletedUsernames ?? [])])),
+    outlineCompletedAt: mergeIsoRecord(base.outlineCompletedAt, incoming.outlineCompletedAt),
+    outlineReasons,
+    outlineEvents: [...(base.outlineEvents ?? []), ...(incoming.outlineEvents ?? [])]
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      .filter((event, index, events) => {
+        const previous = events[index - 1];
+        return (
+          !previous ||
+          `${previous.createdAt}:${previous.username}:${previous.reason}:${previous.text}` !==
+            `${event.createdAt}:${event.username}:${event.reason}:${event.text}`
+        );
+      })
+  };
+}
+
 function mergeSessionStates(latest: SessionState, incoming: SessionState): SessionState {
   return {
     ...latest,
@@ -326,6 +372,8 @@ function mergeSessionStates(latest: SessionState, incoming: SessionState): Sessi
     draftStep6: mergeStringRecord(latest.draftStep6, incoming.draftStep6),
     draftStep8: mergeStringRecord(latest.draftStep8, incoming.draftStep8),
     reports: mergeReports(latest.reports ?? createEmptyReports(), incoming.reports ?? createEmptyReports()),
+    attendanceOverrides: mergeAttendanceOverrides(latest.attendanceOverrides, incoming.attendanceOverrides),
+    makeupWork: mergeMakeupWork(latest.makeupWork, incoming.makeupWork),
     step12FallbackDebugTraces: mergeStep12FallbackDebugTraces(latest.step12FallbackDebugTraces, incoming.step12FallbackDebugTraces),
     qualitySignals: {
       rejectedAnswerCounts: mergeNumberRecord(latest.qualitySignals?.rejectedAnswerCounts, incoming.qualitySignals?.rejectedAnswerCounts),
@@ -649,6 +697,8 @@ export type MonitorSessionSummary = {
   groupName?: string;
   participants: string[];
   joinedUsers: string[];
+  attendanceOverrides?: SessionState["attendanceOverrides"];
+  makeupWork?: SessionState["makeupWork"];
   currentStep: number;
   personalSteps: Record<string, number>;
   groupGate: Record<string, string[]>;
@@ -1471,6 +1521,8 @@ export async function listMonitorSessionSummariesByActivityId(
       groupName: row.group_name ?? payload?.groupName ?? payload?.groupId ?? undefined,
       participants: participants.length > 0 ? participants : (payload?.participants ?? participantFallback),
       joinedUsers: joinedUsers.length > 0 ? joinedUsers : (payload?.joinedUsers ?? participantFallback),
+      attendanceOverrides: payload?.attendanceOverrides,
+      makeupWork: payload?.makeupWork,
       currentStep: row.current_step ?? payload?.currentStep ?? 1,
       personalSteps: Object.keys(asNumberRecord(row.personal_steps_json)).length > 0 ? asNumberRecord(row.personal_steps_json) : asNumberRecord(payload?.personalSteps),
       groupGate: Object.keys(asStringArrayRecord(row.group_gate_json)).length > 0 ? asStringArrayRecord(row.group_gate_json) : asStringArrayRecord(payload?.groupGate),

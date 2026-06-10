@@ -10,6 +10,15 @@ type MonitorPollingSession = {
   lastMessageAt?: string | null;
   groupGate?: Record<string, string[]>;
   personalSteps?: Record<string, number>;
+  attendanceOverrides?: {
+    waitingExcludedUsernames?: string[];
+    updatedAt?: string;
+  };
+  makeupWork?: {
+    outlineRequiredUsernames?: string[];
+    outlineCompletedUsernames?: string[];
+    outlineCompletedAt?: Record<string, string>;
+  };
 };
 
 function stableStringArrayRecordSignature(record?: Record<string, string[]>): string {
@@ -34,7 +43,19 @@ export function computeTeacherMonitorPayloadHash(sessions: MonitorPollingSession
       const messageCount = session.messageCount ?? session.messages?.length ?? 0;
       const groupGate = stableStringArrayRecordSignature(session.groupGate);
       const personalSteps = stableNumberRecordSignature(session.personalSteps);
-      return `${session.sessionId}:${session.currentStep}:${messageCount}:${session.lastMessageAt ?? ""}:${groupGate}:${personalSteps}`;
+      const attendance = [
+        [...(session.attendanceOverrides?.waitingExcludedUsernames ?? [])].sort().join(","),
+        session.attendanceOverrides?.updatedAt ?? ""
+      ].join(",");
+      const makeup = [
+        [...(session.makeupWork?.outlineRequiredUsernames ?? [])].sort().join(","),
+        [...(session.makeupWork?.outlineCompletedUsernames ?? [])].sort().join(","),
+        Object.entries(session.makeupWork?.outlineCompletedAt ?? {})
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([user, at]) => `${user}=${at}`)
+          .join(",")
+      ].join(",");
+      return `${session.sessionId}:${session.currentStep}:${messageCount}:${session.lastMessageAt ?? ""}:${groupGate}:${personalSteps}:${attendance}:${makeup}`;
     })
     .join("|");
 }

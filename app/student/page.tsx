@@ -58,6 +58,19 @@ type SessionState = {
   workflow: string;
   participants: string[];
   participantDisplayNames?: Record<string, string>;
+  attendanceOverrides?: {
+    waitingExcludedUsernames: string[];
+    updatedAt?: string;
+    updatedBy?: string;
+    events?: Array<{ username: string; excluded: boolean; step: number; substepKey?: string; at: string; by: string }>;
+  };
+  makeupWork?: {
+    outlineRequiredUsernames: string[];
+    outlineCompletedUsernames: string[];
+    outlineCompletedAt?: Record<string, string>;
+    outlineReasons?: Record<string, Array<"absent_step3" | "absent_step4" | "teacher_assigned">>;
+    outlineEvents?: Array<{ username: string; reason: "absent_step3" | "absent_step4" | "teacher_assigned"; stepContext: number; createdAt: string; text: string }>;
+  };
   groupGate?: Record<string, string[]>;
   stepState: {
     step1Substep: number;
@@ -259,6 +272,7 @@ export default function StudentPage() {
   const [text, setText] = useState("");
   const [error, setError] = useState("");
   const [step3CompleteHint, setStep3CompleteHint] = useState("");
+  const [makeupOutlineHint, setMakeupOutlineHint] = useState("");
   const [draftText, setDraftText] = useState("");
   const [step9Answers, setStep9Answers] = useState(["", "", "", ""]);
   const [refUser, setRefUser] = useState("");
@@ -654,6 +668,20 @@ export default function StudentPage() {
     if (!session) return [];
     return session.participants.filter((user) => user !== loginUser);
   }, [session, loginUser]);
+  const waitingExcludedUsers = useMemo(
+    () => new Set(session?.attendanceOverrides?.waitingExcludedUsernames ?? []),
+    [session?.attendanceOverrides?.waitingExcludedUsernames]
+  );
+  const effectiveParticipants = useMemo(
+    () => (session?.participants ?? []).filter((user) => !waitingExcludedUsers.has(user)),
+    [session?.participants, waitingExcludedUsers]
+  );
+  const makeupOutlinePending = Boolean(
+    session &&
+      loginUser &&
+      (session.makeupWork?.outlineRequiredUsernames ?? []).includes(loginUser) &&
+      !(session.makeupWork?.outlineCompletedUsernames ?? []).includes(loginUser)
+  );
 
   const currentActivityStatus = session?.activityId ? activityStatusMap[session.activityId] : undefined;
   const courseStatusBlockedMessage =
@@ -708,12 +736,13 @@ export default function StudentPage() {
   );
   const allStep4Completed =
     currentStep === 4 &&
-    !!session &&
-    session.participants.length > 0 &&
-    session.participants.every((p) => step4CompletedUsers.includes(p));
+    effectiveParticipants.length > 0 &&
+    effectiveParticipants.every((p) => step4CompletedUsers.includes(p));
   const hasSubmittedThisTurn = Boolean(loginUser && responders.includes(loginUser));
   const allRespondedThisTurn =
-    currentMode === "group_interaction" && !!session && session.participants.every((p) => responders.includes(p));
+    currentMode === "group_interaction" &&
+    effectiveParticipants.length > 0 &&
+    effectiveParticipants.every((p) => responders.includes(p));
   const canReplyToQuestion =
     currentStep === 4
       ? !step4CompletedByMe
@@ -729,15 +758,15 @@ export default function StudentPage() {
         !!session &&
         Array.isArray(responders) &&
         hasSubmittedThisTurn &&
-        !session.participants.every((p) => responders.includes(p));
+        !effectiveParticipants.every((p) => responders.includes(p));
   const latestStepMessage = session?.messages.filter((m) => m.step === currentStep).at(-1) ?? null;
   const waitingAiForGroup =
     currentStep === 4
       ? false
       : currentMode === "group_interaction" &&
         !!session &&
-        session.participants.length > 0 &&
-        session.participants.every((p) => responders.includes(p)) &&
+        effectiveParticipants.length > 0 &&
+        effectiveParticipants.every((p) => responders.includes(p)) &&
         latestStepMessage?.role !== "ai";
   const step1CompletedWaitingTeacher =
     currentStep === 1 &&
@@ -751,21 +780,25 @@ export default function StudentPage() {
     currentStep === 3 &&
     !!session &&
     step3CompletedByMe &&
-    !session.participants.every((p) => step3CompletedUsers.includes(p));
+    !effectiveParticipants.every((p) => step3CompletedUsers.includes(p));
   const groupStatusResponders = currentStep === 4 ? step4CompletedUsers : responders;
+  const effectiveGroupStatusResponders = useMemo(
+    () => groupStatusResponders.filter((username) => effectiveParticipants.includes(username)),
+    [effectiveParticipants, groupStatusResponders]
+  );
   const groupPendingMemberNames = useMemo(
-    () => (session?.participants ?? [])
+    () => effectiveParticipants
       .filter((username) => !groupStatusResponders.includes(username))
       .map((username) => toDisplayName(username)),
-    [groupStatusResponders, session?.participants, toDisplayName]
+    [effectiveParticipants, groupStatusResponders, toDisplayName]
   );
   const groupMemberNames = useMemo(
-    () => (session?.participants ?? []).map((username) => toDisplayName(username)),
-    [session?.participants, toDisplayName]
+    () => effectiveParticipants.map((username) => toDisplayName(username)),
+    [effectiveParticipants, toDisplayName]
   );
   const groupLabel = session?.groupName ? `第 ${session.groupName} 組` : "—";
-  const groupSubmittedCount = Math.min(groupStatusResponders.length, session?.participants.length ?? 0);
-  const groupTotalCount = session?.participants.length ?? 0;
+  const groupSubmittedCount = Math.min(effectiveGroupStatusResponders.length, effectiveParticipants.length);
+  const groupTotalCount = effectiveParticipants.length;
   const groupStatusAllDone = currentStep === 4 ? allStep4Completed : allRespondedThisTurn;
   const groupStatusSubmittedByMe = currentStep === 4 ? step4CompletedByMe : hasSubmittedThisTurn;
   const showGroupStatusCard = Boolean(session && currentMode === "group_interaction" && [1, 2, 4].includes(currentStep));
@@ -1143,6 +1176,31 @@ export default function StudentPage() {
       return;
     }
     setStep3CompleteHint("");
+    applySessionSafely(data);
+  }
+
+  async function completeMakeupOutlineTree(mermaid: string) {
+    if (!session) return;
+    const courseStatus = activityStatusMap[session.activityId ?? ""];
+    if (courseStatus && courseStatus !== "in_progress") {
+      setError(courseStatus === "paused" ? "課程目前暫停中，請等待老師繼續上課。" : "課程目前不可提交，請等待老師指示。");
+      return;
+    }
+    setError("");
+    const response = await fetch("/api/session/makeup-outline/complete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId: session.id, outline: mermaid })
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      if (data?.error === "step3_outline_depth3_not_edited") {
+        setMakeupOutlineHint("尚未完成：請先確實編輯第三層（含）以後的所有節點內容，再按「完成個人結構圖」。");
+      }
+      setError(formatUserError(data.error ?? "complete_makeup_outline_failed"));
+      return;
+    }
+    setMakeupOutlineHint("");
     applySessionSafely(data);
   }
 
@@ -1781,7 +1839,25 @@ export default function StudentPage() {
             </>
           ) : null}
 
-          {(currentStep === 6 || currentStep === 8) && loginUser ? (
+          {currentStep === 6 && loginUser && makeupOutlinePending ? (
+            <div className="card">
+              <h2>需補個人結構圖</h2>
+              <small style={{ display: "block", marginBottom: 8 }}>
+                你目前仍可查看歷史內容；請先完成自己的結構圖，再進入正式寫作。
+              </small>
+              <OutlineEditor
+                serverMermaid={session.outlines[loginUser] ?? ""}
+                locked={false}
+                lockedLabel="已完成個人結構圖補做"
+                onSave={handleOutlineSave}
+                onComplete={completeMakeupOutlineTree}
+                completeLabel="完成個人結構圖"
+                completeHint={makeupOutlineHint}
+              />
+            </div>
+          ) : null}
+
+          {(currentStep === 6 || currentStep === 8) && loginUser && !(currentStep === 6 && makeupOutlinePending) ? (
             <Step68Panel
               currentStep={currentStep as 6 | 8}
               participants={session.participants}

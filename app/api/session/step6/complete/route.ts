@@ -13,6 +13,7 @@ import { validateDraftContent } from "@/src/lib/answer-validation";
 import { recordStreamingCall } from "@/src/lib/llm-stats";
 import { classifyLlmError } from "@/src/lib/llm-observability";
 import { appendFallbackDebugTrace, buildPromptText, truncateTraceText } from "@/src/lib/fallback-debug-trace";
+import { isMakeupOutlinePending } from "@/src/lib/session-attendance";
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -92,6 +93,9 @@ export async function POST(request: NextRequest) {
   const userStep = session.personalSteps?.[user.username] ?? session.currentStep;
   if (userStep !== 6) {
     return NextResponse.json({ error: "invalid_step" }, { status: 400 });
+  }
+  if (isMakeupOutlinePending(session, user.username)) {
+    return NextResponse.json({ error: "makeup_outline_required" }, { status: 409 });
   }
 
   const finalDraft = body.draft as string;

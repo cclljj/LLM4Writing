@@ -180,6 +180,22 @@ The classroom dashboard SHALL show all sessions for the selected course and prio
 - **THEN** it checks `4-complete` against joined members first
 - **AND** when joined-member data is unavailable, it falls back to active members inferred from student message stats before final fallback to full participants
 
+#### Scenario: Session waiting exclusion in monitor
+
+- **GIVEN** teacher/admin is viewing a course's class joined-status table
+- **WHEN** they mark a student as `本次不列入等待`
+- **THEN** only that session's gate membership excludes the student
+- **AND** the row shows a `本次不列入等待` badge
+- **AND** if the student has `需補個人結構圖`, the row shows that badge separately
+- **AND** if the excluded student still has activity, the row shows `已請假但有活動`
+- **AND** cancelling the waiting exclusion does not clear makeup-outline state
+
+#### Scenario: Attendance and makeup changes refresh monitor polling
+
+- **GIVEN** a monitor payload changes only in `attendanceOverrides` or `makeupWork`
+- **WHEN** the frontend computes the monitor polling hash
+- **THEN** the hash changes and polling exits quiescent backoff
+
 #### Scenario: Scoped loading
 
 - **GIVEN** one dashboard action is processing

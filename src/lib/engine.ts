@@ -32,6 +32,7 @@ import {
 } from "@/src/lib/llm-response";
 import { buildStep1Question, buildStep2Question, buildStep9BatchPrompt, getCurrentGroupGateKey, getCurrentSubstepKey, getStep9Questions } from "@/src/lib/workflow-questions";
 import { advanceStep1Or2SubstepAfterAi, getNextSubstepKeyAfterCompletion, handleStep1Or2Group } from "@/src/lib/workflow-step1-2";
+import { excludeWaitingMembers } from "@/src/lib/session-attendance";
 
 function now(): string {
   return new Date().toISOString();
@@ -1647,7 +1648,8 @@ export async function sendStudentMessage(
     responders.add(userId);
     session.groupGate[gateKey] = Array.from(responders);
 
-    const allResponded = session.participants.every((participant) => responders.has(participant));
+    const gateMembers = excludeWaitingMembers(session.participants, session);
+    const allResponded = gateMembers.length > 0 && gateMembers.every((participant) => responders.has(participant));
     if (allResponded) {
       const aiText = sanitizeStudentFacingText(await generateAiTextForStep(session, step, "all group members replied"));
       session.messages.push(

@@ -40,6 +40,21 @@ function makeSession(): SessionState {
     reflectionIndex: {},
     outlines: {},
     step3SubmittedOutlines: {},
+    makeupWork: {
+      outlineRequiredUsernames: ["bob"],
+      outlineCompletedUsernames: ["bob"],
+      outlineCompletedAt: { bob: "2026-06-07T00:05:00.000Z" },
+      outlineReasons: { bob: ["absent_step3"] },
+      outlineEvents: [
+        {
+          username: "bob",
+          reason: "absent_step3",
+          stepContext: 6,
+          createdAt: "2026-06-07T00:05:00.000Z",
+          text: "graph TD\nA[補做主題] --> B[理由]"
+        }
+      ]
+    },
     draftStep6: {},
     draftStep8: {},
     reports: { step5: {}, step7: {}, step10: {} },
@@ -56,14 +71,15 @@ test("research export: anonymous mode includes only participant student inputs",
     exportedAt: "2026-06-07T01:00:00.000Z"
   });
 
-  assert.equal(payload.schemaVersion, "research-student-inputs-v1");
+  assert.equal(payload.schemaVersion, "research-student-inputs-v2");
   assert.equal(payload.identityMode, "anonymous");
-  assert.equal(payload.records.length, 2);
+  assert.equal(payload.records.length, 3);
   assert.equal(payload.records[0]!.text, "我的想法\n第二行");
   assert.equal(payload.records[0]!.studentAccount, undefined);
   assert.equal(payload.records[0]!.studentHash.length, 64);
-  assert.deepEqual(payload.records.map((record) => record.role), ["student", "student"]);
-  assert.deepEqual(payload.records.map((record) => record.studentAccount), [undefined, undefined]);
+  assert.deepEqual(payload.records.map((record) => record.role), ["student", "student", "student"]);
+  assert.deepEqual(payload.records.map((record) => record.type), ["student_message", "student_message", "makeup_outline"]);
+  assert.deepEqual(payload.records.map((record) => record.studentAccount), [undefined, undefined, undefined]);
 });
 
 test("research export: account mode includes raw student account", () => {
@@ -74,5 +90,5 @@ test("research export: account mode includes raw student account", () => {
   });
 
   assert.equal(payload.identityMode, "account");
-  assert.deepEqual(payload.records.map((record) => record.studentAccount), ["alice", "bob"]);
+  assert.deepEqual(payload.records.map((record) => record.studentAccount), ["alice", "bob", "bob"]);
 });

@@ -20,6 +20,7 @@ import { computeNextOpenClassId } from "../src/lib/activity-store";
 import { buildStep1Question, buildStep2Question } from "../src/lib/workflow-questions";
 import { advanceStep1Or2SubstepAfterAi, getNextSubstepKeyAfterCompletion, handleStep1Or2Group, recoverStalledStep1Or2AiWait } from "../src/lib/workflow-step1-2";
 import { isStep12FeedbackQualityRisk } from "../src/lib/step12-feedback-quality";
+import { isMakeupOutlinePending, resolveStep12GateMembers, setWaitingExclusion } from "../src/lib/session-attendance";
 import {
   composeStep10Report,
   normalizeStep10SectionBody,
@@ -945,6 +946,56 @@ test("teacher monitor payload hash changes when Step3/4 gate members change", ()
     { sessionId: "s1", currentStep: 3, messageCount: 2, lastMessageAt: "2026-05-21T00:00:00.000Z", groupGate: { "3-complete": ["u1", "u2"] } }
   ]);
   assert.notEqual(before, after);
+});
+
+test("teacher monitor payload hash changes when attendance or makeup state changes", () => {
+  const before = computeTeacherMonitorPayloadHash([
+    { sessionId: "s1", currentStep: 4, messageCount: 2, lastMessageAt: "2026-05-21T00:00:00.000Z" }
+  ]);
+  const afterAttendance = computeTeacherMonitorPayloadHash([
+    {
+      sessionId: "s1",
+      currentStep: 4,
+      messageCount: 2,
+      lastMessageAt: "2026-05-21T00:00:00.000Z",
+      attendanceOverrides: { waitingExcludedUsernames: ["u2"], updatedAt: "2026-05-21T00:01:00.000Z" }
+    }
+  ]);
+  const afterMakeup = computeTeacherMonitorPayloadHash([
+    {
+      sessionId: "s1",
+      currentStep: 4,
+      messageCount: 2,
+      lastMessageAt: "2026-05-21T00:00:00.000Z",
+      makeupWork: { outlineRequiredUsernames: ["u2"], outlineCompletedUsernames: [] }
+    }
+  ]);
+  assert.notEqual(before, afterAttendance);
+  assert.notEqual(before, afterMakeup);
+});
+
+test("session waiting exclusion removes only current gate requirements and preserves makeup state", () => {
+  const session = baseSession({
+    currentStep: 3,
+    joinedUsers: ["s1", "s2"],
+    outlines: { s1: "graph TD\nA --> B" },
+    step3SubmittedOutlines: { s1: "graph TD\nA --> B" }
+  });
+
+  setWaitingExclusion(session, { username: "s2", excluded: true, by: "teacher", at: "2026-06-07T00:00:00.000Z" });
+  assert.deepEqual(resolveStep12GateMembers(session), ["s1"]);
+  assert.equal(isMakeupOutlinePending(session, "s2"), true);
+
+  setWaitingExclusion(session, { username: "s2", excluded: false, by: "teacher", at: "2026-06-07T00:05:00.000Z" });
+  assert.deepEqual(resolveStep12GateMembers(session), ["s1", "s2"]);
+  assert.equal(isMakeupOutlinePending(session, "s2"), true);
+});
+
+test("waiting exclusion never creates a zero-member auto-complete gate", () => {
+  const session = baseSession({ joinedUsers: ["s1", "s2"] });
+  setWaitingExclusion(session, { username: "s1", excluded: true, by: "teacher", at: "2026-06-07T00:00:00.000Z" });
+  setWaitingExclusion(session, { username: "s2", excluded: true, by: "teacher", at: "2026-06-07T00:00:01.000Z" });
+  assert.deepEqual(resolveStep12GateMembers(session), []);
 });
 
 test("teacher monitor keeps Step3/4 advance gates on fast polling", () => {
