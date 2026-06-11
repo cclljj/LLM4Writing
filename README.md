@@ -105,6 +105,7 @@ npm run dev
 ```text
 app/                      Next.js pages + API routes
 app/*/_components/        Page-scoped UI components
+app/*/_hooks/             Page-scoped state/data hooks 與派生邏輯
 src/lib/                  Engine、auth、store、diagnostics、utilities
 src/config/               Prompt 與 workflow 設定
 tests/                    Node unit tests + Playwright E2E
@@ -203,7 +204,7 @@ Prompt 來源檔案：[`src/config/system-prompt-config.json`](./src/config/syst
 
 ```bash
 npm run typecheck # TypeScript no-emit validation
-npm test          # Node unit tests（140 tests）
+npm test          # Node unit tests（166 tests）
 npm run test:e2e  # Playwright E2E
 npm run build     # Next.js build validation
 ```

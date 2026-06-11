@@ -82,6 +82,13 @@ The system SHALL keep shared layout, control, table, and status styles in reusab
 - **THEN** table wrappers use the shared `.table-scroll` behavior
 - **AND** CSS includes tablet breakpoints to adjust table density and page spacing
 
+#### Scenario: Semantic color tokens instead of raw hex values
+
+- **GIVEN** UI code under `app/**/*.tsx` needs colors for text, borders, backgrounds, or status semantics
+- **WHEN** a component styles an element
+- **THEN** it references the semantic CSS variables defined in `app/globals.css` (neutral scale plus info/success/warning/danger triads) or the semantic classes built on them
+- **AND** hardcoded hex color literals are not introduced; a ratchet test in `tests/ui-source-guards.test.ts` fails the build when the count rises above the recorded baseline (currently 0)
+
 ### Requirement: Dual-Mode Persistence
 
 The system SHALL use PostgreSQL when configured and SHALL fall back to memory or file-backed storage when database access is not available.
