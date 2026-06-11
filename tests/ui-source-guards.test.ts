@@ -182,7 +182,7 @@ test("source-guard: hardcoded hex colors in app tsx may only decrease (ratchet, 
 
   // Ratchet rule: this baseline may only be lowered, never raised. New UI code
   // must use design tokens from globals.css (see #456/#458) instead of raw hex.
-  const HEX_COLOR_BASELINE = 294;
+  const HEX_COLOR_BASELINE = 256;
 
   const tsxFiles = readdirSync(appDir, { recursive: true })
     .map((entry) => String(entry))
@@ -190,7 +190,9 @@ test("source-guard: hardcoded hex colors in app tsx may only decrease (ratchet, 
     .map((entry) => join(appDir, entry));
   assert.ok(tsxFiles.length > 10, "hex ratchet should scan the app tsx tree");
 
-  const hexPattern = /#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?\b/g;
+  // 6-digit hex always counts; 3-digit hex only when it contains a letter so
+  // that issue references in comments (e.g. "#244") are not miscounted.
+  const hexPattern = /#(?:[0-9a-fA-F]{6}|(?=[0-9a-fA-F]*[a-fA-F])[0-9a-fA-F]{3})\b/g;
   let total = 0;
   const perFile: string[] = [];
   for (const file of tsxFiles) {
