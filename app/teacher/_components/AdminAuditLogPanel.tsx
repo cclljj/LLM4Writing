@@ -102,7 +102,7 @@ export default function AdminAuditLogPanel() {
       {grouped.map(([day, entries]) => (
         <div key={day} className="card" style={{ marginTop: 12, marginBottom: 0 }}>
           <h3 style={{ marginBottom: 8 }}>{day}</h3>
-          <div style={{ overflowX: "auto" }}>
+          <div className="table-scroll">
             <table className="pro-table">
               <thead>
                 <tr>

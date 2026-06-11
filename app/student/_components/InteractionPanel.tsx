@@ -276,7 +276,7 @@ function InteractionPanel({
         <form onSubmit={onSendMessage}>
           <label>{currentStep === 4 ? "我的發言" : "你的回答"}</label>
           <textarea value={text} onChange={(e) => onTextChange(e.target.value)} onPaste={preventTextPaste} />
-          <button type="submit" style={{ marginTop: 10 }}>
+          <button type="submit" className="full-width" style={{ marginTop: 10 }}>
             發送訊息
           </button>
           {currentStep === 4 ? (
@@ -306,7 +306,7 @@ function InteractionPanel({
               />
             </div>
           ))}
-          <button type="submit" style={{ marginTop: 10 }} disabled={isSendingMessage}>
+          <button type="submit" className="full-width" style={{ marginTop: 10 }} disabled={isSendingMessage}>
             一次送出四題答案
           </button>
         </form>

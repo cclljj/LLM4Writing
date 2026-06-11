@@ -64,6 +64,24 @@ The system SHALL provide separate student, teacher, and admin capabilities for t
 - **THEN** focused controls show a visible focus indicator
 - **AND** important errors, loading states, and streaming feedback use alert/status live-region semantics
 
+### Requirement: Frontend Design System Baseline
+
+The system SHALL keep shared layout, control, table, and status styles in reusable CSS primitives rather than relying on page-local overrides for common semantics.
+
+#### Scenario: Button width semantics
+
+- **GIVEN** buttons render across student, teacher, and admin pages
+- **WHEN** a button does not explicitly opt into full-width layout
+- **THEN** it sizes to its content by default
+- **AND** full-width form actions use the `.full-width` utility class
+
+#### Scenario: Reusable table scrolling and tablet breakpoints
+
+- **GIVEN** teacher/admin pages render wide tables on tablet-sized screens
+- **WHEN** the viewport is around 768px or 1024px wide
+- **THEN** table wrappers use the shared `.table-scroll` behavior
+- **AND** CSS includes tablet breakpoints to adjust table density and page spacing
+
 ### Requirement: Dual-Mode Persistence
 
 The system SHALL use PostgreSQL when configured and SHALL fall back to memory or file-backed storage when database access is not available.

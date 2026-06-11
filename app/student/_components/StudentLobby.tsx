@@ -146,7 +146,7 @@ export default function StudentLobby({
       </div>
 
       {classCourses.length === 0 ? (
-        <div className="card" style={{ borderColor: "#bfdbfe", background: "#eff6ff" }}>
+        <div className="card card-info">
           <h2>目前沒有可顯示課程</h2>
           <small>請確認老師已建立寫作任務，且你的學校與班級資料設定正確。</small>
         </div>

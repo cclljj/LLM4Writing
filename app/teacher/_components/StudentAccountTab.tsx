@@ -837,7 +837,7 @@ export default function StudentAccountTab({
           ) : null}
         </div>
 
-        <div style={{ overflowX: "auto" }}>
+        <div className="table-scroll">
           <table className="pro-table">
             <thead>
               <tr>

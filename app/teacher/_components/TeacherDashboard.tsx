@@ -117,7 +117,7 @@ export default function TeacherDashboard<TSession extends DashboardSession>({
           <small>需留意小組</small>
         </div>
       </div>
-      <div style={{ overflowX: "auto", marginTop: 12 }}>
+      <div className="table-scroll" style={{ marginTop: 12 }}>
         <table className="pro-table">
           <thead>
             <tr>

@@ -63,7 +63,7 @@ export default function HomePage() {
               placeholder="請輸入密碼"
             />
 
-            <button type="submit" style={{ marginTop: 14 }}>
+            <button type="submit" className="full-width" style={{ marginTop: 14 }}>
               登入系統
             </button>
 

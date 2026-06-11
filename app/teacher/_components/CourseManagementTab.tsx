@@ -690,7 +690,7 @@ export default function CourseManagementTab({
               />
             </div>
             <div className="col" style={{ alignSelf: "end" }}>
-              <button type="submit">{essayForm.id ? "儲存主題" : "新增主題"}</button>
+              <button type="submit" className="full-width">{essayForm.id ? "儲存主題" : "新增主題"}</button>
             </div>
             {essayForm.id ? (
               <div className="col" style={{ alignSelf: "end" }}>
@@ -705,7 +705,7 @@ export default function CourseManagementTab({
             ) : null}
           </form>
           {essayForm.id ? <small>目前正在編輯：{essayForm.id}</small> : null}
-          <div style={{ overflowX: "auto", marginTop: 10 }}>
+          <div className="table-scroll" style={{ marginTop: 10 }}>
             <table className="pro-table">
               <thead>
                 <tr>
@@ -1039,7 +1039,7 @@ export default function CourseManagementTab({
             </div>
           </div>
         ) : null}
-        <div style={{ overflowX: "auto" }}>
+        <div className="table-scroll">
           <table className="pro-table">
             <thead>
               <tr>

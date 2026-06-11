@@ -605,7 +605,7 @@ export default function CourseImplementationReportTab({
           </div>
         ) : null}
 
-        <div style={{ overflowX: "auto" }}>
+        <div className="table-scroll">
           <table className="pro-table">
             <thead>
               <tr>
@@ -730,7 +730,7 @@ export default function CourseImplementationReportTab({
             </small>
           ) : null}
 
-          <div style={{ overflowX: "auto" }}>
+          <div className="table-scroll">
             <table className="pro-table">
               <thead>
                 <tr>

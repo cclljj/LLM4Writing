@@ -1367,7 +1367,7 @@ export default function LearningMonitorTab({
             </select>
           </div>
         </div>
-        <div style={{ overflowX: "auto" }}>
+        <div className="table-scroll">
           <table className="pro-table">
             <thead>
               <tr>
@@ -1598,7 +1598,7 @@ export default function LearningMonitorTab({
               全班加入狀態
               {contextLabel ? <span style={{ fontSize: 14, color: "#64748b", fontWeight: 400, marginLeft: 8 }}>— {contextLabel}</span> : null}
             </h2>
-            <div style={{ overflowX: "auto" }}>
+            <div className="table-scroll">
               <table className="pro-table">
                 <thead>
                   <tr>
@@ -1724,7 +1724,7 @@ export default function LearningMonitorTab({
             </h2>
 
             <h3 style={{ marginTop: 8 }}>小組進度統計</h3>
-            <div style={{ overflowX: "auto" }}>
+            <div className="table-scroll">
               <table className="pro-table">
                 <thead>
                   <tr>
@@ -1751,7 +1751,7 @@ export default function LearningMonitorTab({
             {groupProgressRows.length === 0 ? <small>目前沒有可統計的小組資料。</small> : null}
 
             <h3 style={{ marginTop: 14 }}>個人進度統計</h3>
-            <div style={{ overflowX: "auto" }}>
+            <div className="table-scroll">
               <table className="pro-table">
                 <thead>
                   <tr>

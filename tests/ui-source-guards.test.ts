@@ -113,6 +113,19 @@ test("source-guard: app router has user-facing fallback surfaces and production 
   assert.ok(globalsSrc.includes(":focus-visible"), "global CSS should provide visible keyboard focus styling");
 });
 
+test("source-guard: design system primitives cover buttons, tables, and tablet breakpoints", async () => {
+  const globalsSrc = await read("../app/globals.css");
+  const teacherSrc = await read("../app/teacher/_components/LearningMonitorTab.tsx");
+  const accountSrc = await read("../app/teacher/_components/StudentAccountTab.tsx");
+  assert.ok(globalsSrc.includes("button {\n  width: auto;"), "buttons should default to content width");
+  assert.ok(globalsSrc.includes(".full-width"), "full-width controls should be opt-in via utility class");
+  assert.ok(globalsSrc.includes(".table-scroll"), "table scroll wrappers should use a reusable class");
+  assert.ok(globalsSrc.includes("@media (max-width: 1024px)"), "tablet landscape breakpoint should be present");
+  assert.ok(globalsSrc.includes("@media (max-width: 768px)"), "tablet portrait breakpoint should be present");
+  assert.ok(teacherSrc.includes("className=\"table-scroll\""), "learning monitor tables should use table-scroll class");
+  assert.ok(accountSrc.includes("className=\"table-scroll\""), "account tables should use table-scroll class");
+});
+
 test("source-guard: destructive actions use explicit confirmation dialogs", async () => {
   const confirmSrc = await read("../app/teacher/_components/ConfirmDialog.tsx");
   const accountSrc = await read("../app/teacher/_components/StudentAccountTab.tsx");

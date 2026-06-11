@@ -96,7 +96,7 @@ function CourseDiagnosticsPanel({
           <small style={{ display: "block", marginTop: 10 }}>
             指標來源：{diagnostics.source === "persisted_learning_events" ? "事件表（較精準）" : "session 訊息估算"}
           </small>
-          <div style={{ overflowX: "auto", marginTop: 12 }}>
+          <div className="table-scroll" style={{ marginTop: 12 }}>
             <table className="pro-table">
               <thead>
                 <tr>

@@ -59,9 +59,16 @@ label {
 
 input,
 textarea,
-select,
-button {
+select {
   width: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  padding: 10px 12px;
+  font-size: 0.95rem;
+}
+
+button {
+  width: auto;
   border-radius: 10px;
   border: 1px solid var(--line);
   padding: 10px 12px;
@@ -101,6 +108,22 @@ button.danger {
   border-color: #fecaca;
   background: #b91c1c;
   color: #fff;
+}
+
+.full-width {
+  width: 100%;
+}
+
+.button-compact {
+  width: auto;
+  min-width: 0;
+  padding: 2px 6px;
+}
+
+.button-danger-soft {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
 }
 
 .button-link {
@@ -227,6 +250,29 @@ a {
 .status-panel.success {
   border-color: #bbf7d0;
   background: #f0fdf4;
+}
+
+.card-info {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+}
+
+.card-danger {
+  border-color: #fecaca;
+  background: #fff1f2;
+}
+
+.text-danger {
+  color: #b91c1c;
+}
+
+.text-muted {
+  color: var(--muted);
+}
+
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .next-action-card {
@@ -544,6 +590,7 @@ a {
 
 .pro-table {
   width: 100%;
+  min-width: 760px;
   border-collapse: collapse;
   font-size: 0.93rem;
 }
@@ -560,4 +607,42 @@ a {
   background: #f8fafc;
   color: #334155;
   font-weight: 700;
+}
+
+@media (max-width: 1024px) {
+  main {
+    max-width: 960px;
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+
+  .pro-table {
+    font-size: 0.88rem;
+  }
+
+  .pro-table th,
+  .pro-table td {
+    padding: 8px 6px;
+  }
+}
+
+@media (max-width: 768px) {
+  main {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .row {
+    gap: 10px;
+  }
+
+  .col {
+    flex-basis: 240px;
+  }
+
+  .table-scroll {
+    margin-left: -4px;
+    margin-right: -4px;
+    padding: 0 4px 6px;
+  }
 }

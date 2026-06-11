@@ -460,7 +460,7 @@ export default function AdminPromptDiagnostics() {
             <small style={{ display: "block", marginBottom: 8, color: "#64748b" }}>
               範圍：最近 {data.timeWindow}。依風險分數排序（fallback / 拒答 / 等待時間），作為優先排查順序。
             </small>
-            <div style={{ overflowX: "auto" }}>
+            <div className="table-scroll">
               <table className="pro-table">
                 <thead>
                   <tr>
@@ -516,7 +516,7 @@ export default function AdminPromptDiagnostics() {
             <small style={{ display: "block", marginBottom: 8, color: "#64748b" }}>
               先選課程，再看 Step1~10 的成功率 / fallback 率 / 拒答率 / 平均等待。點步驟可篩選下方追查樣本。
             </small>
-            <div style={{ overflowX: "auto" }}>
+            <div className="table-scroll">
               <table className="pro-table">
                 <thead>
                   <tr>
@@ -560,7 +560,7 @@ export default function AdminPromptDiagnostics() {
             <small style={{ display: "block", marginBottom: 8, color: "#64748b" }}>
               顯示選定課程（與可選定步驟）的 fallback 事件。優先使用 fallback 事件本身的分類，缺失時再對齊鄰近 LLM 錯誤分類。
             </small>
-            <div style={{ overflowX: "auto" }}>
+            <div className="table-scroll">
               <table className="pro-table">
                 <thead>
                   <tr>
@@ -591,7 +591,7 @@ export default function AdminPromptDiagnostics() {
             <small style={{ display: "block", marginBottom: 8, color: "#64748b" }}>
               這裡顯示的是重建版本（由事件 + session 訊息 + prompt 設定推估），不是 provider 原始 request body。可用來快速定位哪一段上下文容易觸發 fallback。
             </small>
-            <div style={{ overflowX: "auto" }}>
+            <div className="table-scroll">
               <table className="pro-table">
                 <thead>
                   <tr>
@@ -667,7 +667,7 @@ export default function AdminPromptDiagnostics() {
             <small style={{ display: "block", marginBottom: 8, color: "#64748b" }}>
               日粒度趨勢（最近 {data.timeWindow}）：顯示成功率、fallback 率、拒答率、平均等待時間。
             </small>
-            <div style={{ overflowX: "auto" }}>
+            <div className="table-scroll">
               <table className="pro-table">
                 <thead>
                   <tr>
@@ -707,7 +707,7 @@ export default function AdminPromptDiagnostics() {
             <small style={{ display: "block", marginBottom: 8, color: "#64748b" }}>
               範圍：最近 {data.timeWindow}。從訊息 timestamp 估算（student → 接續 ai 同步驟）；異常值（&gt; 5 分鐘）已濾除。
             </small>
-            <div style={{ overflowX: "auto" }}>
+            <div className="table-scroll">
               <table className="pro-table">
                 <thead>
                   <tr>
@@ -749,7 +749,7 @@ export default function AdminPromptDiagnostics() {
                 <small>{data.fallbackRate.overall.fallbacks} / {data.fallbackRate.overall.totalAi}</small>
               </div>
             </div>
-            <div style={{ overflowX: "auto" }}>
+            <div className="table-scroll">
               <table className="pro-table">
                 <thead>
                   <tr>
@@ -804,7 +804,7 @@ export default function AdminPromptDiagnostics() {
                 <small>{fmtPct(data.llmErrorTaxonomy.other.rate)}</small>
               </div>
             </div>
-            <div style={{ overflowX: "auto" }}>
+            <div className="table-scroll">
               <table className="pro-table">
                 <thead>
                   <tr>
@@ -839,7 +839,7 @@ export default function AdminPromptDiagnostics() {
             <small style={{ display: "block", marginBottom: 8, color: "#64748b" }}>
               範圍：最近 {data.timeWindow} 內有活動的 spec10 sessions（總計 {data.artifactHealth.totalStudents} 人）的 artifact 完成率。
             </small>
-            <div style={{ overflowX: "auto" }}>
+            <div className="table-scroll">
               <table className="pro-table">
                 <thead>
                   <tr>
@@ -906,7 +906,7 @@ export default function AdminPromptDiagnostics() {
                 <div style={{ fontSize: 18, fontWeight: 600 }}>{fmtNum(data.tokenUsage.overall.avgPerMessage)}</div>
               </div>
             </div>
-            <div style={{ overflowX: "auto" }}>
+            <div className="table-scroll">
               <table className="pro-table">
                 <thead>
                   <tr>
@@ -935,7 +935,7 @@ export default function AdminPromptDiagnostics() {
 
           <div className="card">
             <h3 style={{ marginBottom: 10 }}>近期使用狀況</h3>
-            <div style={{ overflowX: "auto" }}>
+            <div className="table-scroll">
               <table className="pro-table">
                 <thead>
                   <tr>

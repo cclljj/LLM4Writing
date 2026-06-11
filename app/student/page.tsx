@@ -1513,7 +1513,7 @@ export default function StudentPage() {
   if (!authReady) {
     return (
       <main>
-        <div className="card" style={{ borderColor: "#bfdbfe", background: "#eff6ff" }}>
+        <div className="card card-info">
           <h2>正在確認登入狀態</h2>
           <small>系統正在連線，請稍候...</small>
         </div>
@@ -1524,7 +1524,7 @@ export default function StudentPage() {
   if (authError && !loginUser) {
     return (
       <main>
-        <div className="card" style={{ borderColor: "#fecaca", background: "#fff1f2" }}>
+        <div className="card card-danger">
           <h2>暫時無法進入學生端</h2>
           <small>{authError}</small>
           <div className="row" style={{ marginTop: 12 }}>
@@ -1549,7 +1549,7 @@ export default function StudentPage() {
   return (
     <main>
       {error ? (
-        <div className="card" style={{ borderColor: "#fecaca", background: "#fff1f2" }}>
+        <div className="card card-danger">
           <small>{error}</small>
           {!session && loginUser ? (
             <div className="row" style={{ marginTop: 12 }}>
@@ -1564,7 +1564,7 @@ export default function StudentPage() {
       ) : null}
 
       {missingFields.length > 0 ? (
-        <div className="card" style={{ borderColor: "#fecaca", background: "#fff1f2" }}>
+        <div className="card card-danger">
           <h2>資料警告</h2>
           <small>你的帳號資料不完整（{missingFields.join(", ")}），請向老師反映。</small>
         </div>
@@ -1777,7 +1777,7 @@ export default function StudentPage() {
                 <form onSubmit={sendMessage}>
                   <label>你的回答</label>
                   <textarea value={text} onChange={(e) => setText(e.target.value)} onPaste={(e) => e.preventDefault()} />
-                  <button type="submit" style={{ marginTop: 10 }}>發送訊息</button>
+                  <button type="submit" className="full-width" style={{ marginTop: 10 }}>發送訊息</button>
                 </form>
               ) : null}
             </div>
@@ -1898,7 +1898,7 @@ export default function StudentPage() {
           ) : null}
 
           {currentStep === 10 && isStep10ReportReady ? (
-            <div className="card" style={{ borderColor: "#bfdbfe", background: "#eff6ff" }}>
+            <div className="card card-info">
               <h2>課程已完成</h2>
               <small>整個課程已經結束，請等待老師指示進行後續課程。</small>
             </div>
