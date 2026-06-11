@@ -6,6 +6,38 @@
   --line: #d1d5db;
   --primary: #0b57d0;
   --primary-soft: #e8f0fe;
+
+  /* Semantic tokens (#456). UI code must use these instead of raw hex —
+     enforced by the hex ratchet test in tests/ui-source-guards.test.ts. */
+
+  /* Neutral scale */
+  --surface-alt: #f8fafc;
+  --line-soft: #e5e7eb;
+  --muted-soft: #94a3b8;
+  --muted-strong: #475569;
+  --text-strong: #0f172a;
+
+  /* Info (blue) */
+  --info-bg: #eff6ff;
+  --info-bg-strong: #dbeafe;
+  --info-border: #bfdbfe;
+  --info-accent: #60a5fa;
+  --info-text: #1e40af;
+
+  /* Success (green) */
+  --success-bg: #f0fdf4;
+  --success-border: #bbf7d0;
+  --success-text: #166534;
+
+  /* Warning (amber) */
+  --warning-bg: #fff7ed;
+  --warning-border: #fed7aa;
+  --warning-text: #b45309;
+
+  /* Danger (red) */
+  --danger-bg: #fef2f2;
+  --danger-border: #fecaca;
+  --danger-text: #b91c1c;
 }
 
 * {
@@ -236,38 +268,72 @@ a {
 }
 
 .status-panel {
-  border: 1px solid #bfdbfe;
-  background: #eff6ff;
+  border: 1px solid var(--info-border);
+  background: var(--info-bg);
   border-radius: 12px;
   padding: 12px 14px;
 }
 
 .status-panel.warning {
-  border-color: #fed7aa;
-  background: #fff7ed;
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
 }
 
 .status-panel.success {
-  border-color: #bbf7d0;
-  background: #f0fdf4;
+  border-color: var(--success-border);
+  background: var(--success-bg);
 }
 
 .card-info {
-  border-color: #bfdbfe;
-  background: #eff6ff;
+  border-color: var(--info-border);
+  background: var(--info-bg);
+}
+
+.card-success {
+  border-color: var(--success-border);
+  background: var(--success-bg);
+}
+
+.card-warning {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
 }
 
 .card-danger {
-  border-color: #fecaca;
-  background: #fff1f2;
+  border-color: var(--danger-border);
+  background: var(--danger-bg);
 }
 
 .text-danger {
-  color: #b91c1c;
+  color: var(--danger-text);
+}
+
+.text-info {
+  color: var(--info-text);
+}
+
+.text-success {
+  color: var(--success-text);
+}
+
+.text-warning {
+  color: var(--warning-text);
+}
+
+.text-strong {
+  color: var(--text-strong);
 }
 
 .text-muted {
   color: var(--muted);
+}
+
+.text-muted-soft {
+  color: var(--muted-soft);
+}
+
+.text-muted-strong {
+  color: var(--muted-strong);
 }
 
 .table-scroll {
