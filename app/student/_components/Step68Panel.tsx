@@ -130,12 +130,14 @@ function Step68Panel({
       </div>
       <small className={`draft-save-status ${saveStatus.state}`}>{saveStatus.text}</small>
       {currentStep === 6 && isSuggestingStep6 ? (
-        <small style={{ display: "block", marginTop: 6, color: "#94a3b8" }}>
+        <small role="status" aria-live="polite" style={{ display: "block", marginTop: 6, color: "#94a3b8" }}>
           AI 正在分析你的文章並產生修改建議，這個步驟會花比較多的時間，請稍候{suggestingDots}
         </small>
       ) : null}
       {currentStep === 6 && step6StreamingText ? (
         <div
+          role="status"
+          aria-live="polite"
           style={{
             marginTop: 10,
             padding: "10px 12px",
@@ -154,12 +156,14 @@ function Step68Panel({
         </div>
       ) : null}
       {currentStep === 6 && isCompletingStep6 ? (
-        <small style={{ display: "block", marginTop: 6, color: "#94a3b8" }}>
+        <small role="status" aria-live="polite" style={{ display: "block", marginTop: 6, color: "#94a3b8" }}>
           AI 正在產生步驟 7 分析回饋，這個步驟會花比較多的時間，請稍候{completingDots}
         </small>
       ) : null}
       {currentStep === 6 && step7StreamingText ? (
         <div
+          role="status"
+          aria-live="polite"
           style={{
             marginTop: 10,
             padding: "10px 12px",

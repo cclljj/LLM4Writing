@@ -115,6 +115,13 @@ The learning management UI SHALL expose course state controls consistent with th
 - **WHEN** the destructive state change is initiated
 - **THEN** the UI requires a confirmation dialog before calling the API
 
+#### Scenario: Irreversible deletion confirmation
+
+- **GIVEN** teacher/admin deletes an account, writing task, or all course data
+- **WHEN** the deletion is initiated
+- **THEN** the UI uses a custom confirmation dialog instead of native `window.confirm`
+- **AND** irreversible deletions require typing the target username, task title, or course title before the delete button is enabled
+
 ### Requirement: Learning Monitor Summary First
 
 The teacher monitor SHALL load course-scoped summaries before loading full session details.

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { deferStateUpdate } from "@/src/lib/defer-state-update";
 import { UserRow } from "./types";
+import ConfirmDialog from "./ConfirmDialog";
 
 interface StudentAccountTabProps {
   loginUser: string;
@@ -35,6 +36,7 @@ export default function StudentAccountTab({
   const [accountSuccess, setAccountSuccess] = useState("");
   // 刪除帳號 UX 狀態（#257）
   const [deletingUsername, setDeletingUsername] = useState<string>("");
+  const [deleteUserTarget, setDeleteUserTarget] = useState<UserRow | null>(null);
   const [editingUser, setEditingUser] = useState<{
     username: string;
     name: string;
@@ -447,8 +449,7 @@ export default function StudentAccountTab({
   }
 
   async function deleteUser(username: string) {
-    const confirmed = window.confirm(`確定刪除帳號 ${username} 嗎？`);
-    if (!confirmed) return;
+    setDeleteUserTarget(null);
     setAccountError("");
     setAccountSuccess("");
     setDeletingUsername(username);
@@ -1025,7 +1026,7 @@ export default function StudentAccountTab({
                                 cursor: deletingUsername === user.username ? "wait" : undefined
                               }}
                               disabled={Boolean(deletingUsername)}
-                              onClick={() => deleteUser(user.username)}
+                              onClick={() => setDeleteUserTarget(user)}
                             >
                               {deletingUsername === user.username ? "處理中..." : "刪除"}
                             </button>
@@ -1061,6 +1062,22 @@ export default function StudentAccountTab({
           </div>
         </div>
       </div>
+      <ConfirmDialog
+        open={Boolean(deleteUserTarget)}
+        title="刪除帳號"
+        body={
+          deleteUserTarget
+            ? `這會刪除帳號 ${deleteUserTarget.username}${deleteUserTarget.name ? `（${deleteUserTarget.name}）` : ""}，且無法復原。`
+            : ""
+        }
+        requiredText={deleteUserTarget?.username}
+        confirmLabel="刪除帳號"
+        busy={Boolean(deletingUsername)}
+        onCancel={() => setDeleteUserTarget(null)}
+        onConfirm={() => {
+          if (deleteUserTarget) void deleteUser(deleteUserTarget.username);
+        }}
+      />
     </>
   );
 }

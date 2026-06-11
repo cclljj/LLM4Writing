@@ -335,7 +335,7 @@ function InteractionPanel({
       ) : null}
 
       {error ? (
-        <p>
+        <p role="alert" aria-live="assertive">
           <small>{error}</small>
         </p>
       ) : null}

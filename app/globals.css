@@ -81,10 +81,67 @@ button {
   font-weight: 600;
 }
 
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[tabindex]:focus-visible {
+  outline: 3px solid rgba(11, 87, 208, 0.35);
+  outline-offset: 3px;
+}
+
 button.secondary {
   background: var(--primary-soft);
   color: var(--primary);
   border-color: #bcd0ff;
+}
+
+button.danger {
+  border-color: #fecaca;
+  background: #b91c1c;
+  color: #fff;
+}
+
+.button-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  border: 1px solid var(--primary);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 0.95rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.button-link.secondary {
+  background: var(--primary-soft);
+  color: var(--primary);
+  border-color: #bcd0ff;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(15, 23, 42, 0.48);
+}
+
+.modal-panel {
+  width: min(520px, 100%);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 18px;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.24);
 }
 
 pre {

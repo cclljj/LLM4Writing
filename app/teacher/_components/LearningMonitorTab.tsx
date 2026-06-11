@@ -25,6 +25,7 @@ import { formatTaipeiDateTime } from "@/src/lib/time-format";
 import TeacherDashboard, { TeacherDashboardData } from "./TeacherDashboard";
 import CourseDiagnosticsPanel from "./CourseDiagnosticsPanel";
 import { ActivityRow, CourseDiagnosticsPayload, MonitorSession, UserRow } from "./types";
+import ConfirmDialog from "./ConfirmDialog";
 
 // Re-export QualitySignals/ArtifactDiagnostics usage via types import
 type _QS = QualitySignals;
@@ -102,6 +103,8 @@ export default function LearningMonitorTab({
   const [learningPage, setLearningPage] = useState(1);
   const [learningJumpPage, setLearningJumpPage] = useState("1");
   const [progressStatsPage, setProgressStatsPage] = useState(1);
+  const [pendingLifecycleAction, setPendingLifecycleAction] = useState<{ activityId: string; action: "start" | "pause_resume" | "end"; title: string } | null>(null);
+  const [pendingDeleteActivity, setPendingDeleteActivity] = useState<{ activityId: string; title: string } | null>(null);
   const [classJoinSort, setClassJoinSort] = useState<{ column: ClassJoinSortColumn; direction: SortDirection }>({
     column: "username",
     direction: "asc"
@@ -1105,20 +1108,7 @@ export default function LearningMonitorTab({
   }
 
   async function handleCourseLifecycle(activityId: string, action: "start" | "pause_resume" | "end") {
-    if (action === "pause_resume") {
-      const activity = activities.find((item) => item.id === activityId);
-      const isPausing = (activity?.courseStatus ?? "not_started") === "in_progress";
-      const confirmed = window.confirm(
-        isPausing
-          ? "確定要暫停上課嗎？暫停後學生將無法繼續互動，直到恢復上課。"
-          : "確定要繼續上課嗎？"
-      );
-      if (!confirmed) return;
-    }
-    if (action === "end") {
-      const confirmed = window.confirm("確定要結束上課嗎？結束後此課程將停止互動。");
-      if (!confirmed) return;
-    }
+    setPendingLifecycleAction(null);
     const processingText =
       action === "start" ? "系統正在開始上課，請稍候..." : action === "end" ? "系統正在結束上課，請稍候..." : "系統正在更新課程狀態，請稍候...";
     await runLearningAction(`course:${activityId}:${action}`, processingText, async () => {
@@ -1141,10 +1131,9 @@ export default function LearningMonitorTab({
     });
   }
 
-  async function deleteActivityTask(activityId: string, title: string) {
+  async function deleteActivityTask(activityId: string) {
     if (!isAdminConsole || loginRole !== "admin") return;
-    const confirmed = window.confirm(`是否要刪除「${title}」的所有資料？\n\n此操作會刪除寫作任務、分組資料與學生參與過程，且無法復原。`);
-    if (!confirmed) return;
+    setPendingDeleteActivity(null);
     await runLearningAction(`course:${activityId}:delete`, "系統正在刪除寫作任務課程資料，請稍候...", async () => {
       const response = await fetch("/api/admin/activities", {
         method: "DELETE",
@@ -1289,12 +1278,37 @@ export default function LearningMonitorTab({
   // suppress unused var warnings for functions that are defined but referenced only via void
   void getMonitorGateKey;
 
+  const pendingLifecycleActivity = pendingLifecycleAction
+    ? activities.find((item) => item.id === pendingLifecycleAction.activityId)
+    : undefined;
+  const pendingLifecycleIsPausing =
+    pendingLifecycleAction?.action === "pause_resume" &&
+    (pendingLifecycleActivity?.courseStatus ?? "not_started") === "in_progress";
+  const pendingLifecycleTitle =
+    pendingLifecycleAction?.action === "start"
+      ? "開始上課"
+      : pendingLifecycleAction?.action === "end"
+        ? "結束上課"
+        : pendingLifecycleIsPausing
+          ? "暫停上課"
+          : "繼續上課";
+  const pendingLifecycleBody =
+    pendingLifecycleAction?.action === "start"
+      ? `確定要開始「${pendingLifecycleAction.title}」嗎？學生將可以進入課程互動。`
+      : pendingLifecycleAction?.action === "end"
+        ? `確定要結束「${pendingLifecycleAction.title}」嗎？結束後此課程將停止互動。`
+        : pendingLifecycleIsPausing
+          ? `確定要暫停「${pendingLifecycleAction?.title}」嗎？暫停後學生將無法繼續互動，直到恢復上課。`
+          : `確定要繼續「${pendingLifecycleAction?.title}」嗎？學生將可以繼續互動。`;
+
   return (
     <>
       <div className="card">
         <h2>學習管理</h2>
         {isLearningProcessing && learningActionKey === "initial" ? (
           <div
+            role="status"
+            aria-live="polite"
             style={{
               marginBottom: 12,
               padding: "12px 14px",
@@ -1404,7 +1418,7 @@ export default function LearningMonitorTab({
                           style={startDisabled ? disabledButtonStyle : enabledButtonStyle}
                           className={startDisabled ? "secondary" : ""}
                           disabled={startDisabled || learningActionKey === startKey}
-                          onClick={() => handleCourseLifecycle(activity.id, "start")}
+                          onClick={() => setPendingLifecycleAction({ activityId: activity.id, action: "start", title: activity.title })}
                         >
                           {learningActionKey === startKey ? "開始中..." : "開始上課"}
                         </button>
@@ -1413,7 +1427,7 @@ export default function LearningMonitorTab({
                           className={pauseResumeDisabled ? "secondary" : ""}
                           style={pauseResumeDisabled ? disabledButtonStyle : enabledButtonStyle}
                           disabled={pauseResumeDisabled || learningActionKey === pauseResumeKey}
-                          onClick={() => handleCourseLifecycle(activity.id, "pause_resume")}
+                          onClick={() => setPendingLifecycleAction({ activityId: activity.id, action: "pause_resume", title: activity.title })}
                         >
                           {learningActionKey === pauseResumeKey ? "更新中..." : status === "in_progress" ? "暫停上課" : "繼續上課"}
                         </button>
@@ -1422,7 +1436,7 @@ export default function LearningMonitorTab({
                           className={endDisabled ? "secondary" : ""}
                           style={endDisabled ? disabledButtonStyle : enabledButtonStyle}
                           disabled={endDisabled || learningActionKey === endKey}
-                          onClick={() => handleCourseLifecycle(activity.id, "end")}
+                          onClick={() => setPendingLifecycleAction({ activityId: activity.id, action: "end", title: activity.title })}
                         >
                           {learningActionKey === endKey ? "結束中..." : "結束上課"}
                         </button>
@@ -1462,9 +1476,7 @@ export default function LearningMonitorTab({
                             className="secondary"
                             style={{ width: "auto", background: "#ffe4e6", color: "#9f1239", borderColor: "#fecdd3" }}
                             disabled={learningActionKey === deleteKey}
-                            onClick={() => {
-                              deleteActivityTask(activity.id, activity.title).catch(() => undefined);
-                            }}
+                            onClick={() => setPendingDeleteActivity({ activityId: activity.id, title: activity.title })}
                           >
                             {learningActionKey === deleteKey ? "刪除中..." : "刪除"}
                           </button>
@@ -1528,8 +1540,8 @@ export default function LearningMonitorTab({
         ) : activities.length === 0 ? (
           <small>目前沒有可顯示的課程資料。請按「重新整理」或確認此帳號是否有可見課程。</small>
         ) : null}
-        {learningWarning ? <small>{learningWarning}</small> : null}
-        {error ? <small>{error}</small> : null}
+        {learningWarning ? <small role="status" aria-live="polite">{learningWarning}</small> : null}
+        {error ? <small role="alert" aria-live="assertive">{error}</small> : null}
       </div>
 
       {showCourseStatusView ? (
@@ -1537,6 +1549,8 @@ export default function LearningMonitorTab({
           {isLearningProcessing && (learningActionKey === "initial" || learningActionKey.endsWith(":view")) ? (
             <div
               className="card"
+              role="status"
+              aria-live="polite"
               style={{
                 borderColor: "#60a5fa",
                 background: "#dbeafe"
@@ -2059,6 +2073,37 @@ export default function LearningMonitorTab({
           ) : null}
         </>
       ) : null}
+      <ConfirmDialog
+        open={Boolean(pendingLifecycleAction)}
+        title={pendingLifecycleTitle}
+        body={pendingLifecycleBody}
+        confirmLabel={pendingLifecycleTitle}
+        busy={Boolean(pendingLifecycleAction && learningActionKey === `course:${pendingLifecycleAction.activityId}:${pendingLifecycleAction.action}`)}
+        onCancel={() => setPendingLifecycleAction(null)}
+        onConfirm={() => {
+          if (pendingLifecycleAction) {
+            void handleCourseLifecycle(pendingLifecycleAction.activityId, pendingLifecycleAction.action);
+          }
+        }}
+      />
+      <ConfirmDialog
+        open={Boolean(pendingDeleteActivity)}
+        title="刪除課程所有資料"
+        body={
+          pendingDeleteActivity
+            ? `這會刪除「${pendingDeleteActivity.title}」的寫作任務、分組資料與學生參與過程，且無法復原。`
+            : ""
+        }
+        requiredText={pendingDeleteActivity?.title}
+        confirmLabel="刪除所有資料"
+        busy={Boolean(pendingDeleteActivity && learningActionKey === `course:${pendingDeleteActivity.activityId}:delete`)}
+        onCancel={() => setPendingDeleteActivity(null)}
+        onConfirm={() => {
+          if (pendingDeleteActivity) {
+            deleteActivityTask(pendingDeleteActivity.activityId).catch(() => undefined);
+          }
+        }}
+      />
     </>
   );
 }

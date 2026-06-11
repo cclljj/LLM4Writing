@@ -236,7 +236,7 @@ export default function TeacherPage() {
   if (!authReady) {
     return (
       <main>
-        <div className="card" style={{ borderColor: "#bfdbfe", background: "#eff6ff" }}>
+        <div className="card" role="status" aria-live="polite" style={{ borderColor: "#bfdbfe", background: "#eff6ff" }}>
           <h2>正在確認登入狀態</h2>
           <small>系統正在連線，請稍候...</small>
         </div>
@@ -247,7 +247,7 @@ export default function TeacherPage() {
   if (authError && !loginUser) {
     return (
       <main>
-        <div className="card" style={{ borderColor: "#fecaca", background: "#fff1f2" }}>
+        <div className="card" role="alert" aria-live="assertive" style={{ borderColor: "#fecaca", background: "#fff1f2" }}>
           <h2>暫時無法進入{isAdminConsole ? "管理端" : "教師端"}</h2>
           <small>{authError}</small>
           <div className="row" style={{ marginTop: 12 }}>
@@ -308,13 +308,13 @@ export default function TeacherPage() {
       </div>
 
       {isRefreshing ? (
-        <div className="card" style={{ borderColor: "#bfdbfe", background: "#eff6ff" }}>
+        <div className="card" role="status" aria-live="polite" style={{ borderColor: "#bfdbfe", background: "#eff6ff" }}>
           <small>正在載入管理資料，請稍候...</small>
         </div>
       ) : null}
 
       {error ? (
-        <div className="card" style={{ borderColor: "#fecaca", background: "#fff1f2" }}>
+        <div className="card" role="alert" aria-live="assertive" style={{ borderColor: "#fecaca", background: "#fff1f2" }}>
           <small>{error}</small>
           <div className="row" style={{ marginTop: 12 }}>
             <div style={{ width: 180 }}>

@@ -44,6 +44,26 @@ The system SHALL provide separate student, teacher, and admin capabilities for t
 - **AND** if loading still fails, it shows an admin-readable retry state and preserves any existing screen data where possible
 - **AND** explicit unauthenticated responses still redirect to `/login`
 
+#### Scenario: App router fallback surfaces
+
+- **GIVEN** a route is loading, missing, or fails during rendering
+- **WHEN** the App Router fallback renders
+- **THEN** the user sees Traditional Chinese loading, not-found, or recoverable error content instead of a blank page
+
+#### Scenario: Production-facing metadata
+
+- **GIVEN** a student, teacher, or admin opens the application
+- **WHEN** browser metadata is rendered
+- **THEN** page titles use the production-facing LLM4Writing product name and area-specific labels
+- **AND** internal rewrite or deployment wording is not exposed
+
+#### Scenario: Baseline keyboard and live-region accessibility
+
+- **GIVEN** a user navigates by keyboard or assistive technology
+- **WHEN** focus moves through interactive controls or important status text changes
+- **THEN** focused controls show a visible focus indicator
+- **AND** important errors, loading states, and streaming feedback use alert/status live-region semantics
+
 ### Requirement: Dual-Mode Persistence
 
 The system SHALL use PostgreSQL when configured and SHALL fall back to memory or file-backed storage when database access is not available.

@@ -3,8 +3,11 @@ import { headers } from "next/headers";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "LLM4Writing Vercel Native",
-  description: "Vercel-native rewrite of LLM4Writing"
+  title: {
+    default: "LLM4Writing 寫作學習平台",
+    template: "%s | LLM4Writing"
+  },
+  description: "AI 輔助寫作教學與學習歷程平台"
 };
 
 /**

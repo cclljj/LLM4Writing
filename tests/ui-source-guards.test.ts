@@ -98,6 +98,34 @@ test("source-guard: teacher/admin route keeps management bootstrap failures reco
   assert.ok(helperSrc.includes("status === 429 || error.status >= 500"), "shared client fetch helper should retry transient HTTP failures");
 });
 
+test("source-guard: app router has user-facing fallback surfaces and production metadata", async () => {
+  const layoutSrc = await read("../app/layout.tsx");
+  const errorSrc = await read("../app/error.tsx");
+  const loadingSrc = await read("../app/loading.tsx");
+  const notFoundSrc = await read("../app/not-found.tsx");
+  const globalsSrc = await read("../app/globals.css");
+  assert.ok(layoutSrc.includes("LLM4Writing 寫作學習平台"), "root metadata should use the production-facing product name");
+  assert.ok(!layoutSrc.includes("Vercel Native"), "metadata should not expose internal deployment wording");
+  assert.ok(!layoutSrc.includes("rewrite"), "metadata should not expose rewrite wording");
+  assert.ok(errorSrc.includes("頁面暫時無法顯示"), "app error boundary should show a recoverable message");
+  assert.ok(loadingSrc.includes("正在載入"), "app loading boundary should show loading feedback");
+  assert.ok(notFoundSrc.includes("找不到這個頁面"), "app not-found boundary should show a friendly not-found page");
+  assert.ok(globalsSrc.includes(":focus-visible"), "global CSS should provide visible keyboard focus styling");
+});
+
+test("source-guard: destructive actions use explicit confirmation dialogs", async () => {
+  const confirmSrc = await read("../app/teacher/_components/ConfirmDialog.tsx");
+  const accountSrc = await read("../app/teacher/_components/StudentAccountTab.tsx");
+  const courseSrc = await read("../app/teacher/_components/CourseManagementTab.tsx");
+  const monitorSrc = await read("../app/teacher/_components/LearningMonitorTab.tsx");
+  const combined = `${accountSrc}\n${courseSrc}\n${monitorSrc}`;
+  assert.ok(confirmSrc.includes("requiredText"), "confirmation dialog should support typed confirmation");
+  assert.ok(accountSrc.includes("requiredText={deleteUserTarget?.username}"), "account deletion should require typing the username");
+  assert.ok(courseSrc.includes("requiredText={deleteTaskTarget?.essayTitle}"), "task deletion should require typing the task title");
+  assert.ok(monitorSrc.includes("requiredText={pendingDeleteActivity?.title}"), "course-data deletion should require typing the course title");
+  assert.ok(!combined.includes("window.confirm"), "destructive UI flows should not use native confirm");
+});
+
 test("source-guard: learning management renders course diagnostics status", async () => {
   const uiSrc = await read("../app/teacher/_components/LearningMonitorTab.tsx");
   const panelSrc = await read("../app/teacher/_components/CourseDiagnosticsPanel.tsx");

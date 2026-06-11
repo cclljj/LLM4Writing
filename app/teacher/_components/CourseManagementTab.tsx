@@ -4,6 +4,7 @@ import { DragEvent, FormEvent, useEffect, useMemo, useRef, useState } from "reac
 import { deferStateUpdate } from "@/src/lib/defer-state-update";
 import { ActivityGroup, ActivityRow, EssayRow, OpenClassRow, UserRow, genreOptions } from "./types";
 import CourseImplementationReportTab from "./CourseImplementationReportTab";
+import ConfirmDialog from "./ConfirmDialog";
 
 interface CourseManagementTabProps {
   loginRole: "teacher" | "admin";
@@ -82,6 +83,7 @@ export default function CourseManagementTab({
   const [savedSuccessMessage, setSavedSuccessMessage] = useState<string>("");
   // 刪除任務 UX 狀態（#257）：追蹤目前正在刪除的 activityId，提供按鈕 disabled 與提示
   const [deletingTaskId, setDeletingTaskId] = useState<string>("");
+  const [deleteTaskTarget, setDeleteTaskTarget] = useState<OpenClassRow | null>(null);
 
   const taskFormRef = useRef<HTMLDivElement | null>(null);
 
@@ -288,10 +290,7 @@ export default function CourseManagementTab({
   async function deleteTask(openClass: OpenClassRow) {
     setError("");
     setSavedSuccessMessage("");
-    const confirmed = window.confirm(
-      `確定刪除寫作任務「${openClass.essayTitle} / ${openClass.school} ${openClass.classNumber}」嗎？\n此操作無法復原。`
-    );
-    if (!confirmed) return;
+    setDeleteTaskTarget(null);
     setDeletingTaskId(openClass.id);
     setSavingMessage(`正在刪除任務 ${openClass.id}，請稍候...`);
     setIsSavingTask(true); // 重用既有 banner 樣式 (#255)
@@ -1088,7 +1087,7 @@ export default function CourseManagementTab({
                             opacity: deletingTaskId === openClass.id ? 0.6 : 1,
                             cursor: deletingTaskId === openClass.id ? "wait" : undefined
                           }}
-                          onClick={() => deleteTask(openClass)}
+                          onClick={() => setDeleteTaskTarget(openClass)}
                           disabled={Boolean(deletingTaskId) || isSavingTask}
                         >
                           {deletingTaskId === openClass.id ? "處理中..." : "刪除"}
@@ -1145,6 +1144,23 @@ export default function CourseManagementTab({
           setError={setError}
         />
       ) : null}
+
+      <ConfirmDialog
+        open={Boolean(deleteTaskTarget)}
+        title="刪除寫作任務"
+        body={
+          deleteTaskTarget
+            ? `這會刪除「${deleteTaskTarget.essayTitle} / ${deleteTaskTarget.school} ${deleteTaskTarget.classNumber}」的任務、分組與相關資料，且無法復原。`
+            : ""
+        }
+        requiredText={deleteTaskTarget?.essayTitle}
+        confirmLabel="刪除任務"
+        busy={Boolean(deletingTaskId)}
+        onCancel={() => setDeleteTaskTarget(null)}
+        onConfirm={() => {
+          if (deleteTaskTarget) void deleteTask(deleteTaskTarget);
+        }}
+      />
     </>
   );
 }
