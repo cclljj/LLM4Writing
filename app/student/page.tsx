@@ -13,18 +13,33 @@ import { validateDraftContent } from "@/src/lib/answer-validation";
 import { appendErrorHint, formatUserError } from "@/src/lib/error-messages";
 import { deferStateUpdate } from "@/src/lib/defer-state-update";
 import { formatTaipeiTime } from "@/src/lib/time-format";
-import OutlineSvg from "@/app/_components/OutlineSvg";
+import { stepNameMap } from "@/src/lib/step-names";
+import {
+  appendTeacherHelpHint,
+  buildHistoryReviewSteps,
+  buildInteractiveMessages,
+  fetchStudentJson,
+  getActiveGroupGateKey,
+  getMode,
+  getOwnStepFromSession,
+  getStudentRetryableMessage,
+  StudentFetchError
+} from "@/src/lib/student-page-helpers";
 import GroupWaitingStatus from "./_components/GroupWaitingStatus";
 import NextActionCard from "./_components/NextActionCard";
 import StudentProgressRail from "./_components/StudentProgressRail";
 import { renderMessageHtml } from "./_components/renderMessageHtml";
-import OutlineEditor from "./_components/OutlineEditor";
 import StudentLobby from "./_components/StudentLobby";
 import HistoryReview from "./_components/HistoryReview";
 import InteractionPanel from "./_components/InteractionPanel";
 import Step68Panel from "./_components/Step68Panel";
-
-type InteractionMode = "group_interaction" | "personal_interaction" | "non_interactive" | "personal_reflection";
+import CoursePrepCard from "./_components/CoursePrepCard";
+import CourseInfoBanner from "./_components/CourseInfoBanner";
+import Step3InteractionCard from "./_components/Step3InteractionCard";
+import MakeupOutlineCard from "./_components/MakeupOutlineCard";
+import Step34OutlinePanel from "./_components/Step34OutlinePanel";
+import Step5ReportCard from "./_components/Step5ReportCard";
+import DebugLogCard from "./_components/DebugLogCard";
 
 type Course = {
   id: string;
@@ -106,158 +121,7 @@ type StudentSessionPayload = Omit<SessionState, "messages"> & {
   lastMessageAt?: string | null;
 };
 
-type InteractiveItem = {
-  id: string;
-  kind: "question" | "student" | "ai";
-  text: string;
-  at: string;
-  userId?: string;
-};
-
-type StepReview = {
-  step: number;
-  title: string;
-  messages: InteractiveItem[];
-};
-
-const stepNameMap: Record<number, string> = {
-  1: "審視題目",
-  2: "蒐集資料",
-  3: "生成論點",
-  4: "對比修正",
-  5: "摘要報告",
-  6: "撰寫初稿",
-  7: "分析回饋",
-  8: "修改潤飾",
-  9: "個人反思",
-  10: "總結報告"
-};
-
 const LAST_ACTIVITY_STORAGE_KEY = "student:lastActivityId";
-const STUDENT_FETCH_TIMEOUT_MS = 8000;
-const STUDENT_FETCH_RETRY_DELAYS_MS = [500, 1200];
-
-class StudentFetchError extends Error {
-  status?: number;
-  code: "http" | "network" | "timeout" | "parse";
-
-  constructor(message: string, code: StudentFetchError["code"], status?: number) {
-    super(message);
-    this.name = "StudentFetchError";
-    this.code = code;
-    this.status = status;
-  }
-}
-
-type FetchJsonOptions = {
-  timeoutMs?: number;
-  retryDelaysMs?: number[];
-};
-
-async function sleep(ms: number): Promise<void> {
-  await new Promise((resolve) => window.setTimeout(resolve, ms));
-}
-
-function isRetryableStudentFetchError(error: unknown): boolean {
-  if (!(error instanceof StudentFetchError)) return true;
-  if (error.code === "network" || error.code === "timeout" || error.code === "parse") return true;
-  return Boolean(error.status && (error.status === 429 || error.status >= 500));
-}
-
-async function fetchStudentJson<T>(
-  input: RequestInfo | URL,
-  init: RequestInit = {},
-  options: FetchJsonOptions = {}
-): Promise<{ data: T; response: Response }> {
-  const timeoutMs = options.timeoutMs ?? STUDENT_FETCH_TIMEOUT_MS;
-  const retryDelaysMs = options.retryDelaysMs ?? STUDENT_FETCH_RETRY_DELAYS_MS;
-  let lastError: unknown;
-
-  for (let attempt = 0; attempt <= retryDelaysMs.length; attempt++) {
-    const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
-    try {
-      const response = await fetch(input, { ...init, signal: controller.signal });
-      const raw = await response.text();
-      let data: T;
-      try {
-        data = raw ? (JSON.parse(raw) as T) : ({} as T);
-      } catch {
-        throw new StudentFetchError("student_json_parse_failed", "parse", response.status);
-      }
-      if (!response.ok) {
-        const errorCode = typeof (data as { error?: unknown }).error === "string"
-          ? (data as { error: string }).error
-          : "student_request_failed";
-        throw new StudentFetchError(errorCode, "http", response.status);
-      }
-      return { data, response };
-    } catch (error) {
-      const normalizedError =
-        error instanceof StudentFetchError
-          ? error
-          : new StudentFetchError(
-              error instanceof DOMException && error.name === "AbortError" ? "student_request_timeout" : "student_network_failed",
-              error instanceof DOMException && error.name === "AbortError" ? "timeout" : "network"
-            );
-      lastError = normalizedError;
-      if (attempt >= retryDelaysMs.length || !isRetryableStudentFetchError(normalizedError)) {
-        throw normalizedError;
-      }
-      await sleep(retryDelaysMs[attempt]!);
-    } finally {
-      window.clearTimeout(timeout);
-    }
-  }
-
-  throw lastError instanceof Error ? lastError : new StudentFetchError("student_request_failed", "network");
-}
-
-function getStudentRetryableMessage(target: "auth" | "overview" | "join"): string {
-  if (target === "auth") return "目前無法確認登入狀態，可能是網路或伺服器暫時忙碌。請稍候再試；如果全班都遇到這個畫面，請老師通知管理者。";
-  if (target === "join") return "目前無法進入課程，可能是網路或伺服器暫時忙碌。請再按一次進入課程；如果仍失敗，請先通知老師。";
-  return "目前無法載入課程清單，可能是網路或伺服器暫時忙碌。請按重新整理課程清單再試；如果全班都遇到這個畫面，請老師通知管理者。";
-}
-
-function getMode(step: number): InteractionMode {
-  if ([1, 2, 4].includes(step)) return "group_interaction";
-  if ([3, 6, 8].includes(step)) return "personal_interaction";
-  if ([5, 7, 10].includes(step)) return "non_interactive";
-  return "personal_reflection";
-}
-
-function getActiveGroupGateKey(session: SessionState | null, step: number): string | null {
-  if (!session) return null;
-  if (step === 1) {
-    const sub = session.stepState?.step1Substep ?? 1;
-    if (sub === 3) return `1-3-${session.stepState?.step1Substep3Question ?? 1}`;
-    if (sub === 4) return `1-4-${session.stepState?.step1Substep4Question ?? 1}`;
-    return `1-${sub}`;
-  }
-  if (step === 2) {
-    const sub = session.stepState?.step2Substep ?? 1;
-    if (sub === 1) return `2-1-${session.stepState?.step2Substep1Question ?? 1}`;
-    return `2-${sub}`;
-  }
-  return null;
-}
-
-function looksLikeInstructionPromptText(text: string): boolean {
-  if (text.includes("【") || text.includes("提問規則") || text.includes("批判性思考")) return true;
-  if (text.includes("請回答以下問題")) return true;
-  const lines = text.split(/\r?\n/).filter((line) => line.trim().length > 0);
-  return lines.length >= 4 || text.length >= 160;
-}
-
-function appendTeacherHelpHint(message: string): string {
-  const hint = "如果你不確定怎麼修改，可以先舉手請老師來幫忙。";
-  if (message.includes(hint)) return message;
-  return `${message}\n\n${hint}`;
-}
-
-function getOwnStepFromSession(session: SessionState, username: string): number {
-  return session.personalSteps?.[username] ?? session.currentStep;
-}
 
 export default function StudentPage() {
   const router = useRouter();
@@ -584,100 +448,15 @@ export default function StudentPage() {
     [session]
   );
 
-  const interactiveMessages = useMemo(() => {
-    if (!session) return [] as InteractiveItem[];
-    const currentMode = getMode(currentStep);
-    const activeGateKey = getActiveGroupGateKey(session, currentStep);
-    const responders = activeGateKey ? session.groupGate?.[activeGateKey] ?? [] : [];
-    const hasSubmittedThisTurn = Boolean(loginUser && responders.includes(loginUser));
-    const hidePeerAnswersBeforeOwn =
-      currentMode === "group_interaction" &&
-      Array.isArray(responders) &&
-      responders.length > 0 &&
-      !hasSubmittedThisTurn;
+  const interactiveMessages = useMemo(
+    () => buildInteractiveMessages({ session, sortedMessages, loginUser, currentStep }),
+    [session, sortedMessages, loginUser, currentStep]
+  );
 
-    const stepMessages = sortedMessages.filter((m) => m.step === currentStep);
-    let currentTurnStartIndex = -1;
-    for (let i = stepMessages.length - 1; i >= 0; i -= 1) {
-      const m = stepMessages[i]!;
-      if (activeGateKey) {
-        if (m.role === "system" && m.text.includes(`子步驟 ${activeGateKey}：`)) {
-          currentTurnStartIndex = i;
-          break;
-        }
-      } else if (m.role === "system" && m.text.startsWith("步驟 4 開頭詞：")) {
-        currentTurnStartIndex = i;
-        break;
-      }
-    }
-
-    const toQuestionText = (t: string): string | null => {
-      if (t.includes("子步驟 ")) {
-        const idx = t.indexOf("子步驟 ");
-        const extracted = t.slice(idx).trim();
-        const m = extracted.match(/^子步驟\s+(\d-\d(?:-\d)?)：([\s\S]*)$/);
-        if (!m) return extracted;
-        const substep = m[1];
-        const content = m[2]?.trim() ?? "";
-        if (content.startsWith("請討論：") || looksLikeInstructionPromptText(content)) {
-          return `子步驟 ${substep}：請依上一則 AI 提問進行回答。`;
-        }
-        return `子步驟 ${substep}：${content}`;
-      }
-      if (t.startsWith("下一題：")) return t.replace("下一題：", "").trim();
-      if (t.startsWith("步驟 9 開始：")) return t.replace("步驟 9 開始：", "").trim();
-      if (t.startsWith("步驟 3 開頭詞：")) return t.replace("步驟 3 開頭詞：", "").trim();
-      return null;
-    };
-
-    const result: InteractiveItem[] = [];
-    stepMessages.forEach((m, idx) => {
-      if (m.role === "student") {
-        if (currentStep >= 5 && m.userId && m.userId !== loginUser) return;
-        if (currentStep === 3 && m.userId && m.userId !== loginUser) return;
-        const isCurrentTurnMessage = currentTurnStartIndex >= 0 ? idx > currentTurnStartIndex : false;
-        if (hidePeerAnswersBeforeOwn && isCurrentTurnMessage && m.userId && m.userId !== loginUser) return;
-        result.push({ id: m.id, kind: "student", text: m.text, at: m.at, userId: m.userId });
-        return;
-      }
-      if (m.role === "ai") {
-        if (currentStep >= 5 && m.userId && m.userId !== loginUser) return;
-        if (currentStep === 3 && m.userId !== loginUser) return;
-        result.push({ id: m.id, kind: "ai", text: m.text, at: m.at });
-        return;
-      }
-      if (m.role === "system") {
-        if (currentStep >= 5 && m.userId && m.userId !== loginUser) return;
-        const q = toQuestionText(m.text);
-        if (q) result.push({ id: m.id, kind: "question", text: q, at: m.at });
-      }
-    });
-    return result;
-  }, [session, sortedMessages, loginUser, currentStep]);
-
-  const historyReviewSteps = useMemo(() => {
-    const ownStep = session && loginUser ? session.personalSteps?.[loginUser] ?? session.currentStep : 1;
-    if (!session || !loginUser || ownStep <= 1) return [] as StepReview[];
-    const reviews: StepReview[] = [];
-    for (let step = 1; step < ownStep; step += 1) {
-      const messages = sortedMessages
-        .filter((m) => m.step === step)
-        .flatMap((m): InteractiveItem[] => {
-          if (m.role === "system" || m.role === "teacher") return [];
-          if (m.role === "student") {
-            if (m.userId !== loginUser) return [];
-            return [{ id: m.id, kind: "student", text: m.text, at: m.at, userId: m.userId }];
-          }
-          if (m.role === "ai") {
-            if (m.userId && m.userId !== loginUser) return [];
-            return [{ id: m.id, kind: "ai", text: m.text, at: m.at, userId: m.userId }];
-          }
-          return [];
-        });
-      reviews.push({ step, title: stepNameMap[step] ?? `步驟 ${step}`, messages });
-    }
-    return reviews;
-  }, [loginUser, session, sortedMessages]);
+  const historyReviewSteps = useMemo(
+    () => buildHistoryReviewSteps(stepNameMap, { session, sortedMessages, loginUser }),
+    [loginUser, session, sortedMessages]
+  );
 
   const step3SubmittedOutlineMermaid = useMemo(() => {
     const ownStep = session && loginUser ? session.personalSteps?.[loginUser] ?? session.currentStep : 1;
@@ -1620,71 +1399,33 @@ export default function StudentPage() {
       ) : null}
 
       {preparingCourse ? (
-        <div className="card" style={{ borderColor: "#93c5fd", background: "#eff6ff" }}>
-          <h2>準備開始上課</h2>
-          <p><strong>{preparingCourse.title}</strong></p>
-          <p>班級：{preparingCourse.classNumber} / 文體：{preparingCourse.genre} / 討論時長：{preparingCourse.durationMinutes} 分鐘</p>
-          <small>你已進入準備階段，請等待老師點選「開始上課」。</small>
-          <div className="row" style={{ marginTop: 10 }}>
-            <div style={{ width: 220 }}>
-              <button type="button" onClick={() => joinActivity(preparingCourse.id)}>檢查並進入討論</button>
-            </div>
-            <div style={{ width: 180 }}>
-              <button type="button" className="secondary" onClick={() => refreshOverview()}>重新整理狀態</button>
-            </div>
-            <div style={{ width: 180 }}>
-              <button type="button" className="secondary" onClick={() => setPreparingCourse(null)}>離開準備</button>
-            </div>
-          </div>
-        </div>
+        <CoursePrepCard
+          course={preparingCourse}
+          onJoin={joinActivity}
+          onRefresh={() => refreshOverview()}
+          onLeave={() => setPreparingCourse(null)}
+        />
       ) : null}
 
       {session ? (
         <>
-          <div className="card">
-            <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
-              <h2 style={{ marginBottom: 0 }}>課程內容</h2>
-              <div className="row" style={{ gap: 8 }}>
-                <button
-                  type="button"
-                  className="secondary"
-                  style={{ width: "auto" }}
-                  onClick={() => {
-                    setSession(null);
-                    setPreparingCourse(null);
-                    rememberLastActivity(null);
-                    syncActivityQuery(null);
-                    refreshOverview().catch(() => undefined);
-                  }}
-                >
-                  返回學生端課程首頁
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="card" style={{ borderColor: "#93c5fd", background: "#eff6ff", padding: "10px 14px" }}>
-            <p style={{ margin: 0, fontWeight: 700, fontSize: 20, lineHeight: 1.4 }}>
-              {session.activityTitle ?? currentActivity?.title ?? "未命名課程"}
-            </p>
-            <p style={{ margin: "6px 0 0", lineHeight: 1.5 }}>
-              文體：{currentActivity?.genre ?? "—"} / 時長：{currentActivity?.durationMinutes ?? "—"} 分鐘
-            </p>
-            <p style={{ margin: "4px 0 0", lineHeight: 1.5 }}>
-              班級：{currentActivity?.classNumber ?? "—"} / 組別：{session.groupName ?? "—"}
-            </p>
-            <p style={{ margin: "4px 0 0", lineHeight: 1.5 }}>
-              組員名單：{groupMemberNames.length > 0 ? groupMemberNames.join("、") : "—"}
-            </p>
-            <div style={{ marginTop: 10 }}>
-              <p style={{ margin: 0 }}><strong>引導說明</strong></p>
-              <div style={{ marginTop: 4 }} dangerouslySetInnerHTML={{ __html: renderMessageHtml(currentActivity?.essayDescription || "—") }} />
-            </div>
-            <div style={{ marginTop: 10, borderTop: "1px solid #dbeafe", paddingTop: 8 }}>
-              <p style={{ margin: 0 }}><strong>補充資料</strong></p>
-              <div style={{ marginTop: 4 }} dangerouslySetInnerHTML={{ __html: renderMessageHtml(currentActivity?.supplemental || "—") }} />
-            </div>
-          </div>
+          <CourseInfoBanner
+            title={session.activityTitle ?? currentActivity?.title ?? "未命名課程"}
+            genre={currentActivity?.genre ?? "—"}
+            durationMinutes={currentActivity?.durationMinutes ?? "—"}
+            classNumber={currentActivity?.classNumber ?? "—"}
+            groupName={session.groupName ?? "—"}
+            groupMemberNames={groupMemberNames}
+            essayDescription={currentActivity?.essayDescription || "—"}
+            supplemental={currentActivity?.supplemental || "—"}
+            onBackToLobby={() => {
+              setSession(null);
+              setPreparingCourse(null);
+              rememberLastActivity(null);
+              syncActivityQuery(null);
+              refreshOverview().catch(() => undefined);
+            }}
+          />
 
           <StudentProgressRail currentStep={currentStep} />
           <NextActionCard action={nextAction} />
@@ -1763,133 +1504,46 @@ export default function StudentPage() {
           ) : null}
 
           {currentStep === 3 ? (
-            <div className="card">
-              <h2>互動內容</h2>
-              {interactiveMessages.map((message) => (
-                <div key={message.id} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
-                  <strong>
-                    {message.kind === "question"
-                      ? "問題"
-                      : message.kind === "student"
-                        ? `學生${message.userId ? `(${message.userId})` : ""}`
-                        : "AI 回覆"}
-                  </strong>
-                  <div style={{ marginTop: 4 }} dangerouslySetInnerHTML={{ __html: renderMessageHtml(message.text) }} />
-                  <small>{message.at}</small>
-                </div>
-              ))}
-              {interactiveMessages.length === 0 ? (
-                <small>請先描述你目前想建構的文章主軸，或直接提出你在結構樹規劃上遇到的問題。</small>
-              ) : null}
-              {step3StreamingText ? (
-                <div
-                  style={{
-                    borderTop: "1px solid #e5e7eb",
-                    padding: "8px 0",
-                    whiteSpace: "pre-wrap"
-                  }}
-                >
-                  <strong>AI 回覆</strong>
-                  <div style={{ marginTop: 4 }}>{step3StreamingText}</div>
-                </div>
-              ) : null}
-              {isSendingMessage ? (
-                <p style={{ marginTop: 10 }}><small>AI 正在整理回覆中，請稍候...</small></p>
-              ) : null}
-              {step3CompletedByMe ? (
-                <p style={{ marginTop: 10 }}>
-                  <small>{waitingStep3Members ? "你已完成結構樹，等待其他同學完成..." : "你已完成結構樹，可等待老師切換下一步。"}</small>
-                </p>
-              ) : null}
-              {step3CompletedByMe && isInputEnabled ? (
-                <div style={{ marginTop: 8 }}>
-                  <button type="button" className="secondary" onClick={() => reopenStep3Editing()}>
-                    恢復編輯
-                  </button>
-                </div>
-              ) : null}
-              {!step3CompletedByMe && isInputEnabled && canReplyToQuestion && !isSendingMessage ? (
-                <form onSubmit={sendMessage}>
-                  <label>你的回答</label>
-                  <textarea value={text} onChange={(e) => setText(e.target.value)} onPaste={(e) => e.preventDefault()} />
-                  <button type="submit" className="full-width" style={{ marginTop: 10 }}>發送訊息</button>
-                </form>
-              ) : null}
-            </div>
+            <Step3InteractionCard
+              interactiveMessages={interactiveMessages}
+              step3StreamingText={step3StreamingText}
+              isSendingMessage={isSendingMessage}
+              step3CompletedByMe={step3CompletedByMe}
+              waitingStep3Members={waitingStep3Members}
+              isInputEnabled={isInputEnabled}
+              canReplyToQuestion={canReplyToQuestion}
+              text={text}
+              onTextChange={setText}
+              onSendMessage={sendMessage}
+              onReopenStep3={() => reopenStep3Editing()}
+            />
           ) : null}
 
-          {currentStep === 3 && loginUser ? (
-            <div className="card">
-              <h2>文章結構樹</h2>
-              <OutlineEditor
-                serverMermaid={session.outlines[loginUser] ?? ""}
-                locked={step3CompletedByMe}
-                lockedLabel="已完成送出"
-                onSave={handleOutlineSave}
-                onComplete={completeOutlineTree}
-                completeLabel="完成結構樹"
-                completeDisabled={step3CompletedByMe}
-                completeHint={step3CompleteHint}
-                completedMessage={
-                  step3CompletedByMe
-                    ? (waitingStep3Members ? "你已完成結構樹，已鎖定編輯，等待其他同學完成..." : "你已完成結構樹，已鎖定編輯，可等待老師切換下一步。")
-                    : undefined
-                }
-              />
-            </div>
-          ) : null}
-
-          {currentStep === 4 && session && loginUser ? (
-            <>
-              <div className="card">
-                <h2>同組同學結構樹</h2>
-                <label style={{ marginTop: 10 }}>選擇同學</label>
-                <select value={refUser} onChange={(e) => setRefUser(e.target.value)}>
-                  {(teammateUsers.length > 0 ? teammateUsers : session.participants).map((user) => (
-                    <option key={user} value={user}>{user}</option>
-                  ))}
-                </select>
-                <OutlineSvg compact mermaidText={session.outlines[refUser] ?? ""} />
-              </div>
-
-              <div className="card">
-                <h2>我的結構樹（可編修）</h2>
-                {step4CompletedByMe ? (
-                  <>
-                    <small>你已確認完成此步驟，已鎖定編修；你的變更已自動儲存。</small>
-                    <OutlineSvg compact mermaidText={session.outlines[loginUser] ?? ""} />
-                  </>
-                ) : (
-                  <>
-                    <small style={{ display: "block", marginBottom: 8 }}>此步驟建議先與同學討論，再修改自己的結構樹。</small>
-                    <OutlineEditor
-                      serverMermaid={session.outlines[loginUser] ?? ""}
-                      locked={false}
-                      lockedLabel="已確認完成，編修已鎖定"
-                      onSave={handleOutlineSave}
-                    />
-                  </>
-                )}
-              </div>
-            </>
+          {(currentStep === 3 || currentStep === 4) && loginUser ? (
+            <Step34OutlinePanel
+              currentStep={currentStep as 3 | 4}
+              loginUser={loginUser}
+              participants={session.participants}
+              teammateUsers={teammateUsers}
+              outlines={session.outlines}
+              refUser={refUser}
+              onRefUserChange={setRefUser}
+              step3CompletedByMe={step3CompletedByMe}
+              step4CompletedByMe={step4CompletedByMe}
+              waitingStep3Members={waitingStep3Members}
+              step3CompleteHint={step3CompleteHint}
+              onSave={handleOutlineSave}
+              onCompleteStep3={completeOutlineTree}
+            />
           ) : null}
 
           {currentStep === 6 && loginUser && makeupOutlinePending ? (
-            <div className="card">
-              <h2>需補個人結構圖</h2>
-              <small style={{ display: "block", marginBottom: 8 }}>
-                你目前仍可查看歷史內容；請先完成自己的結構圖，再進入正式寫作。
-              </small>
-              <OutlineEditor
-                serverMermaid={session.outlines[loginUser] ?? ""}
-                locked={false}
-                lockedLabel="已完成個人結構圖補做"
-                onSave={handleOutlineSave}
-                onComplete={completeMakeupOutlineTree}
-                completeLabel="完成個人結構圖"
-                completeHint={makeupOutlineHint}
-              />
-            </div>
+            <MakeupOutlineCard
+              serverMermaid={session.outlines[loginUser] ?? ""}
+              completeHint={makeupOutlineHint}
+              onSave={handleOutlineSave}
+              onComplete={completeMakeupOutlineTree}
+            />
           ) : null}
 
           {(currentStep === 6 || currentStep === 8) && loginUser && !(currentStep === 6 && makeupOutlinePending) ? (
@@ -1914,22 +1568,13 @@ export default function StudentPage() {
             />
           ) : null}
 
-          {currentStep === 5 ? (
-            <div className="card">
-              <h2>摘要報告</h2>
-              <pre>{(loginUser && session.reports?.step5?.[loginUser]) || "系統尚未產生摘要。"}</pre>
-              <small>摘要顯示後將自動進入步驟 6。</small>
-            </div>
-          ) : null}
-
-          {currentStep === 7 ? (
-            <div className="card">
-              <h2>分析回饋</h2>
-              <h3>步驟 6 作文內容</h3>
-              <pre>{loginUser ? session.draftStep6[loginUser] ?? "尚未提交初稿。" : "尚未提交初稿。"}</pre>
-              <h3 style={{ marginTop: 12 }}>AI 分析回饋</h3>
-              <pre>{ownStep7Report ?? "系統尚未產生分析。"}</pre>
-            </div>
+          {currentStep === 5 || currentStep === 7 ? (
+            <Step5ReportCard
+              currentStep={currentStep as 5 | 7}
+              step5Report={loginUser ? session.reports?.step5?.[loginUser] : undefined}
+              draftStep6={loginUser ? session.draftStep6[loginUser] : undefined}
+              step7Report={ownStep7Report ?? undefined}
+            />
           ) : null}
 
           {currentStep === 10 && isStep10ReportReady ? (
@@ -1975,21 +1620,7 @@ export default function StudentPage() {
             />
           ) : null}
 
-          {showDebugLog ? (
-            <>
-              <hr />
-              <div className="card">
-                <h2>完整對話紀錄（除錯）</h2>
-                {sortedMessages.map((message) => (
-                  <div key={message.id} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
-                    <strong>[S{message.step}] {message.role}{message.userId ? `(${message.userId})` : ""}</strong>
-                    <div style={{ marginTop: 4 }} dangerouslySetInnerHTML={{ __html: renderMessageHtml(message.text) }} />
-                    <small>{message.at}</small>
-                  </div>
-                ))}
-              </div>
-            </>
-          ) : null}
+          {showDebugLog ? <DebugLogCard messages={sortedMessages} /> : null}
         </>
       ) : null}
     </main>

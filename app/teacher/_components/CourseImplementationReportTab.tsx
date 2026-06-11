@@ -8,6 +8,7 @@ import { ActivityRow, MonitorSession, OpenClassRow, UserRow } from "./types";
 import { generateCourseImplementationPdf } from "@/src/lib/courseImplementationPdf";
 import { injectStep8DraftTimeline } from "@/src/lib/course-report-pdf-timeline";
 import { shouldTreatAsZipDownload } from "@/src/lib/course-report-download";
+import { stepNameMap } from "@/src/lib/step-names";
 
 type CourseImplementationReportTabProps = {
   loginRole: "teacher" | "admin";
@@ -65,18 +66,6 @@ type ClassExportJob = {
 
 const PAGE_SIZE = 10;
 
-const stepNameMap: Record<number, string> = {
-  1: "審視題目",
-  2: "蒐集資料",
-  3: "生成論點",
-  4: "對比修正",
-  5: "摘要報告",
-  6: "撰寫初稿",
-  7: "分析回饋",
-  8: "修改潤飾",
-  9: "個人反思",
-  10: "總結報告"
-};
 
 function formatStepText(step: number): string {
   if (!Number.isFinite(step) || step <= 0) return "尚未加入";

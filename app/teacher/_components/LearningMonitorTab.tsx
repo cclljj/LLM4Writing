@@ -26,6 +26,7 @@ import TeacherDashboard, { TeacherDashboardData } from "./TeacherDashboard";
 import CourseDiagnosticsPanel from "./CourseDiagnosticsPanel";
 import { ActivityRow, CourseDiagnosticsPayload, MonitorSession, UserRow } from "./types";
 import ConfirmDialog from "./ConfirmDialog";
+import { stepNameMap } from "@/src/lib/step-names";
 
 // Re-export QualitySignals/ArtifactDiagnostics usage via types import
 type _QS = QualitySignals;
@@ -37,18 +38,6 @@ type MonitorMessage = { id: string; role: string; userId?: string; step: number;
 type ClassJoinSortColumn = "username" | "groupName" | "step" | "messageCount";
 type SortDirection = "asc" | "desc";
 
-const stepNameMap: Record<number, string> = {
-  1: "審視題目",
-  2: "蒐集資料",
-  3: "生成論點",
-  4: "對比修正",
-  5: "摘要報告",
-  6: "撰寫初稿",
-  7: "分析回饋",
-  8: "修改潤飾",
-  9: "個人反思",
-  10: "總結報告"
-};
 
 const TEACHER_MONITOR_ACTIVITY_STORAGE_KEY = "teacher:monitor:selectedActivityId";
 const ADMIN_MONITOR_ACTIVITY_STORAGE_KEY = "admin:monitor:selectedActivityId";

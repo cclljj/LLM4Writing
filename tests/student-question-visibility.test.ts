@@ -12,12 +12,14 @@ test("#310: interaction panel labels question messages as 問題", () => {
 });
 
 test("#310: step3 interaction view labels question messages as 問題", () => {
-  const src = readFileSync(resolve(thisDir, "../app/student/page.tsx"), "utf8");
-  assert.ok(src.includes('? "問題"'), "step3 question label should be 問題 in student page");
+  // The step3 interaction card was extracted from student/page.tsx in #457.
+  const src = readFileSync(resolve(thisDir, "../app/student/_components/Step3InteractionCard.tsx"), "utf8");
+  assert.ok(src.includes('? "問題"'), "step3 question label should be 問題 in Step3InteractionCard");
 });
 
 test("#310: step3 no longer drops system question messages", () => {
-  const src = readFileSync(resolve(thisDir, "../app/student/page.tsx"), "utf8");
+  // Interactive message mapping moved to buildInteractiveMessages in #457.
+  const src = readFileSync(resolve(thisDir, "../src/lib/student-page-helpers.ts"), "utf8");
   assert.equal(
     src.includes("if (currentStep === 3) return;"),
     false,

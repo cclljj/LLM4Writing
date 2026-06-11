@@ -7,6 +7,7 @@ import { deferStateUpdate } from "@/src/lib/defer-state-update";
 import { formatTaipeiDateTime } from "@/src/lib/time-format";
 import OutlineSvg from "@/app/_components/OutlineSvg";
 import { renderMessageHtml } from "@/app/student/_components/renderMessageHtml";
+import { stepNameMap } from "@/src/lib/step-names";
 
 type HistorySummary = {
   sessionCount: number;
@@ -63,18 +64,6 @@ type HistoryPayload = {
   sessions: SessionItem[];
 };
 
-const stepNameMap: Record<number, string> = {
-  1: "審視題目",
-  2: "蒐集資料",
-  3: "生成論點",
-  4: "對比修正",
-  5: "摘要報告",
-  6: "撰寫初稿",
-  7: "分析回饋",
-  8: "修改潤飾",
-  9: "個人反思",
-  10: "總結報告"
-};
 
 export default function StudentCourseHistoryPage() {
   const params = useParams<{ activityId: string }>();
