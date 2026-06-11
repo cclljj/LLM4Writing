@@ -1283,9 +1283,9 @@ export default function LearningMonitorTab({
             style={{
               marginBottom: 12,
               padding: "12px 14px",
-              border: "1px solid #60a5fa",
-              background: "#dbeafe",
-              color: "#1e40af",
+              border: "1px solid var(--info-accent)",
+              background: "var(--info-bg-strong)",
+              color: "var(--info-text)",
               borderRadius: 8
             }}
           >
@@ -1351,12 +1351,12 @@ export default function LearningMonitorTab({
               role="status"
               aria-live="polite"
               style={{
-                borderColor: "#60a5fa",
-                background: "#dbeafe"
+                borderColor: "var(--info-accent)",
+                background: "var(--info-bg-strong)"
               }}
             >
               <h2 style={{ marginBottom: 6 }}>系統處理中</h2>
-              <p style={{ margin: 0, color: "#1e40af" }}>{learningProcessingText || "正在載入課程狀態資料，請稍候..."}</p>
+              <p style={{ margin: 0, color: "var(--info-text)" }}>{learningProcessingText || "正在載入課程狀態資料，請稍候..."}</p>
             </div>
           ) : null}
           <TeacherDashboard

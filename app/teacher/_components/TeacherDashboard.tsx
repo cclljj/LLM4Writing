@@ -71,10 +71,10 @@ function statusLabel(row: TeacherDashboardRow): string {
 }
 
 function statusBadgeStyle(row: TeacherDashboardRow): CSSProperties {
-  if (row.hint.ready) return { background: "#dcfce7", color: "#166534", borderColor: "#86efac" };
-  if (row.risk.level === "stuck") return { background: "#fee2e2", color: "#991b1b", borderColor: "#fca5a5" };
-  if (row.risk.level === "watch") return { background: "#fef3c7", color: "#92400e", borderColor: "#fcd34d" };
-  return { background: "#f1f5f9", color: "#475569", borderColor: "#cbd5e1" };
+  if (row.hint.ready) return { background: "var(--success-bg)", color: "var(--success-text)", borderColor: "var(--success-border)" };
+  if (row.risk.level === "stuck") return { background: "var(--danger-bg)", color: "var(--danger-text)", borderColor: "var(--danger-border)" };
+  if (row.risk.level === "watch") return { background: "var(--warning-bg)", color: "var(--warning-text)", borderColor: "var(--warning-border)" };
+  return { background: "var(--surface-alt)", color: "var(--muted-strong)", borderColor: "var(--line)" };
 }
 
 export default function TeacherDashboard<TSession extends DashboardSession>({
@@ -89,7 +89,7 @@ export default function TeacherDashboard<TSession extends DashboardSession>({
     <div className="card">
       <h2>
         課堂儀表板
-        {headerSuffix ? <span style={{ fontSize: 14, color: "#64748b", fontWeight: 400, marginLeft: 8 }}>— {headerSuffix}</span> : null}
+        {headerSuffix ? <span style={{ fontSize: 14, color: "var(--muted)", fontWeight: 400, marginLeft: 8 }}>— {headerSuffix}</span> : null}
       </h2>
       <div className="metric-grid">
         <div className="metric-card">
@@ -155,7 +155,7 @@ export default function TeacherDashboard<TSession extends DashboardSession>({
                 <td>
                   <div style={{ fontWeight: 600 }}>{row.session.groupName ?? row.session.groupId ?? "未命名組"}</div>
                   {row.activityLabel ? (
-                    <small style={{ color: "#64748b", display: "block" }}>{row.activityLabel}</small>
+                    <small style={{ color: "var(--muted)", display: "block" }}>{row.activityLabel}</small>
                   ) : null}
                 </td>
                 <td>
@@ -185,7 +185,7 @@ export default function TeacherDashboard<TSession extends DashboardSession>({
                     <small style={{ display: "block", marginTop: 4 }}>需關注：{row.risk.affectedUsers.join("、")}</small>
                   ) : null}
                   {!row.hint.ready && row.risk.suggestions && row.risk.suggestions.length > 0 ? (
-                    <small style={{ display: "block", marginTop: 6, color: "#0f766e" }}>
+                    <small style={{ display: "block", marginTop: 6, color: "var(--success-text)" }}>
                       建議：{row.risk.suggestions[0]}
                     </small>
                   ) : null}

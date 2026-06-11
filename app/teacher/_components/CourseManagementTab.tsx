@@ -733,9 +733,9 @@ export default function CourseManagementTab({
                           className="secondary"
                           style={{
                             width: "auto",
-                            background: essay.enabled ? "#f3f4f6" : undefined,
-                            color: essay.enabled ? "#9ca3af" : undefined,
-                            borderColor: essay.enabled ? "#e5e7eb" : undefined,
+                            background: essay.enabled ? "var(--surface-alt)" : undefined,
+                            color: essay.enabled ? "var(--muted-soft)" : undefined,
+                            borderColor: essay.enabled ? "var(--line-soft)" : undefined,
                             cursor: essay.enabled ? "not-allowed" : undefined
                           }}
                           disabled={essay.enabled}
@@ -748,9 +748,9 @@ export default function CourseManagementTab({
                           className="secondary"
                           style={{
                             width: "auto",
-                            background: !essay.enabled ? "#f3f4f6" : undefined,
-                            color: !essay.enabled ? "#9ca3af" : undefined,
-                            borderColor: !essay.enabled ? "#e5e7eb" : undefined,
+                            background: !essay.enabled ? "var(--surface-alt)" : undefined,
+                            color: !essay.enabled ? "var(--muted-soft)" : undefined,
+                            borderColor: !essay.enabled ? "var(--line-soft)" : undefined,
                             cursor: !essay.enabled ? "not-allowed" : undefined
                           }}
                           disabled={!essay.enabled}
@@ -809,7 +809,7 @@ export default function CourseManagementTab({
             </select>
             {/* Bound teacher display (#254) — shown for admin once class is selected. */}
             {loginRole === "admin" && taskForm.classNumber ? (
-              <small style={{ display: "block", marginTop: 4, color: formOwnerTeacher ? "#475569" : "#b91c1c" }}>
+              <small style={{ display: "block", marginTop: 4, color: formOwnerTeacher ? "var(--muted-strong)" : "var(--danger-text)" }}>
                 {formOwnerTeacher
                   ? `綁定教師：${formOwnerTeacher.name} (${formOwnerTeacher.username})`
                   : "綁定教師：找不到此班學生的綁定教師，請先在帳號管理為學生指派教師。"}
@@ -854,7 +854,7 @@ export default function CourseManagementTab({
         {/* 分組區（選定班級後出現） */}
         {taskForm.classNumber ? (
           <>
-            <hr style={{ border: 0, borderTop: "1px solid #e5e7eb", margin: "12px 0" }} />
+            <hr style={{ border: 0, borderTop: "1px solid var(--line-soft)", margin: "12px 0" }} />
             <h3 style={{ margin: "0 0 6px" }}>小組分配</h3>
             <div className="row">
               <div className="col">
@@ -887,7 +887,7 @@ export default function CourseManagementTab({
             <div className="row" style={{ marginTop: 12 }}>
               <div
                 className="col"
-                style={{ minHeight: 120, border: "1px dashed #94a3b8", borderRadius: 8, padding: 10 }}
+                style={{ minHeight: 120, border: "1px dashed var(--muted-soft)", borderRadius: 8, padding: 10 }}
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={dropToUnassigned}
               >
@@ -897,7 +897,7 @@ export default function CourseManagementTab({
                     key={username}
                     draggable
                     onDragStart={onDragStart(username, "unassigned")}
-                    style={{ padding: "6px 8px", marginTop: 6, border: "1px solid #cbd5e1", borderRadius: 6 }}
+                    style={{ padding: "6px 8px", marginTop: 6, border: "1px solid var(--line)", borderRadius: 6 }}
                   >
                     {formatStudentLabel(username)}
                   </div>
@@ -907,7 +907,7 @@ export default function CourseManagementTab({
                 <div
                   key={group.groupId}
                   className="col"
-                  style={{ minHeight: 120, border: "1px dashed #94a3b8", borderRadius: 8, padding: 10 }}
+                  style={{ minHeight: 120, border: "1px dashed var(--muted-soft)", borderRadius: 8, padding: 10 }}
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={dropToGroup(group.groupId)}
                 >
@@ -929,7 +929,7 @@ export default function CourseManagementTab({
                       key={username}
                       draggable
                       onDragStart={onDragStart(username, group.groupId)}
-                      style={{ padding: "6px 8px", marginTop: 6, border: "1px solid #cbd5e1", borderRadius: 6 }}
+                      style={{ padding: "6px 8px", marginTop: 6, border: "1px solid var(--line)", borderRadius: 6 }}
                     >
                       {formatStudentLabel(username)}
                     </div>
@@ -948,7 +948,7 @@ export default function CourseManagementTab({
               disabled={isSavingTask}
               style={
                 isSavingTask
-                  ? { background: "#f3f4f6", color: "#9ca3af", borderColor: "#e5e7eb", cursor: "wait" }
+                  ? { background: "var(--surface-alt)", color: "var(--muted-soft)", borderColor: "var(--line-soft)", cursor: "wait" }
                   : undefined
               }
             >
@@ -970,9 +970,9 @@ export default function CourseManagementTab({
                   marginTop: 6,
                   padding: "10px 14px",
                   borderRadius: 8,
-                  border: "1px solid #bfdbfe",
-                  background: "#eff6ff",
-                  color: "#1e40af",
+                  border: "1px solid var(--info-border)",
+                  background: "var(--info-bg)",
+                  color: "var(--info-text)",
                   fontWeight: 600
                 }}
               >
@@ -988,9 +988,9 @@ export default function CourseManagementTab({
                   marginTop: 6,
                   padding: "10px 14px",
                   borderRadius: 8,
-                  border: "1px solid #bbf7d0",
-                  background: "#f0fdf4",
-                  color: "#166534",
+                  border: "1px solid var(--success-border)",
+                  background: "var(--success-bg)",
+                  color: "var(--success-text)",
                   fontWeight: 600
                 }}
               >
@@ -1000,7 +1000,7 @@ export default function CourseManagementTab({
           ) : null}
           {error ? (
             <div className="col" style={{ width: "100%" }}>
-              <small style={{ color: "#b91c1c" }}>{error}</small>
+              <small style={{ color: "var(--danger-text)" }}>{error}</small>
             </div>
           ) : null}
         </div>
@@ -1081,9 +1081,9 @@ export default function CourseManagementTab({
                           className="secondary"
                           style={{
                             width: "auto",
-                            color: "#b91c1c",
-                            borderColor: "#fecaca",
-                            background: "#fef2f2",
+                            color: "var(--danger-text)",
+                            borderColor: "var(--danger-border)",
+                            background: "var(--danger-bg)",
                             opacity: deletingTaskId === openClass.id ? 0.6 : 1,
                             cursor: deletingTaskId === openClass.id ? "wait" : undefined
                           }}

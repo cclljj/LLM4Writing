@@ -1459,7 +1459,7 @@ export default function StudentPage() {
             ) : null}
             {currentStep === 10 ? (
               <>
-                <hr style={{ border: 0, borderTop: "1px solid #e5e7eb", margin: "10px 0" }} />
+                <hr style={{ border: 0, borderTop: "1px solid var(--line-soft)", margin: "10px 0" }} />
                 <h3 style={{ margin: "0 0 8px" }}>總結報告</h3>
                 {isStep10ReportReady ? (
                   <div style={{ marginTop: 4 }} dangerouslySetInnerHTML={{ __html: renderMessageHtml(ownStep10Report ?? "") }} />
@@ -1468,20 +1468,20 @@ export default function StudentPage() {
                     style={{
                       marginTop: 4,
                       padding: "10px 12px",
-                      border: "1px solid #cbd5e1",
+                      border: "1px solid var(--line)",
                       borderRadius: 8,
-                      background: "#f8fafc",
+                      background: "var(--surface-alt)",
                       fontSize: 14,
                       lineHeight: 1.6
                     }}
                   >
-                    <small style={{ display: "block", marginBottom: 6, color: "#64748b", fontWeight: 600 }}>
+                    <small style={{ display: "block", marginBottom: 6, color: "var(--muted)", fontWeight: 600 }}>
                       AI 正在產生總結，這個步驟會花比較多的時間，請稍候{step10LoadingDots}
                     </small>
                     <div style={{ marginTop: 4 }} dangerouslySetInnerHTML={{ __html: renderMessageHtml(step10StreamingText) }} />
                   </div>
                 ) : (
-                  <small style={{ color: "#94a3b8" }}>
+                  <small style={{ color: "var(--muted-soft)" }}>
                     AI 正在產生總結，這個步驟會花比較多的時間，請稍候{step10LoadingDots}
                   </small>
                 )}

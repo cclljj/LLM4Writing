@@ -255,9 +255,9 @@ function activityStatusLabel(status: "active" | "idle" | "stuck"): string {
 }
 
 function fallbackToneColor(rate: number): string {
-  if (rate >= 0.05) return "#b91c1c"; // red
-  if (rate >= 0.01) return "#ca8a04"; // amber
-  return "#166534"; // green
+  if (rate >= 0.05) return "var(--danger-text)"; // red
+  if (rate >= 0.01) return "var(--warning-text)"; // amber
+  return "var(--success-text)"; // green
 }
 
 export default function AdminPromptDiagnostics() {
@@ -361,7 +361,7 @@ export default function AdminPromptDiagnostics() {
           </button>
         </div>
         {loading ? <small style={{ display: "block", marginTop: 10 }}>診斷資料載入中...</small> : null}
-        {error ? <small style={{ display: "block", marginTop: 10, color: "#b91c1c" }}>{error}</small> : null}
+        {error ? <small style={{ display: "block", marginTop: 10, color: "var(--danger-text)" }}>{error}</small> : null}
       </div>
 
       {data ? (
@@ -429,7 +429,7 @@ export default function AdminPromptDiagnostics() {
               <small>event coverage：learning={fmtNum(data.storage.eventMetricsCoverage.learningEvents)} / llm={fmtNum(data.storage.eventMetricsCoverage.llmEvents)}</small><br />
               <small>critical tables：llm_events={data.storage.tableHealth.tables.llm4writing_llm_events ? "OK" : "MISSING"} / learning_events={data.storage.tableHealth.tables.llm4writing_learning_events ? "OK" : "MISSING"}</small>
               {data.storage.warnings.length > 0 ? (
-                <div style={{ marginTop: 8, color: "#991b1b" }}>
+                <div style={{ marginTop: 8, color: "var(--danger-text)" }}>
                   {data.storage.warnings.map((warning) => (
                     <div key={warning}>- {warning}</div>
                   ))}
@@ -455,9 +455,9 @@ export default function AdminPromptDiagnostics() {
               ))}
             </div>
 
-            <hr style={{ border: 0, borderTop: "1px solid #e2e8f0", margin: "14px 0" }} />
+            <hr style={{ border: 0, borderTop: "1px solid var(--line-soft)", margin: "14px 0" }} />
             <h4 style={{ marginBottom: 6 }}>課程排行（課程維度）</h4>
-            <small style={{ display: "block", marginBottom: 8, color: "#64748b" }}>
+            <small style={{ display: "block", marginBottom: 8, color: "var(--muted)" }}>
               範圍：最近 {data.timeWindow}。依風險分數排序（fallback / 拒答 / 等待時間），作為優先排查順序。
             </small>
             <div className="table-scroll">
@@ -481,7 +481,7 @@ export default function AdminPromptDiagnostics() {
                   {data.courseKpis.map((course) => (
                     <tr
                       key={course.key}
-                      style={{ background: selectedCourseKey === course.key ? "#eff6ff" : undefined, cursor: "pointer" }}
+                      style={{ background: selectedCourseKey === course.key ? "var(--info-bg)" : undefined, cursor: "pointer" }}
                       onClick={() => {
                         setSelectedCourseKey(course.key);
                         setSelectedStepKey("");
@@ -509,11 +509,11 @@ export default function AdminPromptDiagnostics() {
             </div>
             {data.courseKpis.length === 0 ? <small>尚無課程 KPI 樣本。</small> : null}
 
-            <hr style={{ border: 0, borderTop: "1px solid #e2e8f0", margin: "14px 0" }} />
+            <hr style={{ border: 0, borderTop: "1px solid var(--line-soft)", margin: "14px 0" }} />
             <h4 style={{ marginBottom: 6 }}>
               課程步驟分析（{selectedCourse ? `${selectedCourse.activityTitle} / ${selectedCourse.classNumber}` : "—"}）
             </h4>
-            <small style={{ display: "block", marginBottom: 8, color: "#64748b" }}>
+            <small style={{ display: "block", marginBottom: 8, color: "var(--muted)" }}>
               先選課程，再看 Step1~10 的成功率 / fallback 率 / 拒答率 / 平均等待。點步驟可篩選下方追查樣本。
             </small>
             <div className="table-scroll">
@@ -536,7 +536,7 @@ export default function AdminPromptDiagnostics() {
                     .map(([step, kpi]) => (
                       <tr
                         key={step}
-                        style={{ background: selectedStepKey === step ? "#f8fafc" : undefined, cursor: "pointer" }}
+                        style={{ background: selectedStepKey === step ? "var(--surface-alt)" : undefined, cursor: "pointer" }}
                         onClick={() => setSelectedStepKey((prev) => (prev === step ? "" : step))}
                       >
                         <td>Step {step}</td>
@@ -553,11 +553,11 @@ export default function AdminPromptDiagnostics() {
               </table>
             </div>
             {Object.keys(selectedCourseStepKpis).length === 0 ? <small>此課程目前沒有可用步驟樣本。</small> : null}
-            <hr style={{ border: 0, borderTop: "1px solid #e2e8f0", margin: "14px 0" }} />
+            <hr style={{ border: 0, borderTop: "1px solid var(--line-soft)", margin: "14px 0" }} />
             <h4 style={{ marginBottom: 6 }}>
               追查樣本（{selectedCourse ? selectedCourse.activityTitle : "請先選課程"}{selectedStepKey ? ` / Step ${selectedStepKey}` : ""}）
             </h4>
-            <small style={{ display: "block", marginBottom: 8, color: "#64748b" }}>
+            <small style={{ display: "block", marginBottom: 8, color: "var(--muted)" }}>
               顯示選定課程（與可選定步驟）的 fallback 事件。優先使用 fallback 事件本身的分類，缺失時再對齊鄰近 LLM 錯誤分類。
             </small>
             <div className="table-scroll">
@@ -588,7 +588,7 @@ export default function AdminPromptDiagnostics() {
             </div>
             {selectedStepFallbackSamples.length === 0 ? <small>目前篩選條件下沒有 fallback 樣本。</small> : null}
             <h4 style={{ margin: "12px 0 6px" }}>最近 fallback 近似送出內容（重建）</h4>
-            <small style={{ display: "block", marginBottom: 8, color: "#64748b" }}>
+            <small style={{ display: "block", marginBottom: 8, color: "var(--muted)" }}>
               這裡顯示的是重建版本（由事件 + session 訊息 + prompt 設定推估），不是 provider 原始 request body。可用來快速定位哪一段上下文容易觸發 fallback。
             </small>
             <div className="table-scroll">
@@ -616,7 +616,7 @@ export default function AdminPromptDiagnostics() {
                       <td style={{ minWidth: 420 }}>
                         <details>
                           <summary style={{ cursor: "pointer" }}>查看原始提問與重建內容（Session: {trace.sessionId ?? "—"}）</summary>
-                          <div style={{ marginTop: 8, marginBottom: 8, fontSize: 12, color: "#64748b" }}>
+                          <div style={{ marginTop: 8, marginBottom: 8, fontSize: 12, color: "var(--muted)" }}>
                             debugTraceSource={trace.debugTraceSource} / reconstructionSource={trace.reconstructionSource}
                           </div>
                           {trace.originalPrompt ? (
@@ -626,8 +626,8 @@ export default function AdminPromptDiagnostics() {
                                 marginTop: 8,
                                 padding: 10,
                                 borderRadius: 8,
-                                background: "#eef2ff",
-                                border: "1px solid #c7d2fe",
+                                background: "var(--info-bg)",
+                                border: "1px solid var(--info-border)",
                                 fontSize: 12,
                                 lineHeight: 1.5,
                                 maxHeight: 260,
@@ -643,8 +643,8 @@ export default function AdminPromptDiagnostics() {
                               marginTop: 8,
                               padding: 10,
                               borderRadius: 8,
-                              background: "#f8fafc",
-                              border: "1px solid #e2e8f0",
+                              background: "var(--surface-alt)",
+                              border: "1px solid var(--line-soft)",
                               fontSize: 12,
                               lineHeight: 1.5,
                               maxHeight: 300,
@@ -662,9 +662,9 @@ export default function AdminPromptDiagnostics() {
             </div>
             {selectedStepFallbackTraces.length === 0 ? <small>目前篩選條件下沒有可重建的 fallback trace。</small> : null}
 
-            <hr style={{ border: 0, borderTop: "1px solid #e2e8f0", margin: "14px 0" }} />
+            <hr style={{ border: 0, borderTop: "1px solid var(--line-soft)", margin: "14px 0" }} />
             <h4 style={{ marginBottom: 6 }}>課程趨勢</h4>
-            <small style={{ display: "block", marginBottom: 8, color: "#64748b" }}>
+            <small style={{ display: "block", marginBottom: 8, color: "var(--muted)" }}>
               日粒度趨勢（最近 {data.timeWindow}）：顯示成功率、fallback 率、拒答率、平均等待時間。
             </small>
             <div className="table-scroll">
@@ -702,9 +702,9 @@ export default function AdminPromptDiagnostics() {
             </div>
             {data.trends.byCourse.length === 0 ? <small>尚無課程趨勢資料。</small> : null}
 
-            <hr style={{ border: 0, borderTop: "1px solid #e2e8f0", margin: "14px 0" }} />
+            <hr style={{ border: 0, borderTop: "1px solid var(--line-soft)", margin: "14px 0" }} />
             <h4 style={{ marginBottom: 6 }}>LLM 回應時間（依步驟）</h4>
-            <small style={{ display: "block", marginBottom: 8, color: "#64748b" }}>
+            <small style={{ display: "block", marginBottom: 8, color: "var(--muted)" }}>
               範圍：最近 {data.timeWindow}。從訊息 timestamp 估算（student → 接續 ai 同步驟）；異常值（&gt; 5 分鐘）已濾除。
             </small>
             <div className="table-scroll">
@@ -735,14 +735,14 @@ export default function AdminPromptDiagnostics() {
               <small>尚無可用樣本。</small>
             ) : null}
 
-            <hr style={{ border: 0, borderTop: "1px solid #e2e8f0", margin: "14px 0" }} />
+            <hr style={{ border: 0, borderTop: "1px solid var(--line-soft)", margin: "14px 0" }} />
             <h4 style={{ marginBottom: 6 }}>LLM Fallback 觸發率</h4>
-            <small style={{ display: "block", marginBottom: 8, color: "#64748b" }}>
+            <small style={{ display: "block", marginBottom: 8, color: "var(--muted)" }}>
               範圍：最近 {data.timeWindow}。ai 訊息含 fallback 標誌字串的比例。&gt; 5% 紅燈、1-5% 黃燈、&lt; 1% 綠燈。
             </small>
             <div style={{ display: "flex", gap: 16, marginBottom: 10, flexWrap: "wrap" }}>
               <div>
-                <small style={{ color: "#475569" }}>整體</small>
+                <small style={{ color: "var(--muted-strong)" }}>整體</small>
                 <div style={{ fontSize: 18, fontWeight: 600, color: fallbackToneColor(data.fallbackRate.overall.rate) }}>
                   {fmtPct(data.fallbackRate.overall.rate)}
                 </div>
@@ -777,29 +777,29 @@ export default function AdminPromptDiagnostics() {
               <small>尚無 ai 訊息可供分析。</small>
             ) : null}
 
-            <hr style={{ border: 0, borderTop: "1px solid #e2e8f0", margin: "14px 0" }} />
+            <hr style={{ border: 0, borderTop: "1px solid var(--line-soft)", margin: "14px 0" }} />
             <h4 style={{ marginBottom: 6 }}>LLM 錯誤分類（timeout / truncation / parse fail）</h4>
-            <small style={{ display: "block", marginBottom: 8, color: "#64748b" }}>
+            <small style={{ display: "block", marginBottom: 8, color: "var(--muted)" }}>
               來源：持久化事件表（`llm_events` / `learning_events`）。`truncation` 包含回覆被長度截斷但後續續寫成功的事件。
             </small>
             <div style={{ display: "flex", gap: 20, flexWrap: "wrap", marginBottom: 10 }}>
               <div>
-                <small style={{ color: "#475569" }}>timeout</small>
+                <small style={{ color: "var(--muted-strong)" }}>timeout</small>
                 <div style={{ fontSize: 18, fontWeight: 600 }}>{fmtNum(data.llmErrorTaxonomy.timeout.count)}</div>
                 <small>{fmtPct(data.llmErrorTaxonomy.timeout.rate)}</small>
               </div>
               <div>
-                <small style={{ color: "#475569" }}>truncation</small>
+                <small style={{ color: "var(--muted-strong)" }}>truncation</small>
                 <div style={{ fontSize: 18, fontWeight: 600 }}>{fmtNum(data.llmErrorTaxonomy.truncation.count)}</div>
                 <small>{fmtPct(data.llmErrorTaxonomy.truncation.rate)}</small>
               </div>
               <div>
-                <small style={{ color: "#475569" }}>parse fail</small>
+                <small style={{ color: "var(--muted-strong)" }}>parse fail</small>
                 <div style={{ fontSize: 18, fontWeight: 600 }}>{fmtNum(data.llmErrorTaxonomy.parseFail.count)}</div>
                 <small>{fmtPct(data.llmErrorTaxonomy.parseFail.rate)}</small>
               </div>
               <div>
-                <small style={{ color: "#475569" }}>other</small>
+                <small style={{ color: "var(--muted-strong)" }}>other</small>
                 <div style={{ fontSize: 18, fontWeight: 600 }}>{fmtNum(data.llmErrorTaxonomy.other.count)}</div>
                 <small>{fmtPct(data.llmErrorTaxonomy.other.rate)}</small>
               </div>
@@ -834,9 +834,9 @@ export default function AdminPromptDiagnostics() {
                 </tbody>
               </table>
             </div>
-            <hr style={{ border: 0, borderTop: "1px solid #e2e8f0", margin: "14px 0" }} />
+            <hr style={{ border: 0, borderTop: "1px solid var(--line-soft)", margin: "14px 0" }} />
             <h4 style={{ marginBottom: 6 }}>作品 Artifact 健康度</h4>
-            <small style={{ display: "block", marginBottom: 8, color: "#64748b" }}>
+            <small style={{ display: "block", marginBottom: 8, color: "var(--muted)" }}>
               範圍：最近 {data.timeWindow} 內有活動的 spec10 sessions（總計 {data.artifactHealth.totalStudents} 人）的 artifact 完成率。
             </small>
             <div className="table-scroll">
@@ -887,22 +887,22 @@ export default function AdminPromptDiagnostics() {
                 </tbody>
               </table>
             </div>
-            <hr style={{ border: 0, borderTop: "1px solid #e2e8f0", margin: "14px 0" }} />
+            <hr style={{ border: 0, borderTop: "1px solid var(--line-soft)", margin: "14px 0" }} />
             <h4 style={{ marginBottom: 6 }}>Token 使用量（估算）</h4>
-            <small style={{ display: "block", marginBottom: 8, color: "#64748b" }}>
+            <small style={{ display: "block", marginBottom: 8, color: "var(--muted)" }}>
               範圍：最近 {data.timeWindow}。以 AI 回覆文字進行 completion token 估算（非 provider 帳單精算值）。
             </small>
             <div style={{ display: "flex", gap: 20, flexWrap: "wrap", marginBottom: 10 }}>
               <div>
-                <small style={{ color: "#475569" }}>估算總 tokens</small>
+                <small style={{ color: "var(--muted-strong)" }}>估算總 tokens</small>
                 <div style={{ fontSize: 18, fontWeight: 600 }}>{fmtNum(data.tokenUsage.overall.estimatedCompletionTokens)}</div>
               </div>
               <div>
-                <small style={{ color: "#475569" }}>AI 訊息數</small>
+                <small style={{ color: "var(--muted-strong)" }}>AI 訊息數</small>
                 <div style={{ fontSize: 18, fontWeight: 600 }}>{fmtNum(data.tokenUsage.overall.aiMessages)}</div>
               </div>
               <div>
-                <small style={{ color: "#475569" }}>每則平均 tokens</small>
+                <small style={{ color: "var(--muted-strong)" }}>每則平均 tokens</small>
                 <div style={{ fontSize: 18, fontWeight: 600 }}>{fmtNum(data.tokenUsage.overall.avgPerMessage)}</div>
               </div>
             </div>

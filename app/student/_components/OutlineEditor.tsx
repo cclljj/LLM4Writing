@@ -286,11 +286,11 @@ export default function OutlineEditor({
         style={{
           width: "100%",
           maxHeight: 560,
-          border: "1px solid #e5e7eb",
+          border: "1px solid var(--line-soft)",
           borderRadius: 10,
           marginTop: 10,
           overflow: "auto",
-          background: "linear-gradient(180deg, #f8fafc 0%, #ffffff 100%)"
+          background: "linear-gradient(180deg, var(--surface-alt) 0%, var(--surface) 100%)"
         }}
       >
         <div
@@ -316,7 +316,7 @@ export default function OutlineEditor({
                     y1={parent.y + 34}
                     x2={node.x + 60}
                     y2={node.y}
-                    stroke="#64748b"
+                    stroke="var(--muted)"
                     strokeWidth={2}
                   />
                 );
@@ -367,8 +367,8 @@ export default function OutlineEditor({
                   width: 120,
                   minHeight: 68,
                   borderRadius: 10,
-                  border: node.id === dropTargetNodeId ? "2px solid #0ea5e9" : "1px solid #94a3b8",
-                  background: "#ffffff",
+                  border: node.id === dropTargetNodeId ? "2px solid var(--info-accent)" : "1px solid var(--muted-soft)",
+                  background: "var(--surface)",
                   boxShadow: "0 4px 14px rgba(15, 23, 42, 0.08)",
                   padding: "8px 10px 6px",
                   cursor: permissions.canEditText ? "move" : "default",
@@ -421,7 +421,7 @@ export default function OutlineEditor({
                     onMouseDown={(e) => e.stopPropagation()}
                   />
                 ) : (
-                  <div style={{ fontSize: 13, fontWeight: 600, color: "#0f172a", whiteSpace: "pre-wrap" }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-strong)", whiteSpace: "pre-wrap" }}>
                     {node.text}
                   </div>
                 )}
@@ -441,7 +441,7 @@ export default function OutlineEditor({
             </div>
           </div>
           {completeHint ? (
-            <small style={{ display: "block", marginTop: 8, color: "#b91c1c" }}>
+            <small style={{ display: "block", marginTop: 8, color: "var(--danger-text)" }}>
               {completeHint}
             </small>
           ) : null}

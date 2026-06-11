@@ -155,7 +155,7 @@ export default function StudentCourseHistoryPage() {
       ) : null}
 
       {error ? (
-        <div className="card" style={{ borderColor: "#fecaca", background: "#fff1f2" }}>
+        <div className="card" style={{ borderColor: "var(--danger-border)", background: "var(--danger-bg)" }}>
           <h2>無法載入紀錄</h2>
           <small>{error}</small>
         </div>
@@ -219,12 +219,12 @@ export default function StudentCourseHistoryPage() {
                     </div>
                     {stepExpanded[step] ? (
                       <>
-                        <hr style={{ border: 0, borderTop: "1px solid #e5e7eb", margin: "10px 0" }} />
+                        <hr style={{ border: 0, borderTop: "1px solid var(--line-soft)", margin: "10px 0" }} />
                         {stepMessages.length === 0 ? (
                           <small>此步驟沒有可顯示內容。</small>
                         ) : (
                           stepMessages.map((message) => (
-                            <div key={message.id} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
+                            <div key={message.id} style={{ borderTop: "1px solid var(--line-soft)", padding: "8px 0" }}>
                               <strong>
                                 {message.role === "student"
                                   ? "你"
@@ -243,19 +243,19 @@ export default function StudentCourseHistoryPage() {
                           ))
                         )}
                         {step === 3 && history.latestWork.step3SubmittedOutline ? (
-                          <div style={{ marginTop: 12, borderTop: "1px solid #e5e7eb", paddingTop: 10 }}>
+                          <div style={{ marginTop: 12, borderTop: "1px solid var(--line-soft)", paddingTop: 10 }}>
                             <strong>步驟三完成時繳交的結構樹</strong>
                             <OutlineSvg compact mermaidText={history.latestWork.step3SubmittedOutline} />
                           </div>
                         ) : null}
                         {step === 4 && history.latestWork.step4Outline ? (
-                          <div style={{ marginTop: 12, borderTop: "1px solid #e5e7eb", paddingTop: 10 }}>
+                          <div style={{ marginTop: 12, borderTop: "1px solid var(--line-soft)", paddingTop: 10 }}>
                             <strong>步驟四修正後結構樹</strong>
                             <OutlineSvg compact mermaidText={history.latestWork.step4Outline} />
                           </div>
                         ) : null}
                         {step === 6 && history.latestWork.draftStep6 ? (
-                          <div style={{ marginTop: 12, borderTop: "1px solid #e5e7eb", paddingTop: 10 }}>
+                          <div style={{ marginTop: 12, borderTop: "1px solid var(--line-soft)", paddingTop: 10 }}>
                             <strong>步驟六初稿</strong>
                             <div
                               style={{ marginTop: 4 }}
@@ -264,7 +264,7 @@ export default function StudentCourseHistoryPage() {
                           </div>
                         ) : null}
                         {step === 7 && history.latestWork.step7Report ? (
-                          <div style={{ marginTop: 12, borderTop: "1px solid #e5e7eb", paddingTop: 10 }}>
+                          <div style={{ marginTop: 12, borderTop: "1px solid var(--line-soft)", paddingTop: 10 }}>
                             <strong>步驟七分析回饋</strong>
                             <div
                               style={{ marginTop: 4 }}
@@ -273,7 +273,7 @@ export default function StudentCourseHistoryPage() {
                           </div>
                         ) : null}
                         {step === 8 && history.latestWork.draftStep8 ? (
-                          <div style={{ marginTop: 12, borderTop: "1px solid #e5e7eb", paddingTop: 10 }}>
+                          <div style={{ marginTop: 12, borderTop: "1px solid var(--line-soft)", paddingTop: 10 }}>
                             <strong>步驟八潤飾稿</strong>
                             <div
                               style={{ marginTop: 4 }}
@@ -282,7 +282,7 @@ export default function StudentCourseHistoryPage() {
                           </div>
                         ) : null}
                         {step === 10 && history.latestWork.step10Report ? (
-                          <div style={{ marginTop: 12, borderTop: "1px solid #e5e7eb", paddingTop: 10 }}>
+                          <div style={{ marginTop: 12, borderTop: "1px solid var(--line-soft)", paddingTop: 10 }}>
                             <strong>步驟十總結報告</strong>
                             <div
                               style={{ marginTop: 4 }}
@@ -311,7 +311,7 @@ export default function StudentCourseHistoryPage() {
             </div>
             <div style={{ marginTop: 10 }}>
               {history.sessions.map((item) => (
-                <div key={item.sessionId} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
+                <div key={item.sessionId} style={{ borderTop: "1px solid var(--line-soft)", padding: "8px 0" }}>
                   <small>
                     {formatTaipeiDateTime(item.createdAt)} / 最後進度 Step {item.currentStep}
                     {stepNameMap[item.currentStep] ? `（${stepNameMap[item.currentStep]}）` : ""} / 個人發言 {item.ownMessageCount} 則

@@ -151,7 +151,7 @@ function InteractionPanel({
 
       {interactiveMessages.map((message) =>
         currentStep === 6 && message.kind === "student" ? null : (
-          <div key={message.id} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
+          <div key={message.id} style={{ borderTop: "1px solid var(--line-soft)", padding: "8px 0" }}>
             {currentStep === 4 && message.kind === "student" ? (
               <p style={{ margin: 0 }}>
                 <strong>{formatStudentIdentity(message.userId, participantDisplayNames)}：</strong>
@@ -163,9 +163,9 @@ function InteractionPanel({
                 const parsed = parseStep6Suggestion(message.text)!;
                 const expanded = step6ExpandedById[message.id] ?? false;
                 return (
-                  <div style={{ border: "1px solid #dbeafe", borderRadius: 10, padding: "8px 10px", background: "#f8fbff" }}>
+                  <div style={{ border: "1px solid var(--info-bg-strong)", borderRadius: 10, padding: "8px 10px", background: "var(--surface-alt)" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-                      <strong style={{ color: "#1d4ed8" }}>{formatUtc8Title(message.at)}</strong>
+                      <strong style={{ color: "var(--info-text)" }}>{formatUtc8Title(message.at)}</strong>
                       <button
                         type="button"
                         className="secondary"
@@ -323,7 +323,7 @@ function InteractionPanel({
             完成文章撰寫，進入下一步驟
           </button>
           {isCompletingStep6 ? (
-            <small style={{ display: "block", marginTop: 6, color: "#94a3b8" }}>AI 正在處理中，請稍候...</small>
+            <small style={{ display: "block", marginTop: 6, color: "var(--muted-soft)" }}>AI 正在處理中，請稍候...</small>
           ) : null}
         </div>
       ) : null}

@@ -193,7 +193,7 @@ test("source-guard: hardcoded hex colors in app tsx may only decrease (ratchet, 
 
   // Ratchet rule: this baseline may only be lowered, never raised. New UI code
   // must use design tokens from globals.css (see #456/#458) instead of raw hex.
-  const HEX_COLOR_BASELINE = 193;
+  const HEX_COLOR_BASELINE = 0;
 
   const tsxFiles = readdirSync(appDir, { recursive: true })
     .map((entry) => String(entry))

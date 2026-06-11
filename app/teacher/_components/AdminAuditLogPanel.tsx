@@ -74,7 +74,7 @@ export default function AdminAuditLogPanel() {
       <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
         <h2 style={{ marginBottom: 0 }}>操作歷史 Log</h2>
         <div className="row" style={{ gap: 8, alignItems: "center", width: "auto" }}>
-          <small style={{ color: "#64748b" }}>時間範圍</small>
+          <small style={{ color: "var(--muted)" }}>時間範圍</small>
           {DAY_OPTIONS.map((option) => (
             <button
               key={option}
@@ -93,7 +93,7 @@ export default function AdminAuditLogPanel() {
       </div>
 
       {loading ? <small style={{ display: "block", marginTop: 10 }}>載入紀錄中...</small> : null}
-      {error ? <small style={{ display: "block", marginTop: 10, color: "#b91c1c" }}>{error}</small> : null}
+      {error ? <small style={{ display: "block", marginTop: 10, color: "var(--danger-text)" }}>{error}</small> : null}
 
       {!loading && !error && grouped.length === 0 ? (
         <small style={{ display: "block", marginTop: 10 }}>目前沒有可顯示的操作紀錄。</small>

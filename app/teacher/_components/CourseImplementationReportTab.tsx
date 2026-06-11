@@ -699,7 +699,7 @@ export default function CourseImplementationReportTab({
             </div>
           </div>
           {researchIdentityMode === "account" ? (
-            <small style={{ display: "block", marginBottom: 10, color: "#b45309" }}>
+            <small style={{ display: "block", marginBottom: 10, color: "var(--warning-text)" }}>
               目前匯出會包含學生帳號，請確認符合 IRB/同意書使用範圍。
             </small>
           ) : null}
@@ -796,15 +796,15 @@ export default function CourseImplementationReportTab({
                 const isExpanded = personalStepExpanded[step] ?? false;
 
                 const step3Block = step === 3 && userStep3SubmittedOutline ? (
-                  <div style={{ borderTop: "2px solid #cbd5e1", padding: "12px 0", marginTop: 4 }}>
-                    <strong style={{ fontSize: 13, color: "#334155" }}>步驟三完成結構樹</strong>
+                  <div style={{ borderTop: "2px solid var(--line)", padding: "12px 0", marginTop: 4 }}>
+                    <strong style={{ fontSize: 13, color: "var(--muted-strong)" }}>步驟三完成結構樹</strong>
                     <OutlineSvg mermaidText={userStep3SubmittedOutline} label="步驟三完成結構樹" />
                   </div>
                 ) : null;
 
                 const step4Block = step === 4 && userOutline ? (
-                  <div style={{ borderTop: "2px solid #cbd5e1", padding: "12px 0", marginTop: 4 }}>
-                    <strong style={{ fontSize: 13, color: "#334155" }}>步驟四對比修正後結構樹</strong>
+                  <div style={{ borderTop: "2px solid var(--line)", padding: "12px 0", marginTop: 4 }}>
+                    <strong style={{ fontSize: 13, color: "var(--muted-strong)" }}>步驟四對比修正後結構樹</strong>
                     <OutlineSvg mermaidText={userOutline} label="步驟四對比修正後" />
                   </div>
                 ) : null;
@@ -828,9 +828,9 @@ export default function CourseImplementationReportTab({
 
                     {isExpanded ? (
                       <>
-                        <hr style={{ border: 0, borderTop: "1px solid #e5e7eb", margin: "10px 0" }} />
+                        <hr style={{ border: 0, borderTop: "1px solid var(--line-soft)", margin: "10px 0" }} />
                         {stepMessages.map((message) => (
-                          <div key={message.id} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
+                          <div key={message.id} style={{ borderTop: "1px solid var(--line-soft)", padding: "8px 0" }}>
                             <strong>
                               {message.role === "student"
                                 ? "你"

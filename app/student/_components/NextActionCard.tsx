@@ -2,9 +2,9 @@ import { StudentNextAction } from "@/src/lib/student-next-action";
 
 export default function NextActionCard({ action }: { action: StudentNextAction }) {
   const toneStyle = {
-    success: { borderColor: "#bbf7d0", background: "linear-gradient(135deg, #f0fdf4 0%, #ecfeff 100%)", color: "#166534" },
-    waiting: { borderColor: "#fed7aa", background: "linear-gradient(135deg, #fff7ed 0%, #fffbeb 100%)", color: "#9a3412" },
-    focus: { borderColor: "#93c5fd", background: "linear-gradient(135deg, #eff6ff 0%, #f0f9ff 100%)", color: "#1d4ed8" }
+    success: { borderColor: "var(--success-border)", background: "linear-gradient(135deg, var(--success-bg) 0%, var(--info-bg) 100%)", color: "var(--success-text)" },
+    waiting: { borderColor: "var(--warning-border)", background: "linear-gradient(135deg, var(--warning-bg) 0%, var(--warning-bg) 100%)", color: "var(--warning-text)" },
+    focus: { borderColor: "var(--info-border)", background: "linear-gradient(135deg, var(--info-bg) 0%, var(--info-bg) 100%)", color: "var(--info-text)" }
   }[action.tone];
 
   return (
@@ -14,7 +14,7 @@ export default function NextActionCard({ action }: { action: StudentNextAction }
         <span className="next-action-pill">{action.statusLabel}</span>
       </div>
       <h2 style={{ marginBottom: 8 }}>{action.primaryAction}</h2>
-      <p style={{ margin: 0, color: "#334155" }}>{action.body}</p>
+      <p style={{ margin: 0, color: "var(--muted-strong)" }}>{action.body}</p>
     </div>
   );
 }

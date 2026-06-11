@@ -689,7 +689,7 @@ export default function StudentAccountTab({
             </div>
           </div>
           {isBulkCreatingUsers ? (
-            <small style={{ display: "block", marginTop: 8, color: "#1e40af", fontWeight: 600 }}>
+            <small style={{ display: "block", marginTop: 8, color: "var(--info-text)", fontWeight: 600 }}>
               系統新增帳號中，這步驟需要一點時間，請耐心等候 {bulkCreateDots}
             </small>
           ) : null}
@@ -705,7 +705,7 @@ export default function StudentAccountTab({
         </div>
 
         {resetTargetUser ? (
-          <div className="card" style={{ marginBottom: 10, borderColor: "#bfdbfe", background: "#eff6ff" }}>
+          <div className="card" style={{ marginBottom: 10, borderColor: "var(--info-border)", background: "var(--info-bg)" }}>
             <h3 style={{ marginBottom: 8 }}>重設密碼：{resetTargetUser}</h3>
             <div className="row">
               <div className="col">
@@ -766,25 +766,25 @@ export default function StudentAccountTab({
               marginBottom: 8,
               padding: "10px 14px",
               borderRadius: 8,
-              border: "1px solid #bfdbfe",
-              background: "#eff6ff",
-              color: "#1e40af",
+              border: "1px solid var(--info-border)",
+              background: "var(--info-bg)",
+              color: "var(--info-text)",
               fontWeight: 600
             }}
           >
             正在刪除帳號 {deletingUsername}，請稍候...
           </div>
         ) : null}
-        {accountError ? <small style={{ color: "#b91c1c", display: "block", marginBottom: 8 }}>{accountError}</small> : null}
+        {accountError ? <small style={{ color: "var(--danger-text)", display: "block", marginBottom: 8 }}>{accountError}</small> : null}
         {!deletingUsername && accountSuccess ? (
           <div
             style={{
               marginBottom: 8,
               padding: "10px 14px",
               borderRadius: 8,
-              border: "1px solid #bbf7d0",
-              background: "#f0fdf4",
-              color: "#166534",
+              border: "1px solid var(--success-border)",
+              background: "var(--success-bg)",
+              color: "var(--success-text)",
               fontWeight: 600
             }}
           >
@@ -1019,9 +1019,9 @@ export default function StudentAccountTab({
                               className="secondary"
                               style={{
                                 width: "auto",
-                                color: "#b91c1c",
-                                borderColor: "#fecaca",
-                                background: "#fef2f2",
+                                color: "var(--danger-text)",
+                                borderColor: "var(--danger-border)",
+                                background: "var(--danger-bg)",
                                 opacity: deletingUsername === user.username ? 0.6 : 1,
                                 cursor: deletingUsername === user.username ? "wait" : undefined
                               }}

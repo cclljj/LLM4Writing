@@ -24,13 +24,13 @@ export default function OutlineSvg({ mermaidText, label, compact = false }: Prop
       style={{
         marginTop: 8,
         overflow: "auto",
-        border: "1px solid #e5e7eb",
+        border: "1px solid var(--line-soft)",
         borderRadius: 8,
         padding: compact ? 0 : 8,
-        background: compact ? "#ffffff" : "#f8fafc"
+        background: compact ? "var(--surface)" : "var(--surface-alt)"
       }}
     >
-      {label ? <small style={{ display: "block", marginBottom: 4, color: "#475569" }}>{label}</small> : null}
+      {label ? <small style={{ display: "block", marginBottom: 4, color: "var(--muted-strong)" }}>{label}</small> : null}
       <svg
         width={preview.width}
         height={preview.height}
@@ -43,7 +43,7 @@ export default function OutlineSvg({ mermaidText, label, compact = false }: Prop
             <polyline
               key={`${edge.fromId}-${edge.toId}`}
               points={edge.points.map((p) => `${p.x},${p.y}`).join(" ")}
-              stroke="#94a3b8"
+              stroke="var(--muted-soft)"
               strokeWidth="2"
               fill="none"
             />
@@ -65,7 +65,7 @@ export default function OutlineSvg({ mermaidText, label, compact = false }: Prop
                 <polyline
                   key={`${parent.id}-${node.id}`}
                   points={`${parentCx},${startY} ${parentCx},${Math.min(startY + elbowGap, midY)} ${childCx},${midY} ${childCx},${endY}`}
-                  stroke="#94a3b8"
+                  stroke="var(--muted-soft)"
                   strokeWidth="2"
                   fill="none"
                 />
@@ -79,15 +79,15 @@ export default function OutlineSvg({ mermaidText, label, compact = false }: Prop
               width={node.w ?? nodeDefaultW}
               height={node.h ?? nodeDefaultH}
               rx="10"
-              fill={compact ? "#f8fafc" : "#fff"}
-              stroke={compact ? "#94a3b8" : "#64748b"}
+              fill={compact ? "var(--surface-alt)" : "var(--surface)"}
+              stroke={compact ? "var(--muted-soft)" : "var(--muted)"}
             />
             <text
               x={node.x + (node.w ?? nodeDefaultW) / 2}
               y={node.y + textTopPad}
               textAnchor="middle"
               fontSize="12"
-              fill="#0f172a"
+              fill="var(--text-strong)"
             >
               {(node.lines && node.lines.length > 0 ? node.lines : node.text.split("\n")).map((line, idx) => (
                 <tspan

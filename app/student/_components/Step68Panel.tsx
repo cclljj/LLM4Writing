@@ -130,7 +130,7 @@ function Step68Panel({
       </div>
       <small className={`draft-save-status ${saveStatus.state}`}>{saveStatus.text}</small>
       {currentStep === 6 && isSuggestingStep6 ? (
-        <small role="status" aria-live="polite" style={{ display: "block", marginTop: 6, color: "#94a3b8" }}>
+        <small role="status" aria-live="polite" style={{ display: "block", marginTop: 6, color: "var(--muted-soft)" }}>
           AI 正在分析你的文章並產生修改建議，這個步驟會花比較多的時間，請稍候{suggestingDots}
         </small>
       ) : null}
@@ -141,22 +141,22 @@ function Step68Panel({
           style={{
             marginTop: 10,
             padding: "10px 12px",
-            border: "1px solid #cbd5e1",
+            border: "1px solid var(--line)",
             borderRadius: 8,
-            background: "#f8fafc",
+            background: "var(--surface-alt)",
             whiteSpace: "pre-wrap",
             fontSize: 14,
             lineHeight: 1.6
           }}
         >
-          <small style={{ display: "block", marginBottom: 6, color: "#64748b", fontWeight: 600 }}>
+          <small style={{ display: "block", marginBottom: 6, color: "var(--muted)", fontWeight: 600 }}>
             AI 修改建議（產生中{isSuggestingStep6 ? "…" : ""}）
           </small>
           {step6StreamingText}
         </div>
       ) : null}
       {currentStep === 6 && isCompletingStep6 ? (
-        <small role="status" aria-live="polite" style={{ display: "block", marginTop: 6, color: "#94a3b8" }}>
+        <small role="status" aria-live="polite" style={{ display: "block", marginTop: 6, color: "var(--muted-soft)" }}>
           AI 正在產生步驟 7 分析回饋，這個步驟會花比較多的時間，請稍候{completingDots}
         </small>
       ) : null}
@@ -167,21 +167,21 @@ function Step68Panel({
           style={{
             marginTop: 10,
             padding: "10px 12px",
-            border: "1px solid #cbd5e1",
+            border: "1px solid var(--line)",
             borderRadius: 8,
-            background: "#f8fafc",
+            background: "var(--surface-alt)",
             whiteSpace: "pre-wrap",
             fontSize: 14,
             lineHeight: 1.6
           }}
         >
-          <small style={{ display: "block", marginBottom: 6, color: "#64748b", fontWeight: 600 }}>
+          <small style={{ display: "block", marginBottom: 6, color: "var(--muted)", fontWeight: 600 }}>
             步驟 7 分析回饋（產生中{isCompletingStep6 ? "…" : ""}）
           </small>
           {step7StreamingText}
         </div>
       ) : null}
-      {unsavedChars > 0 ? <small style={{ display: "block", marginTop: 6, color: "#b45309" }}>未保存字數：{unsavedChars}</small> : null}
+      {unsavedChars > 0 ? <small style={{ display: "block", marginTop: 6, color: "var(--warning-text)" }}>未保存字數：{unsavedChars}</small> : null}
     </div>
   );
 }

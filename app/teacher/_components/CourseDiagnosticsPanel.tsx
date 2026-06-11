@@ -59,7 +59,7 @@ function CourseDiagnosticsPanel({
       <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
         <h2 style={{ marginBottom: 0 }}>
           課程診斷摘要
-          {contextLabel ? <span style={{ fontSize: 14, color: "#64748b", fontWeight: 400, marginLeft: 8 }}>— {contextLabel}</span> : null}
+          {contextLabel ? <span style={{ fontSize: 14, color: "var(--muted)", fontWeight: 400, marginLeft: 8 }}>— {contextLabel}</span> : null}
         </h2>
         <button
           type="button"
@@ -72,23 +72,23 @@ function CourseDiagnosticsPanel({
         </button>
       </div>
       {loading ? <small style={{ display: "block", marginTop: 10 }}>課程診斷資料載入中...</small> : null}
-      {error ? <small style={{ display: "block", marginTop: 10, color: "#b91c1c" }}>{error}</small> : null}
+      {error ? <small style={{ display: "block", marginTop: 10, color: "var(--danger-text)" }}>{error}</small> : null}
       {diagnostics ? (
         <>
           <div className="row" style={{ gap: 10, marginTop: 12 }}>
-            <div style={{ flex: 1, padding: 12, border: "1px solid #e5e7eb", borderRadius: 8, background: "#f8fafc" }}>
+            <div style={{ flex: 1, padding: 12, border: "1px solid var(--line-soft)", borderRadius: 8, background: "var(--surface-alt)" }}>
               <small>上課場次</small>
               <h3 style={{ margin: "4px 0 0" }}>{diagnostics.summary.totalSessions}</h3>
             </div>
-            <div style={{ flex: 1, padding: 12, border: "1px solid #e5e7eb", borderRadius: 8, background: "#f8fafc" }}>
+            <div style={{ flex: 1, padding: 12, border: "1px solid var(--line-soft)", borderRadius: 8, background: "var(--surface-alt)" }}>
               <small>Fallback</small>
               <h3 style={{ margin: "4px 0 0" }}>{diagnostics.summary.totalFallbacks}（{formatPercent(diagnostics.summary.fallbackRate)}）</h3>
             </div>
-            <div style={{ flex: 1, padding: 12, border: "1px solid #e5e7eb", borderRadius: 8, background: "#f8fafc" }}>
+            <div style={{ flex: 1, padding: 12, border: "1px solid var(--line-soft)", borderRadius: 8, background: "var(--surface-alt)" }}>
               <small>拒答</small>
               <h3 style={{ margin: "4px 0 0" }}>{diagnostics.summary.totalRejections}（{formatPercent(diagnostics.summary.rejectionRate)}）</h3>
             </div>
-            <div style={{ flex: 1, padding: 12, border: "1px solid #e5e7eb", borderRadius: 8, background: "#f8fafc" }}>
+            <div style={{ flex: 1, padding: 12, border: "1px solid var(--line-soft)", borderRadius: 8, background: "var(--surface-alt)" }}>
               <small>最久停留步驟</small>
               <h3 style={{ margin: "4px 0 0" }}>{diagnostics.summary.slowestStep ? `Step ${diagnostics.summary.slowestStep}` : "—"}</h3>
             </div>

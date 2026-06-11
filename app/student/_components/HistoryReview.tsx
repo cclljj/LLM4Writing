@@ -88,11 +88,11 @@ function HistoryReview({
                 <p>
                   <small>此為歷史步驟回顧（僅本人與 AI 互動）。</small>
                 </p>
-                <hr style={{ border: 0, borderTop: "1px solid #e5e7eb", margin: "10px 0" }} />
+                <hr style={{ border: 0, borderTop: "1px solid var(--line-soft)", margin: "10px 0" }} />
                 <h3 style={{ margin: "0 0 8px" }}>互動內容</h3>
                 {review.messages.length > 0 ? (
                   review.messages.map((message) => (
-                    <div key={`review-msg-${message.id}`} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
+                    <div key={`review-msg-${message.id}`} style={{ borderTop: "1px solid var(--line-soft)", padding: "8px 0" }}>
                       <strong>{message.kind === "student" ? "你" : "AI 回覆"}</strong>
                       <div
                         style={{ marginTop: 4 }}
@@ -105,13 +105,13 @@ function HistoryReview({
                   <small>此步驟目前沒有可顯示的個人互動紀錄。</small>
                 )}
                 {review.step === 3 && step3SubmittedOutlineMermaid ? (
-                  <div style={{ marginTop: 14, borderTop: "1px solid #e5e7eb", paddingTop: 10 }}>
+                  <div style={{ marginTop: 14, borderTop: "1px solid var(--line-soft)", paddingTop: 10 }}>
                     <strong>步驟三完成時繳交的結構樹</strong>
                     <OutlineSvg compact mermaidText={step3SubmittedOutlineMermaid} />
                   </div>
                 ) : null}
                 {review.step === 4 && step4OutlineMermaid ? (
-                  <div style={{ marginTop: 14, borderTop: "1px solid #e5e7eb", paddingTop: 10 }}>
+                  <div style={{ marginTop: 14, borderTop: "1px solid var(--line-soft)", paddingTop: 10 }}>
                     <strong>步驟四修正後結構樹</strong>
                     <OutlineSvg compact mermaidText={step4OutlineMermaid} />
                   </div>

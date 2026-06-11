@@ -53,9 +53,9 @@ export default function StudentLobby({
   return (
     <>
       {isLoadingOverview ? (
-        <div className="card" style={{ borderColor: "#2563eb", background: "#dbeafe", padding: "14px 16px" }}>
-          <p style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#1d4ed8" }}>系統正在載入資料中，請稍候...</p>
-          <small style={{ display: "block", marginTop: 6, color: "#1e3a8a" }}>載入完成後會自動顯示課程清單。</small>
+        <div className="card" style={{ borderColor: "var(--info-accent)", background: "var(--info-bg-strong)", padding: "14px 16px" }}>
+          <p style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "var(--info-text)" }}>系統正在載入資料中，請稍候...</p>
+          <small style={{ display: "block", marginTop: 6, color: "var(--info-text)" }}>載入完成後會自動顯示課程清單。</small>
         </div>
       ) : null}
 
@@ -63,7 +63,7 @@ export default function StudentLobby({
         <h2>進行中課程（本班）</h2>
         {activeCourses.length === 0 ? <small>目前沒有進行中的課程。</small> : null}
         {activeCourses.map((course) => (
-          <div key={course.id} style={{ borderTop: "1px solid #e5e7eb", padding: "10px 0" }}>
+          <div key={course.id} style={{ borderTop: "1px solid var(--line-soft)", padding: "10px 0" }}>
             <strong>{course.title}</strong>（班級 {course.classNumber} / {course.genre} / {course.durationMinutes} 分鐘）
             <div>
               <small>分組狀態：{course.groupStatus ?? "尚未分組"}</small>
@@ -86,7 +86,7 @@ export default function StudentLobby({
         </small>
         {upcomingCourses.length === 0 ? <small style={{ display: "block", marginTop: 8 }}>目前沒有尚未開始課程。</small> : null}
         {upcomingCourses.map((course) => (
-          <div key={course.id} style={{ borderTop: "1px solid #e5e7eb", padding: "10px 0" }}>
+          <div key={course.id} style={{ borderTop: "1px solid var(--line-soft)", padding: "10px 0" }}>
             <strong>{course.title}</strong>（班級 {course.classNumber} / {course.genre} / {course.durationMinutes} 分鐘）
             <div>
               <small>分組狀態：{course.groupStatus ?? "尚未分組"}</small>
@@ -106,7 +106,7 @@ export default function StudentLobby({
         <h2>暫停中課程（本班）</h2>
         {pausedCourses.length === 0 ? <small>目前沒有暫停中的課程。</small> : null}
         {pausedCourses.map((course) => (
-          <div key={course.id} style={{ borderTop: "1px solid #e5e7eb", padding: "10px 0" }}>
+          <div key={course.id} style={{ borderTop: "1px solid var(--line-soft)", padding: "10px 0" }}>
             <strong>{course.title}</strong>（班級 {course.classNumber} / {course.genre}）
             <div>
               <small>課程目前暫停中，請等待老師繼續上課。</small>
@@ -122,7 +122,7 @@ export default function StudentLobby({
         <h2>自己參與過的課程清單</h2>
         {participatedCourses.length === 0 ? <small>目前沒有已參與課程紀錄。</small> : null}
         {participatedCourses.map((course) => (
-          <div key={course.activityId} style={{ borderTop: "1px solid #e5e7eb", padding: "10px 0" }}>
+          <div key={course.activityId} style={{ borderTop: "1px solid var(--line-soft)", padding: "10px 0" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
               <div>
                 <strong>{course.title}</strong>（班級 {course.classNumber}）
