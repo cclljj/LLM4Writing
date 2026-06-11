@@ -138,6 +138,13 @@ The teacher monitor SHALL load course-scoped summaries before loading full sessi
 - **WHEN** polling refreshes data
 - **THEN** it uses summary payloads and does not fetch full messages unless a detail view is requested
 
+#### Scenario: Monitor requires selected course scope
+
+- **GIVEN** teacher/admin monitor data is requested without an `activityId`
+- **WHEN** the list endpoint is called
+- **THEN** the API rejects the request with `activity_id_required`
+- **AND** normal monitor UI does not use a global session scan fallback
+
 #### Scenario: Cross-course contamination guard
 
 - **GIVEN** a returned session has the same activity id but group members that do not match the current course groups

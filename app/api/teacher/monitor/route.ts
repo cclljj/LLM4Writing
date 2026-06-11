@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/src/lib/auth-server";
 import { getAllActivities, hydrateDomainState } from "@/src/lib/activity-store";
-import { getSession, listMonitorSessionSummariesByActivityId, listSessions } from "@/src/lib/store";
+import { getSession, listMonitorSessionSummariesByActivityId } from "@/src/lib/store";
 import { getUsersVisibleToTeacherStore, listUsersStore } from "@/src/lib/user-store";
 import { getOnlineUsers } from "@/src/lib/session-presence";
 import { isSessionInActivityGroupScope } from "@/src/lib/monitor-session-scope";
 import { ChatMessage, SessionState } from "@/src/lib/types";
 import type { MonitorSessionSummary } from "@/src/lib/store";
-
-const GLOBAL_MONITOR_SESSION_SCAN_LIMIT = 500;
 
 function normalizeText(text: string): string {
   return text.replace(/\r\n/g, "\n").trim();
@@ -207,18 +205,5 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ sessions: visibleSessions, total, limit, offset });
   }
 
-  const sessions = await listSessions({ limit: GLOBAL_MONITOR_SESSION_SCAN_LIMIT, offset: 0 });
-  const scopedSessions = sessions
-    .filter((s) => s.workflow === "spec10" && Boolean(s.activityId) && visibleActivityIds.has(s.activityId!))
-    .filter((s) => {
-      const activity = activityMap.get(s.activityId!);
-      return Boolean(activity && isSessionInActivityGroupScope(s, activity));
-    });
-  const total = scopedSessions.length;
-  const paginatedSessions = scopedSessions.slice(offset, offset + limit);
-  const paginated = await Promise.all(
-    paginatedSessions.map((s) => buildMonitorSessionPayload(s, activityMap.get(s.activityId!), detail))
-  );
-
-  return NextResponse.json({ sessions: paginated, total, limit, offset });
+  return NextResponse.json({ error: "activity_id_required" }, { status: 400 });
 }

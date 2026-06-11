@@ -763,9 +763,13 @@ export default function LearningMonitorTab({
 
   async function refreshMonitor(activityIdOverride?: string): Promise<MonitorSession[]> {
     const targetActivityId = activityIdOverride ?? selectedLearningActivityId;
-    const monitorUrl = targetActivityId
-      ? `/api/teacher/monitor?activityId=${encodeURIComponent(targetActivityId)}`
-      : "/api/teacher/monitor";
+    if (!targetActivityId) {
+      setMonitorSessions([]);
+      setMonitorSelected(null);
+      setLearningWarning("");
+      return [];
+    }
+    const monitorUrl = `/api/teacher/monitor?activityId=${encodeURIComponent(targetActivityId)}`;
     const fetchOpts: RequestInit = { cache: "no-store" };
     let response: Response | null = null;
     try {

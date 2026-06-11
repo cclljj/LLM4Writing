@@ -54,6 +54,8 @@ function isSingleNodeOutline(outline: string): boolean {
 
 export async function GET(request: Request, context: { params: Promise<{ sessionId: string }> }) {
   const { sessionId } = await context.params;
+  const url = new URL(request.url);
+  const view = url.searchParams.get("view") === "poll" ? "poll" : "full";
   const meta = await getSessionWithMeta(sessionId);
 
   if (!meta) {
@@ -157,12 +159,26 @@ export async function GET(request: Request, context: { params: Promise<{ session
 
   const allUsers = await listUsersStore();
   const userNameMap = new Map(allUsers.map((account) => [account.username, account.name?.trim() || account.username]));
-  const responsePayload = {
+  const participantDisplayNames = session.participants.reduce((acc, username) => {
+    acc[username] = userNameMap.get(username) || username;
+    return acc;
+  }, {} as Record<string, string>);
+  const responsePayload =
+    view === "poll"
+      ? (() => {
+          const withoutMessages = { ...session } as Partial<typeof session>;
+          delete withoutMessages.messages;
+          return {
+            ...withoutMessages,
+            participantDisplayNames,
+            pollSummary: true,
+            messageCount: session.messages.length,
+            lastMessageAt: session.messages.at(-1)?.at ?? null
+          };
+        })()
+      : {
     ...session,
-    participantDisplayNames: session.participants.reduce((acc, username) => {
-      acc[username] = userNameMap.get(username) || username;
-      return acc;
-    }, {} as Record<string, string>)
+    participantDisplayNames
   };
   const response = NextResponse.json(responsePayload);
   response.headers.set("ETag", changed ? `"${new Date().toISOString()}"` : etag);

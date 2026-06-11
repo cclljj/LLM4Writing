@@ -200,7 +200,9 @@ test("source-guard: activity-scoped routes avoid unbounded listSessions", async 
   }
 
   const monitor = readFileSync(resolve(thisDir, "../app/api/teacher/monitor/route.ts"), "utf8");
-  assert.ok(monitor.includes("listSessions({ limit: GLOBAL_MONITOR_SESSION_SCAN_LIMIT"));
+  assert.equal(monitor.includes("listSessions"), false, "monitor route should not use global session scans");
+  assert.ok(monitor.includes("activity_id_required"));
+  assert.ok(monitor.includes("listMonitorSessionSummariesByActivityId"));
   const diagnostics = readFileSync(resolve(thisDir, "../app/api/admin/diagnostics/route.ts"), "utf8");
   assert.ok(diagnostics.includes("listSessions({ limit: DIAGNOSTICS_SESSION_SCAN_LIMIT"));
 });

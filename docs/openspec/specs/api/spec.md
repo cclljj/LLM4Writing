@@ -100,6 +100,14 @@ The system SHALL expose session read, chat, artifact, and step-specific mutation
 - **WHEN** the session has not changed
 - **THEN** the response is HTTP 304 with no body
 
+#### Scenario: Student polling summary payload
+
+- **GIVEN** a student polls `GET /api/session/:sessionId?view=poll`
+- **WHEN** the session has changed but message history does not need to be transferred
+- **THEN** the response omits full `messages`
+- **AND** includes `messageCount` and `lastMessageAt` for change detection
+- **AND** the client fetches the full session only when message history signature changes
+
 #### Scenario: Chat send identity
 
 - **GIVEN** a student calls `POST /api/chat/send`

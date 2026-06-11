@@ -69,9 +69,24 @@ test("source-guard: student session polling uses adaptive backoff helpers", asyn
   assert.ok(src.includes("resolveStudentSessionNextPollDelay"), "student session polling should resolve adaptive delays");
   assert.ok(src.includes("computeStudentSessionPayloadHash"), "student session polling should hash payload changes");
   assert.ok(src.includes("window.setTimeout(tick"), "student session polling should schedule a timeout loop");
+  assert.ok(src.includes("?view=poll"), "routine student polling should request summary payloads");
+  assert.ok(src.includes("data.pollSummary"), "student polling should recognize summary payloads");
+  assert.ok(src.includes("const fullRes = await fetch(`/api/session/${sessionId}`"), "student polling should fetch full payload when message history changed");
   assert.ok(!src.includes("fetch(`/api/session/${sessionId}`, { headers })\n        .then"), "student session polling should not use the old fixed interval promise chain");
   assert.ok(pollingHelper.includes("Pick<SessionState"), "student polling hash input should be derived from SessionState");
+  assert.ok(pollingHelper.includes("messageCount"), "student polling hash should support message-count summaries");
+  assert.ok(pollingHelper.includes("lastMessageAt"), "student polling hash should support last-message summaries");
   assert.ok(pollingHelper.includes("STUDENT_SESSION_MAX_POLL_MS = 30000"), "student session polling should cap quiet-period backoff at 30s");
+});
+
+test("source-guard: teacher monitor requires activity-scoped summary queries", async () => {
+  const routeSrc = await read("../app/api/teacher/monitor/route.ts");
+  const uiSrc = await read("../app/teacher/_components/LearningMonitorTab.tsx");
+  assert.ok(routeSrc.includes("activity_id_required"), "monitor route should reject unscoped list requests");
+  assert.ok(!routeSrc.includes("listSessions"), "monitor route should not use global session scans");
+  assert.ok(routeSrc.includes("listMonitorSessionSummariesByActivityId"), "monitor route should use activity-scoped summary query");
+  assert.ok(uiSrc.includes("if (!targetActivityId)"), "monitor UI should not fetch monitor data without an activityId");
+  assert.ok(uiSrc.includes("/api/teacher/monitor?activityId="), "monitor UI should fetch activity-scoped monitor data");
 });
 
 test("source-guard: heavy student panels are memoized", async () => {

@@ -99,6 +99,13 @@ type SessionState = {
   }>;
 };
 
+type StudentSessionPayload = Omit<SessionState, "messages"> & {
+  messages?: SessionState["messages"];
+  pollSummary?: boolean;
+  messageCount?: number;
+  lastMessageAt?: string | null;
+};
+
 type InteractiveItem = {
   id: string;
   kind: "question" | "student" | "ai";
@@ -299,6 +306,7 @@ export default function StudentPage() {
   const sessionPayloadHashRef = useRef<string>("");
   const sessionPollDelayRef = useRef<number>(STUDENT_SESSION_FAST_POLL_MS);
   const sessionPollingBusyRef = useRef(false);
+  const sessionMessageSignatureRef = useRef<{ count: number; lastAt: string }>({ count: 0, lastAt: "" });
   const outlineMermaidRef = useRef<string>("");
   const restoreAttemptedRef = useRef<string>("");
 
@@ -322,10 +330,10 @@ export default function StudentPage() {
     window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
   };
 
-  const applySessionSafely = useCallback((incoming: SessionState) => {
+  const applySessionSafely = useCallback((incoming: StudentSessionPayload) => {
     setSession((prev) => {
-      if (!prev || !loginUser) return incoming;
-      if (prev.id !== incoming.id) return incoming;
+      if (!prev || !loginUser) return { ...incoming, messages: incoming.messages ?? [] };
+      if (prev.id !== incoming.id) return { ...incoming, messages: incoming.messages ?? [] };
       const mergedIncoming =
         incoming.participantDisplayNames && Object.keys(incoming.participantDisplayNames).length > 0
           ? incoming
@@ -333,18 +341,30 @@ export default function StudentPage() {
               ...incoming,
               participantDisplayNames: prev.participantDisplayNames
             };
+      const incomingWithMessages = {
+        ...mergedIncoming,
+        messages: mergedIncoming.messages ?? prev.messages
+      };
       const prevOwnStep = getOwnStepFromSession(prev, loginUser);
-      const nextOwnStep = getOwnStepFromSession(mergedIncoming, loginUser);
+      const nextOwnStep = getOwnStepFromSession(incomingWithMessages, loginUser);
       const prevMessageCount = prev.messages?.length ?? 0;
-      const nextMessageCount = mergedIncoming.messages?.length ?? 0;
+      const nextMessageCount = incomingWithMessages.messages?.length ?? 0;
       // Guard against out-of-order polling responses that would roll the user
       // back to an earlier personal step with no newer payload.
       if (nextOwnStep < prevOwnStep && nextMessageCount <= prevMessageCount) {
         return prev;
       }
-      return mergedIncoming;
+      return incomingWithMessages;
     });
   }, [loginUser]);
+
+  useEffect(() => {
+    const messages = session?.messages ?? [];
+    sessionMessageSignatureRef.current = {
+      count: messages.length,
+      lastAt: messages.at(-1)?.at ?? ""
+    };
+  }, [session?.messages]);
 
   useEffect(() => {
     let canceled = false;
@@ -413,7 +433,7 @@ export default function StudentPage() {
       let unchanged = true;
       let failed = false;
       try {
-        const res = await fetch(`/api/session/${sessionId}`, { headers });
+        const res = await fetch(`/api/session/${sessionId}?view=poll`, { headers });
         const newEtag = res.headers.get("ETag");
         if (newEtag) sessionEtagRef.current = newEtag;
         if (res.status !== 304) {
@@ -423,7 +443,22 @@ export default function StudentPage() {
             unchanged = nextHash === sessionPayloadHashRef.current;
             if (!unchanged) {
               sessionPayloadHashRef.current = nextHash;
-              applySessionSafely(data);
+              const previousMessageSignature = sessionMessageSignatureRef.current;
+              const nextMessageCount = typeof data.messageCount === "number" ? data.messageCount : data.messages?.length ?? 0;
+              const nextLastMessageAt = data.lastMessageAt ?? data.messages?.at?.(-1)?.at ?? "";
+              if (data.pollSummary && (nextMessageCount !== previousMessageSignature.count || nextLastMessageAt !== previousMessageSignature.lastAt)) {
+                const fullRes = await fetch(`/api/session/${sessionId}`, { cache: "no-store" });
+                const fullData = await fullRes.json();
+                if (fullRes.ok && fullData?.id) {
+                  applySessionSafely(fullData);
+                  sessionMessageSignatureRef.current = {
+                    count: fullData.messages?.length ?? 0,
+                    lastAt: fullData.messages?.at?.(-1)?.at ?? ""
+                  };
+                }
+              } else {
+                applySessionSafely(data);
+              }
             }
           }
         }

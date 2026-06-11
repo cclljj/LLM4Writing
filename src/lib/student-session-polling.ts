@@ -16,6 +16,8 @@ type StudentPollingSession = Pick<SessionState, "id" | "currentStep"> &
     | "makeupWork"
   >> & {
     messages?: Array<Pick<SessionState["messages"][number], "at">>;
+    messageCount?: number;
+    lastMessageAt?: string | null;
     reports?: Partial<SessionState["reports"]>;
   };
 
@@ -45,7 +47,8 @@ function textLengthSignature(record: Record<string, string> | undefined, usernam
 
 export function computeStudentSessionPayloadHash(session: StudentPollingSession, username: string): string {
   const messages = session.messages ?? [];
-  const lastMessageAt = messages.at(-1)?.at ?? "";
+  const messageCount = session.messageCount ?? messages.length;
+  const lastMessageAt = session.lastMessageAt ?? messages.at(-1)?.at ?? "";
   const personalSteps = stableNumberRecordSignature(session.personalSteps);
   const groupGate = stableStringArrayRecordSignature(session.groupGate);
   const reportSignature = [
@@ -72,7 +75,7 @@ export function computeStudentSessionPayloadHash(session: StudentPollingSession,
   return [
     session.id,
     session.currentStep,
-    messages.length,
+    messageCount,
     lastMessageAt,
     personalSteps,
     groupGate,
