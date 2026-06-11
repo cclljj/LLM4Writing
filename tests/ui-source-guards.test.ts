@@ -93,12 +93,13 @@ test("source-guard: student session polling uses adaptive backoff helpers", asyn
 
 test("source-guard: teacher monitor requires activity-scoped summary queries", async () => {
   const routeSrc = await read("../app/api/teacher/monitor/route.ts");
-  const uiSrc = await read("../app/teacher/_components/LearningMonitorTab.tsx");
+  // Monitor data fetching moved into useMonitorData in #460.
+  const dataSrc = await read("../app/teacher/_hooks/useMonitorData.ts");
   assert.ok(routeSrc.includes("activity_id_required"), "monitor route should reject unscoped list requests");
   assert.ok(!routeSrc.includes("listSessions"), "monitor route should not use global session scans");
   assert.ok(routeSrc.includes("listMonitorSessionSummariesByActivityId"), "monitor route should use activity-scoped summary query");
-  assert.ok(uiSrc.includes("if (!targetActivityId)"), "monitor UI should not fetch monitor data without an activityId");
-  assert.ok(uiSrc.includes("/api/teacher/monitor?activityId="), "monitor UI should fetch activity-scoped monitor data");
+  assert.ok(dataSrc.includes("if (!targetActivityId)"), "monitor data hook should not fetch monitor data without an activityId");
+  assert.ok(dataSrc.includes("/api/teacher/monitor?activityId="), "monitor data hook should fetch activity-scoped monitor data");
 });
 
 test("source-guard: heavy student panels are memoized", async () => {
@@ -177,7 +178,8 @@ test("source-guard: learning management renders course diagnostics status", asyn
   const routeSrc = await read("../app/api/teacher/course-diagnostics/route.ts");
   assert.ok(uiSrc.includes("CourseDiagnosticsPanel"), "learning management should delegate course diagnostics rendering");
   assert.ok(panelSrc.includes("課程診斷摘要"), "course diagnostics panel should render a course diagnostics card");
-  assert.ok(uiSrc.includes("/api/teacher/course-diagnostics?activityId="), "learning management should load course diagnostics by activity");
+  const monitorDataSrc = await read("../app/teacher/_hooks/useMonitorData.ts");
+  assert.ok(monitorDataSrc.includes("/api/teacher/course-diagnostics?activityId="), "learning management should load course diagnostics by activity");
   assert.ok(panelSrc.includes("Fallback"), "course diagnostics UI should surface fallback stats");
   assert.ok(panelSrc.includes("拒答"), "course diagnostics UI should surface rejection stats");
   assert.ok(panelSrc.includes("每步平均停留時間"), "course diagnostics UI should surface step dwell-time stats");

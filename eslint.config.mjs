@@ -22,12 +22,11 @@ const eslintConfig = [
     },
   },
   {
-    // Tech-debt exemptions (#455): files already above the limit when the
-    // guardrail landed. The first two are scheduled for extraction in
-    // #457-#460; remove entries here as each file drops below 800 lines.
+    // Tech-debt exemptions (#455): legacy files already above the limit when
+    // the guardrail landed. student/page.tsx and LearningMonitorTab.tsx were
+    // brought under the limit in #457-#460; remove remaining entries as each
+    // file drops below 800 lines.
     files: [
-      "app/student/page.tsx",
-      "app/teacher/_components/LearningMonitorTab.tsx",
       "app/teacher/_components/CourseManagementTab.tsx",
       "app/teacher/_components/StudentAccountTab.tsx",
       "app/teacher/_components/AdminPromptDiagnostics.tsx",
