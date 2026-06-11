@@ -58,19 +58,24 @@ test("source-guard: learning monitor uses outline labels and participant mapping
 });
 
 test("source-guard: student route keeps classroom bootstrap failures recoverable", async () => {
-  const src = await read("../app/student/page.tsx");
+  // Auth/overview bootstrap moved into app/student/_hooks in #459.
+  const pageSrc = await read("../app/student/page.tsx");
+  const authSrc = await read("../app/student/_hooks/useStudentAuth.ts");
+  const overviewSrc = await read("../app/student/_hooks/useStudentOverview.ts");
   const helperSrc = await read("../src/lib/student-page-helpers.ts");
-  assert.ok(src.includes("fetchStudentJson"), "student page should use a retrying JSON fetch helper");
+  assert.ok(authSrc.includes("fetchStudentJson"), "auth bootstrap should use a retrying JSON fetch helper");
+  assert.ok(overviewSrc.includes("fetchStudentJson"), "overview loading should use a retrying JSON fetch helper");
   assert.ok(helperSrc.includes("STUDENT_FETCH_TIMEOUT_MS"), "student fetch helper should bound classroom bootstrap fetches with a timeout");
-  assert.ok(src.includes("StudentFetchError"), "student page should classify retryable student fetch failures");
-  assert.ok(src.includes("setAuthError(getStudentRetryableMessage(\"auth\"))"), "auth bootstrap failures should show recoverable UI");
-  assert.ok(src.includes("error.status === 401"), "only confirmed unauthenticated auth responses should redirect to login");
-  assert.ok(src.includes("重新確認登入"), "student page should expose a retry action when auth bootstrap is transiently unavailable");
-  assert.ok(src.includes("重新整理課程清單"), "student overview failures should expose a retry action");
+  assert.ok(authSrc.includes("StudentFetchError"), "auth bootstrap should classify retryable student fetch failures");
+  assert.ok(authSrc.includes("setAuthError(getStudentRetryableMessage(\"auth\"))"), "auth bootstrap failures should show recoverable UI");
+  assert.ok(authSrc.includes("error.status === 401"), "only confirmed unauthenticated auth responses should redirect to login");
+  assert.ok(pageSrc.includes("重新確認登入"), "student page should expose a retry action when auth bootstrap is transiently unavailable");
+  assert.ok(pageSrc.includes("重新整理課程清單"), "student overview failures should expose a retry action");
 });
 
 test("source-guard: student session polling uses adaptive backoff helpers", async () => {
-  const src = await read("../app/student/page.tsx");
+  // The polling loop moved into app/student/_hooks/useStudentSession.ts in #459.
+  const src = await read("../app/student/_hooks/useStudentSession.ts");
   const pollingHelper = await read("../src/lib/student-session-polling.ts");
   assert.ok(src.includes("resolveStudentSessionNextPollDelay"), "student session polling should resolve adaptive delays");
   assert.ok(src.includes("computeStudentSessionPayloadHash"), "student session polling should hash payload changes");
@@ -79,6 +84,7 @@ test("source-guard: student session polling uses adaptive backoff helpers", asyn
   assert.ok(src.includes("data.pollSummary"), "student polling should recognize summary payloads");
   assert.ok(src.includes("const fullRes = await fetch(`/api/session/${sessionId}`"), "student polling should fetch full payload when message history changed");
   assert.ok(!src.includes("fetch(`/api/session/${sessionId}`, { headers })\n        .then"), "student session polling should not use the old fixed interval promise chain");
+  assert.ok(src.includes("shouldAcceptIncomingSession"), "session application should keep the rollback guard from student-page-helpers");
   assert.ok(pollingHelper.includes("Pick<SessionState"), "student polling hash input should be derived from SessionState");
   assert.ok(pollingHelper.includes("messageCount"), "student polling hash should support message-count summaries");
   assert.ok(pollingHelper.includes("lastMessageAt"), "student polling hash should support last-message summaries");

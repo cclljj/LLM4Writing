@@ -141,6 +141,62 @@ export function getOwnStepFromSession(
   return session.personalSteps?.[username] ?? session.currentStep;
 }
 
+// Race-condition guards extracted from app/student/page.tsx (#459). These are
+// the decision rules that protect in-flight student edits from polling
+// overwrites; they must stay pure so the safety-net tests can pin behavior.
+
+export function shouldAcceptIncomingSession(input: {
+  prevOwnStep: number;
+  nextOwnStep: number;
+  prevMessageCount: number;
+  nextMessageCount: number;
+}): boolean {
+  // Guard against out-of-order polling responses that would roll the user
+  // back to an earlier personal step with no newer payload.
+  if (input.nextOwnStep < input.prevOwnStep && input.nextMessageCount <= input.prevMessageCount) {
+    return false;
+  }
+  return true;
+}
+
+export type DraftHydrationDecision = {
+  hydrateStep6: boolean;
+  step6Draft: string;
+  hydrateStep8: boolean;
+  step8Draft: string;
+};
+
+export function resolveDraftHydration(input: {
+  ownStep: number;
+  lastOwnStep: number | null;
+  draftText: string;
+  savedDraft8Text: string;
+  latestDraft6: string;
+  latestDraft8: string | undefined;
+}): DraftHydrationDecision {
+  const justEnteredStep6 = input.lastOwnStep !== 6 && input.ownStep === 6;
+  const justEnteredStep8 = input.lastOwnStep !== 8 && input.ownStep === 8;
+  const decision: DraftHydrationDecision = {
+    hydrateStep6: false,
+    step6Draft: "",
+    hydrateStep8: false,
+    step8Draft: ""
+  };
+  if (input.ownStep === 6 && (justEnteredStep6 || !input.draftText)) {
+    decision.hydrateStep6 = true;
+    decision.step6Draft = input.latestDraft6;
+  }
+  if (input.ownStep === 8) {
+    const latestDraft = input.latestDraft8 ?? input.latestDraft6;
+    const hasUnsavedLocalStep8Edit = input.draftText !== input.savedDraft8Text;
+    decision.hydrateStep8 =
+      justEnteredStep8 ||
+      (!hasUnsavedLocalStep8Edit && (input.draftText.length === 0 || latestDraft !== input.draftText));
+    decision.step8Draft = latestDraft;
+  }
+  return decision;
+}
+
 export type InteractiveItem = {
   id: string;
   kind: "question" | "student" | "ai";

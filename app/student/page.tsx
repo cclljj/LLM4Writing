@@ -1,30 +1,20 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 import { buildStudentNextAction } from "@/src/lib/student-next-action";
-import {
-  computeStudentSessionPayloadHash,
-  resolveStudentSessionNextPollDelay,
-  STUDENT_SESSION_FAST_POLL_MS
-} from "@/src/lib/student-session-polling";
-import { getStep9QuestionsFromConfig } from "@/src/lib/spec";
-import { validateDraftContent } from "@/src/lib/answer-validation";
-import { appendErrorHint, formatUserError } from "@/src/lib/error-messages";
 import { deferStateUpdate } from "@/src/lib/defer-state-update";
-import { formatTaipeiTime } from "@/src/lib/time-format";
-import { stepNameMap } from "@/src/lib/step-names";
 import {
-  appendTeacherHelpHint,
   buildHistoryReviewSteps,
-  buildInteractiveMessages,
-  fetchStudentJson,
-  getActiveGroupGateKey,
-  getMode,
-  getOwnStepFromSession,
-  getStudentRetryableMessage,
-  StudentFetchError
+  buildInteractiveMessages
 } from "@/src/lib/student-page-helpers";
+import { stepNameMap } from "@/src/lib/step-names";
+import { useStudentAuth } from "./_hooks/useStudentAuth";
+import { useStudentOverview } from "./_hooks/useStudentOverview";
+import { rememberLastActivity, syncActivityQuery, useStudentSession } from "./_hooks/useStudentSession";
+import { useDraftEditor } from "./_hooks/useDraftEditor";
+import { useStepStreaming } from "./_hooks/useStepStreaming";
+import { useStudentStepActions } from "./_hooks/useStudentStepActions";
+import { buildStudentGateView } from "./_hooks/buildStudentGateView";
 import GroupWaitingStatus from "./_components/GroupWaitingStatus";
 import NextActionCard from "./_components/NextActionCard";
 import StudentProgressRail from "./_components/StudentProgressRail";
@@ -41,385 +31,36 @@ import Step34OutlinePanel from "./_components/Step34OutlinePanel";
 import Step5ReportCard from "./_components/Step5ReportCard";
 import DebugLogCard from "./_components/DebugLogCard";
 
-type Course = {
-  id: string;
-  classNumber: string;
-  title: string;
-  genre: string;
-  essayDescription?: string;
-  durationMinutes: number;
-  supplemental: string;
-  groupStatus?: string;
-  courseStatus?: "not_started" | "in_progress" | "paused" | "ended";
-};
-
-type ParticipatedCourse = {
-  activityId: string;
-  title: string;
-  classNumber: string;
-  lastSessionId: string;
-  lastStep: number;
-  lastParticipatedAt: string;
-  sessionCount: number;
-};
-
-type SessionState = {
-  id: string;
-  currentStep: number;
-  personalSteps?: Record<string, number>;
-  activityId?: string;
-  activityTitle?: string;
-  groupName?: string;
-  workflow: string;
-  participants: string[];
-  participantDisplayNames?: Record<string, string>;
-  attendanceOverrides?: {
-    waitingExcludedUsernames: string[];
-    updatedAt?: string;
-    updatedBy?: string;
-    events?: Array<{ username: string; excluded: boolean; step: number; substepKey?: string; at: string; by: string }>;
-  };
-  makeupWork?: {
-    outlineRequiredUsernames: string[];
-    outlineCompletedUsernames: string[];
-    outlineCompletedAt?: Record<string, string>;
-    outlineReasons?: Record<string, Array<"absent_step3" | "absent_step4" | "teacher_assigned">>;
-    outlineEvents?: Array<{ username: string; reason: "absent_step3" | "absent_step4" | "teacher_assigned"; stepContext: number; createdAt: string; text: string }>;
-  };
-  groupGate?: Record<string, string[]>;
-  stepState: {
-    step1Substep: number;
-    step2Substep: number;
-    step1Substep3Question?: number;
-    step1Substep4Question?: number;
-    step2Substep1Question?: number;
-  };
-  outlines: Record<string, string>;
-  step3SubmittedOutlines?: Record<string, string>;
-  draftStep6: Record<string, string>;
-  draftStep8: Record<string, string>;
-  reports: { step5: Record<string, string>; step7: Record<string, string>; step10: Record<string, string> };
-  promptConfig?: {
-    questionBanks?: Record<string, string[]>;
-    stepOpenings?: Record<string, string>;
-    step9Questions?: Record<string, string>;
-  };
-  messages: Array<{
-    id: string;
-    role: string;
-    userId?: string;
-    text: string;
-    at: string;
-    step: number;
-  }>;
-};
-
-type StudentSessionPayload = Omit<SessionState, "messages"> & {
-  messages?: SessionState["messages"];
-  pollSummary?: boolean;
-  messageCount?: number;
-  lastMessageAt?: string | null;
-};
-
-const LAST_ACTIVITY_STORAGE_KEY = "student:lastActivityId";
-
 export default function StudentPage() {
-  const router = useRouter();
   const [showDebugLog, setShowDebugLog] = useState(false);
-  const [authReady, setAuthReady] = useState(false);
-  const [authError, setAuthError] = useState("");
-  const [authRetryNonce, setAuthRetryNonce] = useState(0);
-  const [loginUser, setLoginUser] = useState("");
-  const [profile, setProfile] = useState<{ name?: string; school?: string; classNumber?: string; ownerTeacherUsername?: string } | null>(null);
-  const [missingFields, setMissingFields] = useState<string[]>([]);
-  const [classCourses, setClassCourses] = useState<Course[]>([]);
-  const [upcomingCourses, setUpcomingCourses] = useState<Course[]>([]);
-  const [activeCourses, setActiveCourses] = useState<Course[]>([]);
-  const [pausedCourses, setPausedCourses] = useState<Course[]>([]);
-  const [participatedCourses, setParticipatedCourses] = useState<ParticipatedCourse[]>([]);
-  const [activityStatusMap, setActivityStatusMap] = useState<Record<string, "not_started" | "in_progress" | "paused" | "ended">>({});
-  const [preparingCourse, setPreparingCourse] = useState<Course | null>(null);
-  const [session, setSession] = useState<SessionState | null>(null);
-  const [text, setText] = useState("");
   const [error, setError] = useState("");
-  const [step3CompleteHint, setStep3CompleteHint] = useState("");
-  const [makeupOutlineHint, setMakeupOutlineHint] = useState("");
-  const [draftText, setDraftText] = useState("");
-  const [step9Answers, setStep9Answers] = useState(["", "", "", ""]);
-  const [refUser, setRefUser] = useState("");
-  const [isSendingMessage, setIsSendingMessage] = useState(false);
-  const [isLoadingOverview, setIsLoadingOverview] = useState(false);
-  const [isAutoAdvancingStep5, setIsAutoAdvancingStep5] = useState(false);
-  const [isSuggestingStep6, setIsSuggestingStep6] = useState(false);
-  const [step3StreamingText, setStep3StreamingText] = useState("");
-  const [step6StreamingText, setStep6StreamingText] = useState("");
-  const [step7StreamingText, setStep7StreamingText] = useState("");
-  const [step10StreamingText, setStep10StreamingText] = useState("");
-  const [step10LoadingDots, setStep10LoadingDots] = useState<"..." | "......">("...");
-  const step10StreamRequestedRef = useRef<string>("");
-  const [isCompletingStep6, setIsCompletingStep6] = useState(false);
-  const [savedDraft6Text, setSavedDraft6Text] = useState("");
-  const [isCompletingStep8, setIsCompletingStep8] = useState(false);
-  const [savedDraft8Text, setSavedDraft8Text] = useState("");
-  const [isSavingDraft, setIsSavingDraft] = useState(false);
-  const [draftSaveError, setDraftSaveError] = useState("");
-  const [lastDraftSavedAt, setLastDraftSavedAt] = useState<string | null>(null);
-  const [step6RefUser, setStep6RefUser] = useState("");
-  const lastOwnStepRef = useRef<number | null>(null);
-  const sessionEtagRef = useRef<string>("");
-  const sessionPayloadHashRef = useRef<string>("");
-  const sessionPollDelayRef = useRef<number>(STUDENT_SESSION_FAST_POLL_MS);
-  const sessionPollingBusyRef = useRef(false);
-  const sessionMessageSignatureRef = useRef<{ count: number; lastAt: string }>({ count: 0, lastAt: "" });
-  const outlineMermaidRef = useRef<string>("");
-  const restoreAttemptedRef = useRef<string>("");
-
-  const rememberLastActivity = (activityId: string | null) => {
-    if (typeof window === "undefined") return;
-    if (activityId) {
-      window.localStorage.setItem(LAST_ACTIVITY_STORAGE_KEY, activityId);
-    } else {
-      window.localStorage.removeItem(LAST_ACTIVITY_STORAGE_KEY);
-    }
-  };
-
-  const syncActivityQuery = (activityId: string | null) => {
-    if (typeof window === "undefined") return;
-    const url = new URL(window.location.href);
-    if (activityId) {
-      url.searchParams.set("activityId", activityId);
-    } else {
-      url.searchParams.delete("activityId");
-    }
-    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
-  };
-
-  const applySessionSafely = useCallback((incoming: StudentSessionPayload) => {
-    setSession((prev) => {
-      if (!prev || !loginUser) return { ...incoming, messages: incoming.messages ?? [] };
-      if (prev.id !== incoming.id) return { ...incoming, messages: incoming.messages ?? [] };
-      const mergedIncoming =
-        incoming.participantDisplayNames && Object.keys(incoming.participantDisplayNames).length > 0
-          ? incoming
-          : {
-              ...incoming,
-              participantDisplayNames: prev.participantDisplayNames
-            };
-      const incomingWithMessages = {
-        ...mergedIncoming,
-        messages: mergedIncoming.messages ?? prev.messages
-      };
-      const prevOwnStep = getOwnStepFromSession(prev, loginUser);
-      const nextOwnStep = getOwnStepFromSession(incomingWithMessages, loginUser);
-      const prevMessageCount = prev.messages?.length ?? 0;
-      const nextMessageCount = incomingWithMessages.messages?.length ?? 0;
-      // Guard against out-of-order polling responses that would roll the user
-      // back to an earlier personal step with no newer payload.
-      if (nextOwnStep < prevOwnStep && nextMessageCount <= prevMessageCount) {
-        return prev;
-      }
-      return incomingWithMessages;
+  const { authReady, authError, loginUser, retryAuth } = useStudentAuth();
+  const {
+    profile,
+    missingFields,
+    classCourses,
+    upcomingCourses,
+    activeCourses,
+    pausedCourses,
+    participatedCourses,
+    activityStatusMap,
+    isLoadingOverview,
+    refreshOverview,
+    refreshActivityStatuses
+  } = useStudentOverview({ authReady, loginUser, setError });
+  const { session, setSession, applySessionSafely, preparingCourse, setPreparingCourse, joinActivity } =
+    useStudentSession({
+      authReady,
+      loginUser,
+      setError,
+      refreshOverview,
+      refreshActivityStatuses,
+      isLoadingOverview,
+      classCourses,
+      upcomingCourses,
+      activeCourses,
+      pausedCourses
     });
-  }, [loginUser]);
-
-  useEffect(() => {
-    const messages = session?.messages ?? [];
-    sessionMessageSignatureRef.current = {
-      count: messages.length,
-      lastAt: messages.at(-1)?.at ?? ""
-    };
-  }, [session?.messages]);
-
-  useEffect(() => {
-    let canceled = false;
-    fetchStudentJson<{ authenticated?: boolean; user?: { username?: string } }>("/api/auth/me", { cache: "no-store" })
-      .then(({ data }) => {
-        if (canceled) return;
-        if (data?.authenticated && data?.user?.username) {
-          setLoginUser(data.user.username);
-          setAuthError("");
-        } else {
-          setLoginUser("");
-          router.push("/login");
-        }
-      })
-      .catch((error) => {
-        if (canceled) return;
-        setLoginUser("");
-        if (error instanceof StudentFetchError && error.status === 401) {
-          router.push("/login");
-          return;
-        }
-        setAuthError(getStudentRetryableMessage("auth"));
-      })
-      .finally(() => {
-        if (!canceled) setAuthReady(true);
-      });
-    return () => {
-      canceled = true;
-    };
-  }, [authRetryNonce, router]);
-
-  useEffect(() => {
-    if (!authReady || !loginUser) return;
-    refreshOverview();
-  }, [authReady, loginUser]);
-
-  useEffect(() => {
-    if (!authReady || !loginUser) return;
-    if (!session?.id) {
-      const timer = window.setInterval(() => {
-        refreshOverview().catch(() => undefined);
-      }, 15000);
-      return () => window.clearInterval(timer);
-    }
-    const sessionId = session.id;
-    let canceled = false;
-    let timerId: number | null = null;
-    let successfulPollCount = 0;
-    sessionPollDelayRef.current = STUDENT_SESSION_FAST_POLL_MS;
-    sessionPayloadHashRef.current = "";
-
-    const scheduleNext = (delayMs: number) => {
-      if (canceled) return;
-      timerId = window.setTimeout(tick, delayMs);
-    };
-
-    const tick = async () => {
-      if (canceled) return;
-      if (sessionPollingBusyRef.current) {
-        scheduleNext(STUDENT_SESSION_FAST_POLL_MS);
-        return;
-      }
-      sessionPollingBusyRef.current = true;
-      const headers: Record<string, string> = {};
-      if (sessionEtagRef.current) headers["If-None-Match"] = sessionEtagRef.current;
-      let unchanged = true;
-      let failed = false;
-      try {
-        const res = await fetch(`/api/session/${sessionId}?view=poll`, { headers });
-        const newEtag = res.headers.get("ETag");
-        if (newEtag) sessionEtagRef.current = newEtag;
-        if (res.status !== 304) {
-          const data = await res.json();
-          if (data?.id) {
-            const nextHash = computeStudentSessionPayloadHash(data, loginUser);
-            unchanged = nextHash === sessionPayloadHashRef.current;
-            if (!unchanged) {
-              sessionPayloadHashRef.current = nextHash;
-              const previousMessageSignature = sessionMessageSignatureRef.current;
-              const nextMessageCount = typeof data.messageCount === "number" ? data.messageCount : data.messages?.length ?? 0;
-              const nextLastMessageAt = data.lastMessageAt ?? data.messages?.at?.(-1)?.at ?? "";
-              if (data.pollSummary && (nextMessageCount !== previousMessageSignature.count || nextLastMessageAt !== previousMessageSignature.lastAt)) {
-                const fullRes = await fetch(`/api/session/${sessionId}`, { cache: "no-store" });
-                const fullData = await fullRes.json();
-                if (fullRes.ok && fullData?.id) {
-                  applySessionSafely(fullData);
-                  sessionMessageSignatureRef.current = {
-                    count: fullData.messages?.length ?? 0,
-                    lastAt: fullData.messages?.at?.(-1)?.at ?? ""
-                  };
-                }
-              } else {
-                applySessionSafely(data);
-              }
-            }
-          }
-        }
-        successfulPollCount++;
-        if (successfulPollCount % 3 === 0) refreshActivityStatuses().catch(() => undefined);
-      } catch {
-        failed = true;
-      } finally {
-        sessionPollingBusyRef.current = false;
-      }
-      if (!canceled) {
-        sessionPollDelayRef.current = failed
-          ? STUDENT_SESSION_FAST_POLL_MS
-          : resolveStudentSessionNextPollDelay({
-              currentDelayMs: sessionPollDelayRef.current,
-              unchanged
-            });
-        scheduleNext(sessionPollDelayRef.current);
-      }
-    };
-
-    scheduleNext(STUDENT_SESSION_FAST_POLL_MS);
-    return () => {
-      canceled = true;
-      if (timerId !== null) window.clearTimeout(timerId);
-    };
-  }, [applySessionSafely, authReady, loginUser, session?.id]);
-
-  useEffect(() => {
-    if (!session || !loginUser) return;
-    const ownStep = session.personalSteps?.[loginUser] ?? session.currentStep;
-    const justEnteredStep6 = lastOwnStepRef.current !== 6 && ownStep === 6;
-    const justEnteredStep8 = lastOwnStepRef.current !== 8 && ownStep === 8;
-    if (ownStep === 6 && (justEnteredStep6 || !draftText)) {
-      const latestDraft = session.draftStep6[loginUser] ?? "";
-      deferStateUpdate(() => {
-        setDraftText(latestDraft);
-        setSavedDraft6Text(latestDraft);
-        setDraftSaveError("");
-        setLastDraftSavedAt(null);
-        setStep6RefUser((prev) => (prev ? prev : loginUser));
-      });
-    }
-    if (ownStep === 8) {
-      const latestDraft = session.draftStep8[loginUser] ?? session.draftStep6[loginUser] ?? "";
-      const hasUnsavedLocalStep8Edit = draftText !== savedDraft8Text;
-      const shouldHydrateStep8Draft =
-        justEnteredStep8 ||
-        (!hasUnsavedLocalStep8Edit && (draftText.length === 0 || latestDraft !== draftText));
-      if (shouldHydrateStep8Draft) {
-        deferStateUpdate(() => {
-          setDraftText(latestDraft);
-          setSavedDraft8Text(latestDraft);
-          setDraftSaveError("");
-          setLastDraftSavedAt(null);
-        });
-      }
-    }
-    if (!refUser && session.participants.length > 0) {
-      deferStateUpdate(() =>
-        setRefUser((session.participants.find((user) => user !== loginUser) ?? session.participants[0])!)
-      );
-    }
-    lastOwnStepRef.current = ownStep;
-  }, [draftText, loginUser, refUser, savedDraft8Text, session]);
-
-  useEffect(() => {
-    const ownStep = session && loginUser ? session.personalSteps?.[loginUser] ?? session.currentStep : 1;
-    if (!session || ownStep !== 5 || !session.reports?.step5 || isAutoAdvancingStep5) return;
-    const timer = window.setTimeout(async () => {
-      setIsAutoAdvancingStep5(true);
-      try {
-        const response = await fetch("/api/session/step5/continue", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sessionId: session.id })
-        });
-        const data = await response.json();
-        if (response.ok && data?.id) {
-          applySessionSafely(data);
-        } else {
-          setError(formatUserError(data.error ?? "step5_auto_advance_failed"));
-        }
-      } finally {
-        setIsAutoAdvancingStep5(false);
-      }
-    }, 1200);
-    return () => window.clearTimeout(timer);
-  }, [applySessionSafely, isAutoAdvancingStep5, loginUser, session]);
-
-  useEffect(() => {
-    const ownStep = session && loginUser ? session.personalSteps?.[loginUser] ?? session.currentStep : 1;
-    if (!session || !loginUser || ownStep !== 6) return;
-    if (!step6RefUser || !session.participants.includes(step6RefUser)) {
-      deferStateUpdate(() => setStep6RefUser(loginUser));
-    }
-  }, [loginUser, session, step6RefUser]);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -431,17 +72,6 @@ export default function StudentPage() {
   const currentStep = session && loginUser
     ? session.personalSteps?.[loginUser] ?? session.currentStep
     : session?.currentStep ?? 1;
-
-  useEffect(() => {
-    if (currentStep !== 9) return;
-    deferStateUpdate(() => setStep9Answers(["", "", "", ""]));
-  }, [currentStep, session?.id]);
-
-  useEffect(() => {
-    if (currentStep !== 3) {
-      deferStateUpdate(() => setStep3CompleteHint(""));
-    }
-  }, [currentStep, session?.id]);
 
   const sortedMessages = useMemo(
     () => [...(session?.messages ?? [])].sort((a, b) => a.at.localeCompare(b.at)),
@@ -458,17 +88,121 @@ export default function StudentPage() {
     [loginUser, session, sortedMessages]
   );
 
-  const step3SubmittedOutlineMermaid = useMemo(() => {
-    const ownStep = session && loginUser ? session.personalSteps?.[loginUser] ?? session.currentStep : 1;
-    if (!session || !loginUser || ownStep < 4) return "";
-    return session.step3SubmittedOutlines?.[loginUser]?.trim() ?? "";
-  }, [loginUser, session]);
+  // One memo around the pure gate-view builder keeps prop identities stable
+  // for memoized children across polling re-renders (#459).
+  const gate = useMemo(
+    () =>
+      buildStudentGateView({
+        session,
+        loginUser,
+        currentStep,
+        activityStatusMap,
+        lastInteractiveKind: interactiveMessages[interactiveMessages.length - 1]?.kind
+      }),
+    [session, loginUser, currentStep, activityStatusMap, interactiveMessages]
+  );
+  const {
+    step3SubmittedOutlineMermaid,
+    step4OutlineMermaid,
+    teammateUsers,
+    makeupOutlinePending,
+    courseStatusBlockedMessage,
+    currentMode,
+    isInputEnabled,
+    stepModeLine,
+    activeGateKey,
+    usernameToName,
+    step3CompletedByMe,
+    step4CompletedByMe,
+    step4CompletedPeers,
+    allStep4Completed,
+    canReplyToQuestion,
+    waitingGroupMembers,
+    waitingAiForGroup,
+    step1CompletedWaitingTeacher,
+    step2CompletedWaitingTeacher,
+    waitingStep3Members,
+    groupPendingMemberNames,
+    groupMemberNames,
+    groupLabel,
+    groupSubmittedCount,
+    groupTotalCount,
+    showGroupStatusCard,
+    groupStatusTitle,
+    groupStatusTone,
+    ownStep7Report,
+    ownStep10Report,
+    isStep10ReportReady,
+    stepOpeningText,
+    step9QuestionTexts
+  } = gate;
 
-  const step4OutlineMermaid = useMemo(() => {
-    const ownStep = session && loginUser ? session.personalSteps?.[loginUser] ?? session.currentStep : 1;
-    if (!session || !loginUser || ownStep < 5) return "";
-    return session.outlines?.[loginUser]?.trim() ?? "";
-  }, [loginUser, session]);
+  const {
+    draftText,
+    setDraftText,
+    isCompletingStep6,
+    setIsCompletingStep6,
+    isCompletingStep8,
+    setIsCompletingStep8,
+    step6RefUser,
+    setStep6RefUser,
+    refUser,
+    setRefUser,
+    saveArtifact,
+    markDraftSaved,
+    unsavedDraft6Chars,
+    unsavedDraft8Chars,
+    currentUnsavedDraftChars,
+    draftSaveStatus
+  } = useDraftEditor({ session, loginUser, currentStep, applySessionSafely, setError });
+
+  const {
+    step3StreamingText,
+    setStep3StreamingText,
+    step6StreamingText,
+    setStep6StreamingText,
+    step7StreamingText,
+    setStep7StreamingText,
+    step10StreamingText,
+    step10LoadingDots
+  } = useStepStreaming({ session, loginUser, currentStep, ownStep10Report, applySessionSafely, setError });
+
+  const {
+    text,
+    setText,
+    step9Answers,
+    setStep9Answers,
+    step3CompleteHint,
+    makeupOutlineHint,
+    isSendingMessage,
+    isSuggestingStep6,
+    sendMessage,
+    submitStep9Batch,
+    handleOutlineSave,
+    completeOutlineTree,
+    completeMakeupOutlineTree,
+    reopenStep3Editing,
+    completeStep4,
+    requestStep6Suggestion,
+    completeStep6ToStep8,
+    completeStep8ToStep9
+  } = useStudentStepActions({
+    session,
+    loginUser,
+    currentStep,
+    activityStatusMap,
+    isInputEnabled,
+    applySessionSafely,
+    setError,
+    draftText,
+    saveArtifact,
+    markDraftSaved,
+    setIsCompletingStep6,
+    setIsCompletingStep8,
+    setStep3StreamingText,
+    setStep6StreamingText,
+    setStep7StreamingText
+  });
 
   const currentActivity = useMemo(
     () => {
@@ -478,179 +212,7 @@ export default function StudentPage() {
     },
     [classCourses, preparingCourse, session?.activityId]
   );
-  const teammateUsers = useMemo(() => {
-    if (!session) return [];
-    return session.participants.filter((user) => user !== loginUser);
-  }, [session, loginUser]);
-  const waitingExcludedUsers = useMemo(
-    () => new Set(session?.attendanceOverrides?.waitingExcludedUsernames ?? []),
-    [session?.attendanceOverrides?.waitingExcludedUsernames]
-  );
-  const effectiveParticipants = useMemo(
-    () => (session?.participants ?? []).filter((user) => !waitingExcludedUsers.has(user)),
-    [session?.participants, waitingExcludedUsers]
-  );
-  const makeupOutlinePending = Boolean(
-    session &&
-      loginUser &&
-      (session.makeupWork?.outlineRequiredUsernames ?? []).includes(loginUser) &&
-      !(session.makeupWork?.outlineCompletedUsernames ?? []).includes(loginUser)
-  );
 
-  const currentActivityStatus = session?.activityId ? activityStatusMap[session.activityId] : undefined;
-  const courseStatusBlockedMessage =
-    currentActivityStatus === "paused"
-      ? "課程目前暫停中，已暫停互動與提交，請等待老師繼續上課。"
-      : currentActivityStatus === "ended"
-        ? "課程已結束，無法再互動或提交。請等待老師後續指示。"
-        : currentActivityStatus === "not_started"
-          ? "課程尚未開始，請等待老師開始上課。"
-          : "";
-  const currentMode = getMode(currentStep);
-  const currentModeLabel =
-    currentMode === "group_interaction"
-      ? "小組互動"
-      : currentMode === "personal_interaction"
-        ? "個人互動"
-        : currentMode === "non_interactive"
-          ? "無互動"
-          : "個人反思";
-  const isInputEnabled = currentMode !== "non_interactive" && (!currentActivityStatus || currentActivityStatus === "in_progress");
-
-  const stepSubstepText =
-    currentStep === 1
-      ? `目前子步驟：${
-          (session?.stepState.step1Substep ?? 1) === 3
-            ? `1-3-${session?.stepState.step1Substep3Question ?? 1}`
-            : (session?.stepState.step1Substep ?? 1) === 4
-              ? `1-4-${session?.stepState.step1Substep4Question ?? 1}`
-              : `1-${session?.stepState.step1Substep ?? 1}`
-        }`
-      : currentStep === 2
-        ? `目前子步驟：${
-            (session?.stepState.step2Substep ?? 1) === 1
-              ? `2-1-${session?.stepState.step2Substep1Question ?? 1}`
-              : `2-${session?.stepState.step2Substep ?? 1}`
-          }`
-        : null;
-  const stepModeLine = `${stepSubstepText ?? "目前子步驟：—"} ｜ 模式：${currentModeLabel}`;
-  const lastInteractive = interactiveMessages[interactiveMessages.length - 1];
-  const lastIsQuestion = lastInteractive?.kind === "question";
-  const activeGateKey = getActiveGroupGateKey(session, currentStep);
-  const usernameToName = useMemo(() => session?.participantDisplayNames ?? {}, [session?.participantDisplayNames]);
-  const toDisplayName = useCallback((username: string) => usernameToName[username] || username, [usernameToName]);
-  const responders = activeGateKey ? session?.groupGate?.[activeGateKey] ?? [] : [];
-  const step3CompletedUsers = session?.groupGate?.["3-complete"] ?? [];
-  const step4CompletedUsers = useMemo(() => session?.groupGate?.["4-complete"] ?? [], [session?.groupGate]);
-  const step3CompletedByMe = Boolean(loginUser && step3CompletedUsers.includes(loginUser));
-  const step4CompletedByMe = Boolean(loginUser && step4CompletedUsers.includes(loginUser));
-  const step4CompletedPeers = useMemo(
-    () => (session?.participants ?? []).filter((p) => p !== loginUser && step4CompletedUsers.includes(p)),
-    [loginUser, session?.participants, step4CompletedUsers]
-  );
-  const allStep4Completed =
-    currentStep === 4 &&
-    effectiveParticipants.length > 0 &&
-    effectiveParticipants.every((p) => step4CompletedUsers.includes(p));
-  const hasSubmittedThisTurn = Boolean(loginUser && responders.includes(loginUser));
-  const allRespondedThisTurn =
-    currentMode === "group_interaction" &&
-    effectiveParticipants.length > 0 &&
-    effectiveParticipants.every((p) => responders.includes(p));
-  const canReplyToQuestion =
-    currentStep === 4
-      ? !step4CompletedByMe
-      : currentMode === "group_interaction"
-        ? !hasSubmittedThisTurn && !allRespondedThisTurn
-        : currentStep === 3
-          ? !step3CompletedByMe
-          : Boolean(lastIsQuestion);
-  const waitingGroupMembers =
-    currentStep === 4
-      ? !!session && step4CompletedByMe && !allStep4Completed
-      : currentMode === "group_interaction" &&
-        !!session &&
-        Array.isArray(responders) &&
-        hasSubmittedThisTurn &&
-        !effectiveParticipants.every((p) => responders.includes(p));
-  const latestStepMessage = session?.messages.filter((m) => m.step === currentStep).at(-1) ?? null;
-  const waitingAiForGroup =
-    currentStep === 4
-      ? false
-      : currentMode === "group_interaction" &&
-        !!session &&
-        effectiveParticipants.length > 0 &&
-        effectiveParticipants.every((p) => responders.includes(p)) &&
-        latestStepMessage?.role !== "ai";
-  const step1CompletedWaitingTeacher =
-    currentStep === 1 &&
-    latestStepMessage?.role === "system" &&
-    latestStepMessage.text.includes("步驟 1 子步驟已完成，等待教師切換下一步");
-  const step2CompletedWaitingTeacher =
-    currentStep === 2 &&
-    latestStepMessage?.role === "system" &&
-    latestStepMessage.text.includes("步驟 2 子步驟已完成，等待教師切換下一步");
-  const waitingStep3Members =
-    currentStep === 3 &&
-    !!session &&
-    step3CompletedByMe &&
-    !effectiveParticipants.every((p) => step3CompletedUsers.includes(p));
-  const groupStatusResponders = currentStep === 4 ? step4CompletedUsers : responders;
-  const effectiveGroupStatusResponders = useMemo(
-    () => groupStatusResponders.filter((username) => effectiveParticipants.includes(username)),
-    [effectiveParticipants, groupStatusResponders]
-  );
-  const groupPendingMemberNames = useMemo(
-    () => effectiveParticipants
-      .filter((username) => !groupStatusResponders.includes(username))
-      .map((username) => toDisplayName(username)),
-    [effectiveParticipants, groupStatusResponders, toDisplayName]
-  );
-  const groupMemberNames = useMemo(
-    () => effectiveParticipants.map((username) => toDisplayName(username)),
-    [effectiveParticipants, toDisplayName]
-  );
-  const groupLabel = session?.groupName ? `第 ${session.groupName} 組` : "—";
-  const groupSubmittedCount = Math.min(effectiveGroupStatusResponders.length, effectiveParticipants.length);
-  const groupTotalCount = effectiveParticipants.length;
-  const groupStatusAllDone = currentStep === 4 ? allStep4Completed : allRespondedThisTurn;
-  const groupStatusSubmittedByMe = currentStep === 4 ? step4CompletedByMe : hasSubmittedThisTurn;
-  const showGroupStatusCard = Boolean(session && currentMode === "group_interaction" && [1, 2, 4].includes(currentStep));
-  const groupStatusTitle = groupStatusAllDone
-    ? currentStep === 4
-      ? "全組已確認完成，等待老師切換下一步"
-      : "全組已完成本題，AI 正在整理下一步"
-    : groupStatusSubmittedByMe
-      ? "你的部分已完成，正在等待同組同學"
-      : "輪到你完成目前任務";
-  const groupStatusTone = groupStatusAllDone ? "success" : groupStatusSubmittedByMe ? "warning" : "";
-  const ownStep7Report = session && loginUser ? session.reports.step7[loginUser] : undefined;
-  const ownStep10Report = session && loginUser ? session.reports.step10[loginUser] : undefined;
-  const isStep10ReportReady = Boolean(ownStep10Report && ownStep10Report.trim());
-  useEffect(() => {
-    const isStep10Waiting = currentStep === 10 && !ownStep10Report?.trim();
-    if (!isStep10Waiting) {
-      deferStateUpdate(() => setStep10LoadingDots("..."));
-      return;
-    }
-    const timer = window.setInterval(() => {
-      setStep10LoadingDots((prev) => (prev === "..." ? "......" : "..."));
-    }, 600);
-    return () => window.clearInterval(timer);
-  }, [currentStep, ownStep10Report]);
-  const unsavedDraft6Chars = currentStep === 6 && draftText !== savedDraft6Text ? draftText.length : 0;
-  const unsavedDraft8Chars = currentStep === 8 && draftText !== savedDraft8Text ? draftText.length : 0;
-  const currentUnsavedDraftChars = currentStep === 8 ? unsavedDraft8Chars : unsavedDraft6Chars;
-  const draftSaveStatus = useMemo(() => {
-    if (isSavingDraft) return { state: "saving" as const, text: "正在儲存..." };
-    if (draftSaveError) return { state: "error" as const, text: draftSaveError };
-    if (currentUnsavedDraftChars > 0) return { state: "dirty" as const, text: `尚有 ${currentUnsavedDraftChars} 字未保存` };
-    if (lastDraftSavedAt) {
-      const time = formatTaipeiTime(lastDraftSavedAt, { withSeconds: false });
-      return { state: "saved" as const, text: `已自動保存於 ${time}` };
-    }
-    return { state: "saved" as const, text: "目前內容已保存" };
-  }, [currentUnsavedDraftChars, draftSaveError, isSavingDraft, lastDraftSavedAt]);
   const nextAction = buildStudentNextAction({
     currentStep,
     currentMode,
@@ -669,660 +231,6 @@ export default function StudentPage() {
     unsavedDraftChars: currentUnsavedDraftChars,
     step9AnsweredCount: step9Answers.filter((a) => a.trim().length > 0).length
   });
-  const stepOpeningText = session?.promptConfig?.stepOpenings?.[String(currentStep)]?.trim() ?? "";
-  const step9QuestionTexts = useMemo(() => {
-    if (currentStep !== 9) return [] as string[];
-    const latestSystem = [...(session?.messages ?? [])]
-      .filter((m) => m.step === 9 && m.role === "system")
-      .at(-1)?.text;
-    const fromSystem = latestSystem
-      ? Array.from(latestSystem.matchAll(/\n?[1-4]\.\s*(.+)/g)).map((m) => (m[1] ?? "").trim()).slice(0, 4)
-      : [];
-    if (fromSystem.length === 4) return fromSystem;
-    return getStep9QuestionsFromConfig(session?.promptConfig?.step9Questions).slice(0, 4);
-  }, [currentStep, session?.messages, session?.promptConfig?.step9Questions]);
-
-  async function refreshOverview() {
-    setIsLoadingOverview(true);
-    try {
-      const { data } = await fetchStudentJson<{
-        profile?: { name?: string; school?: string; classNumber?: string; ownerTeacherUsername?: string } | null;
-        missingFields?: string[];
-        classCourses?: Course[];
-        upcomingCourses?: Course[];
-        activeCourses?: Course[];
-        pausedCourses?: Course[];
-        participatedCourses?: ParticipatedCourse[];
-      }>("/api/student/overview", { cache: "no-store" });
-      setProfile(data.profile ?? null);
-      setMissingFields(data.missingFields ?? []);
-      setClassCourses(data.classCourses ?? []);
-      setUpcomingCourses(data.upcomingCourses ?? []);
-      setActiveCourses(data.activeCourses ?? []);
-      setPausedCourses(data.pausedCourses ?? []);
-      setParticipatedCourses(data.participatedCourses ?? []);
-      const allCourses: Course[] = [
-        ...(data.classCourses ?? []),
-        ...(data.upcomingCourses ?? []),
-        ...(data.activeCourses ?? []),
-        ...(data.pausedCourses ?? [])
-      ];
-      const statusMap = allCourses.reduce((acc, course) => {
-        if (course.id && course.courseStatus) acc[course.id] = course.courseStatus;
-        return acc;
-      }, {} as Record<string, "not_started" | "in_progress" | "paused" | "ended">);
-      setActivityStatusMap(statusMap);
-      setError("");
-    } catch {
-      setError(getStudentRetryableMessage("overview"));
-    } finally {
-      setIsLoadingOverview(false);
-    }
-  }
-
-  async function refreshActivityStatuses() {
-    const { data } = await fetchStudentJson<{ activities?: Course[] }>("/api/student/activities", { cache: "no-store" });
-    const list: Course[] = data.activities ?? [];
-    const statusMap = list.reduce((acc, course) => {
-      if (course.id && course.courseStatus) acc[course.id] = course.courseStatus;
-      return acc;
-    }, {} as Record<string, "not_started" | "in_progress" | "paused" | "ended">);
-    setActivityStatusMap(statusMap);
-  }
-
-  async function joinActivity(activityId: string, options?: { silent?: boolean }) {
-    if (!loginUser) { setError(formatUserError("auth_not_ready")); return; }
-    if (!options?.silent) setError("");
-    try {
-      const { data } = await fetchStudentJson<SessionState>("/api/student/join", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ activityId })
-      }, { retryDelaysMs: [700] });
-      applySessionSafely(data);
-      rememberLastActivity(activityId);
-      syncActivityQuery(activityId);
-      setPreparingCourse(null);
-      await refreshOverview();
-    } catch (error) {
-      if (options?.silent) return;
-      if (error instanceof StudentFetchError) {
-        if (error.message === "course_not_started") { setError(formatUserError("course_not_started")); return; }
-        if (error.message === "course_ended") { setError(formatUserError("course_ended")); return; }
-        if (error.message === "course_paused") { setError(formatUserError("course_paused")); return; }
-        if (error.message === "not_group_member") { setError(formatUserError("not_group_member")); return; }
-        if (error.message === "student_join_failed") {
-          setError("進入課程失敗。建議：請重新整理後再試，或請教師確認課程設定。");
-          return;
-        }
-        if (error.code === "http" && error.status && error.status < 500 && error.status !== 429) {
-          setError(formatUserError(error.message || "join_failed"));
-          return;
-        }
-        setError(getStudentRetryableMessage("join"));
-        return;
-      }
-      setError(getStudentRetryableMessage("join"));
-    }
-  }
-
-  useEffect(() => {
-    if (!session?.activityId) return;
-    rememberLastActivity(session.activityId);
-    syncActivityQuery(session.activityId);
-  }, [session?.activityId]);
-
-  useEffect(() => {
-    if (!authReady || !loginUser || session || isLoadingOverview) return;
-    if (restoreAttemptedRef.current) return;
-    if (typeof window === "undefined") return;
-
-    const url = new URL(window.location.href);
-    const fromQuery = url.searchParams.get("activityId")?.trim() ?? "";
-    const fromStorage = window.localStorage.getItem(LAST_ACTIVITY_STORAGE_KEY)?.trim() ?? "";
-    const candidate = fromQuery || fromStorage;
-    if (!candidate) {
-      restoreAttemptedRef.current = "__none__";
-      return;
-    }
-
-    const allKnownCourses = [...activeCourses, ...pausedCourses, ...upcomingCourses, ...classCourses];
-    const known = allKnownCourses.find((c) => c.id === candidate);
-    if (!known) {
-      restoreAttemptedRef.current = "__unknown__";
-      rememberLastActivity(null);
-      syncActivityQuery(null);
-      return;
-    }
-    if (known.courseStatus !== "in_progress" && known.courseStatus !== "paused") {
-      restoreAttemptedRef.current = "__not_resumable__";
-      rememberLastActivity(null);
-      syncActivityQuery(null);
-      return;
-    }
-
-    restoreAttemptedRef.current = candidate;
-    deferStateUpdate(() => {
-      joinActivity(candidate, { silent: true }).catch(() => undefined);
-    });
-    // joinActivity depends on broad page state; this restore guard must run once per candidate.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    activeCourses,
-    authReady,
-    classCourses,
-    isLoadingOverview,
-    loginUser,
-    pausedCourses,
-    session,
-    upcomingCourses
-  ]);
-
-  async function sendMessage(e: FormEvent) {
-    e.preventDefault();
-    if (!session || !text.trim() || !isInputEnabled) return;
-    setError("");
-    setIsSendingMessage(true);
-    try {
-      if (currentStep === 3) {
-        setStep3StreamingText("");
-        const textToSend = text;
-        const response = await fetch("/api/session/step3/stream", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sessionId: session.id, text: textToSend })
-        });
-        if (!response.ok || !response.body) {
-          try {
-            const data = await response.json();
-            setError(appendTeacherHelpHint(formatUserError(data.error ?? "step3_stream_failed")));
-          } catch {
-            setError(appendTeacherHelpHint(formatUserError("step3_stream_failed")));
-          }
-          return;
-        }
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = "";
-        let liveText = "";
-        let finalSession: typeof session | null = null;
-        let streamError = "";
-        outer: while (true) {
-          const { value, done } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-          const parts = buffer.split("\n\n");
-          buffer = parts.pop() ?? "";
-          for (const part of parts) {
-            const line = part.trim();
-            if (!line.startsWith("data:")) continue;
-            const payload = line.slice(5).trim();
-            if (!payload) continue;
-            try {
-              const event = JSON.parse(payload) as
-                | { type: "chunk"; text: string }
-                | { type: "done"; session: typeof session }
-                | { type: "error"; error?: string };
-              if (event.type === "chunk") {
-                liveText += event.text;
-                setStep3StreamingText(liveText);
-              } else if (event.type === "done") {
-                finalSession = event.session;
-                break outer;
-              } else if (event.type === "error") {
-                streamError = event.error ?? "step3_stream_failed";
-                break outer;
-              }
-            } catch {
-              // Ignore malformed event lines.
-            }
-          }
-        }
-        if (streamError) {
-          setError(appendTeacherHelpHint(formatUserError(streamError)));
-        } else if (finalSession) {
-          applySessionSafely(finalSession);
-          setText("");
-        }
-        return;
-      }
-
-      const response = await fetch("/api/chat/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId: session.id, userId: loginUser, text })
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        const errorText = typeof data.error === "string" ? data.error : "send_failed";
-        const hintText = typeof data.hint === "string" && data.hint.trim() ? data.hint.trim() : "";
-        setError(appendTeacherHelpHint(appendErrorHint(errorText, hintText)));
-        return;
-      }
-      applySessionSafely(data);
-      setText("");
-    } finally {
-      setIsSendingMessage(false);
-      setStep3StreamingText("");
-    }
-  }
-
-  async function submitStep9Batch(e: FormEvent) {
-    e.preventDefault();
-    if (!session || currentStep !== 9 || !isInputEnabled) return;
-    const payload = `Q1: ${step9Answers[0]}\nQ2: ${step9Answers[1]}\nQ3: ${step9Answers[2]}\nQ4: ${step9Answers[3]}`;
-    setError("");
-    setIsSendingMessage(true);
-    try {
-      const response = await fetch("/api/chat/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId: session.id, userId: loginUser, text: payload })
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        const errorText = typeof data.error === "string" ? data.error : "send_failed";
-        const hintText = typeof data.hint === "string" && data.hint.trim() ? data.hint.trim() : "";
-        setError(appendTeacherHelpHint(appendErrorHint(errorText, hintText)));
-        return;
-      }
-      applySessionSafely(data);
-      setStep9Answers(["", "", "", ""]);
-    } finally {
-      setIsSendingMessage(false);
-    }
-  }
-
-  async function saveArtifact(type: "outline" | "draft6" | "draft8", content: string): Promise<boolean> {
-    if (!session) return false;
-    const isDraft = type === "draft6" || type === "draft8";
-    if (isDraft) {
-      setIsSavingDraft(true);
-      setDraftSaveError("");
-    }
-    try {
-      const response = await fetch("/api/session/artifact/save", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId: session.id, type, content })
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        const message = formatUserError(data.error ?? "save_failed");
-        setError(message);
-        if (isDraft) setDraftSaveError(message);
-        return false;
-      }
-      if (type === "draft6") setSavedDraft6Text(content);
-      if (type === "draft8") setSavedDraft8Text(content);
-      if (isDraft) setLastDraftSavedAt(new Date().toISOString());
-      applySessionSafely(data);
-      return true;
-    } finally {
-      if (isDraft) setIsSavingDraft(false);
-    }
-  }
-
-  async function handleOutlineSave(mermaid: string) {
-    outlineMermaidRef.current = mermaid;
-    setStep3CompleteHint("");
-    await saveArtifact("outline", mermaid);
-  }
-
-  async function completeOutlineTree(mermaid: string) {
-    if (!session) return;
-    const courseStatus = activityStatusMap[session.activityId ?? ""];
-    if (courseStatus && courseStatus !== "in_progress") {
-      setError(courseStatus === "paused" ? "課程目前暫停中，請等待老師繼續上課。" : "課程目前不可提交，請等待老師指示。");
-      return;
-    }
-    const response = await fetch("/api/session/step3/complete", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionId: session.id, outline: mermaid })
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      if (data?.error === "step3_outline_depth3_not_edited") {
-        setStep3CompleteHint("尚未完成：請先確實編輯第三層（含）以後的所有節點內容，再按「完成結構樹」。");
-      }
-      setError(formatUserError(data.error ?? "complete_step3_failed"));
-      return;
-    }
-    setStep3CompleteHint("");
-    applySessionSafely(data);
-  }
-
-  async function completeMakeupOutlineTree(mermaid: string) {
-    if (!session) return;
-    const courseStatus = activityStatusMap[session.activityId ?? ""];
-    if (courseStatus && courseStatus !== "in_progress") {
-      setError(courseStatus === "paused" ? "課程目前暫停中，請等待老師繼續上課。" : "課程目前不可提交，請等待老師指示。");
-      return;
-    }
-    setError("");
-    const response = await fetch("/api/session/makeup-outline/complete", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionId: session.id, outline: mermaid })
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      if (data?.error === "step3_outline_depth3_not_edited") {
-        setMakeupOutlineHint("尚未完成：請先確實編輯第三層（含）以後的所有節點內容，再按「完成個人結構圖」。");
-      }
-      setError(formatUserError(data.error ?? "complete_makeup_outline_failed"));
-      return;
-    }
-    setMakeupOutlineHint("");
-    applySessionSafely(data);
-  }
-
-  async function reopenStep3Editing() {
-    if (!session) return;
-    const courseStatus = activityStatusMap[session.activityId ?? ""];
-    if (courseStatus && courseStatus !== "in_progress") {
-      setError(courseStatus === "paused" ? "課程目前暫停中，請等待老師繼續上課。" : "課程目前不可操作，請等待老師指示。");
-      return;
-    }
-    setError("");
-    const response = await fetch("/api/session/step3/reopen", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionId: session.id })
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      setError(formatUserError(data.error ?? "reopen_step3_failed"));
-      return;
-    }
-    setStep3CompleteHint("");
-    applySessionSafely(data);
-  }
-
-  async function completeStep4() {
-    if (!session) return;
-    const courseStatus = activityStatusMap[session.activityId ?? ""];
-    if (courseStatus && courseStatus !== "in_progress") {
-      setError(courseStatus === "paused" ? "課程目前暫停中，請等待老師繼續上課。" : "課程目前不可提交，請等待老師指示。");
-      return;
-    }
-    setError("");
-    const outlineToSave = outlineMermaidRef.current || (session.outlines[loginUser] ?? "");
-    const response = await fetch("/api/session/step4/complete", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionId: session.id, outline: outlineToSave })
-    });
-    const data = await response.json();
-    if (!response.ok) { setError(formatUserError(data.error ?? "complete_step4_failed")); return; }
-    applySessionSafely(data);
-  }
-
-  async function requestStep6Suggestion() {
-    if (!session || currentStep !== 6) return;
-    const courseStatus = activityStatusMap[session.activityId ?? ""];
-    if (courseStatus && courseStatus !== "in_progress") {
-      setError(courseStatus === "paused" ? "課程目前暫停中，請等待老師繼續上課。" : "課程目前不可操作，請等待老師指示。");
-      return;
-    }
-    setError("");
-    setStep6StreamingText("");
-    setIsSuggestingStep6(true);
-    try {
-      const saved = await saveArtifact("draft6", draftText);
-      if (!saved) {
-        setError((prev) => prev || "儲存文章失敗，尚未送出 AI 建議。請先儲存成功後再試。");
-        return;
-      }
-      const response = await fetch("/api/session/step6/suggest", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId: session.id, draft: draftText })
-      });
-      if (!response.ok || !response.body) {
-        // Fallback: try to parse JSON error body for legacy error responses.
-        try {
-          const data = await response.json();
-          setError(formatUserError(data.error ?? "step6_suggest_failed"));
-        } catch {
-          setError(formatUserError("step6_suggest_failed"));
-        }
-        return;
-      }
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let liveText = "";
-      let finalSession: typeof session | null = null;
-      let streamError = "";
-      outer: while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const parts = buffer.split("\n\n");
-        buffer = parts.pop() ?? "";
-        for (const part of parts) {
-          const line = part.trim();
-          if (!line.startsWith("data:")) continue;
-          const payload = line.slice(5).trim();
-          if (!payload) continue;
-          try {
-            const event = JSON.parse(payload) as
-              | { type: "chunk"; text: string }
-              | { type: "done"; session: typeof session }
-              | { type: "error"; error?: string };
-            if (event.type === "chunk") {
-              liveText += event.text;
-              setStep6StreamingText(liveText);
-            } else if (event.type === "done") {
-              finalSession = event.session;
-              break outer;
-            } else if (event.type === "error") {
-              streamError = event.error ?? "step6_suggest_failed";
-              break outer;
-            }
-          } catch {
-            // Ignore malformed event lines.
-          }
-        }
-      }
-      if (streamError) {
-        setError(formatUserError(streamError));
-      } else if (finalSession) {
-        applySessionSafely(finalSession);
-      }
-    } catch {
-      setError(formatUserError("step6_suggest_failed"));
-    } finally {
-      setIsSuggestingStep6(false);
-      setStep6StreamingText("");
-    }
-  }
-
-  async function streamStep10Report(sessionId: string): Promise<boolean> {
-    setStep10StreamingText("");
-    try {
-      const response = await fetch("/api/session/step10/stream", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId })
-      });
-      if (!response.ok || !response.body) {
-        setError(formatUserError("step10_stream_failed"));
-        return false;
-      }
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let liveText = "";
-      let finalSession: typeof session | null = null;
-      let streamError = "";
-      outer: while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const parts = buffer.split("\n\n");
-        buffer = parts.pop() ?? "";
-        for (const part of parts) {
-          const line = part.trim();
-          if (!line.startsWith("data:")) continue;
-          const payload = line.slice(5).trim();
-          if (!payload) continue;
-          try {
-            const event = JSON.parse(payload) as
-              | { type: "chunk"; text: string }
-              | { type: "done"; session: typeof session }
-              | { type: "error"; error?: string };
-            if (event.type === "chunk") {
-              liveText += event.text;
-              setStep10StreamingText(liveText);
-            } else if (event.type === "done") {
-              finalSession = event.session;
-              break outer;
-            } else if (event.type === "error") {
-              streamError = event.error ?? "step10_stream_failed";
-              break outer;
-            }
-          } catch {
-            // ignore
-          }
-        }
-      }
-      if (streamError) {
-        setError(formatUserError(streamError));
-        return false;
-      }
-      if (finalSession) {
-        applySessionSafely(finalSession);
-        return true;
-      }
-      return false;
-    } catch {
-      setError(formatUserError("step10_stream_failed"));
-      return false;
-    } finally {
-      setStep10StreamingText("");
-    }
-  }
-
-  // Auto-trigger Step 10 streaming when student personal step reaches 10
-  // without a stored report yet (#241).
-  useEffect(() => {
-    if (!session || !loginUser) return;
-    if (currentStep !== 10) return;
-    if (ownStep10Report && ownStep10Report.trim()) return;
-    if (step10StreamRequestedRef.current === session.id) return;
-    step10StreamRequestedRef.current = session.id;
-    streamStep10Report(session.id)
-      .then((ok) => {
-        if (!ok) {
-          step10StreamRequestedRef.current = "";
-        }
-      })
-      .catch(() => {
-        step10StreamRequestedRef.current = "";
-      });
-    // streamStep10Report intentionally closes over the latest session helpers.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.id, currentStep, ownStep10Report, loginUser]);
-
-  async function completeStep6ToStep8() {
-    if (!session || currentStep !== 6) return;
-    const draftError = validateDraftContent(draftText);
-    if (draftError) { setError(draftError); return; }
-    setError("");
-    setStep7StreamingText("");
-    setIsCompletingStep6(true);
-    try {
-      const response = await fetch("/api/session/step6/complete", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId: session.id, draft: draftText })
-      });
-      if (!response.ok || !response.body) {
-        try {
-          const data = await response.json();
-          setError(appendErrorHint(data.error ?? "step6_complete_failed", typeof data.hint === "string" ? data.hint : undefined));
-        } catch {
-          setError(formatUserError("step6_complete_failed"));
-        }
-        return;
-      }
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let liveText = "";
-      let finalSession: typeof session | null = null;
-      let streamError = "";
-      outer: while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const parts = buffer.split("\n\n");
-        buffer = parts.pop() ?? "";
-        for (const part of parts) {
-          const line = part.trim();
-          if (!line.startsWith("data:")) continue;
-          const payload = line.slice(5).trim();
-          if (!payload) continue;
-          try {
-            const event = JSON.parse(payload) as
-              | { type: "chunk"; text: string }
-              | { type: "done"; session: typeof session }
-              | { type: "error"; error?: string };
-            if (event.type === "chunk") {
-              liveText += event.text;
-              setStep7StreamingText(liveText);
-            } else if (event.type === "done") {
-              finalSession = event.session;
-              break outer;
-            } else if (event.type === "error") {
-              streamError = event.error ?? "step6_complete_failed";
-              break outer;
-            }
-          } catch {
-            // ignore malformed event lines
-          }
-        }
-      }
-      if (streamError) {
-        setError(formatUserError(streamError));
-      } else if (finalSession) {
-        setSavedDraft6Text(draftText);
-        setLastDraftSavedAt(new Date().toISOString());
-        applySessionSafely(finalSession);
-      }
-    } catch {
-      setError(formatUserError("step6_complete_failed"));
-    } finally {
-      setIsCompletingStep6(false);
-      setStep7StreamingText("");
-    }
-  }
-
-  async function completeStep8ToStep9() {
-    if (!session || currentStep !== 8) return;
-    setError("");
-    setIsCompletingStep8(true);
-    try {
-      const response = await fetch("/api/session/step8/complete", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId: session.id, draft: draftText })
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        setError(appendErrorHint(data.error ?? "step8_complete_failed", typeof data.hint === "string" ? data.hint : undefined));
-        return;
-      }
-      setSavedDraft8Text(draftText);
-      setLastDraftSavedAt(new Date().toISOString());
-      applySessionSafely(data);
-    } finally {
-      setIsCompletingStep8(false);
-    }
-  }
 
   if (!authReady) {
     return (
@@ -1343,14 +251,7 @@ export default function StudentPage() {
           <small>{authError}</small>
           <div className="row" style={{ marginTop: 12 }}>
             <div style={{ width: 180 }}>
-              <button
-                type="button"
-                onClick={() => {
-                  setAuthReady(false);
-                  setAuthError("");
-                  setAuthRetryNonce((value) => value + 1);
-                }}
-              >
+              <button type="button" onClick={retryAuth}>
                 重新確認登入
               </button>
             </div>
