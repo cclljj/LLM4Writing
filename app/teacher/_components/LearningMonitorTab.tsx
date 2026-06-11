@@ -11,8 +11,6 @@ import {
   isSessionInActivityScope
 } from "@/src/lib/monitor-session-scope";
 import { excludeWaitingMembers, isWaitingExcluded } from "@/src/lib/session-attendance";
-import OutlineSvg from "@/app/_components/OutlineSvg";
-import { renderMessageHtml } from "@/app/student/_components/renderMessageHtml";
 import {
   computeTeacherMonitorPayloadHash,
   hasLowLatencyStepAdvanceGate,
@@ -21,12 +19,16 @@ import {
   TEACHER_MONITOR_MIN_POLL_MS
 } from "@/src/lib/teacher-monitor-polling";
 import { fetchJsonWithRetry } from "@/src/lib/client-retry-fetch";
-import { formatTaipeiDateTime } from "@/src/lib/time-format";
 import TeacherDashboard, { TeacherDashboardData } from "./TeacherDashboard";
 import CourseDiagnosticsPanel from "./CourseDiagnosticsPanel";
 import { ActivityRow, CourseDiagnosticsPayload, MonitorSession, UserRow } from "./types";
 import ConfirmDialog from "./ConfirmDialog";
-import { stepNameMap } from "@/src/lib/step-names";
+import MonitorFilterBar from "./MonitorFilterBar";
+import CourseLifecycleTable from "./CourseLifecycleTable";
+import ClassJoinStatusTable from "./ClassJoinStatusTable";
+import ProgressStatsPanel from "./ProgressStatsPanel";
+import GroupLogPanel from "./GroupLogPanel";
+import PersonalLogPanel from "./PersonalLogPanel";
 
 // Re-export QualitySignals/ArtifactDiagnostics usage via types import
 type _QS = QualitySignals;
@@ -34,7 +36,6 @@ type _AD = ArtifactDiagnostics;
 void (null as unknown as _QS);
 void (null as unknown as _AD);
 
-type MonitorMessage = { id: string; role: string; userId?: string; step: number; text: string; at: string };
 type ClassJoinSortColumn = "username" | "groupName" | "step" | "messageCount";
 type SortDirection = "asc" | "desc";
 
@@ -885,13 +886,6 @@ export default function LearningMonitorTab({
     }
   }
 
-  function getCourseStatusLabel(status?: "not_started" | "in_progress" | "paused" | "ended") {
-    if (status === "in_progress") return "進行中";
-    if (status === "paused") return "暫停中";
-    if (status === "ended") return "已結束";
-    return "尚未開始";
-  }
-
   function getMonitorGateKey(session: MonitorSession): string | null {
     if (session.currentStep === 1) {
       const sub = session.stepState?.step1Substep ?? 1;
@@ -1252,22 +1246,6 @@ export default function LearningMonitorTab({
     });
   }
 
-  function getStepsFromMessages(messages: Array<{ step: number }>): number[] {
-    return Array.from(new Set(messages.map((m) => m.step))).sort((a, b) => a - b);
-  }
-
-  function getPersonalScopedMessagesForStudentHistory(
-    messages: MonitorMessage[],
-    username: string
-  ): MonitorMessage[] {
-    return messages.filter((m) => {
-      if (m.role === "student") return m.userId === username;
-      if (m.role === "ai") return !m.userId || m.userId === username;
-      if (m.role === "system") return !m.userId || m.userId === username;
-      return false;
-    });
-  }
-
   // suppress unused var warnings for functions that are defined but referenced only via void
   void getMonitorGateKey;
 
@@ -1315,219 +1293,47 @@ export default function LearningMonitorTab({
             <div style={{ marginTop: 4 }}>{learningProcessingText}</div>
           </div>
         ) : null}
-        <div className="row" style={{ marginBottom: 10, gap: 8 }}>
-          <div className="col">
-            <label>學校篩選</label>
-            <select value={learningSchoolFilter} onChange={(e) => setLearningSchoolFilter(e.target.value)}>
-              <option value="all">全部</option>
-              {learningSchoolOptions.map((school) => (
-                <option key={school} value={school}>
-                  {school}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="col">
-            <label>班級篩選</label>
-            <select value={learningClassFilter} onChange={(e) => setLearningClassFilter(e.target.value)}>
-              <option value="all">全部</option>
-              {learningClassOptions.map((classNumber) => (
-                <option key={classNumber} value={classNumber}>
-                  {classNumber}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="col">
-            <label>課程篩選</label>
-            <select value={learningCourseFilter} onChange={(e) => setLearningCourseFilter(e.target.value)}>
-              <option value="all">全部</option>
-              {learningCourseOptions.map((course) => (
-                <option key={course.id} value={course.id}>
-                  {course.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="col">
-            <label>狀態篩選</label>
-            <select value={learningStatusFilter} onChange={(e) => setLearningStatusFilter(e.target.value)}>
-              <option value="all">全部</option>
-              <option value="not_started">尚未開始</option>
-              <option value="in_progress">進行中</option>
-              <option value="paused">暫停中</option>
-              <option value="ended">已結束</option>
-            </select>
-          </div>
-        </div>
-        <div className="table-scroll">
-          <table className="pro-table">
-            <thead>
-              <tr>
-                <th>學校</th>
-                <th>班級</th>
-                <th>課程</th>
-                <th>教師</th>
-                <th>目前狀態</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {pagedLearningActivities.map((activity) => {
-                const status = activity.courseStatus;
-                const startDisabled = status !== "not_started";
-                const pauseResumeDisabled = status === "not_started" || status === "ended";
-                const endDisabled = status === "not_started" || status === "ended";
-                const viewDisabled = status === "not_started";
-                const startKey = `course:${activity.id}:start`;
-                const pauseResumeKey = `course:${activity.id}:pause_resume`;
-                const endKey = `course:${activity.id}:end`;
-                const viewKey = `course:${activity.id}:view`;
-                const refreshKey = `course:${activity.id}:refresh`;
-                const deleteKey = `course:${activity.id}:delete`;
-                const disabledButtonStyle = {
-                  width: "auto",
-                  background: "#f3f4f6",
-                  color: "#9ca3af",
-                  borderColor: "#e5e7eb",
-                  cursor: "not-allowed"
-                } as const;
-                const enabledButtonStyle = { width: "auto" } as const;
-                return (
-                  <tr key={activity.id}>
-                    <td>{activity.school}</td>
-                    <td>{activity.classNumber}</td>
-                    <td>{activity.title}</td>
-                    <td>
-                      {activity.ownerTeacherUsername
-                        ? `${teacherNameByUsername.get(activity.ownerTeacherUsername) ?? activity.ownerTeacherUsername}(${activity.ownerTeacherUsername})`
-                        : "未指派"}
-                    </td>
-                    <td>{getCourseStatusLabel(status)}</td>
-                    <td>
-                      <div className="row" style={{ gap: 8 }}>
-                        <button
-                          type="button"
-                          style={startDisabled ? disabledButtonStyle : enabledButtonStyle}
-                          className={startDisabled ? "secondary" : ""}
-                          disabled={startDisabled || learningActionKey === startKey}
-                          onClick={() => setPendingLifecycleAction({ activityId: activity.id, action: "start", title: activity.title })}
-                        >
-                          {learningActionKey === startKey ? "開始中..." : "開始上課"}
-                        </button>
-                        <button
-                          type="button"
-                          className={pauseResumeDisabled ? "secondary" : ""}
-                          style={pauseResumeDisabled ? disabledButtonStyle : enabledButtonStyle}
-                          disabled={pauseResumeDisabled || learningActionKey === pauseResumeKey}
-                          onClick={() => setPendingLifecycleAction({ activityId: activity.id, action: "pause_resume", title: activity.title })}
-                        >
-                          {learningActionKey === pauseResumeKey ? "更新中..." : status === "in_progress" ? "暫停上課" : "繼續上課"}
-                        </button>
-                        <button
-                          type="button"
-                          className={endDisabled ? "secondary" : ""}
-                          style={endDisabled ? disabledButtonStyle : enabledButtonStyle}
-                          disabled={endDisabled || learningActionKey === endKey}
-                          onClick={() => setPendingLifecycleAction({ activityId: activity.id, action: "end", title: activity.title })}
-                        >
-                          {learningActionKey === endKey ? "結束中..." : "結束上課"}
-                        </button>
-                        <button
-                          type="button"
-                          className="secondary"
-                          style={viewDisabled ? disabledButtonStyle : enabledButtonStyle}
-                          disabled={viewDisabled || learningActionKey === viewKey}
-                          onClick={() => {
-                            openCourseStatus(activity.id).catch(() => undefined);
-                          }}
-                        >
-                          {learningActionKey === viewKey ? "載入中..." : "查看狀態"}
-                        </button>
-                        <button
-                          type="button"
-                          className="secondary"
-                          style={{ width: "auto" }}
-                          disabled={learningActionKey === refreshKey}
-                          onClick={() => {
-                            setSelectedLearningActivityId(activity.id);
-                            runLearningAction(`course:${activity.id}:refresh`, "系統正在重新整理課程資料，請稍候...", async () => {
-                              await onRefreshData();
-                              if (showCourseStatusView) {
-                                const latestSessions = await refreshMonitor(activity.id);
-                                await loadCourseDiagnostics(activity.id);
-                                await syncSelectedRecordsAfterMonitorRefresh(latestSessions);
-                              }
-                            });
-                          }}
-                        >
-                          {learningActionKey === refreshKey ? "整理中..." : "重新整理"}
-                        </button>
-                        {isAdminConsole ? (
-                          <button
-                            type="button"
-                            className="secondary"
-                            style={{ width: "auto", background: "#ffe4e6", color: "#9f1239", borderColor: "#fecdd3" }}
-                            disabled={learningActionKey === deleteKey}
-                            onClick={() => setPendingDeleteActivity({ activityId: activity.id, title: activity.title })}
-                          >
-                            {learningActionKey === deleteKey ? "刪除中..." : "刪除"}
-                          </button>
-                        ) : null}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-        <div className="row" style={{ marginTop: 10, alignItems: "center", gap: 8 }}>
-          <small>
-            第 {learningPage} / {totalLearningPages} 頁，共 {filteredLearningActivities.length} 筆（每頁 10 筆）
-          </small>
-          <button
-            type="button"
-            className="secondary"
-            style={{ width: "auto" }}
-            disabled={learningPage <= 1}
-            onClick={() => setLearningPage((prev) => Math.max(1, prev - 1))}
-          >
-            上一頁
-          </button>
-          <button
-            type="button"
-            className="secondary"
-            style={{ width: "auto" }}
-            disabled={learningPage >= totalLearningPages}
-            onClick={() => setLearningPage((prev) => Math.min(totalLearningPages, prev + 1))}
-          >
-            下一頁
-          </button>
-          <label style={{ marginLeft: 8 }}>跳到第</label>
-          <input
-            type="number"
-            min={1}
-            max={totalLearningPages}
-            value={learningJumpPage}
-            onChange={(e) => setLearningJumpPage(e.target.value)}
-            style={{ width: 90 }}
-          />
-          <span>頁</span>
-          <button
-            type="button"
-            className="secondary"
-            style={{ width: "auto" }}
-            onClick={() => {
-              const parsed = Number(learningJumpPage);
-              if (!Number.isFinite(parsed)) return;
-              const target = Math.min(totalLearningPages, Math.max(1, Math.trunc(parsed)));
-              setLearningPage(target);
-            }}
-          >
-            前往
-          </button>
-        </div>
+        <MonitorFilterBar
+          schoolFilter={learningSchoolFilter}
+          classFilter={learningClassFilter}
+          courseFilter={learningCourseFilter}
+          statusFilter={learningStatusFilter}
+          schoolOptions={learningSchoolOptions}
+          classOptions={learningClassOptions}
+          courseOptions={learningCourseOptions}
+          onSchoolChange={setLearningSchoolFilter}
+          onClassChange={setLearningClassFilter}
+          onCourseChange={setLearningCourseFilter}
+          onStatusChange={setLearningStatusFilter}
+        />
+        <CourseLifecycleTable
+          rows={pagedLearningActivities}
+          teacherNameByUsername={teacherNameByUsername}
+          isAdminConsole={isAdminConsole}
+          learningActionKey={learningActionKey}
+          page={learningPage}
+          totalPages={totalLearningPages}
+          totalCount={filteredLearningActivities.length}
+          jumpValue={learningJumpPage}
+          onJumpValueChange={setLearningJumpPage}
+          onPageChange={setLearningPage}
+          onLifecycleAction={(activityId, action, title) => setPendingLifecycleAction({ activityId, action, title })}
+          onView={(activityId) => {
+            openCourseStatus(activityId).catch(() => undefined);
+          }}
+          onRefresh={(activityId) => {
+            setSelectedLearningActivityId(activityId);
+            runLearningAction(`course:${activityId}:refresh`, "系統正在重新整理課程資料，請稍候...", async () => {
+              await onRefreshData();
+              if (showCourseStatusView) {
+                const latestSessions = await refreshMonitor(activityId);
+                await loadCourseDiagnostics(activityId);
+                await syncSelectedRecordsAfterMonitorRefresh(latestSessions);
+              }
+            });
+          }}
+          onDelete={(activityId, title) => setPendingDeleteActivity({ activityId, title })}
+        />
         {filteredLearningActivities.length === 0 ? (
           <small>目前此篩選條件下沒有課程資料。</small>
         ) : activities.length === 0 ? (
@@ -1586,483 +1392,90 @@ export default function LearningMonitorTab({
             onNextPage={goToNextCourseDiagnosticsPage}
           />
 
-          <div className="card">
-            <h2>
-              全班加入狀態
-              {contextLabel ? <span style={{ fontSize: 14, color: "#64748b", fontWeight: 400, marginLeft: 8 }}>— {contextLabel}</span> : null}
-            </h2>
-            <div className="table-scroll">
-              <table className="pro-table">
-                <thead>
-                  <tr>
-                    <th>序號</th>
-                    <th>
-                      姓名 (帳號)
-                      <button type="button" className="secondary" style={{ marginLeft: 6, width: "auto", padding: "0 4px", minWidth: 0, color: classJoinSort.column === "username" && classJoinSort.direction === "asc" ? "#0f172a" : "#94a3b8" }} onClick={() => setClassJoinSortBy("username", "asc")} aria-label="姓名帳號升冪排序">↑</button>
-                      <button type="button" className="secondary" style={{ marginLeft: 2, width: "auto", padding: "0 4px", minWidth: 0, color: classJoinSort.column === "username" && classJoinSort.direction === "desc" ? "#0f172a" : "#94a3b8" }} onClick={() => setClassJoinSortBy("username", "desc")} aria-label="姓名帳號降冪排序">↓</button>
-                    </th>
-                    <th>加入狀態</th>
-                    <th>
-                      所在組別
-                      <button type="button" className="secondary" style={{ marginLeft: 6, width: "auto", padding: "0 4px", minWidth: 0, color: classJoinSort.column === "groupName" && classJoinSort.direction === "asc" ? "#0f172a" : "#94a3b8" }} onClick={() => setClassJoinSortBy("groupName", "asc")} aria-label="所在組別升冪排序">↑</button>
-                      <button type="button" className="secondary" style={{ marginLeft: 2, width: "auto", padding: "0 4px", minWidth: 0, color: classJoinSort.column === "groupName" && classJoinSort.direction === "desc" ? "#0f172a" : "#94a3b8" }} onClick={() => setClassJoinSortBy("groupName", "desc")} aria-label="所在組別降冪排序">↓</button>
-                    </th>
-                    <th>
-                      目前進度
-                      <button type="button" className="secondary" style={{ marginLeft: 6, width: "auto", padding: "0 4px", minWidth: 0, color: classJoinSort.column === "step" && classJoinSort.direction === "asc" ? "#0f172a" : "#94a3b8" }} onClick={() => setClassJoinSortBy("step", "asc")} aria-label="目前進度升冪排序">↑</button>
-                      <button type="button" className="secondary" style={{ marginLeft: 2, width: "auto", padding: "0 4px", minWidth: 0, color: classJoinSort.column === "step" && classJoinSort.direction === "desc" ? "#0f172a" : "#94a3b8" }} onClick={() => setClassJoinSortBy("step", "desc")} aria-label="目前進度降冪排序">↓</button>
-                    </th>
-                    <th>
-                      發言數
-                      <button type="button" className="secondary" style={{ marginLeft: 6, width: "auto", padding: "0 4px", minWidth: 0, color: classJoinSort.column === "messageCount" && classJoinSort.direction === "asc" ? "#0f172a" : "#94a3b8" }} onClick={() => setClassJoinSortBy("messageCount", "asc")} aria-label="發言數升冪排序">↑</button>
-                      <button type="button" className="secondary" style={{ marginLeft: 2, width: "auto", padding: "0 4px", minWidth: 0, color: classJoinSort.column === "messageCount" && classJoinSort.direction === "desc" ? "#0f172a" : "#94a3b8" }} onClick={() => setClassJoinSortBy("messageCount", "desc")} aria-label="發言數降冪排序">↓</button>
-                    </th>
-                    <th>最後發言時間</th>
-                    <th>動作</th>
-                  </tr>
-                </thead>
-                <tbody>
-	                  {sortedClassJoinRows.map((row, idx) => {
-	                    const progressKey = row.sessionId ? `progress:${row.sessionId}:${row.username}` : "";
-	                    const isProgressLoading = learningActionKey === progressKey;
-	                    const attendanceKey = row.sessionId ? `attendance:${row.sessionId}:${row.username}` : "";
-	                    const isAttendanceLoading = learningActionKey === attendanceKey;
-	                    return (
-	                    <tr key={row.username}>
-	                      <td>{idx + 1}</td>
-	                      <td>
-	                        {row.displayName} ({row.username})
-	                        <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 4 }}>
-	                          {row.waitingExcluded ? (
-	                            <span className="badge" style={{ background: "#fef3c7", color: "#92400e" }}>
-	                              本次不列入等待
-	                            </span>
-	                          ) : null}
-	                          {row.makeupPending ? (
-	                            <span className="badge" style={{ background: "#fee2e2", color: "#991b1b" }}>
-	                              需補個人結構圖
-	                            </span>
-	                          ) : null}
-	                          {row.makeupCompleted ? (
-	                            <span className="badge" style={{ background: "#dcfce7", color: "#166534" }}>
-	                              已補個人結構圖
-	                            </span>
-	                          ) : null}
-	                          {row.hasActivityWhileExcluded ? (
-	                            <span className="badge" style={{ background: "#e0f2fe", color: "#075985" }}>
-	                              已請假但有活動
-	                            </span>
-	                          ) : null}
-	                        </div>
-	                      </td>
-                      <td>{row.joined ? "已加入" : "未加入"}</td>
-                      <td>{row.groupName ?? "—"}</td>
-                      <td>{row.stepLabel ? `Step ${row.stepLabel}` : "—"}</td>
-                      <td>{row.messageCount}</td>
-                      <td>{row.lastMessageAt ? formatTaipeiDateTime(row.lastMessageAt) : "—"}</td>
-                      <td>
-	                        <button
-                          type="button"
-                          className="secondary"
-                          style={{ width: "auto" }}
-                          disabled={isProgressLoading || !row.sessionId}
-                          onClick={() => {
-                            if (!row.sessionId) return;
-                            setProgressSessionId(row.sessionId);
-                            loadProgress(row.sessionId, row.username);
-                            // Auto-expand personal log section and scroll into view (#249).
-                            setPersonalLogExpanded(true);
-                            window.setTimeout(() => {
-                              personalLogRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-                            }, 0);
-                          }}
-                        >
-	                          {isProgressLoading ? "載入中..." : "查看"}
-	                        </button>
-	                        {row.sessionId ? (
-	                          <button
-	                            type="button"
-	                            className="secondary"
-	                            style={{ width: "auto", marginLeft: 6 }}
-	                            disabled={isAttendanceLoading}
-	                            title={
-	                              row.waitingExcluded
-	                                ? "取消後，學生會重新納入目前小組等待判定；補做需求不會自動取消。"
-	                                : "只影響本 session 的小組等待判定，不代表正式出缺席。若在 Step3/4 標記，學生可能需要補個人結構圖。"
-	                            }
-	                            onClick={() => toggleWaitingExclusion(row.sessionId!, row.username, !row.waitingExcluded)}
-	                          >
-	                            {isAttendanceLoading
-	                              ? "處理中..."
-	                              : row.waitingExcluded
-	                                ? "取消不列入等待"
-	                                : "本次不列入等待"}
-	                          </button>
-	                        ) : null}
-	                      </td>
-                    </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            {sortedClassJoinRows.length === 0 ? <small>此課程目前沒有可見學生名單。</small> : null}
-            {selectedProgressUser ? <small style={{ display: "block", marginTop: 8 }}>目前檢視個人對話：{selectedProgressUser}</small> : null}
-          </div>
+          <ClassJoinStatusTable
+            rows={sortedClassJoinRows}
+            contextLabel={contextLabel}
+            sort={classJoinSort}
+            onSortBy={setClassJoinSortBy}
+            learningActionKey={learningActionKey}
+            selectedProgressUser={selectedProgressUser}
+            onViewProgress={(sessionId, username) => {
+              setProgressSessionId(sessionId);
+              loadProgress(sessionId, username);
+              // Auto-expand personal log section and scroll into view (#249).
+              setPersonalLogExpanded(true);
+              window.setTimeout(() => {
+                personalLogRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+              }, 0);
+            }}
+            onToggleWaitingExclusion={toggleWaitingExclusion}
+          />
 
-          <div className="card">
-            <h2>
-              課堂進度統計
-              {contextLabel ? <span style={{ fontSize: 14, color: "#64748b", fontWeight: 400, marginLeft: 8 }}>— {contextLabel}</span> : null}
-            </h2>
-
-            <h3 style={{ marginTop: 8 }}>小組進度統計</h3>
-            <div className="table-scroll">
-              <table className="pro-table">
-                <thead>
-                  <tr>
-                    <th>小組組別</th>
-                    <th>成員</th>
-                    <th>目前進度</th>
-                    <th>各步驟停留時間</th>
-                    <th>總發言數</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {groupProgressRows.map((row) => (
-                    <tr key={`group-progress-${row.sessionId}`}>
-                      <td>{row.groupName}</td>
-                      <td>{row.membersText}</td>
-                      <td>Step {row.currentStepLabel}</td>
-                      <td>{row.stepDurationsText}</td>
-                      <td>{row.totalSpeechCount}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {groupProgressRows.length === 0 ? <small>目前沒有可統計的小組資料。</small> : null}
-
-            <h3 style={{ marginTop: 14 }}>個人進度統計</h3>
-            <div className="table-scroll">
-              <table className="pro-table">
-                <thead>
-                  <tr>
-                    <th>帳號姓名</th>
-                    <th>所屬組別</th>
-                    <th>目前進度</th>
-                    <th>各步驟停留時間</th>
-                    <th>總發言數</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pagedPersonalProgressStatsRows.map((row) => (
-                    <tr key={`personal-progress-${row.sessionId}-${row.username}`}>
-                      <td>{row.displayName} ({row.username})</td>
-                      <td>{row.groupName}</td>
-                      <td>Step {row.currentStepLabel}</td>
-                      <td>{row.stepDurationsText}</td>
-                      <td>{row.totalSpeechCount}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {personalProgressStatsRows.length === 0 ? (
-              <small>目前沒有可統計的個人資料。</small>
-            ) : (
-              <div className="row" style={{ gap: 8, marginTop: 8 }}>
-                <small style={{ alignSelf: "center" }}>
-                  第 {progressStatsPage} / {personalProgressStatsTotalPages} 頁，共 {personalProgressStatsRows.length} 位學生（每頁 10 位）
-                </small>
-                <button
-                  type="button"
-                  className="secondary"
-                  style={{ width: "auto" }}
-                  disabled={progressStatsPage <= 1}
-                  onClick={() => setProgressStatsPage((p) => Math.max(1, p - 1))}
-                >
-                  上一頁
-                </button>
-                <button
-                  type="button"
-                  className="secondary"
-                  style={{ width: "auto" }}
-                  disabled={progressStatsPage >= personalProgressStatsTotalPages}
-                  onClick={() => setProgressStatsPage((p) => Math.min(personalProgressStatsTotalPages, p + 1))}
-                >
-                  下一頁
-                </button>
-              </div>
-            )}
-          </div>
+          <ProgressStatsPanel
+            contextLabel={contextLabel}
+            groupRows={groupProgressRows}
+            pagedPersonalRows={pagedPersonalProgressStatsRows}
+            personalRowCount={personalProgressStatsRows.length}
+            page={progressStatsPage}
+            totalPages={personalProgressStatsTotalPages}
+            onPageChange={setProgressStatsPage}
+          />
 
           {filteredMonitorSessions.length > 0 ? (
-            <div className="card" ref={groupLogRef}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: groupLogExpanded ? 12 : 0 }}>
-                <h2 style={{ margin: 0 }}>
-                  小組對話紀錄
-                  {contextLabel ? <span style={{ fontSize: 14, color: "#64748b", fontWeight: 400, marginLeft: 8 }}>— {contextLabel}</span> : null}
-                </h2>
-                <button
-                  style={{ width: "3em", padding: "4px 0", fontSize: 13, color: "#1e293b", cursor: "pointer", borderRadius: 6, border: "1px solid #cbd5e1", background: "#f8fafc", textAlign: "center" }}
-                  onClick={() => setGroupLogExpanded((v) => !v)}
-                >
-                  {groupLogExpanded ? "關閉" : "展開"}
-                </button>
-              </div>
-              {groupLogExpanded ? (
-                <div style={{ marginBottom: 12 }}>
-                  <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 4 }}>選擇小組</label>
-                  <select
-                    value={monitorSelected?.sessionId ?? ""}
-                    onChange={(e) => {
-                      const sid = e.target.value;
-                      if (!sid) {
-                        setMonitorSelected(null);
-                        return;
-                      }
-                      const next = groupLogOptions.find((opt) => opt.sessionId === sid);
-                      if (next) {
-                        setMonitorSelected(next.session);
-                        setProgressSessionId(next.sessionId);
-                        if (next.session.messages.length === 0) {
-                          loadMonitorSessionDetail(next.sessionId).catch(() => undefined);
-                        }
-                      }
-                    }}
-                  >
-                    <option value="">請選擇小組...</option>
-                    {groupLogOptions.map((opt) => (
-                      <option key={opt.sessionId} value={opt.sessionId}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ) : null}
-              {groupLogExpanded && monitorSelected ? (() => {
-                const allGroupMsgs = monitorSelected.messages;
-                const groupSteps = getStepsFromMessages(allGroupMsgs);
-
-                const hasStep3 = monitorSelected.participants.some((p) => monitorSelected.step3SubmittedOutlines?.[p]);
-                const hasStep4Revised = monitorSelected.participants.some((p) => {
-                  const s = monitorSelected.step3SubmittedOutlines?.[p];
-                  const c = monitorSelected.outlines?.[p];
-                  return c && c !== s;
-                });
-
-                const step3Block = hasStep3 ? (
-                  <div style={{ borderTop: "2px solid #cbd5e1", padding: "12px 0", marginTop: 4 }}>
-                    <strong style={{ fontSize: 13, color: "#334155" }}>步驟三 各組員完成結構樹</strong>
-                    {monitorSelected.participants.map((p) => {
-                      const submitted = monitorSelected.step3SubmittedOutlines?.[p];
-                      if (!submitted) return null;
-                      return (
-                        <div key={p} style={{ marginTop: 8 }}>
-                          <small style={{ fontWeight: 600 }}>{p}</small>
-                          <OutlineSvg mermaidText={submitted} label="步驟三完成結構樹" />
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : null;
-
-                const step4Block = hasStep4Revised ? (
-                  <div style={{ borderTop: "2px solid #cbd5e1", padding: "12px 0", marginTop: 4 }}>
-                    <strong style={{ fontSize: 13, color: "#334155" }}>步驟四 各組員修正後結構樹</strong>
-                    {monitorSelected.participants.map((p) => {
-                      const s = monitorSelected.step3SubmittedOutlines?.[p];
-                      const c = monitorSelected.outlines?.[p];
-                      if (!c || c === s) return null;
-                      return (
-                        <div key={p} style={{ marginTop: 8 }}>
-                          <small style={{ fontWeight: 600 }}>{p}</small>
-                          <OutlineSvg mermaidText={c} label="步驟四對比修正後" />
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : null;
-
-                const anyMsgs = allGroupMsgs.length > 0;
-                return (
-                  <>
-                    {groupSteps.map((step) => {
-                      const stepMsgs = allGroupMsgs.filter((m) => m.step === step);
-                      if (stepMsgs.length === 0) return null;
-                      // Per-step cards default to closed (#245).
-                      const isExpanded = groupLogStepExpanded[step] ?? false;
-                      return (
-                        <div key={step} className="card">
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-                            <h3 style={{ margin: 0 }}>
-                              Step {step} {stepNameMap[step] ? `- ${stepNameMap[step]}` : ""}
-                            </h3>
-                            <button
-                              type="button"
-                              className="secondary"
-                              aria-expanded={isExpanded}
-                              onClick={() => setGroupLogStepExpanded((prev) => ({ ...prev, [step]: !isExpanded }))}
-                              style={{ width: "fit-content", padding: "3px 6px", whiteSpace: "nowrap" }}
-                            >
-                              {isExpanded ? "▾ 閉合" : "▸ 展開"}
-                            </button>
-                          </div>
-                          {isExpanded ? (
-                            <>
-                              <hr style={{ border: 0, borderTop: "1px solid #e5e7eb", margin: "10px 0" }} />
-                              {stepMsgs.map((message) => (
-                                <div key={message.id} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
-                                  <strong>
-                                    {message.role === "student"
-                                      ? `學生${message.userId ? `（${message.userId}）` : ""}`
-                                      : message.role === "ai"
-                                        ? "AI 回覆"
-                                        : message.role === "system"
-                                          ? "系統訊息"
-                                          : message.role}
-                                  </strong>
-                                  <div dangerouslySetInnerHTML={{ __html: renderMessageHtml(message.text) }} />
-                                  <small>{message.at}</small>
-                                </div>
-                              ))}
-                              {step === 2 && step3Block}
-                              {step === 4 && step4Block}
-                            </>
-                          ) : null}
-                        </div>
-                      );
-                    })}
-                    {!anyMsgs && <small>目前沒有可顯示的對話內容。</small>}
-                  </>
-                );
-              })() : groupLogExpanded ? (
-                <small style={{ color: "#64748b" }}>請從上方下拉選單選擇要查看的小組。</small>
-              ) : null}
-            </div>
+            <GroupLogPanel
+              panelRef={groupLogRef}
+              contextLabel={contextLabel}
+              expanded={groupLogExpanded}
+              onToggleExpanded={() => setGroupLogExpanded((v) => !v)}
+              monitorSelected={monitorSelected}
+              options={groupLogOptions}
+              onSelectSession={(sid) => {
+                if (!sid) {
+                  setMonitorSelected(null);
+                  return;
+                }
+                const next = groupLogOptions.find((opt) => opt.sessionId === sid);
+                if (next) {
+                  setMonitorSelected(next.session);
+                  setProgressSessionId(next.sessionId);
+                  if (next.session.messages.length === 0) {
+                    loadMonitorSessionDetail(next.sessionId).catch(() => undefined);
+                  }
+                }
+              }}
+              stepExpanded={groupLogStepExpanded}
+              onToggleStep={(step) => setGroupLogStepExpanded((prev) => ({ ...prev, [step]: !(prev[step] ?? false) }))}
+            />
           ) : null}
 
           {filteredMonitorSessions.length > 0 ? (
-            <div className="card" ref={personalLogRef}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: personalLogExpanded ? 12 : 0 }}>
-                <h2 style={{ margin: 0 }}>
-                  個人對話紀錄
-                  {contextLabel ? <span style={{ fontSize: 14, color: "#64748b", fontWeight: 400, marginLeft: 8 }}>— {contextLabel}</span> : null}
-                </h2>
-                <button
-                  style={{ width: "3em", padding: "4px 0", fontSize: 13, color: "#1e293b", cursor: "pointer", borderRadius: 6, border: "1px solid #cbd5e1", background: "#f8fafc", textAlign: "center" }}
-                  onClick={() => setPersonalLogExpanded((v) => !v)}
-                >
-                  {personalLogExpanded ? "關閉" : "展開"}
-                </button>
-              </div>
-              {personalLogExpanded ? (
-                <div style={{ marginBottom: 12 }}>
-                  <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 4 }}>選擇學生</label>
-                  <select
-                    value={selectedProgressUser}
-                    onChange={(e) => {
-                      const username = e.target.value;
-                      if (!username) {
-                        setSelectedProgressUser("");
-                        setPersonalMessages([]);
-                        setUserOutline("");
-                        setUserStep3SubmittedOutline("");
-                        return;
-                      }
-                      const opt = personalLogOptions.find((o) => o.username === username);
-                      if (opt) {
-                        setProgressSessionId(opt.sessionId);
-                        loadProgress(opt.sessionId, opt.username);
-                      }
-                    }}
-                  >
-                    <option value="">請選擇學生...</option>
-                    {personalLogOptions.map((opt) => (
-                      <option key={opt.username} value={opt.username}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ) : null}
-              {personalLogExpanded && personalMessages.length > 0 ? (() => {
-                const scopedPersonalMessages = selectedProgressUser
-                  ? getPersonalScopedMessagesForStudentHistory(personalMessages, selectedProgressUser)
-                  : personalMessages;
-                const personalSteps = getStepsFromMessages(scopedPersonalMessages);
-                const hasStep4Revised = Boolean(userOutline && userOutline !== userStep3SubmittedOutline);
-
-                const step3Block = userStep3SubmittedOutline ? (
-                  <div style={{ borderTop: "2px solid #cbd5e1", padding: "12px 0", marginTop: 4 }}>
-                    <strong style={{ fontSize: 13, color: "#334155" }}>步驟三完成結構樹</strong>
-                    <OutlineSvg mermaidText={userStep3SubmittedOutline} label="步驟三完成結構樹" />
-                  </div>
-                ) : null;
-
-                const step4Block = hasStep4Revised ? (
-                  <div style={{ borderTop: "2px solid #cbd5e1", padding: "12px 0", marginTop: 4 }}>
-                    <strong style={{ fontSize: 13, color: "#334155" }}>步驟四對比修正後結構樹</strong>
-                    <OutlineSvg mermaidText={userOutline} label="步驟四對比修正後" />
-                  </div>
-                ) : null;
-
-                return (
-                  <>
-                    {personalSteps.map((step) => {
-                      const stepMsgs = scopedPersonalMessages.filter((m) => m.step === step);
-                      // Per-step cards default to closed (#245).
-                      const isExpanded = personalLogStepExpanded[step] ?? false;
-                      return (
-                        <div key={step} className="card">
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-                            <h3 style={{ margin: 0 }}>
-                              Step {step} {stepNameMap[step] ? `- ${stepNameMap[step]}` : ""}
-                            </h3>
-                            <button
-                              type="button"
-                              className="secondary"
-                              aria-expanded={isExpanded}
-                              onClick={() => setPersonalLogStepExpanded((prev) => ({ ...prev, [step]: !isExpanded }))}
-                              style={{ width: "fit-content", padding: "3px 6px", whiteSpace: "nowrap" }}
-                            >
-                              {isExpanded ? "▾ 閉合" : "▸ 展開"}
-                            </button>
-                          </div>
-                          {isExpanded ? (
-                            <>
-                              <hr style={{ border: 0, borderTop: "1px solid #e5e7eb", margin: "10px 0" }} />
-                              {stepMsgs.map((message) => (
-                                <div key={message.id} style={{ borderTop: "1px solid #e5e7eb", padding: "8px 0" }}>
-                                  <strong>
-                                    {message.role === "student"
-                                      ? "你"
-                                      : message.role === "ai"
-                                        ? "AI 回覆"
-                                        : message.role === "system"
-                                          ? "系統訊息"
-                                          : message.role}
-                                  </strong>
-                                  <div dangerouslySetInnerHTML={{ __html: renderMessageHtml(message.text) }} />
-                                  <small>{message.at}</small>
-                                </div>
-                              ))}
-                              {step === 3 && step3Block}
-                              {step === 4 && step4Block}
-                            </>
-                          ) : null}
-                        </div>
-                      );
-                    })}
-                  </>
-                );
-              })() : personalLogExpanded && selectedProgressUser ? (
-                <small style={{ color: "#64748b" }}>正在載入該學生的對話紀錄…</small>
-              ) : personalLogExpanded ? (
-                <small style={{ color: "#64748b" }}>請從上方下拉選單選擇要查看的學生。</small>
-              ) : null}
-            </div>
+            <PersonalLogPanel
+              panelRef={personalLogRef}
+              contextLabel={contextLabel}
+              expanded={personalLogExpanded}
+              onToggleExpanded={() => setPersonalLogExpanded((v) => !v)}
+              selectedProgressUser={selectedProgressUser}
+              options={personalLogOptions}
+              onSelectStudent={(username) => {
+                if (!username) {
+                  setSelectedProgressUser("");
+                  setPersonalMessages([]);
+                  setUserOutline("");
+                  setUserStep3SubmittedOutline("");
+                  return;
+                }
+                const opt = personalLogOptions.find((o) => o.username === username);
+                if (opt) {
+                  setProgressSessionId(opt.sessionId);
+                  loadProgress(opt.sessionId, opt.username);
+                }
+              }}
+              personalMessages={personalMessages}
+              userOutline={userOutline}
+              userStep3SubmittedOutline={userStep3SubmittedOutline}
+              stepExpanded={personalLogStepExpanded}
+              onToggleStep={(step) => setPersonalLogStepExpanded((prev) => ({ ...prev, [step]: !(prev[step] ?? false) }))}
+            />
           ) : null}
         </>
       ) : null}

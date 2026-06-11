@@ -37,19 +37,24 @@ test("source-guard: monitor session type includes outline fields", async () => {
 });
 
 test("source-guard: learning monitor uses outline labels and participant mapping", async () => {
-  const src = await read("../app/teacher/_components/LearningMonitorTab.tsx");
-  assert.ok(src.includes("步驟三完成結構樹"), "learning monitor should render step3 submitted outline label");
-  assert.ok(src.includes("步驟四對比修正後"), "learning monitor should render step4 revised outline label");
+  // Dialogue log rendering was extracted to GroupLogPanel/PersonalLogPanel in #457.
+  const tabSrc = await read("../app/teacher/_components/LearningMonitorTab.tsx");
+  const groupSrc = await read("../app/teacher/_components/GroupLogPanel.tsx");
+  const personalSrc = await read("../app/teacher/_components/PersonalLogPanel.tsx");
+  assert.ok(groupSrc.includes("步驟三 各組員完成結構樹"), "group log should render step3 submitted outline label");
+  assert.ok(personalSrc.includes("步驟三完成結構樹"), "personal log should render step3 submitted outline label");
+  assert.ok(groupSrc.includes("步驟四 各組員修正後結構樹"), "group log should render step4 revised outline label");
+  assert.ok(personalSrc.includes("步驟四對比修正後"), "personal log should render step4 revised outline label");
   assert.ok(
-    src.includes("step3SubmittedOutlines?.[p]") || src.includes("step3SubmittedOutlines?.[participant]"),
-    "learning monitor should read per-participant step3 submitted outlines"
+    groupSrc.includes("step3SubmittedOutlines?.[p]") || groupSrc.includes("step3SubmittedOutlines?.[participant]"),
+    "group log should read per-participant step3 submitted outlines"
   );
   assert.ok(
-    src.includes("outlines?.[p]") || src.includes("outlines?.[participant]"),
-    "learning monitor should read per-participant revised outlines"
+    groupSrc.includes("outlines?.[p]") || groupSrc.includes("outlines?.[participant]"),
+    "group log should read per-participant revised outlines"
   );
-  assert.ok(src.includes("setUserOutline"), "learning monitor should track userOutline state updates");
-  assert.ok(src.includes("setUserStep3SubmittedOutline"), "learning monitor should track userStep3SubmittedOutline state updates");
+  assert.ok(tabSrc.includes("setUserOutline"), "learning monitor should track userOutline state updates");
+  assert.ok(tabSrc.includes("setUserStep3SubmittedOutline"), "learning monitor should track userStep3SubmittedOutline state updates");
 });
 
 test("source-guard: student route keeps classroom bootstrap failures recoverable", async () => {
@@ -131,14 +136,19 @@ test("source-guard: app router has user-facing fallback surfaces and production 
 
 test("source-guard: design system primitives cover buttons, tables, and tablet breakpoints", async () => {
   const globalsSrc = await read("../app/globals.css");
-  const teacherSrc = await read("../app/teacher/_components/LearningMonitorTab.tsx");
+  // Monitor tables were extracted to dedicated components in #457.
+  const lifecycleSrc = await read("../app/teacher/_components/CourseLifecycleTable.tsx");
+  const classJoinSrc = await read("../app/teacher/_components/ClassJoinStatusTable.tsx");
+  const statsSrc = await read("../app/teacher/_components/ProgressStatsPanel.tsx");
   const accountSrc = await read("../app/teacher/_components/StudentAccountTab.tsx");
   assert.ok(globalsSrc.includes("button {\n  width: auto;"), "buttons should default to content width");
   assert.ok(globalsSrc.includes(".full-width"), "full-width controls should be opt-in via utility class");
   assert.ok(globalsSrc.includes(".table-scroll"), "table scroll wrappers should use a reusable class");
   assert.ok(globalsSrc.includes("@media (max-width: 1024px)"), "tablet landscape breakpoint should be present");
   assert.ok(globalsSrc.includes("@media (max-width: 768px)"), "tablet portrait breakpoint should be present");
-  assert.ok(teacherSrc.includes("className=\"table-scroll\""), "learning monitor tables should use table-scroll class");
+  for (const [name, src] of [["course lifecycle", lifecycleSrc], ["class join", classJoinSrc], ["progress stats", statsSrc]] as const) {
+    assert.ok(src.includes("className=\"table-scroll\""), `${name} tables should use table-scroll class`);
+  }
   assert.ok(accountSrc.includes("className=\"table-scroll\""), "account tables should use table-scroll class");
 });
 
@@ -183,7 +193,7 @@ test("source-guard: hardcoded hex colors in app tsx may only decrease (ratchet, 
 
   // Ratchet rule: this baseline may only be lowered, never raised. New UI code
   // must use design tokens from globals.css (see #456/#458) instead of raw hex.
-  const HEX_COLOR_BASELINE = 256;
+  const HEX_COLOR_BASELINE = 193;
 
   const tsxFiles = readdirSync(appDir, { recursive: true })
     .map((entry) => String(entry))
