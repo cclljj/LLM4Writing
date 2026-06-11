@@ -1620,6 +1620,7 @@ Request:
 - 權限：teacher/admin；teacher 僅可匯出自己可見班級/課程，且 session 必須符合目前活動分組 scope。
 - 僅允許 `courseStatus === "ended"` 的課程；未結束課程回傳 `course_not_ended`。
 - `identity` 預設 `anonymous`；匿名模式不得輸出原始學生帳號，需輸出 activity-scoped `studentHash`。`account` 模式可輸出 `studentAccount`，供已取得授權的研究/IRB 情境使用。
+- Production 必須設定 `RESEARCH_EXPORT_HASH_SALT` 作為 `studentHash` salt；缺失或空白時不得使用固定 fallback，需回傳 HTTP 503 與 `research_export_hash_salt_missing`。
 - 回傳 `research-student-inputs-v2` JSON，內容為學生輸入訊息事件列；每筆至少包含 `activityId`、`sessionId`、`groupId/groupName`、`type`、`studentHash`、`step`、`role`、`at`、`text`。
 - 僅輸出 `role === "student"` 且 `userId` 屬於該 session participants 的訊息，不輸出 AI/system/internal prompt。
 - `type="student_message"` 代表一般學生訊息；`type="makeup_outline"` 代表「需補個人結構圖」完成內容，匿名模式同樣只輸出 `studentHash`。

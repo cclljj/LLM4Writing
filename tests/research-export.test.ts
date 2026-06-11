@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildResearchStudentInputExport } from "../src/lib/research-export";
+import {
+  buildResearchStudentInputExport,
+  RESEARCH_EXPORT_HASH_SALT_MISSING,
+  resolveResearchExportHashSalt
+} from "../src/lib/research-export";
 import type { Activity, SessionState } from "../src/lib/types";
 
 const activity: Activity = {
@@ -63,6 +67,39 @@ function makeSession(): SessionState {
   };
 }
 
+function withEnv<T>(env: { nodeEnv?: string; researchExportHashSalt?: string | undefined }, run: () => T): T {
+  const originalNodeEnv = process.env.NODE_ENV;
+  const originalSalt = process.env.RESEARCH_EXPORT_HASH_SALT;
+  try {
+    if (env.nodeEnv !== undefined) {
+      Object.defineProperty(process.env, "NODE_ENV", {
+        value: env.nodeEnv,
+        configurable: true,
+        enumerable: true,
+        writable: true
+      });
+    }
+    if (env.researchExportHashSalt === undefined) {
+      delete process.env.RESEARCH_EXPORT_HASH_SALT;
+    } else {
+      process.env.RESEARCH_EXPORT_HASH_SALT = env.researchExportHashSalt;
+    }
+    return run();
+  } finally {
+    Object.defineProperty(process.env, "NODE_ENV", {
+      value: originalNodeEnv,
+      configurable: true,
+      enumerable: true,
+      writable: true
+    });
+    if (originalSalt === undefined) {
+      delete process.env.RESEARCH_EXPORT_HASH_SALT;
+    } else {
+      process.env.RESEARCH_EXPORT_HASH_SALT = originalSalt;
+    }
+  }
+}
+
 test("research export: anonymous mode includes only participant student inputs", () => {
   const payload = buildResearchStudentInputExport({
     activity,
@@ -91,4 +128,35 @@ test("research export: account mode includes raw student account", () => {
 
   assert.equal(payload.identityMode, "account");
   assert.deepEqual(payload.records.map((record) => record.studentAccount), ["alice", "bob", "bob"]);
+});
+
+test("research export: production requires configured hash salt", () => {
+  withEnv({ nodeEnv: "production", researchExportHashSalt: undefined }, () => {
+    assert.throws(
+      () =>
+        buildResearchStudentInputExport({
+          activity,
+          sessions: [makeSession()],
+          identityMode: "anonymous"
+        }),
+      { message: RESEARCH_EXPORT_HASH_SALT_MISSING }
+    );
+  });
+});
+
+test("research export: production treats blank hash salt as missing", () => {
+  withEnv({ nodeEnv: "production", researchExportHashSalt: "   " }, () => {
+    assert.throws(() => resolveResearchExportHashSalt(), { message: RESEARCH_EXPORT_HASH_SALT_MISSING });
+  });
+});
+
+test("research export: production uses configured hash salt", () => {
+  withEnv({ nodeEnv: "production", researchExportHashSalt: "test-secret-salt" }, () => {
+    const payload = buildResearchStudentInputExport({
+      activity,
+      sessions: [makeSession()],
+      identityMode: "anonymous"
+    });
+    assert.equal(payload.records[0]!.studentHash.length, 64);
+  });
 });

@@ -216,6 +216,13 @@ The system SHALL expose course control, step switching, monitor, and personal-pr
 - **AND** makeup outlines are included as `type="makeup_outline"` records
 - **AND** anonymous mode does not include raw student accounts
 
+#### Scenario: Research export requires production hash salt
+
+- **GIVEN** the app runs in production without `RESEARCH_EXPORT_HASH_SALT`
+- **WHEN** teacher/admin exports research data
+- **THEN** the API returns HTTP 503 with `research_export_hash_salt_missing`
+- **AND** it does not derive student hashes from a fixed fallback salt
+
 #### Scenario: Course control transition
 
 - **GIVEN** a teacher or admin calls `POST /api/teacher/course-control`

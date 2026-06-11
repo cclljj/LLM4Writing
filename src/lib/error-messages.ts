@@ -21,6 +21,7 @@ const errorMessages: Record<string, string> = {
   not_group_member: "你尚未被分配到此課程小組。建議：請向老師確認分組設定。",
   overview_failed: "課程總覽載入失敗。建議：請稍後再試或重新整理頁面。",
   progress_failed: "個人進度載入失敗。建議：請稍後再點一次查看。",
+  research_export_hash_salt_missing: "研究資料匯出暫時不可用。建議：請系統管理員設定 RESEARCH_EXPORT_HASH_SALT 後再試。",
   save_failed: "內容儲存失敗。建議：請先不要關閉頁面，稍後再按一次儲存。",
   send_failed: "答案送出失敗。建議：請檢查內容後再送一次。",
   session_not_found: "找不到這個課程討論紀錄。建議：請重新進入課程，或請教師確認課程狀態。",

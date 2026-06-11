@@ -57,7 +57,7 @@
 
 ```bash
 cp .env.example .env.local
-# 填入 AUTH_SECRET、資料庫連線字串（可選）、LLM 設定（可選）
+# 填入 AUTH_SECRET、RESEARCH_EXPORT_HASH_SALT、資料庫連線字串（可選）、LLM 設定（可選）
 npm install
 npm run dev
 ```
@@ -75,6 +75,7 @@ npm run dev
 | 變數 | 說明 |
 |------|------|
 | `AUTH_SECRET` | Session token 簽章金鑰，建議 32 字元以上隨機字串 |
+| `RESEARCH_EXPORT_HASH_SALT` | 研究資料 JSON 匯出的學生雜湊 salt；production 未設定時會拒絕匯出 |
 | `UPSTASH_REDIS_REST_URL` | 多副本 production 建議設定；供登入鎖定、API rate limit 與 presence 跨副本共享 |
 | `UPSTASH_REDIS_REST_TOKEN` | 多副本 production 建議設定；Upstash REST token |
 

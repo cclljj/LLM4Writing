@@ -30,8 +30,20 @@ export type ResearchStudentInputExport = {
   records: ResearchStudentInputRecord[];
 };
 
+const DEVELOPMENT_RESEARCH_EXPORT_HASH_SALT = "llm4writing-research-export-development-only";
+export const RESEARCH_EXPORT_HASH_SALT_MISSING = "research_export_hash_salt_missing";
+
+export function resolveResearchExportHashSalt(): string {
+  const configuredSalt = process.env.RESEARCH_EXPORT_HASH_SALT?.trim();
+  if (configuredSalt) return configuredSalt;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(RESEARCH_EXPORT_HASH_SALT_MISSING);
+  }
+  return DEVELOPMENT_RESEARCH_EXPORT_HASH_SALT;
+}
+
 function hashStudent(activityId: string, username: string): string {
-  const salt = process.env.RESEARCH_EXPORT_HASH_SALT ?? "llm4writing-research-export-v1";
+  const salt = resolveResearchExportHashSalt();
   return createHash("sha256").update(`${salt}:${activityId}:${username}`).digest("hex");
 }
 

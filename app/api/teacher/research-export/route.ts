@@ -3,7 +3,11 @@ import { getCurrentUser } from "@/src/lib/auth-server";
 import { getAllActivities, hydrateDomainState } from "@/src/lib/activity-store";
 import { recordAuditLog } from "@/src/lib/audit-log-store";
 import { isSessionInActivityGroupScope } from "@/src/lib/monitor-session-scope";
-import { buildResearchStudentInputExport, parseResearchExportIdentityMode } from "@/src/lib/research-export";
+import {
+  buildResearchStudentInputExport,
+  parseResearchExportIdentityMode,
+  RESEARCH_EXPORT_HASH_SALT_MISSING
+} from "@/src/lib/research-export";
 import { listSessionsByActivityId } from "@/src/lib/store";
 import { getUsersVisibleToTeacherStore, listUsersStore } from "@/src/lib/user-store";
 
@@ -39,7 +43,15 @@ export async function GET(request: NextRequest) {
 
   const sessions = (await listSessionsByActivityId(activityId, { workflow: "spec10" }))
     .filter((session) => isSessionInActivityGroupScope(session, activity));
-  const payload = buildResearchStudentInputExport({ activity, sessions, identityMode });
+  let payload: ReturnType<typeof buildResearchStudentInputExport>;
+  try {
+    payload = buildResearchStudentInputExport({ activity, sessions, identityMode });
+  } catch (error) {
+    if (error instanceof Error && error.message === RESEARCH_EXPORT_HASH_SALT_MISSING) {
+      return NextResponse.json({ error: RESEARCH_EXPORT_HASH_SALT_MISSING }, { status: 503 });
+    }
+    throw error;
+  }
 
   await recordAuditLog({
     actorUsername: user.username,
