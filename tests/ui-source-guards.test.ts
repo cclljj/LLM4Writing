@@ -173,6 +173,41 @@ test("source-guard: learning management renders course diagnostics status", asyn
   assert.ok(routeSrc.includes("isSessionInActivityGroupScope"), "course diagnostics route should scope sessions to the activity groups");
 });
 
+test("source-guard: hardcoded hex colors in app tsx may only decrease (ratchet, #455)", async () => {
+  const { readdirSync, readFileSync } = await import("node:fs");
+  const { resolve, dirname, join } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const thisDir = dirname(fileURLToPath(import.meta.url));
+  const appDir = resolve(thisDir, "../app");
+
+  // Ratchet rule: this baseline may only be lowered, never raised. New UI code
+  // must use design tokens from globals.css (see #456/#458) instead of raw hex.
+  const HEX_COLOR_BASELINE = 294;
+
+  const tsxFiles = readdirSync(appDir, { recursive: true })
+    .map((entry) => String(entry))
+    .filter((entry) => entry.endsWith(".tsx"))
+    .map((entry) => join(appDir, entry));
+  assert.ok(tsxFiles.length > 10, "hex ratchet should scan the app tsx tree");
+
+  const hexPattern = /#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?\b/g;
+  let total = 0;
+  const perFile: string[] = [];
+  for (const file of tsxFiles) {
+    const count = (readFileSync(file, "utf8").match(hexPattern) ?? []).length;
+    if (count > 0) {
+      total += count;
+      perFile.push(`${file.slice(appDir.length + 1)}: ${count}`);
+    }
+  }
+
+  assert.ok(
+    total <= HEX_COLOR_BASELINE,
+    `hardcoded hex colors increased: ${total} > baseline ${HEX_COLOR_BASELINE}. ` +
+      `Use design tokens from globals.css instead. Breakdown:\n${perFile.join("\n")}`
+  );
+});
+
 test("source-guard: research export is scoped, ended-only, and audited", async () => {
   const routeSrc = await read("../app/api/teacher/research-export/route.ts");
   const exportSrc = await read("../src/lib/research-export.ts");
