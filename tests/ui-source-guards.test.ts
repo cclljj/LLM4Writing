@@ -82,7 +82,8 @@ test("source-guard: student session polling uses adaptive backoff helpers", asyn
   assert.ok(src.includes("window.setTimeout(tick"), "student session polling should schedule a timeout loop");
   assert.ok(src.includes("?view=poll"), "routine student polling should request summary payloads");
   assert.ok(src.includes("data.pollSummary"), "student polling should recognize summary payloads");
-  assert.ok(src.includes("const fullRes = await fetch(`/api/session/${sessionId}`"), "student polling should fetch full payload when message history changed");
+  assert.ok(src.includes("const fullRes = await fetch(`/api/session/${sessionId}`"), "student polling should fetch full payload when the core revision changes");
+  assert.ok(src.includes("newEtag === previousEtag"), "student polling should use the core revision ETag before fetching full state");
   assert.ok(!src.includes("fetch(`/api/session/${sessionId}`, { headers })\n        .then"), "student session polling should not use the old fixed interval promise chain");
   assert.ok(src.includes("shouldAcceptIncomingSession"), "session application should keep the rollback guard from student-page-helpers");
   assert.ok(pollingHelper.includes("Pick<SessionState"), "student polling hash input should be derived from SessionState");
@@ -98,8 +99,25 @@ test("source-guard: teacher monitor requires activity-scoped summary queries", a
   assert.ok(routeSrc.includes("activity_id_required"), "monitor route should reject unscoped list requests");
   assert.ok(!routeSrc.includes("listSessions"), "monitor route should not use global session scans");
   assert.ok(routeSrc.includes("listMonitorSessionSummariesByActivityId"), "monitor route should use activity-scoped summary query");
+  assert.ok(routeSrc.includes("getMonitorActivityRevision"), "monitor route should check a lightweight activity revision first");
+  assert.ok(routeSrc.includes("status: 304"), "monitor route should short-circuit unchanged activity revisions");
+  assert.ok(routeSrc.includes("knownTotal: revision.total"), "monitor summary query should reuse the revision count");
   assert.ok(dataSrc.includes("if (!targetActivityId)"), "monitor data hook should not fetch monitor data without an activityId");
   assert.ok(dataSrc.includes("/api/teacher/monitor?activityId="), "monitor data hook should fetch activity-scoped monitor data");
+  assert.ok(dataSrc.includes('"If-None-Match"'), "monitor polling should send the latest activity ETag");
+  assert.ok(dataSrc.includes("response?.status === 304"), "monitor polling should retain state on unchanged responses");
+  assert.ok(dataSrc.includes("monitorSessionsByActivityRef"), "monitor polling should keep per-activity state for safe 304 reuse after switching courses");
+});
+
+test("source-guard: session polling authenticates before lightweight session lookup", async () => {
+  const routeSrc = await read("../app/api/session/[sessionId]/route.ts");
+  const storeSrc = await read("../src/lib/store.ts");
+  assert.ok(routeSrc.indexOf("getCurrentUser()") < routeSrc.indexOf("getSessionPollSnapshot(sessionId)"));
+  const snapshotStart = storeSrc.indexOf("export async function getSessionPollSnapshot");
+  const snapshotEnd = storeSrc.indexOf("export const getSessionWithMeta", snapshotStart);
+  const snapshotSource = storeSrc.slice(snapshotStart, snapshotEnd);
+  assert.ok(snapshotSource.includes("buildSessionCorePayload"));
+  assert.equal(snapshotSource.includes("fetchSessionPartsByIds"), false, "poll snapshot must not assemble child tables");
 });
 
 test("source-guard: heavy student panels are memoized", async () => {

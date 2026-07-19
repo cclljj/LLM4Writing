@@ -1100,6 +1100,57 @@ export type SessionWithMeta = {
   version: number;
 };
 
+export type SessionPollSnapshot = {
+  session: SessionCorePayload;
+  updatedAt: string;
+  version: number;
+  messageCount: number;
+  lastMessageAt: string | null;
+};
+
+/** Lightweight session revision read for routine polling.
+ * It intentionally reads only the core session row and never assembles child
+ * message, artifact, report, or event tables. */
+export async function getSessionPollSnapshot(sessionId: string): Promise<SessionPollSnapshot | undefined> {
+  if (!isDatabaseEnabled()) {
+    const session = getMemoryStore().get(sessionId);
+    if (!session) return undefined;
+    return {
+      session: buildSessionCorePayload(session),
+      updatedAt: memoryUpdatedAt.get(sessionId) ?? session.createdAt,
+      version: memoryVersion.get(sessionId) ?? 1,
+      messageCount: session.messages.length,
+      lastMessageAt: session.messages.at(-1)?.at ?? session.createdAt ?? null
+    };
+  }
+
+  await ensureSessionTable();
+  const sql = getSqlClient();
+  const rows = await sql<{
+    payload: unknown;
+    updated_at: Date;
+    version: number;
+    message_count: number | null;
+    last_message_at: Date | null;
+  }[]>`
+    SELECT payload, updated_at, version, message_count, last_message_at
+    FROM llm4writing_sessions
+    WHERE id = ${sessionId}
+    LIMIT 1
+  `;
+  const row = rows[0];
+  if (!row) return undefined;
+  const session = normalizeSessionPayload(row.payload);
+  if (!session) return undefined;
+  return {
+    session: buildSessionCorePayload(session),
+    updatedAt: row.updated_at.toISOString(),
+    version: row.version ?? 1,
+    messageCount: row.message_count ?? session.messages?.length ?? 0,
+    lastMessageAt: row.last_message_at?.toISOString() ?? session.messages?.at(-1)?.at ?? session.createdAt ?? null
+  };
+}
+
 /** Like getSession but also returns the DB-level updatedAt for ETag computation.
  *  Wrapped with React cache() for request-level memoization — same sessionId
  *  only hits the DB once per request even if called from multiple code paths. */
@@ -1323,13 +1374,45 @@ export async function listMonitorSessionsByActivityId(
   };
 }
 
+export type MonitorActivityRevision = { total: number; updatedAt: string | null };
+
+export async function getMonitorActivityRevision(activityId: string): Promise<MonitorActivityRevision> {
+  const trimmedActivityId = activityId.trim();
+  if (!trimmedActivityId) return { total: 0, updatedAt: null };
+
+  if (!isDatabaseEnabled()) {
+    const sessions = Array.from(getMemoryStore().values()).filter(
+      (session) => session.workflow === "spec10" && session.activityId === trimmedActivityId
+    );
+    const updatedAt = sessions
+      .map((session) => memoryUpdatedAt.get(session.id) ?? session.createdAt)
+      .sort()
+      .at(-1) ?? null;
+    return { total: sessions.length, updatedAt };
+  }
+
+  await ensureSessionTable();
+  const sql = getSqlClient();
+  const rows = await sql<{ count: string; updated_at: Date | null }[]>`
+    SELECT COUNT(*)::text AS count, MAX(updated_at) AS updated_at
+    FROM llm4writing_sessions
+    WHERE (workflow = 'spec10' OR (workflow IS NULL AND payload->>'workflow' = 'spec10'))
+      AND (activity_id = ${trimmedActivityId} OR (activity_id IS NULL AND payload->>'activityId' = ${trimmedActivityId}))
+  `;
+  return {
+    total: parseInt(rows[0]?.count ?? "0", 10),
+    updatedAt: rows[0]?.updated_at?.toISOString() ?? null
+  };
+}
+
 export async function listMonitorSessionSummariesByActivityId(
   activityId: string,
-  opts?: { limit?: number; offset?: number }
+  opts?: { limit?: number; offset?: number; knownTotal?: number }
 ): Promise<{ sessions: MonitorSessionSummary[]; total: number }> {
   const trimmedActivityId = activityId.trim();
   const limit = typeof opts?.limit === "number" && opts.limit > 0 ? opts.limit : 50;
   const offset = typeof opts?.offset === "number" && opts.offset >= 0 ? opts.offset : 0;
+  const knownTotal = typeof opts?.knownTotal === "number" && opts.knownTotal >= 0 ? Math.trunc(opts.knownTotal) : undefined;
 
   if (!trimmedActivityId) {
     return { sessions: [], total: 0 };
@@ -1418,12 +1501,14 @@ export async function listMonitorSessionSummariesByActivityId(
     ORDER BY updated_at DESC
     LIMIT ${limit} OFFSET ${offset}
   `;
-  const countRows = await sql<{ count: string }[]>`
-    SELECT COUNT(*)::text AS count
-    FROM llm4writing_sessions
-    WHERE (workflow = 'spec10' OR (workflow IS NULL AND payload->>'workflow' = 'spec10'))
-      AND (activity_id = ${trimmedActivityId} OR (activity_id IS NULL AND payload->>'activityId' = ${trimmedActivityId}))
-  `;
+  const countRows = knownTotal === undefined
+    ? await sql<{ count: string }[]>`
+        SELECT COUNT(*)::text AS count
+        FROM llm4writing_sessions
+        WHERE (workflow = 'spec10' OR (workflow IS NULL AND payload->>'workflow' = 'spec10'))
+          AND (activity_id = ${trimmedActivityId} OR (activity_id IS NULL AND payload->>'activityId' = ${trimmedActivityId}))
+      `
+    : [];
 
   const sessionIds = rows.map((row) => row.id);
   const participantsMap = new Map<string, string[]>();
@@ -1547,7 +1632,7 @@ export async function listMonitorSessionSummariesByActivityId(
 
   return {
     sessions,
-    total: parseInt(countRows[0]?.count ?? "0", 10)
+    total: knownTotal ?? parseInt(countRows[0]?.count ?? "0", 10)
   };
 }
 

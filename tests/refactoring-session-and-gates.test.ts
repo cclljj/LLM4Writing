@@ -16,6 +16,7 @@ import {
   STUDENT_SESSION_FAST_POLL_MS,
   STUDENT_SESSION_MAX_POLL_MS
 } from "../src/lib/student-session-polling";
+import { buildMonitorActivityEtag, MONITOR_PRESENCE_REFRESH_MS } from "../src/lib/monitor-etag";
 
 test("session presence behavior: online user appears then expires by window", async () => {
   const sessionId = `presence-${Date.now()}-${Math.random()}`;
@@ -69,6 +70,15 @@ test("teacher monitor polling behavior: hash and delay policy are deterministic"
   assert.equal(resolveTeacherMonitorNextPollDelay({ currentDelayMs: 8000, unchanged: true, hasLowLatencyGate: true }), TEACHER_MONITOR_FAST_POLL_MS);
   assert.equal(resolveTeacherMonitorNextPollDelay({ currentDelayMs: 8000, unchanged: false, hasLowLatencyGate: false }), TEACHER_MONITOR_MIN_POLL_MS);
   assert.equal(resolveTeacherMonitorNextPollDelay({ currentDelayMs: 20000, unchanged: true, hasLowLatencyGate: false }), TEACHER_MONITOR_MAX_POLL_MS);
+});
+
+test("teacher monitor ETag tracks data revision and bounded presence freshness", () => {
+  const revision = { total: 2, updatedAt: "2026-07-19T00:00:00.000Z" };
+  const first = buildMonitorActivityEtag(revision, 0);
+  assert.equal(buildMonitorActivityEtag(revision, MONITOR_PRESENCE_REFRESH_MS - 1), first);
+  assert.notEqual(buildMonitorActivityEtag(revision, MONITOR_PRESENCE_REFRESH_MS), first);
+  assert.notEqual(buildMonitorActivityEtag({ ...revision, total: 3 }, 0), first);
+  assert.notEqual(buildMonitorActivityEtag({ ...revision, updatedAt: "2026-07-19T00:00:01.000Z" }, 0), first);
 });
 
 test("student session polling behavior: hash and delay policy are deterministic", () => {

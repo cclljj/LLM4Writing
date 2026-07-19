@@ -821,7 +821,7 @@ LLM 未設定或串流失敗時需提供可讀 fallback，避免學生停留在�
 - 若等待同組成員或遠端 AI，顯示等待提示，完成後自動消失。
 - Step1/2 完成等待教師切換時需隱藏輸入區，並顯示等待老師切換提示。
 - 學生端需定期同步課程狀態，老師切換狀態時不得要求 reload。
-- Polling 採單一協調流程：無 session 時每 15s `refreshOverview()`；有 session 時以活動期 5s 拉 `/api/session/{id}?view=poll`，含 ETag/304。poll summary payload 不含完整 `messages`，只帶 `messageCount` / `lastMessageAt` 供 hash 判斷；若訊息歷史簽名改變，學生端再補抓 `/api/session/{id}` full payload。若連續 304 或 payload hash 無變化，需採靜止期退避（5s → 10s → 20s → 30s 上限）；偵測到 session 變化後立即恢復 5s。`refreshActivityStatuses()` 維持低頻同步（約每 3 次成功 session poll）。
+- Polling 採單一協調流程：無 session 時每 15s `refreshOverview()`；有 session 時以活動期 5s 拉 `/api/session/{id}?view=poll`，含 ETag/304。poll summary 只讀主 session row 的 core state 與 `messageCount` / `lastMessageAt`，不得組裝 messages/artifacts/reports/events 子表；ETag revision 改變時，學生端再補抓 `/api/session/{id}` full payload。若連續 304 或 revision 無變化，需採靜止期退避（5s → 10s → 20s → 30s 上限）；偵測到 session 變化後立即恢復 5s。`refreshActivityStatuses()` 維持低頻同步（約每 3 次成功 session poll）。
 
 #### 6.5.4 進度軌與下一步任務卡
 
@@ -1013,6 +1013,7 @@ classnumber,username,name,school,role,password,ownerTeacherUsername
 - scope 判定需同時確認 session 屬於目前課程的分組定義：若 session 的小組成員與目前課程分組不一致，視為舊資料或跨課程污染，不得顯示於儀表板、對話區或個人進度。
 - 完整 `messages`、`outlines`、`step3SubmittedOutlines` 僅在選取小組對話時以 `?sessionId=...&detail=full` 延遲載入。
 - 輪詢只使用摘要 payload，降低 loading 與網路成本。
+- monitor 摘要列表需支援 `If-None-Match` / `ETag`；同一課程 revision 與短期 presence refresh bucket 都未改變時回 304，前端保留既有 state。presence bucket 最長 10 秒需變更一次，避免在線狀態被 session revision 永久凍結。
 - Step3/Step4 等待教師推進期間，monitor 摘要輪詢需維持低延遲（約 1 秒）以快速反映 `groupGate["3-complete"]` / `groupGate["4-complete"]` 變化；輪詢變更偵測與前端 analytics cache signature 必須納入 `groupGate` 完成名單內容、`attendanceOverrides` 與 `makeupWork`，而非只看 gate key 數量。
 - monitor 列表查詢在 Postgres 模式下需使用 summary-first DB 查詢；一般情況不得回傳完整 messages/artifacts，僅為 legacy JSON-string payload 欄位回補可讀 raw payload。
 - 課堂儀表板、全班加入狀態、小組對話紀錄、個人對話紀錄四個 h2 標題後附加「— 學校 / 班級 / 文章題目」（#258）。
@@ -1393,7 +1394,8 @@ Error:
 - 支援 conditional GET。
 - 回應包含 `ETag: "updated_at"`。
 - 若 `If-None-Match` 相符，回傳 304 無 body。
-- 支援 `?view=poll` summary payload：不回傳完整 `messages`，改回 `messageCount`、`lastMessageAt` 與其餘 session 狀態欄位；學生端若偵測訊息簽名變更，需再讀 full payload。
+- 任何 session lookup 前必須先完成 current-user 認證；未登入請求直接回 403，不得先查詢 session 是否存在。
+- 支援 `?view=poll` core summary payload：只讀 `llm4writing_sessions` 主 row，不組裝 messages/artifacts/reports/events 子表；回傳 core state、`messageCount`、`lastMessageAt`。學生端若偵測 ETag revision 改變，需再讀 full payload。
 - Presence 為 side-effect 側記，不寫入 session payload；預設走 Redis（未配置或失敗時 fallback memory）。
 - 讀取時會做相容性修復：補 `stepOpenings`、補空/單節點結構樹範本、初始化 `step3SubmittedOutlines`、回補 Step3 完成快照、修復已完成 Step9 但個人步驟未推進、復原 Step1/2 group gate 已完成但 AI/下一題卡住的等待狀態。
 
@@ -1618,6 +1620,7 @@ Request:
 - 未帶 `activityId` 的 monitor 列表請求回傳 `activity_id_required`；正式監控入口必須先選定課程並帶入 `activityId`，不得使用全域 session 掃描或靜默上限。
 - 回傳前必須依活動目前分組再次過濾 session；同 `activityId` 但小組成員不符合目前分組者不得回傳。
 - 回應：`{ sessions: [...], total: N, limit: N, offset: N }`。
+- 列表回應包含 activity revision 與短期 presence bucket 組成的 `ETag`；`If-None-Match` 相符時回 304。revision 預查取得的 total 必須重用於同次 summary query，不得再次執行相同 COUNT。
 - 摘要包含 `messageCount`、`lastMessageAt`、`studentMessageStats`、`stepReadyHints`、`artifactDiagnostics`。
 - 摘要中的 `groupGate` 是 Step3/Step4 教師推進按鈕的即時 readiness 依據；前端輪詢 hash 必須把各 gate 的完成者名單、`attendanceOverrides`、`makeupWork` 納入，確保同一 gate key 下新增完成者或等待/補做狀態變化也會重置輪詢退避與重新計算可推進狀態。
 - 摘要模式需相容 legacy session payload：若 `payload` 為 JSON string 或 summary JSON 欄位缺漏，仍需解析 raw payload，並可從 `llm4writing_session_participants` split table 回補 `participants/joinedUsers`，避免教師端 Step3 gate 判定因空成員清單而無法顯示推進按鈕。

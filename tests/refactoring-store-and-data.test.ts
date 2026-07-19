@@ -4,7 +4,9 @@ import type { SessionState } from "../src/lib/types";
 import {
   countSessions,
   deleteSessionsByActivityId,
+  getMonitorActivityRevision,
   getSession,
+  getSessionPollSnapshot,
   getStorageMode,
   hasStudentActivityByActivityId,
   listActivityIdsWithStudentMessages,
@@ -76,6 +78,13 @@ test("store behavior: save/get/count/list roundtrip works", async () => {
   assert.equal(fetched?.id, sid);
   assert.equal(fetched?.step12FallbackDebugTraces?.length, 1, "fallback debug traces should roundtrip through store");
 
+  const pollSnapshot = await getSessionPollSnapshot(sid);
+  assert.ok(pollSnapshot, "poll snapshot should be available after save");
+  assert.equal("messages" in pollSnapshot!.session, false, "poll snapshot should omit message history");
+  assert.equal("outlines" in pollSnapshot!.session, false, "poll snapshot should omit artifacts");
+  assert.equal("reports" in pollSnapshot!.session, false, "poll snapshot should omit reports");
+  assert.equal(pollSnapshot?.messageCount, 1);
+
   const all = await listSessions({ limit: 1, offset: 0 });
   assert.ok(all.length >= 1);
 
@@ -142,7 +151,15 @@ test("store behavior: monitor summaries are activity-scoped and paginated", asyn
   await saveSession(makeSession(sid1, { activityId, currentStep: 2 }));
   await saveSession(makeSession(sid2, { activityId, currentStep: 3 }));
 
-  const page = await listMonitorSessionSummariesByActivityId(activityId, { limit: 1, offset: 0 });
+  const revision = await getMonitorActivityRevision(activityId);
+  assert.equal(revision.total >= 2, true);
+  assert.ok(revision.updatedAt);
+
+  const page = await listMonitorSessionSummariesByActivityId(activityId, {
+    limit: 1,
+    offset: 0,
+    knownTotal: revision.total
+  });
   assert.equal(page.sessions.length, 1);
   assert.equal(page.total >= 2, true);
   assert.equal(page.sessions[0]?.activityId, activityId);

@@ -142,31 +142,29 @@ export function useStudentSession(input: {
       let unchanged = true;
       let failed = false;
       try {
+        const previousEtag = sessionEtagRef.current;
         const res = await fetch(`/api/session/${sessionId}?view=poll`, { headers });
         const newEtag = res.headers.get("ETag");
         if (newEtag) sessionEtagRef.current = newEtag;
         if (res.status !== 304) {
+          if (!res.ok) throw new Error(`session_poll_${res.status}`);
           const data = await res.json();
-          if (data?.id) {
+          if (data?.id && data.pollSummary) {
             const nextHash = computeStudentSessionPayloadHash(data, loginUser);
-            unchanged = nextHash === sessionPayloadHashRef.current;
+            unchanged = newEtag ? newEtag === previousEtag : nextHash === sessionPayloadHashRef.current;
             if (!unchanged) {
               sessionPayloadHashRef.current = nextHash;
-              const previousMessageSignature = sessionMessageSignatureRef.current;
-              const nextMessageCount = typeof data.messageCount === "number" ? data.messageCount : data.messages?.length ?? 0;
-              const nextLastMessageAt = data.lastMessageAt ?? data.messages?.at?.(-1)?.at ?? "";
-              if (data.pollSummary && (nextMessageCount !== previousMessageSignature.count || nextLastMessageAt !== previousMessageSignature.lastAt)) {
-                const fullRes = await fetch(`/api/session/${sessionId}`, { cache: "no-store" });
-                const fullData = await fullRes.json();
-                if (fullRes.ok && fullData?.id) {
-                  applySessionSafely(fullData);
-                  sessionMessageSignatureRef.current = {
-                    count: fullData.messages?.length ?? 0,
-                    lastAt: fullData.messages?.at?.(-1)?.at ?? ""
-                  };
-                }
-              } else {
-                applySessionSafely(data);
+              const fullRes = await fetch(`/api/session/${sessionId}`, { cache: "no-store" });
+              const fullEtag = fullRes.headers.get("ETag");
+              if (fullEtag) sessionEtagRef.current = fullEtag;
+              if (!fullRes.ok) throw new Error(`session_full_${fullRes.status}`);
+              const fullData = await fullRes.json();
+              if (fullData?.id) {
+                applySessionSafely(fullData);
+                sessionMessageSignatureRef.current = {
+                  count: fullData.messages?.length ?? 0,
+                  lastAt: fullData.messages?.at?.(-1)?.at ?? ""
+                };
               }
             }
           }

@@ -61,6 +61,9 @@ export function useMonitorData(input: {
   const monitorPayloadHashRef = useRef<string>("");
   const monitorPollDelayRef = useRef<number>(3000);
   const monitorSessionsRef = useRef<MonitorSession[]>([]);
+  const monitorEtagsRef = useRef<Map<string, string>>(new Map());
+  const monitorSessionsByActivityRef = useRef<Map<string, MonitorSession[]>>(new Map());
+  const monitorSessionsActivityIdRef = useRef("");
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -212,15 +215,35 @@ export function useMonitorData(input: {
       return [];
     }
     const monitorUrl = `/api/teacher/monitor?activityId=${encodeURIComponent(targetActivityId)}`;
-    const fetchOpts: RequestInit = { cache: "no-store" };
+    const knownEtag = monitorSessionsByActivityRef.current.has(targetActivityId)
+      ? monitorEtagsRef.current.get(targetActivityId)
+      : undefined;
+    const fetchOpts: RequestInit = {
+      cache: "no-store",
+      headers: knownEtag ? { "If-None-Match": knownEtag } : undefined
+    };
     let response: Response | null = null;
     try {
       response = await fetch(monitorUrl, fetchOpts);
-      if (!response.ok) {
+      if (response.status !== 304 && !response.ok) {
         response = await fetch(monitorUrl, fetchOpts);
       }
     } catch {
       response = null;
+    }
+    const responseEtag = response?.headers.get("ETag");
+    if (responseEtag) monitorEtagsRef.current.set(targetActivityId, responseEtag);
+    if (response?.status === 304) {
+      setLearningWarning("");
+      const targetActivity = activities.find((activity) => activity.id === targetActivityId);
+      const cachedSessions = monitorSessionsActivityIdRef.current === targetActivityId
+        ? monitorSessionsRef.current
+        : (monitorSessionsByActivityRef.current.get(targetActivityId) ?? []);
+      monitorSessionsActivityIdRef.current = targetActivityId;
+      setMonitorSessions(cachedSessions);
+      return targetActivity
+        ? getActivityGroupScopedSessions(cachedSessions, targetActivity)
+        : getActivityScopedSessions(cachedSessions, targetActivityId);
     }
     if (!response?.ok) {
       setLearningWarning(formatUserError("monitor_load_failed"));
@@ -244,6 +267,8 @@ export function useMonitorData(input: {
         step3SubmittedOutlines: existing.step3SubmittedOutlines
       };
     });
+    monitorSessionsByActivityRef.current.set(targetActivityId, mergedSessions);
+    monitorSessionsActivityIdRef.current = targetActivityId;
     setMonitorSessions(mergedSessions);
     setLearningWarning("");
 

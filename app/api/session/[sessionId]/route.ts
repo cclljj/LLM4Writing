@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
-import { getSessionWithMeta, saveSession } from "@/src/lib/store";
+import { getSessionPollSnapshot, getSessionWithMeta, saveSession } from "@/src/lib/store";
 import { reconcileCompletedStep9Users } from "@/src/lib/engine";
 import { recoverStalledStep1Or2AiWait } from "@/src/lib/workflow-step1-2";
-import { ChatMessage } from "@/src/lib/types";
+import { ChatMessage, SessionState } from "@/src/lib/types";
 import { hydrateDomainState } from "@/src/lib/activity-store";
 import { loadActivityWithConfig } from "@/src/lib/prompt-config";
 import { resolveStructureTreeTemplate } from "@/src/lib/genre-resolver";
@@ -56,21 +56,46 @@ export async function GET(request: Request, context: { params: Promise<{ session
   const { sessionId } = await context.params;
   const url = new URL(request.url);
   const view = url.searchParams.get("view") === "poll" ? "poll" : "full";
-  const meta = await getSessionWithMeta(sessionId);
 
-  if (!meta) {
-    return NextResponse.json({ error: "session_not_found" }, { status: 404 });
-  }
-
-  const { session, updatedAt } = meta;
-  const etag = `"${updatedAt}"`;
-
-  // #384: Require authentication — unauthenticated callers must not read session data
-  // (which includes student drafts, outlines, conversation history, and PII).
+  // Authenticate before any session lookup so unauthenticated callers cannot
+  // trigger session assembly or distinguish existing session ids.
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
+
+  if (view === "poll") {
+    const snapshot = await getSessionPollSnapshot(sessionId);
+    if (!snapshot) return NextResponse.json({ error: "session_not_found" }, { status: 404 });
+    const pollSession = snapshot.session as SessionState;
+    if (user.role === "student" && !pollSession.participants.includes(user.username)) {
+      return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    }
+    if (user.role === "teacher" && !(await canAccessTeacherSession(user, pollSession))) {
+      return NextResponse.json({ error: "forbidden_session" }, { status: 403 });
+    }
+    if (user.role === "student") await markUserOnline(sessionId, user.username);
+
+    const etag = `"${snapshot.updatedAt}"`;
+    if (request.headers.get("if-none-match") === etag) {
+      return new NextResponse(null, { status: 304, headers: { ETag: etag, "Cache-Control": "private, no-cache" } });
+    }
+    const response = NextResponse.json({
+      ...snapshot.session,
+      pollSummary: true,
+      messageCount: snapshot.messageCount,
+      lastMessageAt: snapshot.lastMessageAt
+    });
+    response.headers.set("ETag", etag);
+    response.headers.set("Cache-Control", "private, no-cache");
+    return response;
+  }
+
+  const meta = await getSessionWithMeta(sessionId);
+  if (!meta) return NextResponse.json({ error: "session_not_found" }, { status: 404 });
+  const { session, updatedAt } = meta;
+  const etag = `"${updatedAt}"`;
+
   // Students must be a participant; teachers/admins have broader visibility.
   if (user.role === "student" && !session.participants.includes(user.username)) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
@@ -163,20 +188,7 @@ export async function GET(request: Request, context: { params: Promise<{ session
     acc[username] = userNameMap.get(username) || username;
     return acc;
   }, {} as Record<string, string>);
-  const responsePayload =
-    view === "poll"
-      ? (() => {
-          const withoutMessages = { ...session } as Partial<typeof session>;
-          delete withoutMessages.messages;
-          return {
-            ...withoutMessages,
-            participantDisplayNames,
-            pollSummary: true,
-            messageCount: session.messages.length,
-            lastMessageAt: session.messages.at(-1)?.at ?? null
-          };
-        })()
-      : {
+  const responsePayload = {
     ...session,
     participantDisplayNames
   };

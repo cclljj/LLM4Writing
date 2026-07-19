@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/src/lib/auth-server";
 import { getAllActivities, hydrateDomainState } from "@/src/lib/activity-store";
-import { getSession, listMonitorSessionSummariesByActivityId } from "@/src/lib/store";
+import { getMonitorActivityRevision, getSession, listMonitorSessionSummariesByActivityId } from "@/src/lib/store";
 import { getUsersVisibleToTeacherStore, listUsersStore } from "@/src/lib/user-store";
 import { getOnlineUsers } from "@/src/lib/session-presence";
 import { isSessionInActivityGroupScope } from "@/src/lib/monitor-session-scope";
 import { ChatMessage, SessionState } from "@/src/lib/types";
 import type { MonitorSessionSummary } from "@/src/lib/store";
+import { buildMonitorActivityEtag } from "@/src/lib/monitor-etag";
 
 function normalizeText(text: string): string {
   return text.replace(/\r\n/g, "\n").trim();
@@ -199,10 +200,23 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ sessions: [], total: 0, limit, offset });
     }
 
-    const { sessions, total } = await listMonitorSessionSummariesByActivityId(requestedActivityId, { limit, offset });
+    const revision = await getMonitorActivityRevision(requestedActivityId);
+    const etag = buildMonitorActivityEtag(revision);
+    if (request.headers.get("if-none-match") === etag) {
+      return new NextResponse(null, { status: 304, headers: { ETag: etag, "Cache-Control": "private, no-cache" } });
+    }
+
+    const { sessions, total } = await listMonitorSessionSummariesByActivityId(requestedActivityId, {
+      limit,
+      offset,
+      knownTotal: revision.total
+    });
     const scopedSessions = sessions.filter((s) => isSessionInActivityGroupScope(s, activity));
     const visibleSessions = await Promise.all(scopedSessions.map((s) => buildMonitorSessionSummaryPayload(s, activity)));
-    return NextResponse.json({ sessions: visibleSessions, total, limit, offset });
+    const response = NextResponse.json({ sessions: visibleSessions, total, limit, offset });
+    response.headers.set("ETag", etag);
+    response.headers.set("Cache-Control", "private, no-cache");
+    return response;
   }
 
   return NextResponse.json({ error: "activity_id_required" }, { status: 400 });

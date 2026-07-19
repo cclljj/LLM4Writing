@@ -103,10 +103,17 @@ The system SHALL expose session read, chat, artifact, and step-specific mutation
 #### Scenario: Student polling summary payload
 
 - **GIVEN** a student polls `GET /api/session/:sessionId?view=poll`
-- **WHEN** the session has changed but message history does not need to be transferred
-- **THEN** the response omits full `messages`
+- **WHEN** the client performs a routine revision check
+- **THEN** the server reads only the core session row and does not assemble message, artifact, report, or event child tables
+- **AND** the response omits full `messages` and artifact/report payloads
 - **AND** includes `messageCount` and `lastMessageAt` for change detection
-- **AND** the client fetches the full session only when message history signature changes
+- **AND** the client fetches the full session only when the ETag revision changes
+
+#### Scenario: Unauthenticated session read avoids session lookup
+
+- **GIVEN** a request lacks a valid authenticated session
+- **WHEN** it calls `GET /api/session/:sessionId` in full or poll view
+- **THEN** the API returns forbidden before looking up or assembling the requested session
 
 #### Scenario: Chat send identity
 
@@ -193,6 +200,14 @@ The system SHALL expose course control, step switching, monitor, and personal-pr
 - **WHEN** no full detail is requested
 - **THEN** the API returns summary data, not full messages and artifact payloads
 - **AND** when `activityId` is provided, the response remains scoped to that activity so clients can restore monitor context after reload
+
+#### Scenario: Unchanged monitor summary
+
+- **GIVEN** a teacher/admin polls an authorized activity with its latest monitor `If-None-Match`
+- **WHEN** neither the activity session revision nor the bounded presence-refresh bucket changed
+- **THEN** the API returns HTTP 304 without rebuilding monitor summary aggregates
+- **AND** a presence-refresh bucket forces a fresh summary at least every 10 seconds
+- **AND** a full summary refresh reuses the revision query total instead of repeating the same count query
 
 #### Scenario: Monitor full detail
 
