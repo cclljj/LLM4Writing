@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AUTH_COOKIE_SESSION, verifyAuthSessionToken } from "@/src/lib/auth";
-import { checkRateLimit } from "@/src/lib/rate-limit";
+import { ApiRateLimitDependencyError, checkRateLimit } from "@/src/lib/rate-limit";
 import { generateCspNonce } from "@/src/lib/csp-nonce";
 const DISABLE_NONCE_CSP = process.env.PROXY_DISABLE_NONCE_CSP === "1";
 
@@ -244,6 +244,12 @@ export async function proxy(request: NextRequest) {
       error: error instanceof Error ? error.message : "unknown"
     });
     if (pathname.startsWith("/api/")) {
+      if (error instanceof ApiRateLimitDependencyError) {
+        return withRequestId(
+          NextResponse.json({ error: "api_rate_limit_dependency_unavailable" }, { status: 503 }),
+          requestId
+        );
+      }
       return withRequestId(NextResponse.json({ error: "proxy_invocation_failed" }, { status: 500 }), requestId);
     }
     const response = NextResponse.next();

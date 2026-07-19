@@ -131,6 +131,12 @@ The system MUST validate same-origin requests for mutating admin, teacher, and s
 - **WHEN** proxy catches the error
 - **THEN** it returns a pass-through response with `x-proxy-fallback: 1` instead of a silent 500
 
+#### Scenario: Protected layout defense in depth
+
+- **GIVEN** proxy page authorization fails open because of an internal proxy exception
+- **WHEN** a request renders the student, teacher, or admin layout
+- **THEN** the layout reloads the current user on the server and redirects unauthenticated or wrong-role users to a safe role-specific page
+
 ### Requirement: API Rate Limiting
 
 The system SHALL rate-limit `/api/*` requests with Redis-backed state when available and memory fallback otherwise.
@@ -146,6 +152,13 @@ The system SHALL rate-limit `/api/*` requests with Redis-backed state when avail
 - **GIVEN** Upstash Redis is not configured or temporarily fails
 - **WHEN** rate-limit logic runs
 - **THEN** the system uses process memory fallback and continues handling the request
+
+#### Scenario: Strict production API rate limiting
+
+- **GIVEN** production sets `REQUIRE_DISTRIBUTED_API_RATE_LIMIT=1`
+- **WHEN** Upstash Redis is missing or unavailable during an `/api/*` request
+- **THEN** the proxy rejects the request with HTTP 503 `api_rate_limit_dependency_unavailable`
+- **AND** it does not fall back to per-process memory state
 
 ### Requirement: Presence Is Ephemeral
 

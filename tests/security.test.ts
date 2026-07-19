@@ -16,6 +16,8 @@ import {
   resetLoginRateLimitMemoryForTests
 } from "../src/lib/login-rate-limit";
 import { clientSafeErrorDetail, redactConnectionStrings, safeErrorDetail } from "../src/lib/error-redaction";
+import { ApiRateLimitDependencyError, checkRateLimit } from "../src/lib/rate-limit";
+import { resolveProtectedPageRedirect } from "../src/lib/page-access";
 
 // ---------------------------------------------------------------------------
 // Inline the rate limit logic so we can test it without spinning up the server.
@@ -145,6 +147,67 @@ test("rate limiter: non-API path is not rate limited", () => {
   }
 });
 
+async function withApiRateLimitEnv<T>(env: {
+  nodeEnv?: string;
+  upstashUrl?: string;
+  upstashToken?: string;
+  requireDistributedApiRateLimit?: string;
+}, fn: () => T | Promise<T>): Promise<T> {
+  const previous = {
+    NODE_ENV: process.env.NODE_ENV,
+    UPSTASH_REDIS_REST_URL: process.env.UPSTASH_REDIS_REST_URL,
+    UPSTASH_REDIS_REST_TOKEN: process.env.UPSTASH_REDIS_REST_TOKEN,
+    REQUIRE_DISTRIBUTED_API_RATE_LIMIT: process.env.REQUIRE_DISTRIBUTED_API_RATE_LIMIT
+  };
+  setTestEnvValue("NODE_ENV", env.nodeEnv);
+  setTestEnvValue("UPSTASH_REDIS_REST_URL", env.upstashUrl);
+  setTestEnvValue("UPSTASH_REDIS_REST_TOKEN", env.upstashToken);
+  setTestEnvValue("REQUIRE_DISTRIBUTED_API_RATE_LIMIT", env.requireDistributedApiRateLimit);
+  try {
+    return await fn();
+  } finally {
+    setTestEnvValue("NODE_ENV", previous.NODE_ENV);
+    setTestEnvValue("UPSTASH_REDIS_REST_URL", previous.UPSTASH_REDIS_REST_URL);
+    setTestEnvValue("UPSTASH_REDIS_REST_TOKEN", previous.UPSTASH_REDIS_REST_TOKEN);
+    setTestEnvValue("REQUIRE_DISTRIBUTED_API_RATE_LIMIT", previous.REQUIRE_DISTRIBUTED_API_RATE_LIMIT);
+  }
+}
+
+test("API rate limiter: production strict mode without Upstash fails closed", async () => {
+  await withApiRateLimitEnv({ nodeEnv: "production", requireDistributedApiRateLimit: "1" }, async () => {
+    await assert.rejects(
+      () => checkRateLimit("1.2.3.4", "/api/session/start"),
+      (error) => error instanceof ApiRateLimitDependencyError
+    );
+  });
+});
+
+test("API rate limiter: production defaults to memory fallback when strict mode is disabled", async () => {
+  await withApiRateLimitEnv({ nodeEnv: "production" }, async () => {
+    assert.equal((await checkRateLimit("fallback-ip", "/api/session/start", 0)).allowed, true);
+  });
+});
+
+test("protected page access resolves role-specific fail-closed redirects", () => {
+  assert.equal(resolveProtectedPageRedirect(null, "student"), "/login");
+  assert.equal(resolveProtectedPageRedirect({ username: "s", role: "student" }, "student"), null);
+  assert.equal(resolveProtectedPageRedirect({ username: "s", role: "student" }, "teacher"), "/student");
+  assert.equal(resolveProtectedPageRedirect({ username: "t", role: "teacher" }, "admin"), "/teacher");
+  assert.equal(resolveProtectedPageRedirect({ username: "a", role: "admin" }, "admin"), null);
+  assert.equal(resolveProtectedPageRedirect({ username: "a", role: "admin" }, "teacher"), null);
+});
+
+test("source-guard: protected layouts require server-side page authorization", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { resolve, dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const thisDir = dirname(fileURLToPath(import.meta.url));
+  for (const area of ["student", "teacher", "admin"] as const) {
+    const source = readFileSync(resolve(thisDir, `../app/${area}/layout.tsx`), "utf8");
+    assert.ok(source.includes(`requireProtectedPage("${area}")`), `${area} layout should enforce server-side access`);
+  }
+});
+
 function setTestEnvValue(key: string, value: string | undefined): void {
   if (value === undefined) {
     Reflect.deleteProperty(process.env, key);
@@ -242,6 +305,7 @@ test("source-guard: env example documents distributed login lockout mode", async
   assert.ok(src.includes("UPSTASH_REDIS_REST_URL"), "env example should document Upstash URL");
   assert.ok(src.includes("UPSTASH_REDIS_REST_TOKEN"), "env example should document Upstash token");
   assert.ok(src.includes("REQUIRE_DISTRIBUTED_LOGIN_RATE_LIMIT"), "env example should document strict distributed login lockout mode");
+  assert.ok(src.includes("REQUIRE_DISTRIBUTED_API_RATE_LIMIT"), "env example should document strict distributed API rate limit mode");
 });
 
 test("error redaction: postgres connection strings are fully redacted", () => {

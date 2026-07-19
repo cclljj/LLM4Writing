@@ -11,6 +11,17 @@ export const RATE_LIMIT_RULES: RateLimitRule[] = [
 // Local fallback (dev / missing Redis / transient Redis errors).
 const rlStore = new Map<string, number[]>();
 
+export class ApiRateLimitDependencyError extends Error {
+  constructor(message = "api_rate_limit_dependency_unavailable") {
+    super(message);
+    this.name = "ApiRateLimitDependencyError";
+  }
+}
+
+function shouldFailClosedInProduction(): boolean {
+  return process.env.NODE_ENV === "production" && process.env.REQUIRE_DISTRIBUTED_API_RATE_LIMIT === "1";
+}
+
 function findRule(pathname: string): RateLimitRule | undefined {
   return RATE_LIMIT_RULES.find((r) => r.pattern.test(pathname));
 }
@@ -47,7 +58,8 @@ async function checkRateLimitInRedis(
   if (!Number.isFinite(incr)) return null;
 
   if (incr === 1) {
-    await upstashCommand<string>(["EXPIRE", key, windowSec]);
+    const expireResult = await upstashCommand<number>(["EXPIRE", key, windowSec]);
+    if (expireResult === null) return null;
   }
 
   if (incr <= rule.max) {
@@ -70,6 +82,7 @@ export async function checkRateLimit(
   if (!rule) return { allowed: true, retryAfterSeconds: 0 };
 
   if (!isUpstashConfigured()) {
+    if (shouldFailClosedInProduction()) throw new ApiRateLimitDependencyError();
     return checkRateLimitInMemory(rule, ip, now);
   }
 
@@ -77,8 +90,11 @@ export async function checkRateLimit(
     const distributed = await checkRateLimitInRedis(rule, ip, now);
     if (distributed) return distributed;
   } catch {
+    if (shouldFailClosedInProduction()) throw new ApiRateLimitDependencyError();
     // Fall back to in-memory when Redis is temporarily unavailable.
   }
+
+  if (shouldFailClosedInProduction()) throw new ApiRateLimitDependencyError();
 
   return checkRateLimitInMemory(rule, ip, now);
 }

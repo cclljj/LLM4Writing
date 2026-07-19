@@ -89,6 +89,7 @@ npm run dev
 | `APP_ORIGIN` | CSRF 同源檢查的 canonical origin（建議設定，如 `https://your-domain.example.com`） |
 | `PROXY_DISABLE_NONCE_CSP` | 緊急開關；設為 `1` 時暫停 proxy nonce CSP 注入（事件緩解用） |
 | `REQUIRE_DISTRIBUTED_LOGIN_RATE_LIMIT` | 嚴格安全開關；設為 `1` 時 production 登入鎖定必須使用 Upstash，Redis 缺失/故障會拒絕登入 |
+| `REQUIRE_DISTRIBUTED_API_RATE_LIMIT` | 嚴格安全開關；設為 `1` 時 production API 限流必須使用 Upstash，Redis 缺失/故障會回 HTTP 503 |
 
 ### LLM（選填）
 

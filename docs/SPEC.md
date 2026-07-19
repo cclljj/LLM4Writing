@@ -161,7 +161,7 @@ LLM 上下文規則：
 
 | 功能 | 主要路徑 | Redis key 範例 | fallback |
 |---|---|---|---|
-| API rate limit | `src/lib/rate-limit.ts` | `ratelimit:<rule>:<ip>:<bucket>` | `Map` sliding window |
+| API rate limit | `src/lib/rate-limit.ts` | `ratelimit:<rule>:<ip>:<bucket>` | `Map` sliding window；若 `REQUIRE_DISTRIBUTED_API_RATE_LIMIT=1` 則 production fail closed |
 | login account lockout | `src/lib/login-rate-limit.ts` | `loginfail:<username>`、`loginlock:<username>` | `Map` sliding window；若 `REQUIRE_DISTRIBUTED_LOGIN_RATE_LIMIT=1` 則 production fail closed |
 | session presence | `src/lib/session-presence.ts` | `presence:<sessionId>:<username>`、`presence:<sessionId>:users` | `Map<sessionId, Map<username, iso>>` |
 
@@ -170,7 +170,7 @@ Upstash 啟用條件：
 - `UPSTASH_REDIS_REST_URL`
 - `UPSTASH_REDIS_REST_TOKEN`
 
-任一缺失、或 Redis 暫時錯誤/逾時時，presence、rate limit 與登入逐帳號鎖定會 fallback 到 in-memory，不中斷課程流程。若部署明確設定 `REQUIRE_DISTRIBUTED_LOGIN_RATE_LIMIT=1`，production 登入鎖定必須使用 Upstash；未配置或無法連線 Upstash 時需回傳 `login_rate_limit_dependency_unavailable`。
+任一缺失、或 Redis 暫時錯誤/逾時時，presence、rate limit 與登入逐帳號鎖定預設 fallback 到 in-memory，不中斷課程流程。若部署明確設定 `REQUIRE_DISTRIBUTED_LOGIN_RATE_LIMIT=1`，production 登入鎖定必須使用 Upstash；若設定 `REQUIRE_DISTRIBUTED_API_RATE_LIMIT=1`，production API 限流必須使用 Upstash，未配置或無法連線時由 proxy 回傳 HTTP 503 `api_rate_limit_dependency_unavailable`。
 
 ## 3. 權限與資料邊界
 
@@ -1937,7 +1937,7 @@ Retry-After: <秒數>
 注意：
 
 - Upstash 可用時，限速狀態跨副本共享。
-- Upstash 未設定或短暫故障時，退回 process memory `Map`（僅單副本一致）；若設定 `REQUIRE_DISTRIBUTED_LOGIN_RATE_LIMIT=1`，production 登入鎖定改為 fail closed。
+- Upstash 未設定或短暫故障時，預設退回 process memory `Map`（僅單副本一致）。若 production 設定 `REQUIRE_DISTRIBUTED_API_RATE_LIMIT=1`，所有 `/api/*` 請求改為 fail closed，回 HTTP 503 `api_rate_limit_dependency_unavailable`。
 - IP 從 `x-forwarded-for` 第一個值或 `x-real-ip` 取得。
 
 ### 10.2 Session Presence
@@ -1990,6 +1990,7 @@ Auth session 必須是 server 簽章 token，格式為 `v1.<payload>.<signature>
   - `invalid_origin`
 - proxy 回應應附帶 `x-request-id` 以利跨層追查。
 - page route proxy 發生內部錯誤時，允許 fail-open 並附帶 `x-proxy-fallback: 1`（避免 silent 500 放大）。
+- `/student`、`/teacher`、`/admin` layout 必須再以 server-side current-user 驗證角色；即使 proxy fail-open，未登入或角色不符者仍需導向登入頁或其合法角色頁面。
 
 ### 10.5 Password Storage
 
@@ -2059,7 +2060,7 @@ Auth session 必須是 server 簽章 token，格式為 `v1.<payload>.<signature>
 1. 無 DB 環境下，domain 依賴 `.data/domain-state.json`；檔案不可寫或被清空會回預設。
 2. 群組隨機分配採前端簡單亂數，不含 seed，無法保證可重現。
 3. Prompt 變更需改檔案並重新部署，不支援線上即時編輯。
-4. 若未配置 Upstash（或 Redis 故障），rate limiting 與登入鎖定會 fallback in-memory，跨副本一致性會下降；設定 `REQUIRE_DISTRIBUTED_LOGIN_RATE_LIMIT=1` 時 production 登入鎖定改為 fail closed。
+4. 若未配置 Upstash（或 Redis 故障），rate limiting 與登入鎖定預設 fallback in-memory，跨副本一致性會下降；可分別以 `REQUIRE_DISTRIBUTED_API_RATE_LIMIT=1` 與 `REQUIRE_DISTRIBUTED_LOGIN_RATE_LIMIT=1` 讓 production fail closed。
 5. `/api/teacher/monitor` 未帶 `activityId` 時仍保留相容性全域掃描路徑；正式學習管理頁應帶入 `activityId` 才能使用 DB 層分頁。
 6. Presence 本質為短生命週期狀態；即使使用 Redis，也不做長期持久化，TTL 到期或服務重啟後會自然重建。
 7. diagnostics 優先讀取 `llm_events` / `learning_events`；若資料表為空（例如剛部署或 memory-only 環境）會回退到 session 推估與 process-memory 統計。
