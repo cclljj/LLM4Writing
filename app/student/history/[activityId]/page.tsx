@@ -244,8 +244,8 @@ export default function StudentCourseHistoryPage() {
                         )}
                         {step === 3 && history.latestWork.step3SubmittedOutline ? (
                           <div style={{ marginTop: 12, borderTop: "1px solid var(--line-soft)", paddingTop: 10 }}>
-                            <strong>步驟三完成時繳交的結構樹</strong>
-                            <OutlineSvg compact mermaidText={history.latestWork.step3SubmittedOutline} />
+                            <strong>步驟三原始輸入架構圖</strong>
+                            <OutlineSvg compact mermaidText={history.latestWork.step3SubmittedOutline} label="步驟三原始輸入架構圖" />
                           </div>
                         ) : null}
                         {step === 4 && history.latestWork.step4Outline ? (

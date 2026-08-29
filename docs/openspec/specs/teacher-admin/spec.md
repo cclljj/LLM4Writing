@@ -446,6 +446,16 @@ The admin console SHALL provide Prompt/LLM diagnostics, KPI trends, and non-sens
 - **WHEN** the admin triggers store migration from the UI
 - **THEN** the system calls the admin migration API and updates diagnostics after completion
 
+### Requirement: Course Implementation Report
+
+The course implementation report SHALL preserve both the student's original Step 3 architecture diagram and the revised Step 4 architecture diagram.
+
+#### Scenario: Architecture diagram history
+
+- **GIVEN** a student has a persisted `step3SubmittedOutline` and/or a Step4 `outline`
+- **WHEN** a teacher opens the student's course implementation report
+- **THEN** the report SHALL show Step 3 as the original submitted architecture diagram and Step 4 as the revised architecture diagram, even when the corresponding step has no dialogue messages
+
 ### Requirement: Audit Log
 
 The admin console SHALL provide a recent operation log grouped for review.

@@ -71,6 +71,7 @@ test("source-guard: learning monitor uses outline labels and participant mapping
   const tabSrc = await read("../app/teacher/_components/LearningMonitorTab.tsx");
   const groupSrc = await read("../app/teacher/_components/GroupLogPanel.tsx");
   const personalSrc = await read("../app/teacher/_components/PersonalLogPanel.tsx");
+  const reportSrc = await read("../app/teacher/_components/CourseImplementationReportTab.tsx");
   assert.ok(groupSrc.includes("步驟三 各組員完成結構樹"), "group log should render step3 submitted outline label");
   assert.ok(personalSrc.includes("步驟三完成結構樹"), "personal log should render step3 submitted outline label");
   assert.ok(groupSrc.includes("步驟四 各組員修正後結構樹"), "group log should render step4 revised outline label");
@@ -85,6 +86,9 @@ test("source-guard: learning monitor uses outline labels and participant mapping
   );
   assert.ok(tabSrc.includes("setUserOutline"), "learning monitor should track userOutline state updates");
   assert.ok(tabSrc.includes("setUserStep3SubmittedOutline"), "learning monitor should track userStep3SubmittedOutline state updates");
+  assert.ok(reportSrc.includes("includeStep3: Boolean(userStep3SubmittedOutline)"), "course report should create a Step3 section for outline-only artifacts");
+  assert.ok(reportSrc.includes("步驟三原始輸入架構圖"), "course report should label the original Step3 outline");
+  assert.ok(personalSrc.includes("步驟三完成結構樹"), "personal log should retain its Step3 outline label");
 });
 
 test("source-guard: student route keeps classroom bootstrap failures recoverable", async () => {

@@ -820,8 +820,8 @@ export default function CourseImplementationReportTab({
 
                 const step3Block = step === 3 && userStep3SubmittedOutline ? (
                   <div style={{ borderTop: "2px solid var(--line)", padding: "12px 0", marginTop: 4 }}>
-                    <strong style={{ fontSize: 13, color: "var(--muted-strong)" }}>步驟三完成結構樹</strong>
-                    <OutlineSvg mermaidText={userStep3SubmittedOutline} label="步驟三完成結構樹" />
+                    <strong style={{ fontSize: 13, color: "var(--muted-strong)" }}>步驟三原始輸入架構圖</strong>
+                    <OutlineSvg mermaidText={userStep3SubmittedOutline} label="步驟三原始輸入架構圖" />
                   </div>
                 ) : null;
 

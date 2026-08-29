@@ -480,7 +480,7 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
     const preview = buildOutlinePreview(mermaidText, { maxLines: 40 });
     if (!preview) return;
 
-    const title = step === 3 ? "步驟三完成結構樹（圖形）" : "步驟四修正後結構樹（圖形）";
+    const title = step === 3 ? "步驟三原始輸入架構圖" : "步驟四修正後架構圖";
     writeSectionHeader(title);
 
     const maxGraphHeight = PAGE.height - PAGE.marginTop - PAGE.marginBottom - 40;
@@ -539,7 +539,7 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
   }
 
   async function drawOutlineGraph(step: 3 | 4, mermaidText: string): Promise<void> {
-    const title = step === 3 ? "步驟三完成結構樹（圖形）" : "步驟四修正後結構樹（圖形）";
+    const title = step === 3 ? "步驟三原始輸入架構圖" : "步驟四修正後架構圖";
     writeSectionHeader(title);
 
     try {
