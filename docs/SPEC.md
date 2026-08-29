@@ -1175,7 +1175,7 @@ Loading 規則（#270）：
 - 「下載」按鈕需產生「課程實施報告 PDF v1（學生個人）」並下載。
 - 需提供「一鍵下載全班 ZIP」：由後端批次產生每位學生 PDF（檔名規則同個別下載）後打包為 ZIP。
 - 已結束課程需提供「研究資料 JSON」下載，輸出所有學生輸入內容事件列，供 IRB/研究分析使用。預設採匿名化模式；若切換為「包含學生帳號」，UI 需提示該檔案含可識別個資，需符合 IRB/同意書範圍。
-- 研究資料 JSON 每筆至少包含 `activityId`、`sessionId`、`groupId/groupName`、`studentHash`、`step`、`role="student"`、`at`、`text`；帳號模式另含 `studentAccount`。不得輸出 AI/system/internal prompt 訊息。
+- 研究資料 JSON 每筆至少包含 `activityId`、`sessionId`、`groupId/groupName`、`studentHash`、`step`、`role="student"`、`at`、`text`；帳號模式另含 `studentAccount`。不得輸出 AI/system/internal prompt 訊息。`text` 若含其他同組成員帳號，必須以「有一位組員」遮蔽；即使帳號模式輸出該筆發言者 `studentAccount`，仍不得在文字中揭露其他組員帳號。
 - 全班 ZIP 命名規則：`{activityId}_{classNumber}_course-report-v1.zip`。
 - 全班匯出需採非同步 job：前端可見 `queued/running/retrying/packaging/succeeded/failed/canceled` 狀態與完成進度。
 - 全班匯出中，單位學生 PDF 失敗需自動重試（預設最多 3 次，退避等待）；僅可重試錯誤可進行重試。
@@ -1187,9 +1187,10 @@ Loading 規則（#270）：
   - 學生摘要（帳號、姓名、班級、校名、課程 ID）
   - 完整互動歷程（學生/AI/系統訊息，含步驟開場詞、摘要/總結等，需依系統原始出現順序輸出）
   - Step3/Step4 結構樹需以圖形呈現（非 Mermaid 原文文字），並插入在對應步驟區段位置
-  - Step3/Step4 結構樹圖需自動 scale-fit 到可用頁寬，不可超出頁面而被左右裁切
+  - Step3/Step4 結構樹圖需自動 scale-fit 到可用頁寬與可用頁高，不可超出頁面而被左右裁切；Step4 結構樹需維持節點文字完整可讀，必要時可換至新頁呈現，不得以省略號截斷重要內容
   - 若 Step3/Step4 缺少互動訊息但已有結構樹資料，PDF 仍需補顯示對應結構樹；Step4 不得因內容與 Step3 相同而隱藏
-  - 互動文字需以 Markdown 版型呈現（標題、清單、引用、段落/換行、程式區塊樣式）
+  - 互動文字需以 Markdown/HTML 版型呈現（標題、粗體、清單、引用、段落/換行、HTML `<br>`、程式區塊樣式）；Markdown 標題後若緊接內文，PDF 與網頁報告皆需拆成標題與一般段落，避免如「立意取材」與後文擠在同一行
+  - PDF 互動文字若含其他同組成員帳號，必須以「有一位組員」遮蔽；網頁版課程紀錄可保留帳號以利教師辨識討論脈絡
   - 每頁 header 文案 `LLM4Writing 課程實施報告` 需使用白色文字
 - 當學生無 session 或無個人紀錄時，需顯示可讀錯誤並禁止輸出空白 PDF。
 

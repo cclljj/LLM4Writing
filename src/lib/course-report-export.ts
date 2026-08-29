@@ -261,6 +261,7 @@ async function generateStudentPdfBytes(input: {
     timelineMessages,
     step3SubmittedOutline,
     step4RevisedOutline,
+    privacyPeerUsernames: session.participants.filter((participant) => participant !== input.username),
     generatedAtIso: nowIso(),
     completedAtIso,
   };

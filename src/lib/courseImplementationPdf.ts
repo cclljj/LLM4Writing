@@ -1,5 +1,6 @@
 import { jsPDF } from "jspdf";
 import { buildOutlinePreview } from "@/src/lib/outline-utils";
+import { maskPeerUsernames, normalizeReportMarkdownText } from "@/src/lib/report-rendering";
 import { formatTaipeiDateTime } from "@/src/lib/time-format";
 
 export type PdfStudentMetric = {
@@ -33,6 +34,7 @@ export type CourseImplementationPdfInput = {
   timelineMessages: PdfMessage[];
   step3SubmittedOutline: string;
   step4RevisedOutline: string;
+  privacyPeerUsernames?: string[];
   generatedAtIso: string;
   /** ISO timestamp of the student's last recorded activity (used as completion datetime). */
   completedAtIso?: string;
@@ -106,21 +108,33 @@ async function loadFontBase64(): Promise<string | null> {
 }
 
 function sanitize(text: string): string {
-  return (text ?? "")
-    .replace(/\r\n/g, "\n")
-    .replace(/\t/g, "  ")
-    .replace(/\u0000/g, "")
-    .trim();
+  return normalizeReportMarkdownText(text ?? "");
 }
 
 function stripInlineMarkdown(text: string): string {
   return text
-    .replace(/\*\*([^*]+)\*\*/g, "$1")
-    .replace(/__([^_]+)__/g, "$1")
-    .replace(/\*([^*]+)\*/g, "$1")
-    .replace(/_([^_]+)_/g, "$1")
+    .replace(/\*\*(.+?)\*\*/g, "$1")
+    .replace(/__(.+?)__/g, "$1")
+    .replace(/\*(.+?)\*/g, "$1")
+    .replace(/_(.+?)_/g, "$1")
     .replace(/`([^`]+)`/g, "$1")
     .replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1 ($2)");
+}
+
+function inlineSegments(text: string): Array<{ text: string; strong: boolean }> {
+  const segments: Array<{ text: string; strong: boolean }> = [];
+  const re = /(\*\*.+?\*\*|__.+?__|`.+?`)/g;
+  let cursor = 0;
+  for (const match of text.matchAll(re)) {
+    const index = match.index ?? 0;
+    if (index > cursor) segments.push({ text: stripInlineMarkdown(text.slice(cursor, index)), strong: false });
+    const raw = match[0];
+    const strong = raw.startsWith("**") || raw.startsWith("__");
+    segments.push({ text: stripInlineMarkdown(raw), strong });
+    cursor = index + raw.length;
+  }
+  if (cursor < text.length) segments.push({ text: stripInlineMarkdown(text.slice(cursor)), strong: false });
+  return segments.filter((segment) => segment.text.length > 0);
 }
 
 function formatRole(role: string): string {
@@ -231,6 +245,7 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
   }
   doc.addFileToVFS(FONT_FILE_NAME, fontBase64);
   doc.addFont(FONT_FILE_NAME, FONT_FAMILY, "normal");
+  doc.addFont(FONT_FILE_NAME, FONT_FAMILY, "bold");
   doc.setFont(FONT_FAMILY, "normal");
 
   let y = PAGE.marginTop;
@@ -266,8 +281,13 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
     newPage();
   }
 
-  function writeWrapped(text: string, x: number, width: number, fontSize = 11, lineHeight = 1.55): number {
+  function setFontStyle(style: "normal" | "bold"): void {
+    doc.setFont(FONT_FAMILY, style);
+  }
+
+  function writeWrapped(text: string, x: number, width: number, fontSize = 11, lineHeight = 1.55, options?: { strong?: boolean }): number {
     doc.setFontSize(fontSize);
+    setFontStyle(options?.strong ? "bold" : "normal");
     const normalized = stripInlineMarkdown(text);
     const lines = doc.splitTextToSize(normalized || "（空白）", width) as string[];
     const lh = Math.round(fontSize * lineHeight);
@@ -275,6 +295,60 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
     doc.text(lines, x, y);
     const consumed = lines.length * lh;
     y += consumed;
+    setFontStyle("normal");
+    return consumed;
+  }
+
+  function writeRichWrapped(text: string, x: number, width: number, fontSize = 11, lineHeight = 1.55): number {
+    const segments = inlineSegments(text);
+    if (segments.length === 0) return writeWrapped(text, x, width, fontSize, lineHeight);
+    const lines: Array<Array<{ text: string; strong: boolean }>> = [[]];
+    let currentWidth = 0;
+
+    const append = (ch: string, strong: boolean) => {
+      setFontStyle(strong ? "bold" : "normal");
+      doc.setFontSize(fontSize);
+      const chWidth = doc.getTextWidth(ch);
+      if (currentWidth > 0 && currentWidth + chWidth > width) {
+        lines.push([]);
+        currentWidth = 0;
+      }
+      lines[lines.length - 1]!.push({ text: ch, strong });
+      currentWidth += chWidth;
+    };
+
+    for (const segment of segments) {
+      for (const ch of Array.from(segment.text)) append(ch, segment.strong);
+    }
+
+    const lh = Math.round(fontSize * lineHeight);
+    ensureSpacePx(lines.length * lh + 4);
+    let lineY = y;
+    for (const line of lines) {
+      let lineX = x;
+      let buffer = "";
+      let activeStrong = line[0]?.strong ?? false;
+      const flush = () => {
+        if (!buffer) return;
+        setFontStyle(activeStrong ? "bold" : "normal");
+        doc.setFontSize(fontSize);
+        doc.text(buffer, lineX, lineY);
+        lineX += doc.getTextWidth(buffer);
+        buffer = "";
+      };
+      for (const part of line) {
+        if (part.strong !== activeStrong) {
+          flush();
+          activeStrong = part.strong;
+        }
+        buffer += part.text;
+      }
+      flush();
+      lineY += lh;
+    }
+    const consumed = lines.length * lh;
+    y += consumed;
+    setFontStyle("normal");
     return consumed;
   }
 
@@ -284,8 +358,10 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
     setDrawColor(COLORS.sectionStroke);
     doc.roundedRect(PAGE.marginX, y, contentWidth, 26, 6, 6, "FD");
     doc.setFontSize(12);
+    setFontStyle("bold");
     setTextColor(COLORS.title);
     doc.text(title, PAGE.marginX + 10, y + 17);
+    setFontStyle("normal");
     setTextColor(COLORS.text);
     y += 34;
   }
@@ -333,7 +409,7 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
         const size = sizeMap[level] ?? 11;
         y += level <= 2 ? 8 : 4;
         setTextColor(COLORS.title);
-        writeWrapped(text, x, width, size, 1.4);
+        writeWrapped(text, x, width, size, 1.4, { strong: true });
         setTextColor(COLORS.text);
         y += 4;
         continue;
@@ -352,7 +428,7 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
         ensureSpacePx(16);
         doc.setFontSize(baseFontSize);
         doc.text("•", x + 2, y);
-        writeWrapped(unordered[1]!, x + 14, width - 14, baseFontSize, 1.55);
+        writeRichWrapped(unordered[1]!, x + 14, width - 14, baseFontSize, 1.55);
         y += 3;
         continue;
       }
@@ -363,7 +439,7 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
         doc.setFontSize(baseFontSize);
         ensureSpacePx(16);
         doc.text(prefix, x + 1, y);
-        writeWrapped(ordered[2]!, x + 18, width - 18, baseFontSize, 1.55);
+        writeRichWrapped(ordered[2]!, x + 18, width - 18, baseFontSize, 1.55);
         y += 3;
         continue;
       }
@@ -388,7 +464,7 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
         continue;
       }
 
-      writeWrapped(trimmed, x, width, baseFontSize, 1.6);
+      writeRichWrapped(trimmed, x, width, baseFontSize, 1.6);
       y += 3;
     }
   }
@@ -400,13 +476,17 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
   }
 
   function drawOutlineGraphFallback(step: 3 | 4, mermaidText: string): void {
-    const preview = buildOutlinePreview(mermaidText);
+    const preview = buildOutlinePreview(mermaidText, { maxLines: 40 });
     if (!preview) return;
 
     const title = step === 3 ? "步驟三完成結構樹（圖形）" : "步驟四修正後結構樹（圖形）";
     writeSectionHeader(title);
 
-    const graphScale = Math.min((contentWidth - 24) / preview.width, 1);
+    const maxGraphHeight = PAGE.height - PAGE.marginTop - PAGE.marginBottom - 40;
+    if (y + Math.min(preview.height, maxGraphHeight) + 18 > PAGE.height - PAGE.marginBottom) {
+      newPage();
+    }
+    const graphScale = Math.min((contentWidth - 24) / preview.width, maxGraphHeight / preview.height, 1);
     const graphW = preview.width * graphScale;
     const graphH = preview.height * graphScale;
     const boxX = PAGE.marginX + (contentWidth - graphW) / 2;
@@ -416,12 +496,10 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
     setDrawColor(COLORS.sectionStroke);
     doc.roundedRect(PAGE.marginX, y - 6, contentWidth, graphH + 12, 8, 8, "FD");
 
-    const baseNodeW = 130;
-    const baseNodeH = 80;
-    const nodeW = baseNodeW * graphScale;
-    const nodeH = baseNodeH * graphScale;
-    const centerX = nodeW / 2;
-    const edgeY = nodeH / 2;
+    const centerOf = (node: { x: number; y: number; w?: number; h?: number }) => ({
+      x: (node.x + (node.w ?? 180) / 2) * graphScale,
+      y: (node.y + (node.h ?? 84) / 2) * graphScale,
+    });
 
     const nodeMap = new Map(preview.nodes.map((n) => [n.id, n]));
 
@@ -432,31 +510,27 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
       .forEach((node) => {
         const parent = node.parentId ? nodeMap.get(node.parentId) : null;
         if (!parent) return;
-        const parentX = parent.x * graphScale;
-        const parentY = parent.y * graphScale;
-        const nodeX = node.x * graphScale;
-        const nodeY = node.y * graphScale;
-        doc.line(
-          boxX + (parentX + centerX),
-          y + (parentY + edgeY),
-          boxX + (nodeX + centerX),
-          y + nodeY
-        );
+        const parentCenter = centerOf(parent);
+        const nodeCenter = centerOf(node);
+        doc.line(boxX + parentCenter.x, y + parentCenter.y, boxX + nodeCenter.x, y + node.y * graphScale);
       });
 
     preview.nodes.forEach((node) => {
       const sx = node.x * graphScale;
       const sy = node.y * graphScale;
+      const nodeW = (node.w ?? 180) * graphScale;
+      const nodeH = (node.h ?? 84) * graphScale;
       setFillColor(COLORS.nodeFill);
       setDrawColor(COLORS.nodeStroke);
       doc.roundedRect(boxX + sx, y + sy, nodeW, nodeH, 8, 8, "FD");
 
       const textMaxWidth = nodeW - 12;
-      const lines = doc.splitTextToSize(stripInlineMarkdown(node.text), textMaxWidth) as string[];
-      const clipped = lines.length > 4 ? [...lines.slice(0, 3), `${lines[3]}...`] : lines;
-      doc.setFontSize(Math.max(8, 11 * graphScale));
+      const lines = (node.lines && node.lines.length > 0 ? node.lines : doc.splitTextToSize(stripInlineMarkdown(node.text), textMaxWidth)) as string[];
+      doc.setFontSize(Math.max(7.5, 11 * graphScale));
+      setFontStyle("bold");
       setTextColor(COLORS.title);
-      doc.text(clipped, boxX + sx + 6, y + sy + 16);
+      doc.text(lines, boxX + sx + 6, y + sy + 16 * graphScale);
+      setFontStyle("normal");
       setTextColor(COLORS.text);
     });
 
@@ -482,7 +556,11 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
         return;
       }
 
-      const graphScale = Math.min((contentWidth - 24) / png.width, 1);
+      const maxGraphHeight = PAGE.height - PAGE.marginTop - PAGE.marginBottom - 40;
+      if (y + Math.min(png.height, maxGraphHeight) + 18 > PAGE.height - PAGE.marginBottom) {
+        newPage();
+      }
+      const graphScale = Math.min((contentWidth - 24) / png.width, maxGraphHeight / png.height, 1);
       const graphW = png.width * graphScale;
       const graphH = png.height * graphScale;
       const boxX = PAGE.marginX + (contentWidth - graphW) / 2;
@@ -517,7 +595,8 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
     setTextColor(COLORS.text);
 
     y += 30;
-    renderMarkdown(msg.text, cardX + 8, cardW - 16, 11);
+    const reportText = maskPeerUsernames(msg.text, input.username, input.privacyPeerUsernames);
+    renderMarkdown(reportText, cardX + 8, cardW - 16, 11);
     y += 8;
   }
 

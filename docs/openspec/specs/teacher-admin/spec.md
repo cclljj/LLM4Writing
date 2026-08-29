@@ -281,6 +281,28 @@ The course management area SHALL provide ended-course reports and student-level 
 - **WHEN** the personal record is loaded
 - **THEN** the UI shows completion rating, progress, records, and download action
 
+#### Scenario: PDF report renders readable formatted text
+
+- **GIVEN** a student's interaction history contains Markdown headings, bold text, HTML `<br>` line breaks, or headings with body text on the same source line
+- **WHEN** the student PDF report is generated
+- **THEN** the PDF renders headings, bold emphasis, paragraphs, lists, and line breaks in a readable layout instead of showing raw formatting tokens
+- **AND** heading body text is placed in normal paragraph text rather than being merged into the heading line
+
+#### Scenario: PDF report keeps Step4 structure tree readable
+
+- **GIVEN** the student's Step4 revised structure tree contains long node text
+- **WHEN** the student PDF report is generated
+- **THEN** the Step4 graph is scaled to the available page width and height
+- **AND** important node text is not truncated with ellipses
+- **AND** the graph may start on a new page when needed to preserve readability
+
+#### Scenario: Exported report artifacts mask peer accounts
+
+- **GIVEN** course report web records may show same-group student accounts for teacher context
+- **WHEN** PDF or research JSON export text contains another same-group participant's account
+- **THEN** the exported text replaces that peer account with `有一位組員`
+- **AND** research JSON account mode may still include the current record owner's `studentAccount` field when explicitly requested
+
 #### Scenario: Empty PDF prevention
 
 - **GIVEN** a student has no session or no personal record for the selected course

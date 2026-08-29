@@ -42,3 +42,22 @@ flowchart TB
     }
   }
 });
+
+test("outline layout: report preview can keep long node text without ellipsis truncation", () => {
+  const longText = "這是一段很長的第四步驟修正後結構樹節點文字，用來確認 PDF 報告模式會保留完整內容，不會因為預設節點行數上限而被省略。";
+  const preview = buildOutlinePreview(
+    `
+flowchart TB
+  A["主題"]
+  B["${longText}"]
+  A --> B
+  `,
+    { maxLines: 40 }
+  );
+
+  assert.ok(preview);
+  const target = preview!.nodes.find((node) => node.id === "B");
+  assert.ok(target);
+  assert.equal(target!.lines?.join("").includes("…"), false);
+  assert.equal(target!.lines?.join(""), longText);
+});

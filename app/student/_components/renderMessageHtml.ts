@@ -1,6 +1,7 @@
 // #387: DOMPurify as a final defence-in-depth sanitization layer.
 // isomorphic-dompurify works in both Node.js (SSR) and browser contexts.
 import DOMPurify from "isomorphic-dompurify";
+import { normalizeReportMarkdownText } from "@/src/lib/report-rendering";
 
 function escapeHtml(input: string): string {
   return input
@@ -127,7 +128,7 @@ function unwrapRenderableText(input: string): string {
 }
 
 export function renderMessageHtml(text: string): string {
-  const normalizedText = unwrapRenderableText(text.replace(/^\uFEFF/, "").replace(/<br\s*\/?>/gi, "\n"));
+  const normalizedText = normalizeReportMarkdownText(unwrapRenderableText(text));
   const lines = normalizedText.split(/\r?\n/);
   const htmlParts: string[] = [];
   let unorderedListBuffer: string[] = [];
@@ -151,7 +152,7 @@ export function renderMessageHtml(text: string): string {
       continue;
     }
 
-    const inlineHeading = line.match(/^(#{1,6})\s+(?:\*\*|__)(.+?)(?:\*\*|__)(\S.*)$/);
+    const inlineHeading = line.match(/^(#{1,6})\s+(?:\*\*|__)(.+?)(?:\*\*|__)[\s:：,，、]*(\S.*)$/);
     if (inlineHeading) {
       flushLists();
       const level = Math.min(4, inlineHeading[1]!.length);
@@ -184,7 +185,7 @@ export function renderMessageHtml(text: string): string {
     if (heading) {
       const headingMarkers = heading[1].match(/#{1,6}/g) ?? ["#"];
       const level = Math.min(4, headingMarkers[headingMarkers.length - 1]!.length);
-      const content = heading[2].replace(/^#{1,6}\s*/, "").trim();
+      const content = heading[2].replace(/^#{1,6}\s*/, "").trim().replace(/^<strong>(.+)<\/strong>$/, "$1");
       if (level === 1) htmlParts.push(`<h2 style="margin:10px 0 6px;">${content}</h2>`);
       if (level === 2) htmlParts.push(`<h3 style="margin:9px 0 5px;">${content}</h3>`);
       if (level === 3) htmlParts.push(`<h4 style="margin:8px 0 4px;">${content}</h4>`);

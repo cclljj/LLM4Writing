@@ -382,6 +382,9 @@ export default function CourseImplementationReportTab({
         data.userDraftStep8 ?? "",
         new Date().toISOString()
       );
+      const privacyPeerUsernames = ((data.progress ?? []) as Array<{ username?: string }>)
+        .map((item) => item.username ?? "")
+        .filter((peerUsername) => peerUsername && peerUsername !== username);
 
       const blob = await generateCourseImplementationPdf({
         activityId: selectedCourse.activityId,
@@ -405,6 +408,7 @@ export default function CourseImplementationReportTab({
         timelineMessages,
         step3SubmittedOutline: data.userStep3SubmittedOutline ?? "",
         step4RevisedOutline: data.userOutline ?? "",
+        privacyPeerUsernames,
         generatedAtIso: new Date().toISOString(),
       });
 

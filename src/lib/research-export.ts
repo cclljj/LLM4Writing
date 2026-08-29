@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { maskPeerUsernames } from "@/src/lib/report-rendering";
 import type { Activity, SessionState } from "@/src/lib/types";
 
 export type ResearchExportIdentityMode = "anonymous" | "account";
@@ -64,7 +65,7 @@ export function buildResearchStudentInputExport(input: {
       .filter((message) => message.role === "student" && Boolean(message.userId) && participantSet.has(message.userId!))
       .map((message): ResearchStudentInputRecord | null => {
         const username = message.userId!;
-        const text = normalizeText(message.text);
+        const text = normalizeText(maskPeerUsernames(message.text, username, session.participants));
         if (!text) return null;
         return {
           activityId: input.activity.id,
@@ -84,7 +85,7 @@ export function buildResearchStudentInputExport(input: {
     const makeupRecords = (session.makeupWork?.outlineEvents ?? [])
       .filter((event) => participantSet.has(event.username))
       .map((event): ResearchStudentInputRecord | null => {
-        const text = normalizeText(event.text);
+        const text = normalizeText(maskPeerUsernames(event.text, event.username, session.participants));
         if (!text) return null;
         return {
           activityId: input.activity.id,

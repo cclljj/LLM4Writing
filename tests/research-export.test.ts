@@ -37,7 +37,7 @@ function makeSession(): SessionState {
       { id: "m2", role: "student", userId: "alice", step: 3, text: "  我的想法\r\n第二行  ", at: "2026-06-07T00:01:00.000Z" },
       { id: "m3", role: "ai", userId: "alice", step: 3, text: "AI 回覆", at: "2026-06-07T00:02:00.000Z" },
       { id: "m4", role: "student", userId: "mallory", step: 3, text: "非成員", at: "2026-06-07T00:03:00.000Z" },
-      { id: "m5", role: "student", userId: "bob", step: 4, text: "同學回應", at: "2026-06-07T00:04:00.000Z" }
+      { id: "m5", role: "student", userId: "bob", step: 4, text: "alice 的例子讓我想到 bob 自己的補充", at: "2026-06-07T00:04:00.000Z" }
     ],
     stepState: { step1Substep: 1, step2Substep: 1 },
     groupGate: {},
@@ -117,6 +117,7 @@ test("research export: anonymous mode includes only participant student inputs",
   assert.deepEqual(payload.records.map((record) => record.role), ["student", "student", "student"]);
   assert.deepEqual(payload.records.map((record) => record.type), ["student_message", "student_message", "makeup_outline"]);
   assert.deepEqual(payload.records.map((record) => record.studentAccount), [undefined, undefined, undefined]);
+  assert.equal(payload.records[1]!.text, "有一位組員 的例子讓我想到 bob 自己的補充");
 });
 
 test("research export: account mode includes raw student account", () => {

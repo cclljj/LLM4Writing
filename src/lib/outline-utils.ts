@@ -26,6 +26,7 @@ export type OutlinePreview = {
 
 type BuildOutlinePreviewOptions = {
   compact?: boolean;
+  maxLines?: number;
 };
 
 export function extractMermaidText(text: string): string | null {
@@ -155,7 +156,7 @@ export function buildOutlinePreview(mermaidText: string, options: BuildOutlinePr
 
   const compact = options.compact ?? false;
   const maxCharsPerLine = compact ? 12 : 16;
-  const maxLines = compact ? 4 : 5;
+  const maxLines = options.maxLines ?? (compact ? 4 : 5);
   const charPx = compact ? 11 : 12;
   const linePx = compact ? 15 : 16;
   const padX = compact ? 12 : 14;

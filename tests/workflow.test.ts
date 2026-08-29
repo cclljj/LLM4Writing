@@ -18,6 +18,7 @@ import { validateStep3OutlineCompletion } from "../src/lib/step3-outline-validat
 import { buildStudentNextAction } from "../src/lib/student-next-action";
 import { computeNextOpenClassId } from "../src/lib/activity-store";
 import { buildStep1Question, buildStep2Question } from "../src/lib/workflow-questions";
+import { maskPeerUsernames, normalizeReportMarkdownText } from "../src/lib/report-rendering";
 import { advanceStep1Or2SubstepAfterAi, getNextSubstepKeyAfterCompletion, handleStep1Or2Group, recoverStalledStep1Or2AiWait } from "../src/lib/workflow-step1-2";
 import { isStep12FeedbackQualityRisk } from "../src/lib/step12-feedback-quality";
 import { isMakeupOutlinePending, resolveStep12GateMembers, setWaitingExclusion } from "../src/lib/session-attendance";
@@ -887,8 +888,8 @@ test("renderMessageHtml decodes markdown marker entities before heading parsing"
 
 test("renderMessageHtml collapses duplicated markdown heading prefixes", () => {
   const html = renderMessageHtml("## ### **立意取材**\n### **結構組織**");
-  assert.match(html, /<h4[^>]*><strong>立意取材<\/strong><\/h4>/);
-  assert.match(html, /<h4[^>]*><strong>結構組織<\/strong><\/h4>/);
+  assert.match(html, /<h4[^>]*>立意取材<\/h4>/);
+  assert.match(html, /<h4[^>]*>結構組織<\/h4>/);
   assert.equal(html.includes("### <strong>立意取材"), false);
   assert.equal(html.includes("## ###"), false);
 });
@@ -898,6 +899,22 @@ test("renderMessageHtml keeps inline heading body in normal paragraph text", () 
   assert.match(html, /<h4[^>]*>立意取材<\/h4>/);
   assert.match(html, /<p[^>]*>你能從自身經驗出發。<\/p>/);
   assert.equal(html.includes("<strong>立意取材</strong>你能"), false);
+});
+
+test("report markdown normalization converts HTML breaks and splits heading body text", () => {
+  const normalized = normalizeReportMarkdownText("<br>[回答範例]\n### **立意取材** 你能從自身經驗出發。");
+  assert.equal(normalized, "[回答範例]\n### **立意取材**\n你能從自身經驗出發。");
+
+  const html = renderMessageHtml("&lt;br&gt;[回答範例]\n### **立意取材**：你能從自身經驗出發。");
+  assert.equal(html.includes("&lt;br&gt;"), false);
+  assert.match(html, /<p[^>]*>\[回答範例\]<\/p>/);
+  assert.match(html, /<h4[^>]*>立意取材<\/h4>/);
+  assert.match(html, /<p[^>]*>你能從自身經驗出發。<\/p>/);
+});
+
+test("report privacy masking replaces peer account names in exported text", () => {
+  const masked = maskPeerUsernames("bob 說 alice 的例子可以補強，bob 自己也同意。", "bob", ["alice", "bob"]);
+  assert.equal(masked, "bob 說 有一位組員 的例子可以補強，bob 自己也同意。");
 });
 
 test("Step10 section title parsing removes markdown wrappers before composition", () => {
