@@ -1185,7 +1185,7 @@ Loading 規則（#270）：
 - 全班 ZIP 採全成功策略：任一學生最終失敗即 job 失敗，不提供 ZIP，前端需可重新執行。
 - 全班匯出需支援取消，並保留下載成品 TTL 與清理機制（預設 24 小時）。
 - `start/status/download/cancel` 全流程皆需做教師/admin 權限檢查與 audit log。
-- 學生成果 JSON schema `student-portfolio-report-v1.1` 需對應 PDF v1.1 的主要資料來源，至少包含課程資訊、學生帳號/姓名、摘要評分、產出時間、完成時間、Step3 原始架構圖、Step4 修正版架構圖與完整互動歷程。輸出內容保留原始文字/Mermaid/Markdown，不轉 HTML；若文字含其他同組成員帳號，需以「有一位組員」遮蔽。
+- 學生成果 JSON schema `student-portfolio-report-v1.1` 需對應 PDF v1.1 的主要資料來源，至少包含課程資訊、學生帳號/姓名、摘要評分、產出時間、完成時間、Step3 原始架構圖、Step4 修正版架構圖與完整互動歷程。Step3/Step4 架構圖需同時保留在相容舊欄位 `artifacts`，並以 `stepArtifacts` 明確列成 Step 3 / Step 4 步驟成果；即使某一步沒有內容也需列出並標示 `available=false`。輸出內容保留原始文字/Mermaid/Markdown，不轉 HTML；若文字含其他同組成員帳號，需以「有一位組員」遮蔽。
 - PDF v1.1 至少需含：
   - 封面版本標示為 `Version: 1.1`（不顯示 `Student Portfolio PDF v1`）
   - 學生摘要（帳號、姓名、班級、校名、課程 ID）

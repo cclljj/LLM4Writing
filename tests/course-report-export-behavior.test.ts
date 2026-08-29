@@ -78,7 +78,84 @@ test("student portfolio JSON mirrors report input and masks peer accounts", () =
   assert.equal(payload.summary.starLabel, "★★★★★");
   assert.equal(payload.timelineMessages[0]?.stepName, "生成論點");
   assert.equal(payload.timelineMessages[0]?.text, "有一位組員 給我的提醒");
+  assert.equal(payload.artifacts.step3SubmittedOutline, "graph TD\nA[alice 原始想法]");
   assert.equal(payload.artifacts.step4RevisedOutline, "graph TD\nA[alice] --> B[有一位組員 的建議]");
+  assert.deepEqual(
+    payload.stepArtifacts.map((artifact) => ({
+      step: artifact.step,
+      artifactType: artifact.artifactType,
+      available: artifact.available,
+      content: artifact.content,
+    })),
+    [
+      {
+        step: 3,
+        artifactType: "step3_submitted_outline",
+        available: true,
+        content: "graph TD\nA[alice 原始想法]",
+      },
+      {
+        step: 4,
+        artifactType: "step4_revised_outline",
+        available: true,
+        content: "graph TD\nA[alice] --> B[有一位組員 的建議]",
+      },
+    ]
+  );
+});
+
+test("student portfolio JSON lists Step 3 and Step 4 artifacts even when content is missing", () => {
+  const payload = buildCourseImplementationPortfolioJson({
+    activityId: "oc-001",
+    school: "DemoSchool",
+    classNumber: "701",
+    title: "作文題目",
+    username: "alice",
+    name: "Alice",
+    metric: {
+      stars: 2,
+      stepText: "Step 2",
+      maxStep: 2,
+      messageCount: 1,
+      rejectedCount: 0,
+      step3OutlineChars: 0,
+      draftStep6Chars: 0,
+      joined: true,
+    },
+    starLabel: "★★☆☆☆",
+    starRationales: ["有加入/互動紀錄（+1）。"],
+    timelineMessages: [],
+    step3SubmittedOutline: "",
+    step4RevisedOutline: "",
+    privacyPeerUsernames: [],
+    generatedAtIso: "2026-05-26T11:00:00.000Z",
+  });
+
+  assert.deepEqual(
+    payload.stepArtifacts.map((artifact) => ({
+      step: artifact.step,
+      stepName: artifact.stepName,
+      contentFormat: artifact.contentFormat,
+      available: artifact.available,
+      content: artifact.content,
+    })),
+    [
+      {
+        step: 3,
+        stepName: "生成論點",
+        contentFormat: "mermaid",
+        available: false,
+        content: "",
+      },
+      {
+        step: 4,
+        stepName: "對比修正",
+        contentFormat: "mermaid",
+        available: false,
+        content: "",
+      },
+    ]
+  );
 });
 
 test("class ZIP export behavior: getDownloadBuffer returns only for succeeded jobs with zip payload", () => {

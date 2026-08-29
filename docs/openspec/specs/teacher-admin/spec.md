@@ -462,6 +462,7 @@ The course implementation report SHALL preserve both the student's original Step
 - **WHEN** the teacher exports an individual student's portfolio JSON
 - **THEN** the JSON schema is `student-portfolio-report-v1.1`
 - **AND** it includes the same major source data as the student's PDF report: course metadata, student identity, summary metrics, completion time, Step3 original outline, Step4 revised outline, and timeline messages
+- **AND** Step3 original outline and Step4 revised outline are explicitly listed in `stepArtifacts` as Step 3 / Step 4 entries, even when the content is unavailable
 - **AND** peer account names inside exported text are masked
 
 #### Scenario: All-class portfolio export labels
