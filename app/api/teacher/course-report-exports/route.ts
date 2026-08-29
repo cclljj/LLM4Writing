@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/src/lib/auth-server";
-import { createExportJob, listJobsByOwner } from "@/src/lib/course-report-export";
+import { createExportJob, listJobsByOwner, type ExportJobFormat } from "@/src/lib/course-report-export";
 
 export async function GET() {
   const user = await getCurrentUser();
@@ -17,10 +17,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
-  const body = (await request.json().catch(() => ({}))) as { activityId?: string; classNumber?: string };
+  const body = (await request.json().catch(() => ({}))) as { activityId?: string; classNumber?: string; format?: string };
   const activityId = (body.activityId ?? "").trim();
   const classNumber = (body.classNumber ?? "").trim();
-  if (!activityId || !classNumber) {
+  const format = ((body.format ?? "pdf").trim() || "pdf") as ExportJobFormat;
+  if (!activityId || !classNumber || !["pdf", "json"].includes(format)) {
     return NextResponse.json({ error: "invalid_request" }, { status: 400 });
   }
 
@@ -30,6 +31,7 @@ export async function POST(request: NextRequest) {
       ownerRole: user.role,
       activityId,
       classNumber,
+      format,
     });
     return NextResponse.json({ jobId: job.id, status: job.status });
   } catch (error) {

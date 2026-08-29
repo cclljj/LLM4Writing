@@ -456,6 +456,21 @@ The course implementation report SHALL preserve both the student's original Step
 - **WHEN** a teacher opens the student's course implementation report
 - **THEN** the report SHALL show Step 3 as the original submitted architecture diagram and Step 4 as the revised architecture diagram, even when the corresponding step has no dialogue messages
 
+#### Scenario: Student portfolio JSON export
+
+- **GIVEN** a teacher views an ended course implementation report
+- **WHEN** the teacher exports an individual student's portfolio JSON
+- **THEN** the JSON schema is `student-portfolio-report-v1.1`
+- **AND** it includes the same major source data as the student's PDF report: course metadata, student identity, summary metrics, completion time, Step3 original outline, Step4 revised outline, and timeline messages
+- **AND** peer account names inside exported text are masked
+
+#### Scenario: All-class portfolio export labels
+
+- **GIVEN** a teacher views an ended course implementation report
+- **WHEN** the teacher uses class-level exports
+- **THEN** the UI exposes `一鍵下載全班 PDF` and `一鍵下載全班 JSON`
+- **AND** the UI does not label those buttons as ZIP even when the backend packages class outputs as zip archives
+
 ### Requirement: Audit Log
 
 The admin console SHALL provide a recent operation log grouped for review.

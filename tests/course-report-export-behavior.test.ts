@@ -4,10 +4,12 @@ import { resolveStudentReportCompletedAtIso } from "../src/lib/course-report-com
 import { shouldTreatAsZipDownload } from "../src/lib/course-report-download";
 import { buildCourseReportTimelineItems, injectStep8DraftTimeline } from "../src/lib/course-report-pdf-timeline";
 import { getDownloadBuffer, type ExportJob } from "../src/lib/course-report-export";
+import { buildCourseImplementationPortfolioJson } from "../src/lib/courseImplementationPortfolioJson";
 
 function makeJob(overrides: Partial<ExportJob> = {}): ExportJob {
   return {
     id: "exp_1",
+    format: "pdf",
     ownerUsername: "teacher1",
     ownerRole: "teacher",
     activityId: "oc-001",
@@ -36,6 +38,47 @@ test("zip download guard behavior: only OK + zip content-type is downloadable", 
   assert.equal(shouldTreatAsZipDownload({ ok: true, contentType: "application/zip; charset=binary" }), true);
   assert.equal(shouldTreatAsZipDownload({ ok: true, contentType: "application/json" }), false);
   assert.equal(shouldTreatAsZipDownload({ ok: false, contentType: "application/zip" }), false);
+});
+
+test("student portfolio JSON mirrors report input and masks peer accounts", () => {
+  const payload = buildCourseImplementationPortfolioJson({
+    activityId: "oc-001",
+    school: "DemoSchool",
+    classNumber: "701",
+    title: "作文題目",
+    username: "alice",
+    name: "Alice",
+    metric: {
+      stars: 5,
+      stepText: "Step 10",
+      maxStep: 10,
+      messageCount: 8,
+      rejectedCount: 0,
+      step3OutlineChars: 120,
+      draftStep6Chars: 300,
+      joined: true,
+    },
+    starLabel: "★★★★★",
+    starRationales: ["完成到 Step 10。"],
+    timelineMessages: [
+      { role: "student", step: 3, text: "bob 給我的提醒", at: "2026-05-26T10:00:00.000Z" },
+      { role: "ai", step: 10, text: "## 總結報告\\n內容", at: "2026-05-26T10:30:00.000Z" },
+    ],
+    step3SubmittedOutline: "graph TD\nA[alice 原始想法]",
+    step4RevisedOutline: "graph TD\nA[alice] --> B[bob 的建議]",
+    privacyPeerUsernames: ["bob"],
+    generatedAtIso: "2026-05-26T11:00:00.000Z",
+    completedAtIso: "2026-05-26T10:30:00.000Z",
+  });
+
+  assert.equal(payload.schemaVersion, "student-portfolio-report-v1.1");
+  assert.equal(payload.reportVersion, "1.1");
+  assert.equal(payload.student.username, "alice");
+  assert.equal(payload.course.activityId, "oc-001");
+  assert.equal(payload.summary.starLabel, "★★★★★");
+  assert.equal(payload.timelineMessages[0]?.stepName, "生成論點");
+  assert.equal(payload.timelineMessages[0]?.text, "有一位組員 給我的提醒");
+  assert.equal(payload.artifacts.step4RevisedOutline, "graph TD\nA[alice] --> B[有一位組員 的建議]");
 });
 
 test("class ZIP export behavior: getDownloadBuffer returns only for succeeded jobs with zip payload", () => {

@@ -8,11 +8,14 @@ import { generateCourseImplementationPdfBytes, type CourseImplementationPdfInput
 import { recordAuditLog } from "@/src/lib/audit-log-store";
 import { resolveStudentReportCompletedAtIso } from "@/src/lib/course-report-completion-time";
 import { injectStep8DraftTimeline } from "@/src/lib/course-report-pdf-timeline";
+import { buildCourseImplementationPortfolioJsonString } from "@/src/lib/courseImplementationPortfolioJson";
 
 export type ExportJobStatus = "queued" | "running" | "retrying" | "packaging" | "succeeded" | "failed" | "canceled";
+export type ExportJobFormat = "pdf" | "json";
 
 export type ExportJob = {
   id: string;
+  format: ExportJobFormat;
   ownerUsername: string;
   ownerRole: "teacher" | "admin";
   activityId: string;
@@ -63,7 +66,7 @@ function wait(ms: number): Promise<void> {
 }
 
 function isRetryableError(message: string): boolean {
-  return message === "pdf_font_load_failed" || message === "personal_progress_failed" || message === "report_pdf_generate_failed";
+  return ["pdf_font_load_failed", "personal_progress_failed", "report_pdf_generate_failed", "report_json_generate_failed"].includes(message);
 }
 
 function sanitizeFilename(value: string): string {
@@ -219,7 +222,7 @@ function toTimelineMessages(session: SessionState, username: string): CourseImpl
     .map((message) => ({ role: message.role, step: message.step, text: message.text, at: message.at }));
 }
 
-async function generateStudentPdfBytes(input: {
+async function buildStudentReportInput(input: {
   activityId: string;
   school: string;
   classNumber: string;
@@ -238,7 +241,7 @@ async function generateStudentPdfBytes(input: {
     draftStep6Chars: number;
     joined: boolean;
   };
-}): Promise<Uint8Array> {
+}): Promise<CourseImplementationPdfInput> {
   const session = await getSession(input.sessionId);
   if (!session) throw new Error("session_not_found");
   const courseSessions = await listSessionsByParticipant(input.username, {
@@ -266,7 +269,7 @@ async function generateStudentPdfBytes(input: {
     courseEndedAt: input.courseEndedAt,
     legacyFallbackAt: legacyCompletedAtIso,
   });
-  const payload: CourseImplementationPdfInput = {
+  return {
     activityId: input.activityId,
     school: input.school,
     classNumber: input.classNumber,
@@ -283,7 +286,16 @@ async function generateStudentPdfBytes(input: {
     generatedAtIso: nowIso(),
     completedAtIso,
   };
+}
+
+async function generateStudentPdfBytes(input: Parameters<typeof buildStudentReportInput>[0]): Promise<Uint8Array> {
+  const payload = await buildStudentReportInput(input);
   return generateCourseImplementationPdfBytes(payload);
+}
+
+async function generateStudentJsonBytes(input: Parameters<typeof buildStudentReportInput>[0]): Promise<Uint8Array> {
+  const payload = await buildStudentReportInput(input);
+  return Buffer.from(buildCourseImplementationPortfolioJsonString(payload), "utf8");
 }
 
 async function runPool(tasks: Array<() => Promise<void>>, concurrency: number): Promise<void> {
@@ -341,9 +353,11 @@ export async function createExportJob(input: {
   ownerRole: "teacher" | "admin";
   activityId: string;
   classNumber: string;
+  format?: ExportJobFormat;
 }): Promise<ExportJob> {
   cleanupExpiredJobs();
-  const dedupeKey = `${input.ownerUsername}::${input.activityId}::${input.classNumber}`;
+  const format = input.format ?? "pdf";
+  const dedupeKey = `${input.ownerUsername}::${input.activityId}::${input.classNumber}::${format}`;
   const s = store();
   const existingId = s.dedupeMap.get(dedupeKey);
   if (existingId) {
@@ -361,9 +375,13 @@ export async function createExportJob(input: {
   if (bootstrap.students.length === 0) throw new Error("no_students_with_records");
 
   const id = `exp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-  const zipFileName = `${sanitizeFilename(input.activityId)}_${sanitizeFilename(input.classNumber)}_course-report-v1.zip`;
+  const zipFileName =
+    format === "json"
+      ? `${sanitizeFilename(input.activityId)}_${sanitizeFilename(input.classNumber)}_course-report-json-v1.zip`
+      : `${sanitizeFilename(input.activityId)}_${sanitizeFilename(input.classNumber)}_course-report-v1.zip`;
   const job: ExportJob = {
     id,
+    format,
     ownerUsername: input.ownerUsername,
     ownerRole: input.ownerRole,
     activityId: input.activityId,
@@ -393,7 +411,7 @@ export async function createExportJob(input: {
     targetType: "activity_class",
     targetId: `${input.activityId}::${input.classNumber}`,
     targetLabel: `${bootstrap.school}/${input.classNumber}/${input.activityId}`,
-    details: { jobId: id, totalStudents: bootstrap.students.length }
+    details: { jobId: id, format, totalStudents: bootstrap.students.length }
   }).catch(() => undefined);
 
   void runExportJob(job.id, bootstrap).catch(() => undefined);
@@ -424,7 +442,7 @@ async function runExportJob(jobId: string, bootstrap: Awaited<ReturnType<typeof 
       job.status = attempt > 1 ? "retrying" : "running";
       job.updatedAt = nowIso();
       try {
-        const bytes = await generateStudentPdfBytes({
+        const reportInput = {
           activityId: job.activityId,
           school: bootstrap.school,
           classNumber: job.classNumber,
@@ -434,8 +452,10 @@ async function runExportJob(jobId: string, bootstrap: Awaited<ReturnType<typeof 
           name: student.name,
           sessionId: student.sessionId,
           metric: student.metric,
-        });
-        const fileName = `${sanitizeFilename(job.activityId)}_${sanitizeFilename(job.classNumber)}_${sanitizeFilename(student.username)}_course-report-v1.pdf`;
+        };
+        const bytes = job.format === "json" ? await generateStudentJsonBytes(reportInput) : await generateStudentPdfBytes(reportInput);
+        const extension = job.format === "json" ? "json" : "pdf";
+        const fileName = `${sanitizeFilename(job.activityId)}_${sanitizeFilename(job.classNumber)}_${sanitizeFilename(student.username)}_course-report-v1.${extension}`;
         zip.file(fileName, bytes);
         job.completedStudents += 1;
         job.updatedAt = nowIso();
@@ -474,7 +494,7 @@ async function runExportJob(jobId: string, bootstrap: Awaited<ReturnType<typeof 
       targetType: "activity_class",
       targetId: `${job.activityId}::${job.classNumber}`,
       targetLabel: `${job.school}/${job.classNumber}/${job.activityId}`,
-      details: { jobId: job.id, completedStudents: job.completedStudents, failedStudents: job.failedStudents, error: job.error ?? "" }
+      details: { jobId: job.id, format: job.format, completedStudents: job.completedStudents, failedStudents: job.failedStudents, error: job.error ?? "" }
     }).catch(() => undefined);
     return;
   }
@@ -494,6 +514,6 @@ async function runExportJob(jobId: string, bootstrap: Awaited<ReturnType<typeof 
     targetType: "activity_class",
     targetId: `${job.activityId}::${job.classNumber}`,
     targetLabel: `${job.school}/${job.classNumber}/${job.activityId}`,
-    details: { jobId: job.id, totalStudents: job.totalStudents }
+    details: { jobId: job.id, format: job.format, totalStudents: job.totalStudents }
   }).catch(() => undefined);
 }

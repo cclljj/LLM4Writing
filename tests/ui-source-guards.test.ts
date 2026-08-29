@@ -313,6 +313,22 @@ test("source-guard: research export is scoped, ended-only, and audited", async (
   assert.ok(routeSrc.includes("recordAuditLog"), "research export should write an audit log");
   assert.ok(routeSrc.includes("research_data_export"), "research export audit action should be explicit");
   assert.ok(uiSrc.includes("/api/teacher/research-export?"), "course report UI should call research export API");
-  assert.ok(uiSrc.includes("下載研究資料 JSON"), "course report UI should expose research JSON download");
+  assert.ok(uiSrc.includes("下載系統 Log JSON"), "course report UI should expose system log JSON download");
   assert.ok(uiSrc.includes("包含學生帳號"), "course report UI should expose explicit account identity mode");
+});
+
+test("source-guard: course report UI exposes PDF and portfolio JSON exports separately", async () => {
+  const uiSrc = await read("../app/teacher/_components/CourseImplementationReportTab.tsx");
+  const routeSrc = await read("../app/api/teacher/course-report-exports/route.ts");
+  const exportSrc = await read("../src/lib/course-report-export.ts");
+  assert.ok(uiSrc.includes("一鍵下載全班 PDF"), "class report button should name PDF export");
+  assert.ok(uiSrc.includes("一鍵下載全班 JSON"), "class report button should name portfolio JSON export");
+  assert.ok(!uiSrc.includes("一鍵下載全班 ZIP"), "class report button should not describe the zip packaging");
+  assert.ok(uiSrc.includes("downloadStudentReportJson"), "student rows should expose individual portfolio JSON download");
+  assert.ok(uiSrc.includes(">PDF<") || uiSrc.includes(": \"PDF\""), "student rows should label individual PDF button as PDF");
+  assert.ok(uiSrc.includes(">JSON<") || uiSrc.includes(": \"JSON\""), "student rows should label individual JSON button as JSON");
+  assert.ok(routeSrc.includes('format?: string'), "class report export route should accept an export format");
+  assert.ok(routeSrc.includes('["pdf", "json"].includes(format)'), "class report export route should validate export format");
+  assert.ok(exportSrc.includes('ExportJobFormat = "pdf" | "json"'), "class report export job should track output format");
+  assert.ok(exportSrc.includes("buildCourseImplementationPortfolioJsonString"), "class JSON export should use the portfolio JSON builder");
 });
