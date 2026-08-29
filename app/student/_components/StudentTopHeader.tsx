@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 
 type Identity = {
   username: string;
@@ -20,6 +21,7 @@ function readIdentity(): Identity {
 }
 
 export default function StudentTopHeader() {
+  const router = useRouter();
   const [identity, setIdentity] = useState<Identity>(() => readIdentity());
 
   useEffect(() => {
@@ -51,7 +53,7 @@ export default function StudentTopHeader() {
     localStorage.removeItem("name");
     localStorage.removeItem("school");
     localStorage.removeItem("classNumber");
-    window.location.href = "/login";
+    router.replace("/login");
   };
 
   return (

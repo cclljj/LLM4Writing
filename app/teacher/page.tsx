@@ -225,7 +225,7 @@ export default function TeacherPage() {
       window.localStorage.removeItem(TEACHER_TAB_STORAGE_KEY);
       window.localStorage.removeItem(ADMIN_TAB_STORAGE_KEY);
     }
-    window.location.href = "/login";
+    router.replace("/login");
   }
 
   const displaySchool = loginTeacherProfile?.school || loginSchool;
