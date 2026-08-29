@@ -283,6 +283,7 @@ API 輸出給學習與分組流程使用：
   supplemental: string;
   groups: ActivityGroup[];
   courseStatus?: "not_started" | "in_progress" | "paused" | "ended";
+  courseEndedAt?: string; // ISO timestamp set when courseStatus is switched to ended
 }
 ```
 
@@ -1185,6 +1186,7 @@ Loading 規則（#270）：
 - PDF v1 至少需含：
   - 封面版本標示為 `Version: 1.0`（不顯示 `Student Portfolio PDF v1`）
   - 學生摘要（帳號、姓名、班級、校名、課程 ID）
+  - 完成課程日期時間需使用該課程被切換為 `ended` 的 `courseEndedAt`；legacy 已結束課程若缺少此欄位，才可退回該生最後相關紀錄時間
   - 完整互動歷程（學生/AI/系統訊息，含步驟開場詞、摘要/總結等，需依 Step 分區輸出且每個 Step 僅出現一個區段；同一 Step 區段內需保留系統原始出現順序）
   - Step3/Step4 結構樹需以圖形呈現（非 Mermaid 原文文字），並插入在對應步驟區段位置
   - Step3/Step4 結構樹圖需自動 scale-fit 到可用頁寬與可用頁高，不可超出頁面而被左右裁切；Step4 結構樹需維持節點文字完整可讀，必要時可換至新頁呈現，不得以省略號截斷重要內容
@@ -1692,6 +1694,7 @@ Request:
 - `start`：`not_started -> in_progress`
 - `pause_resume`：`in_progress -> paused`、`paused -> in_progress`、`ended -> in_progress`
 - `end`：`in_progress|paused -> ended`
+- `end` 成功時需記錄 `courseEndedAt`（ISO timestamp），並作為課程實施報告 PDF 的完成課程日期時間；若從 `ended` 恢復為 `in_progress`，需清除舊 `courseEndedAt`，等待下次結束課程時重新寫入。
 
 ### 7.5 Admin / Course APIs
 

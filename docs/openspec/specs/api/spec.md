@@ -249,6 +249,8 @@ The system SHALL expose course control, step switching, monitor, and personal-pr
 - **GIVEN** a teacher or admin calls `POST /api/teacher/course-control`
 - **WHEN** the requested transition is valid
 - **THEN** the course state changes according to `start`, `pause_resume`, or `end`
+- **AND** an `end` transition records the timestamp when the course was switched to ended
+- **AND** resuming an ended course clears the prior ended timestamp so a later end transition can record a fresh value
 
 ### Requirement: Admin And Course APIs
 

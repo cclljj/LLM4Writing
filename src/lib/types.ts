@@ -226,6 +226,7 @@ export interface Activity {
   ownerTeacherUsername?: string;
   groups: ActivityGroup[];
   courseStatus?: "not_started" | "in_progress" | "paused" | "ended";
+  courseEndedAt?: string;
 }
 
 export interface UserAccount {

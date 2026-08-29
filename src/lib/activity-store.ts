@@ -49,6 +49,7 @@ type DomainState = {
   openClasses: OpenClassTask[];
   activityGroupMap: Record<string, ActivityGroup[]>;
   courseStatusMap: Record<string, "not_started" | "in_progress" | "paused" | "ended">;
+  courseEndedAtMap: Record<string, string>;
 };
 
 const KEY = "__llm4writing_domain_state__";
@@ -107,6 +108,7 @@ const defaultOpenClasses: OpenClassTask[] = [];
 const defaultActivityGroupMap: Record<string, ActivityGroup[]> = {};
 
 const defaultCourseStatusMap: Record<string, "not_started" | "in_progress" | "paused" | "ended"> = {};
+const defaultCourseEndedAtMap: Record<string, string> = {};
 
 function cloneState(): DomainState {
   return {
@@ -115,7 +117,8 @@ function cloneState(): DomainState {
     essays: defaultEssays.map((essay) => ({ ...essay })),
     openClasses: defaultOpenClasses.map((openClass) => ({ ...openClass })),
     activityGroupMap: JSON.parse(JSON.stringify(defaultActivityGroupMap)) as Record<string, ActivityGroup[]>,
-    courseStatusMap: { ...defaultCourseStatusMap }
+    courseStatusMap: { ...defaultCourseStatusMap },
+    courseEndedAtMap: { ...defaultCourseEndedAtMap }
   };
 }
 
@@ -201,13 +204,25 @@ function normalizeDomainState(input: unknown): DomainState {
     }
   });
 
+  const rawCourseEndedAt = raw.courseEndedAtMap && typeof raw.courseEndedAtMap === "object" ? raw.courseEndedAtMap : {};
+  const mergedCourseEndedAtMap = {
+    ...base.courseEndedAtMap,
+    ...(rawCourseEndedAt as Record<string, string>)
+  };
+  Object.entries(mergedCourseEndedAtMap).forEach(([key, value]) => {
+    if (!allowedOpenClassIds.has(key) || typeof value !== "string" || !value.trim()) {
+      delete mergedCourseEndedAtMap[key];
+    }
+  });
+
   return {
     users: mergedUsers,
     userPasswords: mergedUserPasswords,
     essays: filteredEssays,
     openClasses: filteredOpenClasses,
     activityGroupMap: mergedActivityGroupMap,
-    courseStatusMap: mergedCourseStatusMap
+    courseStatusMap: mergedCourseStatusMap,
+    courseEndedAtMap: mergedCourseEndedAtMap
   };
 }
 
@@ -226,6 +241,7 @@ const essays = state.essays;
 const openClasses = state.openClasses;
 const activityGroupMap = state.activityGroupMap;
 const courseStatusMap = state.courseStatusMap;
+const courseEndedAtMap = state.courseEndedAtMap ?? (state.courseEndedAtMap = {});
 const DOMAIN_FILE = path.join(process.cwd(), ".data", "domain-state.json");
 
 let sqlClient: Sql | undefined;
@@ -300,6 +316,11 @@ function applyState(next: DomainState) {
   Object.entries(next.courseStatusMap).forEach(([key, value]) => {
     courseStatusMap[key] = value;
   });
+
+  Object.keys(courseEndedAtMap).forEach((key) => delete courseEndedAtMap[key]);
+  Object.entries(next.courseEndedAtMap).forEach(([key, value]) => {
+    courseEndedAtMap[key] = value;
+  });
 }
 
 function snapshotState(): DomainState {
@@ -309,7 +330,8 @@ function snapshotState(): DomainState {
     essays: essays.map((item) => ({ ...item })),
     openClasses: openClasses.map((item) => ({ ...item })),
     activityGroupMap: JSON.parse(JSON.stringify(activityGroupMap)) as Record<string, ActivityGroup[]>,
-    courseStatusMap: { ...courseStatusMap }
+    courseStatusMap: { ...courseStatusMap },
+    courseEndedAtMap: { ...courseEndedAtMap }
   };
 }
 
@@ -400,12 +422,17 @@ function toActivity(openClass: OpenClassTask): Activity {
     durationMinutes: openClass.durationMinutes,
     supplemental: openClass.supplemental,
     groups: groups.map((group) => ({ ...group, members: [...group.members] })),
-    courseStatus: getCourseStatus(openClass.id)
+    courseStatus: getCourseStatus(openClass.id),
+    courseEndedAt: getCourseEndedAt(openClass.id)
   };
 }
 
 export function getCourseStatus(activityId: string): "not_started" | "in_progress" | "paused" | "ended" {
   return courseStatusMap[activityId] ?? "not_started";
+}
+
+export function getCourseEndedAt(activityId: string): string | undefined {
+  return courseEndedAtMap[activityId];
 }
 
 export function startCourse(activityId: string): { ok: true; status: "in_progress" } | { ok: false; error: string } {
@@ -420,6 +447,7 @@ export function startCourse(activityId: string): { ok: true; status: "in_progres
   }
 
   courseStatusMap[activityId] = "in_progress";
+  delete courseEndedAtMap[activityId];
   return { ok: true, status: "in_progress" };
 }
 
@@ -442,10 +470,14 @@ export function togglePauseOrResumeCourse(
   }
 
   courseStatusMap[activityId] = "in_progress";
+  delete courseEndedAtMap[activityId];
   return { ok: true, status: "in_progress" };
 }
 
-export function endCourse(activityId: string): { ok: true; status: "ended" } | { ok: false; error: string } {
+export function endCourse(
+  activityId: string,
+  endedAtIso = new Date().toISOString()
+): { ok: true; status: "ended"; endedAtIso: string } | { ok: false; error: string } {
   const activity = findActivity(activityId);
   if (!activity) {
     return { ok: false, error: "activity_not_found" };
@@ -459,7 +491,8 @@ export function endCourse(activityId: string): { ok: true; status: "ended" } | {
     return { ok: false, error: "course_already_ended" };
   }
   courseStatusMap[activityId] = "ended";
-  return { ok: true, status: "ended" };
+  courseEndedAtMap[activityId] = endedAtIso;
+  return { ok: true, status: "ended", endedAtIso };
 }
 
 function getTeacherProfile(teacherUsername: string): UserAccount | undefined {
@@ -713,6 +746,7 @@ export function upsertOpenClass(input: {
   openClasses.push(created);
   activityGroupMap[created.id] = activityGroupMap[created.id] ?? [];
   courseStatusMap[created.id] = "not_started";
+  delete courseEndedAtMap[created.id];
   return { ok: true as const, saved: toOpenClassView(created) };
 }
 
@@ -724,6 +758,7 @@ export function deleteOpenClassTask(activityId: string) {
   openClasses.splice(idx, 1);
   delete activityGroupMap[activityId];
   delete courseStatusMap[activityId];
+  delete courseEndedAtMap[activityId];
   return { ok: true as const };
 }
 

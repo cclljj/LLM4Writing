@@ -36,6 +36,7 @@ export type ActivityRow = {
   groups: ActivityGroup[];
   studentCandidates?: string[];
   courseStatus?: "not_started" | "in_progress" | "paused" | "ended";
+  courseEndedAt?: string;
 };
 
 export type MonitorSession = {

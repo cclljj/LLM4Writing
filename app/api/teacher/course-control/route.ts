@@ -62,5 +62,5 @@ export async function POST(request: NextRequest) {
   }
   await flushDomainState();
 
-  return NextResponse.json({ ok: true, status: result.status });
+  return NextResponse.json({ ok: true, status: result.status, endedAtIso: result.endedAtIso });
 }

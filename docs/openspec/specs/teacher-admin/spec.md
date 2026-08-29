@@ -295,6 +295,14 @@ The course management area SHALL provide ended-course reports and student-level 
 - **THEN** the PDF renders headings, bold emphasis, paragraphs, lists, and line breaks in a readable layout instead of showing raw formatting tokens
 - **AND** heading body text is placed in normal paragraph text rather than being merged into the heading line
 
+#### Scenario: PDF report completion datetime uses course ended time
+
+- **GIVEN** an ended course has a persisted course-ended timestamp
+- **WHEN** an individual PDF or class ZIP PDF is generated for that course
+- **THEN** the `完成課程日期時間` field uses the course-ended timestamp
+- **AND** repeated downloads at later times do not change that completion datetime
+- **AND** legacy ended courses without that timestamp may fall back to the student's last related record time
+
 #### Scenario: PDF report uses one section per step
 
 - **GIVEN** a student's persisted interaction history contains non-contiguous messages for the same step

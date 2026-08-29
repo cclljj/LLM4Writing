@@ -25,6 +25,7 @@ type EndedCourseRow = {
   title: string;
   ownerTeacherUsername: string;
   ownerTeacherName: string;
+  courseEndedAt?: string;
 };
 
 type StudentReportMetric = {
@@ -164,6 +165,7 @@ export default function CourseImplementationReportTab({
           title: activity.title,
           ownerTeacherUsername,
           ownerTeacherName,
+          courseEndedAt: activity.courseEndedAt,
         };
       })
       .sort((a, b) => b.activityId.localeCompare(a.activityId));
@@ -389,6 +391,7 @@ export default function CourseImplementationReportTab({
         data.userDraftStep8 ?? "",
         new Date().toISOString()
       );
+      const legacyCompletedAtIso = scopedMessages.at(-1)?.at;
       const privacyPeerUsernames = ((data.progress ?? []) as Array<{ username?: string }>)
         .map((item) => item.username ?? "")
         .filter((peerUsername) => peerUsername && peerUsername !== username);
@@ -417,6 +420,7 @@ export default function CourseImplementationReportTab({
         step4RevisedOutline: data.userOutline ?? "",
         privacyPeerUsernames,
         generatedAtIso: new Date().toISOString(),
+        completedAtIso: selectedCourse.courseEndedAt ?? legacyCompletedAtIso,
       });
 
       const filename = `${selectedCourse.activityId}_${selectedCourse.classNumber}_${username}_course-report-v1.pdf`;

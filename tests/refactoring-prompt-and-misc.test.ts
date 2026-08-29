@@ -4,6 +4,7 @@ import {
   computeNextOpenClassId,
   endCourse,
   findActivity,
+  getCourseEndedAt,
   getCourseStatus,
   startCourse,
   togglePauseOrResumeCourse,
@@ -50,9 +51,17 @@ test("activity store behavior: course state transitions are valid", () => {
   assert.equal(resumed.ok, true);
   assert.equal(getCourseStatus(activityId), "in_progress");
 
-  const ended = endCourse(activityId);
+  const endedAtIso = "2026-08-29T08:15:30.000Z";
+  const ended = endCourse(activityId, endedAtIso);
   assert.equal(ended.ok, true);
   assert.equal(getCourseStatus(activityId), "ended");
+  assert.equal(getCourseEndedAt(activityId), endedAtIso);
+  assert.equal(findActivity(activityId)?.courseEndedAt, endedAtIso);
+
+  const resumedAfterEnd = togglePauseOrResumeCourse(activityId);
+  assert.equal(resumedAfterEnd.ok, true);
+  assert.equal(getCourseStatus(activityId), "in_progress");
+  assert.equal(getCourseEndedAt(activityId), undefined);
 });
 
 test("activity store behavior: owner teacher username is preserved on activity projection", () => {

@@ -113,6 +113,7 @@ async function resolveExportInput(
 ): Promise<{
   school: string;
   title: string;
+  courseEndedAt?: string;
   students: Array<{
     username: string;
     name: string;
@@ -202,7 +203,7 @@ async function resolveExportInput(
     })
     .filter((row): row is NonNullable<typeof row> => Boolean(row));
 
-  return { school: activity.school, title: activity.title, students };
+  return { school: activity.school, title: activity.title, courseEndedAt: activity.courseEndedAt, students };
 }
 
 function toTimelineMessages(session: SessionState, username: string): CourseImplementationPdfInput["timelineMessages"] {
@@ -222,6 +223,7 @@ async function generateStudentPdfBytes(input: {
   school: string;
   classNumber: string;
   title: string;
+  courseEndedAt?: string;
   username: string;
   name: string;
   sessionId: string;
@@ -245,7 +247,7 @@ async function generateStudentPdfBytes(input: {
   );
   const step3SubmittedOutline = session.step3SubmittedOutlines?.[input.username] ?? "";
   const step4RevisedOutline = session.outlines?.[input.username] ?? "";
-  const completedAtIso = session.messages
+  const legacyCompletedAtIso = session.messages
     .filter((message) => message.userId === input.username || (!message.userId && (message.role === "ai" || message.role === "system")))
     .at(-1)?.at;
   const payload: CourseImplementationPdfInput = {
@@ -263,7 +265,7 @@ async function generateStudentPdfBytes(input: {
     step4RevisedOutline,
     privacyPeerUsernames: session.participants.filter((participant) => participant !== input.username),
     generatedAtIso: nowIso(),
-    completedAtIso,
+    completedAtIso: input.courseEndedAt ?? legacyCompletedAtIso,
   };
   return generateCourseImplementationPdfBytes(payload);
 }
@@ -411,6 +413,7 @@ async function runExportJob(jobId: string, bootstrap: Awaited<ReturnType<typeof 
           school: bootstrap.school,
           classNumber: job.classNumber,
           title: bootstrap.title,
+          courseEndedAt: bootstrap.courseEndedAt,
           username: student.username,
           name: student.name,
           sessionId: student.sessionId,

@@ -37,7 +37,7 @@ export type CourseImplementationPdfInput = {
   step4RevisedOutline: string;
   privacyPeerUsernames?: string[];
   generatedAtIso: string;
-  /** ISO timestamp of the student's last recorded activity (used as completion datetime). */
+  /** ISO timestamp of the course being switched to ended; legacy exports may fall back to last recorded activity. */
   completedAtIso?: string;
 };
 
