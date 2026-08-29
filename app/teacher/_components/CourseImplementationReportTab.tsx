@@ -8,6 +8,7 @@ import { ActivityRow, MonitorSession, OpenClassRow, UserRow } from "./types";
 import { generateCourseImplementationPdf } from "@/src/lib/courseImplementationPdf";
 import { injectStep8DraftTimeline } from "@/src/lib/course-report-pdf-timeline";
 import { shouldTreatAsZipDownload } from "@/src/lib/course-report-download";
+import { resolveStudentReportCompletedAtIso } from "@/src/lib/course-report-completion-time";
 import { stepNameMap } from "@/src/lib/step-names";
 
 type CourseImplementationReportTabProps = {
@@ -392,6 +393,12 @@ export default function CourseImplementationReportTab({
         new Date().toISOString()
       );
       const legacyCompletedAtIso = scopedMessages.at(-1)?.at;
+      const completedAtIso = resolveStudentReportCompletedAtIso({
+        messages: scopedMessages,
+        username,
+        courseEndedAt: selectedCourse.courseEndedAt,
+        legacyFallbackAt: legacyCompletedAtIso,
+      });
       const privacyPeerUsernames = ((data.progress ?? []) as Array<{ username?: string }>)
         .map((item) => item.username ?? "")
         .filter((peerUsername) => peerUsername && peerUsername !== username);
@@ -420,7 +427,7 @@ export default function CourseImplementationReportTab({
         step4RevisedOutline: data.userOutline ?? "",
         privacyPeerUsernames,
         generatedAtIso: new Date().toISOString(),
-        completedAtIso: selectedCourse.courseEndedAt ?? legacyCompletedAtIso,
+        completedAtIso,
       });
 
       const filename = `${selectedCourse.activityId}_${selectedCourse.classNumber}_${username}_course-report-v1.pdf`;

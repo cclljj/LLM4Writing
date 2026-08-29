@@ -269,6 +269,12 @@ The learning monitor SHALL provide group and personal records organized by step.
 
 The course management area SHALL provide ended-course reports and student-level PDF export.
 
+#### Scenario: PDF report version
+
+- **GIVEN** a teacher or admin generates a course implementation PDF
+- **WHEN** the PDF cover is rendered
+- **THEN** the cover shows `Version: 1.1`
+
 #### Scenario: Ended course list
 
 - **GIVEN** a teacher or admin opens course implementation reports
@@ -295,13 +301,15 @@ The course management area SHALL provide ended-course reports and student-level 
 - **THEN** the PDF renders headings, bold emphasis, paragraphs, lists, and line breaks in a readable layout instead of showing raw formatting tokens
 - **AND** heading body text is placed in normal paragraph text rather than being merged into the heading line
 
-#### Scenario: PDF report completion datetime uses course ended time
+#### Scenario: PDF report completion datetime prefers student Step10 time
 
 - **GIVEN** an ended course has a persisted course-ended timestamp
+- **AND** a student has a Step10 report completion message
 - **WHEN** an individual PDF or class ZIP PDF is generated for that course
-- **THEN** the `完成課程日期時間` field uses the course-ended timestamp
+- **THEN** the `完成課程日期時間` field uses the student's Step10 completion message timestamp
 - **AND** repeated downloads at later times do not change that completion datetime
-- **AND** legacy ended courses without that timestamp may fall back to the student's last related record time
+- **AND** students without a Step10 completion timestamp fall back to the course-ended timestamp
+- **AND** legacy ended courses without either timestamp may fall back to the student's last related record time
 
 #### Scenario: PDF report uses one section per step
 

@@ -1173,7 +1173,7 @@ Loading 規則（#270）：
 - 「課程紀錄」按鈕需使用 `/api/teacher/personal-progress` 載入該生個人紀錄，並在第三張卡片呈現。
 - 第三張卡片呈現方式需比照學習管理「個人對話紀錄」：依 Step 分卡、可展開/閉合、訊息角色標示一致、Step3/4 結構樹附圖、Step8 潤飾稿。
 - 第三張卡片若 Step3/Step4/Step8 無互動訊息，但已有 `userStep3SubmittedOutline` / `userOutline` / `userDraftStep8`，仍需顯示 Step3/Step4/Step8 卡片與對應成果內容。
-- 「下載」按鈕需產生「課程實施報告 PDF v1（學生個人）」並下載。
+- 「下載」按鈕需產生「課程實施報告 PDF v1.1（學生個人）」並下載。
 - 需提供「一鍵下載全班 ZIP」：由後端批次產生每位學生 PDF（檔名規則同個別下載）後打包為 ZIP。
 - 已結束課程需提供「研究資料 JSON」下載，輸出所有學生輸入內容事件列，供 IRB/研究分析使用。預設採匿名化模式；若切換為「包含學生帳號」，UI 需提示該檔案含可識別個資，需符合 IRB/同意書範圍。
 - 研究資料 JSON 每筆至少包含 `activityId`、`sessionId`、`groupId/groupName`、`studentHash`、`step`、`role="student"`、`at`、`text`；帳號模式另含 `studentAccount`。不得輸出 AI/system/internal prompt 訊息。`text` 若含其他同組成員帳號，必須以「有一位組員」遮蔽；即使帳號模式輸出該筆發言者 `studentAccount`，仍不得在文字中揭露其他組員帳號。
@@ -1183,10 +1183,10 @@ Loading 規則（#270）：
 - 全班 ZIP 採全成功策略：任一學生最終失敗即 job 失敗，不提供 ZIP，前端需可重新執行。
 - 全班匯出需支援取消，並保留下載成品 TTL 與清理機制（預設 24 小時）。
 - `start/status/download/cancel` 全流程皆需做教師/admin 權限檢查與 audit log。
-- PDF v1 至少需含：
-  - 封面版本標示為 `Version: 1.0`（不顯示 `Student Portfolio PDF v1`）
+- PDF v1.1 至少需含：
+  - 封面版本標示為 `Version: 1.1`（不顯示 `Student Portfolio PDF v1`）
   - 學生摘要（帳號、姓名、班級、校名、課程 ID）
-  - 完成課程日期時間需使用該課程被切換為 `ended` 的 `courseEndedAt`；legacy 已結束課程若缺少此欄位，才可退回該生最後相關紀錄時間
+  - 完成課程日期時間需優先使用該學生完成 Step10 總結報告的訊息時間；若抓不到 Step10 完成時間，才使用該課程被切換為 `ended` 的 `courseEndedAt`；legacy 已結束課程若兩者皆缺少，才可退回該生最後相關紀錄時間
   - 完整互動歷程（學生/AI/系統訊息，含步驟開場詞、摘要/總結等，需依 Step 分區輸出且每個 Step 僅出現一個區段；同一 Step 區段內需保留系統原始出現順序）
   - Step3/Step4 結構樹需以圖形呈現（非 Mermaid 原文文字），並插入在對應步驟區段位置
   - Step3/Step4 結構樹圖需自動 scale-fit 到可用頁寬與可用頁高，不可超出頁面而被左右裁切；Step4 結構樹需維持節點文字完整可讀，必要時可換至新頁呈現，不得以省略號截斷重要內容

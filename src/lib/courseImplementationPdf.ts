@@ -37,7 +37,7 @@ export type CourseImplementationPdfInput = {
   step4RevisedOutline: string;
   privacyPeerUsernames?: string[];
   generatedAtIso: string;
-  /** ISO timestamp of the course being switched to ended; legacy exports may fall back to last recorded activity. */
+  /** ISO timestamp of the student's Step10 completion; falls back to course-ended or legacy activity time. */
   completedAtIso?: string;
 };
 
@@ -684,7 +684,7 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
   doc.text("課程實施報告", PAGE.marginX + 16, y + 20);
   doc.setFontSize(12);
   setTextColor(COLORS.muted);
-  doc.text("Version: 1.0", PAGE.marginX + 18, y + 42);
+  doc.text("Version: 1.1", PAGE.marginX + 18, y + 42);
   setTextColor(COLORS.text);
   doc.setFontSize(11);
   doc.text(`產出時間：${formatTaipeiDateTime(input.generatedAtIso)}`, PAGE.marginX + 18, y + 62);

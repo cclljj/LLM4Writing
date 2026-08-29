@@ -6,6 +6,7 @@ import { getUsersVisibleToTeacherStore, listUsersStore } from "@/src/lib/user-st
 import { isSessionInActivityGroupScope } from "@/src/lib/monitor-session-scope";
 import { generateCourseImplementationPdfBytes, type CourseImplementationPdfInput } from "@/src/lib/courseImplementationPdf";
 import { recordAuditLog } from "@/src/lib/audit-log-store";
+import { resolveStudentReportCompletedAtIso } from "@/src/lib/course-report-completion-time";
 import { injectStep8DraftTimeline } from "@/src/lib/course-report-pdf-timeline";
 
 export type ExportJobStatus = "queued" | "running" | "retrying" | "packaging" | "succeeded" | "failed" | "canceled";
@@ -250,6 +251,12 @@ async function generateStudentPdfBytes(input: {
   const legacyCompletedAtIso = session.messages
     .filter((message) => message.userId === input.username || (!message.userId && (message.role === "ai" || message.role === "system")))
     .at(-1)?.at;
+  const completedAtIso = resolveStudentReportCompletedAtIso({
+    messages: session.messages,
+    username: input.username,
+    courseEndedAt: input.courseEndedAt,
+    legacyFallbackAt: legacyCompletedAtIso,
+  });
   const payload: CourseImplementationPdfInput = {
     activityId: input.activityId,
     school: input.school,
@@ -265,7 +272,7 @@ async function generateStudentPdfBytes(input: {
     step4RevisedOutline,
     privacyPeerUsernames: session.participants.filter((participant) => participant !== input.username),
     generatedAtIso: nowIso(),
-    completedAtIso: input.courseEndedAt ?? legacyCompletedAtIso,
+    completedAtIso,
   };
   return generateCourseImplementationPdfBytes(payload);
 }

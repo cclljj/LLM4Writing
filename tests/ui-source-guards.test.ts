@@ -48,14 +48,16 @@ test("source-guard: course implementation PDF does not pre-page-break long messa
   assert.equal(drawMessageCardSrc.includes("sanitize(msg.text).length / 42"), false, "message cards should not force long content onto a fresh page");
 });
 
-test("source-guard: course report PDFs use course-ended timestamp when available", async () => {
+test("source-guard: course report PDFs prefer Step10 completion before course-ended timestamp", async () => {
   const activityStoreSrc = await read("../src/lib/activity-store.ts");
   const tabSrc = await read("../app/teacher/_components/CourseImplementationReportTab.tsx");
   const exportSrc = await read("../src/lib/course-report-export.ts");
+  const pdfSrc = await read("../src/lib/courseImplementationPdf.ts");
   assert.ok(activityStoreSrc.includes("courseEndedAtMap"), "activity store should persist course-ended timestamps");
   assert.ok(activityStoreSrc.includes("courseEndedAt: getCourseEndedAt(openClass.id)"), "activity projection should expose course-ended timestamp");
-  assert.ok(tabSrc.includes("completedAtIso: selectedCourse.courseEndedAt ?? legacyCompletedAtIso"), "individual PDF export should prefer course-ended timestamp");
-  assert.ok(exportSrc.includes("completedAtIso: input.courseEndedAt ?? legacyCompletedAtIso"), "class ZIP PDF export should prefer course-ended timestamp");
+  assert.ok(tabSrc.includes("resolveStudentReportCompletedAtIso"), "individual PDF export should resolve student completion time");
+  assert.ok(exportSrc.includes("resolveStudentReportCompletedAtIso"), "class ZIP PDF export should resolve student completion time");
+  assert.ok(pdfSrc.includes("Version: 1.1"), "course implementation PDF should render Version: 1.1");
 });
 
 test("source-guard: monitor session type includes outline fields", async () => {

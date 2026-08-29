@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { resolveStudentReportCompletedAtIso } from "../src/lib/course-report-completion-time";
 import { shouldTreatAsZipDownload } from "../src/lib/course-report-download";
 import { buildCourseReportTimelineItems, injectStep8DraftTimeline } from "../src/lib/course-report-pdf-timeline";
 import { getDownloadBuffer, type ExportJob } from "../src/lib/course-report-export";
@@ -120,4 +121,38 @@ test("step8 timeline injection behavior: runtime step strings still insert befor
   );
 
   assert.deepEqual(injected.map((message) => String(message.step)), ["8", "Step 10", "Step 9"]);
+});
+
+test("course report completion time prefers the student's Step10 completion message", () => {
+  const completedAt = resolveStudentReportCompletedAtIso({
+    username: "alice",
+    courseEndedAt: "2026-05-26T12:00:00.000Z",
+    legacyFallbackAt: "2026-05-26T11:00:00.000Z",
+    messages: [
+      { role: "ai", userId: "alice", step: 8, text: "Step8", at: "2026-05-26T09:00:00.000Z" },
+      { role: "ai", userId: "bob", step: 10, text: "Bob Step10", at: "2026-05-26T09:30:00.000Z" },
+      { role: "ai", userId: "alice", step: "Step 10", text: "Alice Step10", at: "2026-05-26T10:00:00.000Z" },
+    ],
+  });
+
+  assert.equal(completedAt, "2026-05-26T10:00:00.000Z");
+});
+
+test("course report completion time falls back to course ended time, then legacy activity time", () => {
+  const courseEndedAt = resolveStudentReportCompletedAtIso({
+    username: "alice",
+    courseEndedAt: "2026-05-26T12:00:00.000Z",
+    legacyFallbackAt: "2026-05-26T11:00:00.000Z",
+    messages: [
+      { role: "student", userId: "alice", step: 10, text: "我看到報告了", at: "2026-05-26T10:00:00.000Z" },
+    ],
+  });
+  assert.equal(courseEndedAt, "2026-05-26T12:00:00.000Z");
+
+  const legacyFallbackAt = resolveStudentReportCompletedAtIso({
+    username: "alice",
+    legacyFallbackAt: "2026-05-26T11:00:00.000Z",
+    messages: [],
+  });
+  assert.equal(legacyFallbackAt, "2026-05-26T11:00:00.000Z");
 });
