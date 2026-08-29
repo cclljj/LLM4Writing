@@ -582,9 +582,7 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
     const cardX = PAGE.marginX;
     const cardW = contentWidth;
 
-    const messageLines = Math.max(1, Math.ceil(sanitize(msg.text).length / 42));
-    const estimatedHeight = 34 + messageLines * 18;
-    ensureSpacePx(estimatedHeight + 12);
+    ensureSpacePx(44);
 
     setFillColor(roleColor(msg.role));
     setDrawColor(COLORS.sectionStroke);

@@ -84,11 +84,12 @@ function renderStars(stars: number): string {
 
 function getStepsFromMessages(
   messages: PersonalMessage[],
-  options?: { includeStep3?: boolean; includeStep4?: boolean }
+  options?: { includeStep3?: boolean; includeStep4?: boolean; includeStep8?: boolean }
 ): number[] {
   const set = new Set(messages.map((m) => m.step));
   if (options?.includeStep3) set.add(3);
   if (options?.includeStep4) set.add(4);
+  if (options?.includeStep8) set.add(8);
   return Array.from(set).sort((a, b) => a - b);
 }
 
@@ -132,6 +133,7 @@ export default function CourseImplementationReportTab({
   const [personalMessages, setPersonalMessages] = useState<PersonalMessage[]>([]);
   const [userOutline, setUserOutline] = useState("");
   const [userStep3SubmittedOutline, setUserStep3SubmittedOutline] = useState("");
+  const [userDraftStep8, setUserDraftStep8] = useState("");
   const [personalStepExpanded, setPersonalStepExpanded] = useState<Record<number, boolean>>({});
 
   const teacherNameMap = useMemo(() => {
@@ -277,6 +279,7 @@ export default function CourseImplementationReportTab({
     setPersonalMessages([]);
     setUserOutline("");
     setUserStep3SubmittedOutline("");
+    setUserDraftStep8("");
     setPersonalStepExpanded({});
     setClassExportJobId("");
     setClassExportJob(null);
@@ -310,6 +313,9 @@ export default function CourseImplementationReportTab({
     setLoadingStudentLog(true);
     setSelectedStudent(username);
     setPersonalMessages([]);
+    setUserOutline("");
+    setUserStep3SubmittedOutline("");
+    setUserDraftStep8("");
     setPersonalStepExpanded({});
 
     try {
@@ -327,6 +333,7 @@ export default function CourseImplementationReportTab({
       setPersonalMessages((data.personalMessages ?? []) as PersonalMessage[]);
       setUserOutline(data.userOutline ?? "");
       setUserStep3SubmittedOutline(data.userStep3SubmittedOutline ?? "");
+      setUserDraftStep8(data.userDraftStep8 ?? "");
     } catch {
       setError("personal_progress_failed");
     } finally {
@@ -561,6 +568,7 @@ export default function CourseImplementationReportTab({
   const personalSteps = getStepsFromMessages(scopedPersonalMessages, {
     includeStep3: Boolean(userStep3SubmittedOutline),
     includeStep4: Boolean(userOutline),
+    includeStep8: Boolean(userDraftStep8),
   });
 
   return (
@@ -813,6 +821,13 @@ export default function CourseImplementationReportTab({
                   </div>
                 ) : null;
 
+                const step8Block = step === 8 && userDraftStep8 ? (
+                  <div style={{ borderTop: "2px solid var(--line)", padding: "12px 0", marginTop: 4 }}>
+                    <strong style={{ fontSize: 13, color: "var(--muted-strong)" }}>步驟八潤飾稿</strong>
+                    <div dangerouslySetInnerHTML={{ __html: renderMessageHtml(userDraftStep8) }} />
+                  </div>
+                ) : null;
+
                 return (
                   <div key={`personal-step-${step}`} className="card">
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
@@ -850,6 +865,7 @@ export default function CourseImplementationReportTab({
                         ))}
                         {step3Block}
                         {step4Block}
+                        {step8Block}
                       </>
                     ) : null}
                   </div>

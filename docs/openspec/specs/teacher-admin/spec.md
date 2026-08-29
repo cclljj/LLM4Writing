@@ -281,6 +281,13 @@ The course management area SHALL provide ended-course reports and student-level 
 - **WHEN** the personal record is loaded
 - **THEN** the UI shows completion rating, progress, records, and download action
 
+#### Scenario: Student report shows artifact-only Step8 work
+
+- **GIVEN** a selected student's personal progress includes `userDraftStep8` but no Step8 interaction messages
+- **WHEN** the ended course report personal record is loaded
+- **THEN** the UI still includes a Step8 card
+- **AND** the expanded Step8 card renders the polished draft with the same Markdown/HTML formatting behavior as message text
+
 #### Scenario: PDF report renders readable formatted text
 
 - **GIVEN** a student's interaction history contains Markdown headings, bold text, HTML `<br>` line breaks, or headings with body text on the same source line
@@ -294,6 +301,13 @@ The course management area SHALL provide ended-course reports and student-level 
 - **WHEN** the student PDF report timeline is generated
 - **THEN** each step appears as a single section in ascending step order
 - **AND** messages inside the same step section keep their original relative order
+
+#### Scenario: PDF report long messages flow across pages
+
+- **GIVEN** a student's step contains long interaction text
+- **WHEN** the student PDF report is generated
+- **THEN** the message body may continue across page boundaries
+- **AND** the renderer does not force the entire message card to a new page solely because of estimated body height
 
 #### Scenario: PDF report keeps Step4 structure tree readable
 

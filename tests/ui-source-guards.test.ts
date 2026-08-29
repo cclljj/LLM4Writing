@@ -30,6 +30,24 @@ test("source-guard: personal-progress route includes outline + step8 artifact fi
   assert.ok(src.includes("userDraftStep8:"), "personal-progress route must include userDraftStep8 field");
 });
 
+test("source-guard: course implementation report renders artifact-only Step8 work", async () => {
+  const src = await read("../app/teacher/_components/CourseImplementationReportTab.tsx");
+  assert.ok(src.includes("userDraftStep8"), "course report should track the Step8 polished draft artifact");
+  assert.ok(src.includes("setUserDraftStep8"), "course report should update Step8 artifact state from personal progress");
+  assert.ok(src.includes("includeStep8"), "course report should include artifact-only Step8 sections");
+  assert.ok(src.includes("步驟八潤飾稿"), "course report should label the Step8 polished draft block");
+});
+
+test("source-guard: course implementation PDF does not pre-page-break long message cards", async () => {
+  const src = await read("../src/lib/courseImplementationPdf.ts");
+  const drawMessageCardStart = src.indexOf("function drawMessageCard");
+  const renderTimelineStart = src.indexOf("async function renderTimeline", drawMessageCardStart);
+  const drawMessageCardSrc = src.slice(drawMessageCardStart, renderTimelineStart);
+  assert.ok(drawMessageCardSrc.includes("ensureSpacePx(44)"), "message cards should reserve only header space before rendering markdown");
+  assert.equal(drawMessageCardSrc.includes("estimatedHeight"), false, "message cards should not precompute whole-card height");
+  assert.equal(drawMessageCardSrc.includes("sanitize(msg.text).length / 42"), false, "message cards should not force long content onto a fresh page");
+});
+
 test("source-guard: monitor session type includes outline fields", async () => {
   const src = await read("../app/teacher/_components/types.ts");
   assert.ok(src.includes("outlines?: Record<string, string>"), "MonitorSession type must include outlines field");
