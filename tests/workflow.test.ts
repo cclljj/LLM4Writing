@@ -21,6 +21,7 @@ import { buildStep1Question, buildStep2Question } from "../src/lib/workflow-ques
 import { maskPeerUsernames, normalizeReportMarkdownText } from "../src/lib/report-rendering";
 import { advanceStep1Or2SubstepAfterAi, getNextSubstepKeyAfterCompletion, handleStep1Or2Group, recoverStalledStep1Or2AiWait } from "../src/lib/workflow-step1-2";
 import { isStep12FeedbackQualityRisk } from "../src/lib/step12-feedback-quality";
+import { parseStep9ReflectionAnswers } from "../src/lib/step9-reflection-parser";
 import { isMakeupOutlinePending, resolveStep12GateMembers, setWaitingExclusion } from "../src/lib/session-attendance";
 import {
   composeStep10Report,
@@ -106,6 +107,29 @@ test("step1/2 simple validation accepts earnest 3C-related answer and still bloc
     validateStudentAnswerSimple(session, "s1", 1, "今天中午我吃了炒飯和蛋花湯，味道不錯，吃完準備去打球流汗。") ?? "",
     /關聯性不足/
   );
+});
+
+test("step9 reflection parser keeps four answers and supports multiline bodies", () => {
+  const parsed = parseStep9ReflectionAnswers(`Q1: 我今天學到開頭要先扣題。
+第二行繼續補充第一題。
+Q2: 我覺得例子要更具體。
+Q3: 下次我會先列大綱再寫文章。
+Q4: 我想請老師幫我看結論。`);
+
+  assert.equal(parsed.size, 4);
+  assert.equal(parsed.get(1), "我今天學到開頭要先扣題。\n第二行繼續補充第一題。");
+  assert.equal(parsed.get(2), "我覺得例子要更具體。");
+  assert.equal(parsed.get(3), "下次我會先列大綱再寫文章。");
+  assert.equal(parsed.get(4), "我想請老師幫我看結論。");
+});
+
+test("step9 reflection parser exposes missing answers", () => {
+  const parsed = parseStep9ReflectionAnswers(`Q1: 我今天學到開頭要扣題。
+Q2: 我覺得例子要更具體。
+Q4: 我想請老師幫我看結論。`);
+
+  assert.equal(parsed.size, 3);
+  assert.equal(parsed.has(3), false);
 });
 
 test("step1 substeps 1-1/1-2 accept concise requirement-fitting answers", () => {

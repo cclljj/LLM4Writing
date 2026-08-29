@@ -33,6 +33,7 @@ import {
 import { buildStep1Question, buildStep2Question, buildStep9BatchPrompt, getCurrentGroupGateKey, getCurrentSubstepKey, getStep9Questions } from "@/src/lib/workflow-questions";
 import { advanceStep1Or2SubstepAfterAi, getNextSubstepKeyAfterCompletion, handleStep1Or2Group } from "@/src/lib/workflow-step1-2";
 import { excludeWaitingMembers } from "@/src/lib/session-attendance";
+import { parseStep9ReflectionAnswers } from "@/src/lib/step9-reflection-parser";
 
 function now(): string {
   return new Date().toISOString();
@@ -1651,15 +1652,7 @@ export async function sendStudentMessage(
 
   if (mode === "personal_reflection") {
     const step9Questions = getStep9Questions(session);
-    const answers = new Map<number, string>();
-    const pattern = /Q([1-4])\s*:\s*([\s\S]*?)(?=\nQ[1-4]\s*:|$)/g;
-    for (const match of text.matchAll(pattern)) {
-      const idx = Number(match[1]);
-      const body = (match[2] ?? "").trim();
-      if (idx >= 1 && idx <= 4) {
-        answers.set(idx, body);
-      }
-    }
+    const answers = parseStep9ReflectionAnswers(text);
     if (answers.size !== 4) {
       throw new Error("請一次完整回答四題（Q1~Q4）後再送出。");
     }

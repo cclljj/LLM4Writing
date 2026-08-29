@@ -241,8 +241,32 @@ function hasExplanationSignal(answer: string): boolean {
   return SIMPLE_EXPLANATION_MARKERS.some((marker) => answer.includes(marker));
 }
 
+function includesOrderedText(text: string, prefix: string, suffixes: string[], options: { requireContentBetween?: boolean } = {}): boolean {
+  let searchFrom = 0;
+  while (searchFrom < text.length) {
+    const prefixIndex = text.indexOf(prefix, searchFrom);
+    if (prefixIndex === -1) return false;
+    const suffixSearchStart = prefixIndex + prefix.length;
+    if (
+      suffixes.some((suffix) => {
+        const suffixIndex = text.indexOf(suffix, suffixSearchStart);
+        if (suffixIndex === -1) return false;
+        return !options.requireContentBetween || suffixIndex > suffixSearchStart;
+      })
+    ) {
+      return true;
+    }
+    searchFrom = suffixSearchStart;
+  }
+  return false;
+}
+
 function hasConditionStructure(answer: string): boolean {
-  return /如果.+(就|才|則)|只要.+(就|都)|除非.+否則/u.test(answer);
+  return (
+    includesOrderedText(answer, "如果", ["就", "才", "則"], { requireContentBetween: true }) ||
+    includesOrderedText(answer, "只要", ["就", "都"], { requireContentBetween: true }) ||
+    includesOrderedText(answer, "除非", ["否則"], { requireContentBetween: true })
+  );
 }
 
 function hasBoundaryOrClassificationStructure(answer: string): boolean {
@@ -254,11 +278,18 @@ function hasComparisonOrTradeoffStructure(answer: string): boolean {
 }
 
 function hasExampleOrContextStructure(answer: string): boolean {
-  return /(例如|像是|比如|像|情況|情境|平常|生活中|在.*時候)/u.test(answer);
+  return (
+    ["例如", "像是", "比如", "像", "情況", "情境", "平常", "生活中"].some((marker) => answer.includes(marker)) ||
+    includesOrderedText(answer, "在", ["時候"])
+  );
 }
 
 function hasStanceStructure(answer: string): boolean {
-  return /(主張|應該|需要|必須|要|建議|支持|反對|不該|少.+多|多.+少)/u.test(answer);
+  return (
+    ["主張", "應該", "需要", "必須", "要", "建議", "支持", "反對", "不該"].some((marker) => answer.includes(marker)) ||
+    includesOrderedText(answer, "少", ["多"], { requireContentBetween: true }) ||
+    includesOrderedText(answer, "多", ["少"], { requireContentBetween: true })
+  );
 }
 
 function hasGeneralSemanticAnswerStructure(answer: string): boolean {
