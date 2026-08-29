@@ -91,3 +91,33 @@ test("course report timeline behavior: groups repeated step messages into one se
     ["outline:3", "message:9:Step9 第一則", "message:9:Step9 第二則", "message:10:Step10 報告"]
   );
 });
+
+test("course report timeline behavior: normalizes runtime step strings before ordering", () => {
+  const items = buildCourseReportTimelineItems({
+    messages: [
+      { role: "ai", step: "Step 10" as unknown as number, text: "Step10 報告", at: "2026-05-26T10:00:00.000Z" },
+      { role: "system", step: "8" as unknown as number, text: "Step8 最終稿", at: "2026-05-26T10:01:00.000Z" },
+      { role: "student", step: "9" as unknown as number, text: "Step9 反思", at: "2026-05-26T10:02:00.000Z" },
+    ],
+    hasStep3Outline: false,
+    hasStep4Outline: false,
+  });
+
+  assert.deepEqual(
+    items.map((item) => item.type === "message" ? `${item.msg.step}:${item.msg.text}` : `outline:${item.step}`),
+    ["8:Step8 最終稿", "9:Step9 反思", "10:Step10 報告"]
+  );
+});
+
+test("step8 timeline injection behavior: runtime step strings still insert before Step9+", () => {
+  const injected = injectStep8DraftTimeline(
+    [
+      { role: "ai", step: "Step 10" as unknown as number, text: "Step10 報告", at: "2026-05-26T10:00:00.000Z" },
+      { role: "student", step: "Step 9" as unknown as number, text: "Step9 反思", at: "2026-05-26T10:01:00.000Z" },
+    ],
+    "Step8 最終稿",
+    "2026-05-26T10:02:00.000Z"
+  );
+
+  assert.deepEqual(injected.map((message) => String(message.step)), ["8", "Step 10", "Step 9"]);
+});
