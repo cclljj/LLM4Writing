@@ -159,18 +159,6 @@ export async function GET(request: Request, context: { params: Promise<{ session
     session.step3SubmittedOutlines = {};
     changed = true;
   }
-  if (session.currentStep >= 4) {
-    const doneUsers = new Set(session.groupGate?.["3-complete"] ?? []);
-    session.participants.forEach((participant) => {
-      if (!doneUsers.has(participant)) return;
-      const snapshot = session.step3SubmittedOutlines?.[participant]?.trim() ?? "";
-      const outline = session.outlines?.[participant]?.trim() ?? "";
-      if (!snapshot && outline) {
-        session.step3SubmittedOutlines![participant] = outline;
-        changed = true;
-      }
-    });
-  }
   const reconciled = await reconcileCompletedStep9Users(session);
   if (reconciled) {
     changed = true;

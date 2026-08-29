@@ -448,7 +448,7 @@ The admin console SHALL provide Prompt/LLM diagnostics, KPI trends, and non-sens
 
 ### Requirement: Course Implementation Report
 
-The course implementation report SHALL preserve both the student's original Step 3 architecture diagram and the revised Step 4 architecture diagram.
+The course implementation report SHALL preserve both the student's original Step 3 architecture diagram and the revised Step 4 architecture diagram. Step 3 SHALL use the persisted submission snapshot and SHALL NOT be backfilled from the mutable Step4 outline.
 
 #### Scenario: Architecture diagram history
 

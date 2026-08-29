@@ -1,7 +1,7 @@
 import JSZip from "jszip";
 import { SessionState } from "@/src/lib/types";
 import { getAllActivities, hydrateDomainState } from "@/src/lib/activity-store";
-import { getSession, listMonitorSessionSummariesByActivityId } from "@/src/lib/store";
+import { getSession, listMonitorSessionSummariesByActivityId, listSessionsByParticipant } from "@/src/lib/store";
 import { getUsersVisibleToTeacherStore, listUsersStore } from "@/src/lib/user-store";
 import { isSessionInActivityGroupScope } from "@/src/lib/monitor-session-scope";
 import { generateCourseImplementationPdfBytes, type CourseImplementationPdfInput } from "@/src/lib/courseImplementationPdf";
@@ -241,13 +241,22 @@ async function generateStudentPdfBytes(input: {
 }): Promise<Uint8Array> {
   const session = await getSession(input.sessionId);
   if (!session) throw new Error("session_not_found");
+  const courseSessions = await listSessionsByParticipant(input.username, {
+    activityId: input.activityId,
+    workflow: "spec10",
+  });
+  const step3Session = courseSessions.find((candidate) => candidate.step3SubmittedOutlines?.[input.username]?.trim());
+  const step4Session = courseSessions.find((candidate) => {
+    const personalStep = candidate.personalSteps?.[input.username] ?? candidate.currentStep;
+    return personalStep >= 4 && candidate.outlines?.[input.username]?.trim();
+  });
   const timelineMessages = injectStep8DraftTimeline(
     toTimelineMessages(session, input.username),
     session.draftStep8?.[input.username] ?? "",
     nowIso()
   );
-  const step3SubmittedOutline = session.step3SubmittedOutlines?.[input.username] ?? "";
-  const step4RevisedOutline = session.outlines?.[input.username] ?? "";
+  const step3SubmittedOutline = step3Session?.step3SubmittedOutlines?.[input.username] ?? "";
+  const step4RevisedOutline = step4Session?.outlines?.[input.username] ?? "";
   const legacyCompletedAtIso = session.messages
     .filter((message) => message.userId === input.username || (!message.userId && (message.role === "ai" || message.role === "system")))
     .at(-1)?.at;

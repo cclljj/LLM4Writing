@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/src/lib/auth-server";
 import { getAllActivities, hydrateDomainState } from "@/src/lib/activity-store";
-import { getSession } from "@/src/lib/store";
+import { getSession, listSessionsByParticipant } from "@/src/lib/store";
 import { getUsersVisibleToTeacherStore, listUsersStore } from "@/src/lib/user-store";
 import { isSessionInActivityGroupScope } from "@/src/lib/monitor-session-scope";
+import { resolveStudentCourseLatestWork } from "@/src/lib/student-course-history";
 
 function normalizeText(text: string): string {
   return text.replace(/\r\n/g, "\n").trim();
@@ -47,6 +48,17 @@ export async function GET(request: NextRequest) {
   if (username && !session.participants.includes(username)) {
     return NextResponse.json({ error: "participant_not_found" }, { status: 404 });
   }
+
+  const courseSessions = username && session.activityId
+    ? await listSessionsByParticipant(username, { activityId: session.activityId, workflow: "spec10" })
+    : [session];
+  const latestPersonalStep = Math.max(
+    ...courseSessions.map((item) => item.personalSteps?.[username] ?? item.currentStep),
+    session.personalSteps?.[username] ?? session.currentStep
+  );
+  const latestWork = username
+    ? resolveStudentCourseLatestWork({ sessions: courseSessions, username, latestPersonalStep })
+    : undefined;
 
   const progress = session.participants.map((participant) => {
     const ownMessages = session.messages.filter((message) => message.userId === participant);
@@ -106,8 +118,8 @@ export async function GET(request: NextRequest) {
     activityTitle: session.activityTitle,
     progress,
     personalMessages,
-    userOutline: username ? (session.outlines?.[username] ?? "") : undefined,
-    userStep3SubmittedOutline: username ? (session.step3SubmittedOutlines?.[username] ?? "") : undefined,
+    userOutline: username ? (latestWork?.step4Outline ?? "") : undefined,
+    userStep3SubmittedOutline: username ? (latestWork?.step3SubmittedOutline ?? "") : undefined,
     userDraftStep8: username ? (session.draftStep8?.[username] ?? "") : undefined
   });
 }

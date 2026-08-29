@@ -75,6 +75,17 @@ test("source-guard: split session artifacts merge with legacy outline snapshots 
   );
 });
 
+test("source-guard: Step3 report data never backfills from the mutable Step4 outline", async () => {
+  const sessionRouteSrc = await read("../app/api/session/[sessionId]/route.ts");
+  const engineSrc = await read("../src/lib/engine.ts");
+  const progressSrc = await read("../app/api/teacher/personal-progress/route.ts");
+  const exportSrc = await read("../src/lib/course-report-export.ts");
+  assert.equal(sessionRouteSrc.includes("step3SubmittedOutlines![participant] = outline"), false, "session reads must not copy Step4 outline into Step3 snapshot");
+  assert.equal(engineSrc.includes("step3SubmittedOutlines![participant] = outline"), false, "step transitions must not copy Step4 outline into Step3 snapshot");
+  assert.ok(progressSrc.includes("resolveStudentCourseLatestWork"), "web report should resolve Step3 from course history");
+  assert.ok(exportSrc.includes("step3Session?.step3SubmittedOutlines"), "PDF should use the persisted Step3 snapshot session");
+});
+
 test("source-guard: learning monitor uses outline labels and participant mapping", async () => {
   // Dialogue log rendering was extracted to GroupLogPanel/PersonalLogPanel in #457.
   const tabSrc = await read("../app/teacher/_components/LearningMonitorTab.tsx");
