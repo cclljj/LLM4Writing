@@ -78,6 +78,12 @@ The system SHALL expose student course discovery, joining, and history APIs scop
 - **WHEN** the student has participation records for that activity
 - **THEN** the response includes viewer, activity, summary, latest session, latest work, and sessions
 
+#### Scenario: Course history recovers latest work across sessions
+
+- **GIVEN** a student has multiple participation sessions for the same activity
+- **WHEN** the newest session lacks a Step6, Step7, Step8, or Step10 artifact/report that exists in another session for the same student
+- **THEN** `latestWork` includes the newest non-empty value for each field across that student's activity sessions
+
 #### Scenario: Course history does not expose future-step artifacts early
 
 - **GIVEN** a student's latest personal step is before Step4

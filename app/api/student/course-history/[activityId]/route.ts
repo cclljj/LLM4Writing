@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/src/lib/auth-server";
 import { getAllActivities, hydrateDomainState } from "@/src/lib/activity-store";
 import { listSessionsByParticipant } from "@/src/lib/store";
+import { resolveStudentCourseLatestWork } from "@/src/lib/student-course-history";
 
 export async function GET(_: Request, context: { params: Promise<{ activityId: string }> }) {
   const user = await getCurrentUser();
@@ -32,6 +33,7 @@ export async function GET(_: Request, context: { params: Promise<{ activityId: s
 
   const latest = sessions[0]!;
   const latestPersonalStep = latest.personalSteps?.[user.username] ?? latest.currentStep;
+  const latestWork = resolveStudentCourseLatestWork({ sessions, username: user.username, latestPersonalStep });
   const ownMessages = latest.messages.filter((message) => message.userId === user.username);
   const totalMessages = sessions.reduce((sum, session) => sum + session.messages.filter((m) => m.userId === user.username).length, 0);
   const maxStepReached = sessions.reduce(
@@ -67,15 +69,7 @@ export async function GET(_: Request, context: { params: Promise<{ activityId: s
       participants: latest.participants,
       messages: latest.messages
     },
-    latestWork: {
-      outline: latest.outlines[user.username] ?? "",
-      step3SubmittedOutline: latest.step3SubmittedOutlines?.[user.username] ?? "",
-      step4Outline: latestPersonalStep >= 4 ? (latest.outlines[user.username] ?? "") : "",
-      draftStep6: latest.draftStep6[user.username] ?? "",
-      draftStep8: latest.draftStep8[user.username] ?? "",
-      step7Report: latest.reports.step7[user.username] ?? "",
-      step10Report: latest.reports.step10[user.username] ?? ""
-    },
+    latestWork,
     sessions: sessions.map((session) => ({
       sessionId: session.id,
       createdAt: session.createdAt,
