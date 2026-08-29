@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { shouldTreatAsZipDownload } from "../src/lib/course-report-download";
-import { injectStep8DraftTimeline } from "../src/lib/course-report-pdf-timeline";
+import { buildCourseReportTimelineItems, injectStep8DraftTimeline } from "../src/lib/course-report-pdf-timeline";
 import { getDownloadBuffer, type ExportJob } from "../src/lib/course-report-export";
 
 function makeJob(overrides: Partial<ExportJob> = {}): ExportJob {
@@ -62,4 +62,32 @@ test("step8 timeline injection behavior: include/skip by content and duplication
 
   const empty = injectStep8DraftTimeline(base, "   ", "2026-05-26T10:01:00.000Z");
   assert.equal(empty.length, 1);
+});
+
+test("step8 timeline injection behavior: inserts final draft before Step9+ messages", () => {
+  const base = [
+    { role: "student", step: 8, text: "原本 Step8", at: "2026-05-26T10:00:00.000Z" },
+    { role: "system", step: 9, text: "Step9 反思題", at: "2026-05-26T10:01:00.000Z" },
+    { role: "student", step: 9, text: "Step9 回答", at: "2026-05-26T10:02:00.000Z" },
+  ];
+  const injected = injectStep8DraftTimeline(base, "這是 Step8 最終稿", "2026-05-26T10:03:00.000Z");
+  assert.deepEqual(injected.map((message) => message.step), [8, 8, 9, 9]);
+  assert.ok(injected[1]?.text.includes("步驟八最終稿"));
+});
+
+test("course report timeline behavior: groups repeated step messages into one section order", () => {
+  const items = buildCourseReportTimelineItems({
+    messages: [
+      { role: "system", step: 9, text: "Step9 第一則", at: "2026-05-26T10:00:00.000Z" },
+      { role: "ai", step: 10, text: "Step10 報告", at: "2026-05-26T10:01:00.000Z" },
+      { role: "student", step: 9, text: "Step9 第二則", at: "2026-05-26T10:02:00.000Z" },
+    ],
+    hasStep3Outline: true,
+    hasStep4Outline: false,
+  });
+
+  assert.deepEqual(
+    items.map((item) => item.type === "outline" ? `outline:${item.step}` : `message:${item.msg.step}:${item.msg.text}`),
+    ["outline:3", "message:9:Step9 第一則", "message:9:Step9 第二則", "message:10:Step10 報告"]
+  );
 });

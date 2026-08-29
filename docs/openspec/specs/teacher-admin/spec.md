@@ -288,6 +288,13 @@ The course management area SHALL provide ended-course reports and student-level 
 - **THEN** the PDF renders headings, bold emphasis, paragraphs, lists, and line breaks in a readable layout instead of showing raw formatting tokens
 - **AND** heading body text is placed in normal paragraph text rather than being merged into the heading line
 
+#### Scenario: PDF report uses one section per step
+
+- **GIVEN** a student's persisted interaction history contains non-contiguous messages for the same step
+- **WHEN** the student PDF report timeline is generated
+- **THEN** each step appears as a single section in ascending step order
+- **AND** messages inside the same step section keep their original relative order
+
 #### Scenario: PDF report keeps Step4 structure tree readable
 
 - **GIVEN** the student's Step4 revised structure tree contains long node text

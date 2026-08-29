@@ -1,4 +1,5 @@
 import { jsPDF } from "jspdf";
+import { buildCourseReportTimelineItems } from "@/src/lib/course-report-pdf-timeline";
 import { buildOutlinePreview } from "@/src/lib/outline-utils";
 import { maskPeerUsernames, normalizeReportMarkdownText } from "@/src/lib/report-rendering";
 import { formatTaipeiDateTime } from "@/src/lib/time-format";
@@ -612,22 +613,12 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
     const step4Outline = sanitize(input.step4RevisedOutline);
     const hasStep4Outline = step4Outline.length > 0;
 
-    type TimelineItem = { type: "message"; msg: PdfMessage } | { type: "outline"; step: 3 | 4 };
-    const timelineItems: TimelineItem[] = messages.map((msg) => ({ type: "message", msg }));
-    const hasStep3Message = messages.some((msg) => msg.step === 3);
-    const hasStep4Message = messages.some((msg) => msg.step === 4);
+    const timelineItems = buildCourseReportTimelineItems({
+      messages,
+      hasStep3Outline: Boolean(step3Outline),
+      hasStep4Outline,
+    });
 
-    const insertOutlineAnchor = (step: 3 | 4): void => {
-      const targetIndex = timelineItems.findIndex((item) => item.type === "message" && item.msg.step > step);
-      const anchor: TimelineItem = { type: "outline", step };
-      if (targetIndex < 0) timelineItems.push(anchor);
-      else timelineItems.splice(targetIndex, 0, anchor);
-    };
-
-    if (step3Outline && !hasStep3Message) insertOutlineAnchor(3);
-    if (hasStep4Outline && !hasStep4Message) insertOutlineAnchor(4);
-
-    let currentStep = -1;
     let insertedStep3 = false;
     let insertedStep4 = false;
     let messageIndex = 0;
@@ -635,8 +626,9 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
     for (let i = 0; i < timelineItems.length; i += 1) {
       const item = timelineItems[i]!;
       const step = item.type === "outline" ? item.step : item.msg.step;
-      if (step !== currentStep) {
-        currentStep = step;
+      const previous = timelineItems[i - 1];
+      const previousStep = previous ? (previous.type === "outline" ? previous.step : previous.msg.step) : -1;
+      if (step !== previousStep) {
         ensureSpacePx(34);
         setFillColor([226, 232, 240]);
         doc.roundedRect(PAGE.marginX, y - 4, contentWidth, 24, 5, 5, "F");
