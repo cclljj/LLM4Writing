@@ -66,6 +66,15 @@ test("source-guard: monitor session type includes outline fields", async () => {
   assert.ok(src.includes("step3SubmittedOutlines?: Record<string, string>"), "MonitorSession type must include step3SubmittedOutlines field");
 });
 
+test("source-guard: split session artifacts merge with legacy outline snapshots per user", async () => {
+  const storeSrc = await read("../src/lib/store.ts");
+  assert.ok(storeSrc.includes("outlines: mergeStringRecord(session.outlines, parts.outlines)"), "store should merge split Step4 outlines with legacy payloads");
+  assert.ok(
+    storeSrc.includes("step3SubmittedOutlines: mergeStringRecord(session.step3SubmittedOutlines, parts.step3SubmittedOutlines)"),
+    "store should preserve legacy Step3 snapshots when split artifacts are partial"
+  );
+});
+
 test("source-guard: learning monitor uses outline labels and participant mapping", async () => {
   // Dialogue log rendering was extracted to GroupLogPanel/PersonalLogPanel in #457.
   const tabSrc = await read("../app/teacher/_components/LearningMonitorTab.tsx");

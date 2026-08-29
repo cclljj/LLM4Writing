@@ -895,12 +895,12 @@ async function replaceSessionParticipantRows(sql: Sql | TransactionSql, session:
 function mergeLegacyPayloadParts(session: SessionState, parts: SessionPartsById[string]): SessionPartsById[string] {
   return {
     messages: parts.messages.length > 0 ? parts.messages : (session.messages ?? []),
-    outlines: Object.keys(parts.outlines).length > 0 ? parts.outlines : (session.outlines ?? {}),
-    step3SubmittedOutlines: Object.keys(parts.step3SubmittedOutlines).length > 0
-      ? parts.step3SubmittedOutlines
-      : (session.step3SubmittedOutlines ?? {}),
-    draftStep6: Object.keys(parts.draftStep6).length > 0 ? parts.draftStep6 : (session.draftStep6 ?? {}),
-    draftStep8: Object.keys(parts.draftStep8).length > 0 ? parts.draftStep8 : (session.draftStep8 ?? {}),
+    // Split artifact rows can contain only a subset of the legacy payload's users.
+    // Merge per user so an older Step3 snapshot is not discarded when Step4 was saved later.
+    outlines: mergeStringRecord(session.outlines, parts.outlines),
+    step3SubmittedOutlines: mergeStringRecord(session.step3SubmittedOutlines, parts.step3SubmittedOutlines),
+    draftStep6: mergeStringRecord(session.draftStep6, parts.draftStep6),
+    draftStep8: mergeStringRecord(session.draftStep8, parts.draftStep8),
     reports:
       Object.keys(parts.reports.step5).length > 0 ||
       Object.keys(parts.reports.step7).length > 0 ||
