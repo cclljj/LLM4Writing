@@ -912,6 +912,17 @@ test("report markdown normalization converts HTML breaks and splits heading body
   assert.match(html, /<p[^>]*>你能從自身經驗出發。<\/p>/);
 });
 
+test("report markdown normalization splits known Step10 headings without explicit separator", () => {
+  const raw = "### 立意取材這篇文章的取材方向有扣到題目重點，主張清楚。";
+  const normalized = normalizeReportMarkdownText(raw);
+  assert.equal(normalized, "### 立意取材\n這篇文章的取材方向有扣到題目重點，主張清楚。");
+
+  const html = renderMessageHtml(raw);
+  assert.match(html, /<h4[^>]*>立意取材<\/h4>/);
+  assert.match(html, /<p[^>]*>這篇文章的取材方向有扣到題目重點，主張清楚。<\/p>/);
+  assert.equal(html.includes("立意取材這篇文章"), false);
+});
+
 test("report privacy masking replaces peer account names in exported text", () => {
   const masked = maskPeerUsernames("bob 說 alice 的例子可以補強，bob 自己也同意。", "bob", ["alice", "bob"]);
   assert.equal(masked, "bob 說 有一位組員 的例子可以補強，bob 自己也同意。");
