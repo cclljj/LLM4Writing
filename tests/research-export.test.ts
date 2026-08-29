@@ -32,6 +32,7 @@ function makeSession(): SessionState {
     groupName: "第一組",
     participants: ["alice", "bob"],
     joinedUsers: ["alice"],
+    personalSteps: { alice: 8, bob: 6 },
     messages: [
       { id: "m1", role: "system", step: 3, text: "請回答", at: "2026-06-07T00:00:00.000Z" },
       { id: "m2", role: "student", userId: "alice", step: 3, text: "  我的想法\r\n第二行  ", at: "2026-06-07T00:01:00.000Z" },
@@ -42,8 +43,25 @@ function makeSession(): SessionState {
     stepState: { step1Substep: 1, step2Substep: 1 },
     groupGate: {},
     reflectionIndex: {},
-    outlines: {},
-    step3SubmittedOutlines: {},
+    outlines: {
+      alice: "graph TD\nA[alice 原始想法] --> B[有參考 bob 的提醒]",
+      bob: "graph TD\nA[bob 修正版] --> B[回應 alice 的建議]"
+    },
+    step3SubmittedOutlines: {
+      alice: "graph TD\nA[alice 原始想法]",
+      bob: "graph TD\nA[bob 原始想法]"
+    },
+    artifactSignals: {
+      outlineUpdatedAt: {
+        alice: "2026-06-07T00:06:00.000Z",
+        bob: "2026-06-07T00:07:00.000Z"
+      },
+      draftStep6UpdatedAt: {
+        alice: "2026-06-07T00:08:00.000Z",
+        bob: "2026-06-07T00:10:00.000Z"
+      },
+      draftStep8UpdatedAt: { alice: "2026-06-07T00:09:00.000Z" }
+    },
     makeupWork: {
       outlineRequiredUsernames: ["bob"],
       outlineCompletedUsernames: ["bob"],
@@ -59,8 +77,11 @@ function makeSession(): SessionState {
         }
       ]
     },
-    draftStep6: {},
-    draftStep8: {},
+    draftStep6: {
+      alice: "Step6 初稿提到 bob 的觀點",
+      bob: "Bob Step6 初稿"
+    },
+    draftStep8: { alice: "Step8 潤飾稿" },
     reports: { step5: {}, step7: {}, step10: {} },
     promptConfig: { stepPrompts: {}, subStepPrompts: {}, questionBanks: {} },
     createdAt: "2026-06-07T00:00:00.000Z"
@@ -108,16 +129,29 @@ test("research export: anonymous mode includes only participant student inputs",
     exportedAt: "2026-06-07T01:00:00.000Z"
   });
 
-  assert.equal(payload.schemaVersion, "research-student-inputs-v2");
+  assert.equal(payload.schemaVersion, "research-student-inputs-v3");
   assert.equal(payload.identityMode, "anonymous");
-  assert.equal(payload.records.length, 3);
+  assert.equal(payload.records.length, 10);
   assert.equal(payload.records[0]!.text, "我的想法\n第二行");
   assert.equal(payload.records[0]!.studentAccount, undefined);
   assert.equal(payload.records[0]!.studentHash.length, 64);
-  assert.deepEqual(payload.records.map((record) => record.role), ["student", "student", "student"]);
-  assert.deepEqual(payload.records.map((record) => record.type), ["student_message", "student_message", "makeup_outline"]);
-  assert.deepEqual(payload.records.map((record) => record.studentAccount), [undefined, undefined, undefined]);
+  assert.deepEqual(payload.records.map((record) => record.role), Array.from({ length: 10 }, () => "student"));
+  assert.deepEqual(payload.records.map((record) => record.type), [
+    "student_message",
+    "student_message",
+    "makeup_outline",
+    "step3_submitted_outline",
+    "step4_revised_outline",
+    "step3_submitted_outline",
+    "step4_revised_outline",
+    "draft_step6",
+    "draft_step8",
+    "draft_step6"
+  ]);
+  assert.deepEqual(payload.records.map((record) => record.studentAccount), Array.from({ length: 10 }, () => undefined));
   assert.equal(payload.records[1]!.text, "有一位組員 的例子讓我想到 bob 自己的補充");
+  assert.equal(payload.records[4]!.text, "graph TD\nA[alice 原始想法] --> B[有參考 有一位組員 的提醒]");
+  assert.equal(payload.records[7]!.text, "Step6 初稿提到 有一位組員 的觀點");
 });
 
 test("research export: account mode includes raw student account", () => {
@@ -128,7 +162,18 @@ test("research export: account mode includes raw student account", () => {
   });
 
   assert.equal(payload.identityMode, "account");
-  assert.deepEqual(payload.records.map((record) => record.studentAccount), ["alice", "bob", "bob"]);
+  assert.deepEqual(payload.records.map((record) => record.studentAccount), [
+    "alice",
+    "bob",
+    "bob",
+    "alice",
+    "alice",
+    "bob",
+    "bob",
+    "alice",
+    "alice",
+    "bob"
+  ]);
 });
 
 test("research export: production requires configured hash salt", () => {

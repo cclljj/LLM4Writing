@@ -9,7 +9,13 @@ export type ResearchStudentInputRecord = {
   sessionId: string;
   groupId?: string;
   groupName?: string;
-  type: "student_message" | "makeup_outline";
+  type:
+    | "student_message"
+    | "makeup_outline"
+    | "step3_submitted_outline"
+    | "step4_revised_outline"
+    | "draft_step6"
+    | "draft_step8";
   studentHash: string;
   studentAccount?: string;
   step: number;
@@ -19,7 +25,7 @@ export type ResearchStudentInputRecord = {
 };
 
 export type ResearchStudentInputExport = {
-  schemaVersion: "research-student-inputs-v2";
+  schemaVersion: "research-student-inputs-v3";
   exportedAt: string;
   identityMode: ResearchExportIdentityMode;
   activity: {
@@ -52,6 +58,39 @@ function normalizeText(text: string): string {
   return text.replace(/\r\n/g, "\n").trim();
 }
 
+function artifactTimestamp(session: SessionState, username: string, kind: "outline" | "draftStep6" | "draftStep8"): string {
+  if (kind === "outline") return session.artifactSignals?.outlineUpdatedAt?.[username] ?? session.createdAt;
+  if (kind === "draftStep6") return session.artifactSignals?.draftStep6UpdatedAt?.[username] ?? session.createdAt;
+  return session.artifactSignals?.draftStep8UpdatedAt?.[username] ?? session.createdAt;
+}
+
+function buildRecord(input: {
+  activityId: string;
+  session: SessionState;
+  username: string;
+  identityMode: ResearchExportIdentityMode;
+  type: ResearchStudentInputRecord["type"];
+  step: number;
+  at: string;
+  text: string;
+}): ResearchStudentInputRecord | null {
+  const text = normalizeText(maskPeerUsernames(input.text, input.username, input.session.participants));
+  if (!text) return null;
+  return {
+    activityId: input.activityId,
+    sessionId: input.session.id,
+    groupId: input.session.groupId,
+    groupName: input.session.groupName,
+    type: input.type,
+    studentHash: hashStudent(input.activityId, input.username),
+    ...(input.identityMode === "account" ? { studentAccount: input.username } : {}),
+    step: input.step,
+    role: "student",
+    at: input.at,
+    text
+  };
+}
+
 export function buildResearchStudentInputExport(input: {
   activity: Activity;
   sessions: SessionState[];
@@ -65,50 +104,88 @@ export function buildResearchStudentInputExport(input: {
       .filter((message) => message.role === "student" && Boolean(message.userId) && participantSet.has(message.userId!))
       .map((message): ResearchStudentInputRecord | null => {
         const username = message.userId!;
-        const text = normalizeText(maskPeerUsernames(message.text, username, session.participants));
-        if (!text) return null;
-        return {
+        return buildRecord({
           activityId: input.activity.id,
-          sessionId: session.id,
-          groupId: session.groupId,
-          groupName: session.groupName,
+          session,
           type: "student_message",
-          studentHash: hashStudent(input.activity.id, username),
-          ...(identityMode === "account" ? { studentAccount: username } : {}),
+          username,
           step: message.step,
-          role: "student",
           at: message.at,
-          text
-        };
+          text: message.text,
+          identityMode
+        });
       })
       .filter((record): record is ResearchStudentInputRecord => Boolean(record));
     const makeupRecords = (session.makeupWork?.outlineEvents ?? [])
       .filter((event) => participantSet.has(event.username))
       .map((event): ResearchStudentInputRecord | null => {
-        const text = normalizeText(maskPeerUsernames(event.text, event.username, session.participants));
-        if (!text) return null;
-        return {
+        return buildRecord({
           activityId: input.activity.id,
-          sessionId: session.id,
-          groupId: session.groupId,
-          groupName: session.groupName,
+          session,
           type: "makeup_outline",
-          studentHash: hashStudent(input.activity.id, event.username),
-          ...(identityMode === "account" ? { studentAccount: event.username } : {}),
+          username: event.username,
           step: event.stepContext,
-          role: "student",
           at: event.createdAt,
-          text
-        };
+          text: event.text,
+          identityMode
+        });
       })
       .filter((record): record is ResearchStudentInputRecord => Boolean(record));
-    return [...messageRecords, ...makeupRecords];
+    const artifactRecords = session.participants.flatMap((username) => {
+      const personalStep = session.personalSteps?.[username] ?? session.currentStep;
+      const records: Array<ResearchStudentInputRecord | null> = [
+        buildRecord({
+          activityId: input.activity.id,
+          session,
+          type: "step3_submitted_outline",
+          username,
+          step: 3,
+          at: artifactTimestamp(session, username, "outline"),
+          text: session.step3SubmittedOutlines?.[username] ?? "",
+          identityMode
+        }),
+        personalStep >= 4
+          ? buildRecord({
+              activityId: input.activity.id,
+              session,
+              type: "step4_revised_outline",
+              username,
+              step: 4,
+              at: artifactTimestamp(session, username, "outline"),
+              text: session.outlines?.[username] ?? "",
+              identityMode
+            })
+          : null,
+        buildRecord({
+          activityId: input.activity.id,
+          session,
+          type: "draft_step6",
+          username,
+          step: 6,
+          at: artifactTimestamp(session, username, "draftStep6"),
+          text: session.draftStep6?.[username] ?? "",
+          identityMode
+        }),
+        buildRecord({
+          activityId: input.activity.id,
+          session,
+          type: "draft_step8",
+          username,
+          step: 8,
+          at: artifactTimestamp(session, username, "draftStep8"),
+          text: session.draftStep8?.[username] ?? "",
+          identityMode
+        })
+      ];
+      return records.filter((record): record is ResearchStudentInputRecord => Boolean(record));
+    });
+    return [...messageRecords, ...makeupRecords, ...artifactRecords];
   });
 
   records.sort((a, b) => a.at.localeCompare(b.at) || a.sessionId.localeCompare(b.sessionId));
 
   return {
-    schemaVersion: "research-student-inputs-v2",
+    schemaVersion: "research-student-inputs-v3",
     exportedAt: input.exportedAt ?? new Date().toISOString(),
     identityMode,
     activity: {

@@ -233,9 +233,17 @@ The system SHALL expose course control, step switching, monitor, and personal-pr
 
 - **GIVEN** a course has ended and contains makeup outline records
 - **WHEN** teacher/admin exports research data
-- **THEN** the JSON schema is `research-student-inputs-v2`
+- **THEN** the JSON schema is `research-student-inputs-v3`
 - **AND** makeup outlines are included as `type="makeup_outline"` records
 - **AND** anonymous mode does not include raw student accounts
+
+#### Scenario: Research export includes student artifacts
+
+- **GIVEN** a course has ended and contains Step3 submitted outlines, Step4 revised outlines, Step6 drafts, or Step8 drafts
+- **WHEN** teacher/admin exports research data
+- **THEN** those artifacts are included as student records using `type="step3_submitted_outline"`, `type="step4_revised_outline"`, `type="draft_step6"`, or `type="draft_step8"`
+- **AND** artifact text remains raw text, Mermaid, or Markdown rather than rendered HTML
+- **AND** peer account names inside artifact text are masked
 
 #### Scenario: Research export requires production hash salt
 

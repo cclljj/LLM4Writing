@@ -1175,8 +1175,9 @@ Loading 規則（#270）：
 - 第三張卡片若 Step3/Step4/Step8 無互動訊息，但已有 `userStep3SubmittedOutline` / `userOutline` / `userDraftStep8`，仍需顯示 Step3/Step4/Step8 卡片與對應成果內容。
 - 「下載」按鈕需產生「課程實施報告 PDF v1.1（學生個人）」並下載。
 - 需提供「一鍵下載全班 ZIP」：由後端批次產生每位學生 PDF（檔名規則同個別下載）後打包為 ZIP。
-- 已結束課程需提供「研究資料 JSON」下載，輸出所有學生輸入內容事件列，供 IRB/研究分析使用。預設採匿名化模式；若切換為「包含學生帳號」，UI 需提示該檔案含可識別個資，需符合 IRB/同意書範圍。
-- 研究資料 JSON 每筆至少包含 `activityId`、`sessionId`、`groupId/groupName`、`studentHash`、`step`、`role="student"`、`at`、`text`；帳號模式另含 `studentAccount`。不得輸出 AI/system/internal prompt 訊息。`text` 若含其他同組成員帳號，必須以「有一位組員」遮蔽；即使帳號模式輸出該筆發言者 `studentAccount`，仍不得在文字中揭露其他組員帳號。
+- 已結束課程需提供「研究資料 JSON」下載，輸出學生輸入內容事件列與學生產物，供 IRB/研究分析使用。預設採匿名化模式；若切換為「包含學生帳號」，UI 需提示該檔案含可識別個資，需符合 IRB/同意書範圍。
+- 研究資料 JSON 每筆至少包含 `activityId`、`sessionId`、`groupId/groupName`、`type`、`studentHash`、`step`、`role="student"`、`at`、`text`；帳號模式另含 `studentAccount`。不得輸出 AI/system/internal prompt 訊息。`text` 若含其他同組成員帳號，必須以「有一位組員」遮蔽；即使帳號模式輸出該筆發言者 `studentAccount`，仍不得在文字中揭露其他組員帳號。
+- 研究資料 JSON schema `research-student-inputs-v3` 需包含 `student_message`、`makeup_outline`、`step3_submitted_outline`、`step4_revised_outline`、`draft_step6`、`draft_step8` 等 `type`。產物內容維持原始文字/Mermaid/Markdown，不轉成 HTML。
 - 全班 ZIP 命名規則：`{activityId}_{classNumber}_course-report-v1.zip`。
 - 全班匯出需採非同步 job：前端可見 `queued/running/retrying/packaging/succeeded/failed/canceled` 狀態與完成進度。
 - 全班匯出中，單位學生 PDF 失敗需自動重試（預設最多 3 次，退避等待）；僅可重試錯誤可進行重試。
@@ -1676,7 +1677,8 @@ Request:
 - 僅允許 `courseStatus === "ended"` 的課程；未結束課程回傳 `course_not_ended`。
 - `identity` 預設 `anonymous`；匿名模式不得輸出原始學生帳號，需輸出 activity-scoped `studentHash`。`account` 模式可輸出 `studentAccount`，供已取得授權的研究/IRB 情境使用。
 - Production 必須設定 `RESEARCH_EXPORT_HASH_SALT` 作為 `studentHash` salt；缺失或空白時不得使用固定 fallback，需回傳 HTTP 503 與 `research_export_hash_salt_missing`。
-- 回傳 `research-student-inputs-v2` JSON，內容為學生輸入訊息事件列；每筆至少包含 `activityId`、`sessionId`、`groupId/groupName`、`type`、`studentHash`、`step`、`role`、`at`、`text`。
+- 回傳 `research-student-inputs-v3` JSON，內容為學生輸入訊息事件列與學生產物；每筆至少包含 `activityId`、`sessionId`、`groupId/groupName`、`type`、`studentHash`、`step`、`role`、`at`、`text`。
+- `type` 至少包含 `student_message`、`makeup_outline`、`step3_submitted_outline`、`step4_revised_outline`、`draft_step6`、`draft_step8`。
 - 僅輸出 `role === "student"` 且 `userId` 屬於該 session participants 的訊息，不輸出 AI/system/internal prompt。
 - `type="student_message"` 代表一般學生訊息；`type="makeup_outline"` 代表「需補個人結構圖」完成內容，匿名模式同樣只輸出 `studentHash`。
 - 成功匯出需寫入 audit log：`action=research_data_export`，details 含 `identityMode`、`recordCount`、`sessionCount`。
