@@ -740,9 +740,9 @@ export default function CourseImplementationReportTab({
             <thead>
               <tr>
                 <th>課程 ID</th>
+                <th>學年／學期</th>
                 <th>學校</th>
                 <th>班級</th>
-                <th>學年／學期</th>
                 <th>作文題目</th>
                 {loginRole === "admin" ? <th>教師</th> : null}
                 <th>操作</th>
@@ -765,9 +765,9 @@ export default function CourseImplementationReportTab({
                 return (
                 <tr key={course.activityId}>
                   <td>{course.activityId}</td>
+                  <td>{course.academicYear}／{course.academicYearTerm}</td>
                   <td>{course.school}</td>
                   <td>{course.classNumber}</td>
-                  <td>{course.academicYear}／{course.academicYearTerm}</td>
                   <td>{course.title}</td>
                   {loginRole === "admin" ? (
                     <td>{course.ownerTeacherUsername ? `${course.ownerTeacherName} (${course.ownerTeacherUsername})` : "未指派"}</td>

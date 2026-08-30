@@ -471,9 +471,9 @@ export default function AdminPromptDiagnostics() {
                 <thead>
                   <tr>
                     <th>課程</th>
+                    <th>學年／學期</th>
                     <th>學校</th>
                     <th>班級</th>
-                    <th>學年／學期</th>
                     <th>教師</th>
                     <th>成功率</th>
                     <th>Fallback 率</th>
@@ -495,9 +495,9 @@ export default function AdminPromptDiagnostics() {
                       }}
                     >
                       <td>{course.activityTitle}</td>
+                      <td>{course.academicYear}／{course.academicYearTerm}</td>
                       <td>{course.school}</td>
                       <td>{course.classNumber}</td>
-                      <td>{course.academicYear}／{course.academicYearTerm}</td>
                       <td>
                         {course.ownerTeacherUsername
                           ? `${course.ownerTeacherName || course.ownerTeacherUsername}(${course.ownerTeacherUsername})`
@@ -679,9 +679,9 @@ export default function AdminPromptDiagnostics() {
               <table className="pro-table">
                 <thead>
                   <tr>
+                    <th>學年／學期</th>
                     <th>學校</th>
                     <th>班級</th>
-                    <th>學年／學期</th>
                     <th>課程</th>
                     <th>日期點</th>
                     <th>成功率趨勢</th>
@@ -695,9 +695,9 @@ export default function AdminPromptDiagnostics() {
                     const latest = series.points.at(-1);
                     return (
                       <tr key={series.key}>
+                        <td>{series.academicYear}／{series.academicYearTerm}</td>
                         <td>{series.school}</td>
                         <td>{series.classNumber}</td>
-                        <td>{series.academicYear}／{series.academicYearTerm}</td>
                         <td>{series.activityTitle}</td>
                         <td>{series.points.length}</td>
                         <td>{trendValuesText(series.points.map((point) => point.successRate))}</td>
@@ -950,9 +950,9 @@ export default function AdminPromptDiagnostics() {
                 <thead>
                   <tr>
                     <th>近期 Session</th>
+                    <th>學年／學期</th>
                     <th>學校</th>
                     <th>班級</th>
-                    <th>學年／學期</th>
                     <th>組別</th>
                     <th>Step</th>
                     <th>成員</th>
@@ -969,9 +969,9 @@ export default function AdminPromptDiagnostics() {
                   {data.sessions.recent.map((session) => (
                     <tr key={session.sessionId}>
                       <td>{session.activityTitle}</td>
+                      <td>{session.academicYear}／{session.academicYearTerm}</td>
                       <td>{session.school}</td>
                       <td>{session.classNumber}</td>
-                      <td>{session.academicYear}／{session.academicYearTerm}</td>
                       <td>{session.groupName}</td>
                       <td>Step {session.currentStep}</td>
                       <td>{session.participantCount}</td>

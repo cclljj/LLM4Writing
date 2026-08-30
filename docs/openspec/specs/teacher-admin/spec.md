@@ -107,7 +107,7 @@ The learning management UI SHALL expose course state controls consistent with th
 
 - **GIVEN** learning management has visible courses from one or more academic year/term offerings
 - **WHEN** teacher/admin opens the course list or changes school/class filters
-- **THEN** every course row shows its academic year and academic term
+- **THEN** every course row shows academic year/term before school and class
 - **AND** the academic year/term filter contains only combinations that exist in the current filtered course data
 
 #### Scenario: In-progress course
@@ -402,7 +402,7 @@ The admin console SHALL provide Prompt/LLM diagnostics, KPI trends, and non-sens
 
 - **GIVEN** diagnostics renders course KPI ranking, course trend, or recent-session rows
 - **WHEN** a row is associated with a course activity
-- **THEN** it shows the activity's academic year and academic term alongside its school, class, and course title
+- **THEN** it shows the activity's academic year/term before its school and class
 
 #### Scenario: Step drill-down filters fallback investigation
 

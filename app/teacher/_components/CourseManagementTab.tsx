@@ -1072,9 +1072,9 @@ export default function CourseManagementTab({
             <thead>
               <tr>
                 <th>ID</th>
+                <th>學年／學期</th>
                 <th>學校</th>
                 <th>班級</th>
-                <th>學年／學期</th>
                 <th>主題</th>
                 <th>教師</th>
                 <th>時長 (分鐘)</th>
@@ -1086,9 +1086,9 @@ export default function CourseManagementTab({
               {pagedOpenClasses.map((openClass) => (
                 <tr key={openClass.id}>
                   <td>{openClass.id}</td>
+                  <td>{openClass.academicYear}／{openClass.academicYearTerm}</td>
                   <td>{openClass.school}</td>
                   <td>{openClass.classNumber}</td>
-                  <td>{openClass.academicYear}／{openClass.academicYearTerm}</td>
                   <td>{openClass.essayTitle}</td>
                   <td>
                     {openClass.ownerTeacherUsername

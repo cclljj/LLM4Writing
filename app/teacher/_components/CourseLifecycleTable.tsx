@@ -59,9 +59,9 @@ function CourseLifecycleTable({
         <table className="pro-table">
           <thead>
             <tr>
+              <th>學年／學期</th>
               <th>學校</th>
               <th>班級</th>
-              <th>學年／學期</th>
               <th>課程</th>
               <th>教師</th>
               <th>目前狀態</th>
@@ -91,9 +91,9 @@ function CourseLifecycleTable({
               const enabledButtonStyle = { width: "auto" } as const;
               return (
                 <tr key={activity.id}>
+                  <td>{activity.academicYear}／{activity.academicYearTerm}</td>
                   <td>{activity.school}</td>
                   <td>{activity.classNumber}</td>
-                  <td>{activity.academicYear}／{activity.academicYearTerm}</td>
                   <td>{activity.title}</td>
                   <td>
                     {activity.ownerTeacherUsername

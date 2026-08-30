@@ -361,12 +361,21 @@ test("source-guard: teacher course views show and filter by academic year and te
   const monitorSrc = await read("../app/teacher/_components/LearningMonitorTab.tsx");
   const filterSrc = await read("../app/teacher/_components/MonitorFilterBar.tsx");
   const lifecycleSrc = await read("../app/teacher/_components/CourseLifecycleTable.tsx");
+  const managementSrc = await read("../app/teacher/_components/CourseManagementTab.tsx");
   const reportSrc = await read("../app/teacher/_components/CourseImplementationReportTab.tsx");
   const diagnosticsSrc = await read("../app/teacher/_components/AdminPromptDiagnostics.tsx");
   const diagnosticsRouteSrc = await read("../app/api/admin/diagnostics/route.ts");
   assert.ok(monitorSrc.includes("learningAcademicTermOptions"), "learning management should derive available academic term options from activities");
   assert.ok(filterSrc.includes("學年／學期篩選"), "learning management should render the academic year/term filter");
   assert.ok(lifecycleSrc.includes("學年／學期"), "learning management list should render academic year/term");
+  assert.ok(lifecycleSrc.indexOf("<th>學年／學期</th>") < lifecycleSrc.indexOf("<th>學校</th>"), "learning management list should place academic term before school");
+  assert.ok(managementSrc.indexOf("<th>學年／學期</th>") < managementSrc.indexOf("<th>學校</th>"), "course management list should place academic term before school");
+  assert.ok(reportSrc.indexOf("<th>學年／學期</th>") < reportSrc.indexOf("<th>學校</th>"), "report list should place academic term before school");
+  assert.equal(
+    (diagnosticsSrc.match(/<th>學年／學期<\/th>\s*<th>學校<\/th>/g) ?? []).length,
+    3,
+    "all diagnostics course tables should place academic term before school"
+  );
   assert.ok(reportSrc.includes("academicYear} 學年第"), "course implementation report should show selected course academic term");
   assert.ok(diagnosticsSrc.includes("course.academicYear"), "diagnostics ranking should render academic year");
   assert.ok(diagnosticsSrc.includes("series.academicYear"), "diagnostics trends should render academic year");
