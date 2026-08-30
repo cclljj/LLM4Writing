@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
     ownerTeacherUsername?: string;
   };
 
-  if (!body.classNumber || !body.academicYear || !body.academicYearTerm || !body.essayId || !body.durationMinutes || body.supplemental === undefined) {
+  if (!body.classNumber || !body.essayId || !body.durationMinutes || body.supplemental === undefined) {
     return NextResponse.json({ error: "missing_required_fields" }, { status: 400 });
   }
 
@@ -75,13 +75,10 @@ export async function POST(request: NextRequest) {
   }
 
   const classNumber = body.classNumber.trim();
-  const academicYear = body.academicYear.trim();
-  const academicYearTerm = body.academicYearTerm.trim();
+  const academicYear = body.academicYear?.trim() || "114";
+  const academicYearTerm = body.academicYearTerm?.trim() || "2";
   if (!classNumber) {
     return NextResponse.json({ error: "missing_class_number" }, { status: 400 });
-  }
-  if (!academicYear || !academicYearTerm) {
-    return NextResponse.json({ error: "missing_academic_term" }, { status: 400 });
   }
 
   if (user.role === "teacher") {
