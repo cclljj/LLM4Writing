@@ -1,6 +1,7 @@
 import type { CourseImplementationPdfInput, PdfMessage } from "@/src/lib/courseImplementationPdf";
 import { maskPeerUsernames, normalizeReportMarkdownText } from "@/src/lib/report-rendering";
 import { stepNameMap } from "@/src/lib/step-names";
+import { COURSE_REPORT_VERSION, STUDENT_PORTFOLIO_JSON_SCHEMA_VERSION } from "@/src/lib/course-report-version";
 
 type PortfolioArtifactType =
   | "step1_discussion"
@@ -40,8 +41,8 @@ const DEIDENTIFIED_COURSE_SCHOOL = "*****";
 const DEIDENTIFIED_COURSE_CLASS_NUMBER = "*****";
 
 export type CourseImplementationPortfolioJson = {
-  schemaVersion: "student-portfolio-report-v1.4";
-  reportVersion: "1.1";
+  schemaVersion: typeof STUDENT_PORTFOLIO_JSON_SCHEMA_VERSION;
+  reportVersion: typeof COURSE_REPORT_VERSION;
   generatedAtIso: string;
   completedAtIso?: string;
   course: {
@@ -243,8 +244,8 @@ export function buildCourseImplementationPortfolioJson(input: CourseImplementati
     return a.entryType === b.entryType ? 0 : a.entryType === "message" ? -1 : 1;
   });
   return {
-    schemaVersion: "student-portfolio-report-v1.4",
-    reportVersion: "1.1",
+    schemaVersion: STUDENT_PORTFOLIO_JSON_SCHEMA_VERSION,
+    reportVersion: COURSE_REPORT_VERSION,
     generatedAtIso: input.generatedAtIso,
     completedAtIso: input.completedAtIso,
     course: {

@@ -22,7 +22,7 @@ function makeJob(overrides: Partial<ExportJob> = {}): ExportJob {
     currentAttempt: 0,
     maxAttempts: 3,
     status: "succeeded",
-    zipFileName: "oc-001_701_course-report-v1.zip",
+    zipFileName: "oc-001_701_course-report-v1.4.zip",
     downloadToken: "token_1",
     createdAt: "2026-05-26T00:00:00.000Z",
     startedAt: "2026-05-26T00:00:01.000Z",
@@ -83,7 +83,7 @@ test("student portfolio JSON mirrors report input and masks peer accounts", () =
   });
 
   assert.equal(payload.schemaVersion, "student-portfolio-report-v1.4");
-  assert.equal(payload.reportVersion, "1.1");
+  assert.equal(payload.reportVersion, "1.4");
   assert.equal(payload.student.username, "alice");
   assert.equal(payload.student.name, "***");
   assert.equal(JSON.stringify(payload).includes("Alice"), false);

@@ -53,11 +53,17 @@ test("source-guard: course report PDFs prefer Step10 completion before course-en
   const tabSrc = await read("../app/teacher/_components/CourseImplementationReportTab.tsx");
   const exportSrc = await read("../src/lib/course-report-export.ts");
   const pdfSrc = await read("../src/lib/courseImplementationPdf.ts");
+  const portfolioJsonSrc = await read("../src/lib/courseImplementationPortfolioJson.ts");
   assert.ok(activityStoreSrc.includes("courseEndedAtMap"), "activity store should persist course-ended timestamps");
   assert.ok(activityStoreSrc.includes("courseEndedAt: getCourseEndedAt(openClass.id)"), "activity projection should expose course-ended timestamp");
   assert.ok(tabSrc.includes("resolveStudentReportCompletedAtIso"), "individual PDF export should resolve student completion time");
   assert.ok(exportSrc.includes("resolveStudentReportCompletedAtIso"), "class ZIP PDF export should resolve student completion time");
-  assert.ok(pdfSrc.includes("Version: 1.1"), "course implementation PDF should render Version: 1.1");
+  const versionSrc = await read("../src/lib/course-report-version.ts");
+  assert.ok(pdfSrc.includes("COURSE_REPORT_VERSION"), "course implementation PDF should use the shared report version");
+  assert.ok(portfolioJsonSrc.includes("COURSE_REPORT_VERSION"), "student portfolio JSON should use the shared report version");
+  assert.ok(exportSrc.includes("COURSE_REPORT_FILE_VERSION"), "class export filenames should use the shared report version");
+  assert.ok(tabSrc.includes("COURSE_REPORT_FILE_VERSION"), "individual export filenames should use the shared report version");
+  assert.ok(versionSrc.includes('COURSE_REPORT_VERSION = "1.4"'), "shared report version should be 1.4");
 });
 
 test("source-guard: monitor session type includes outline fields", async () => {

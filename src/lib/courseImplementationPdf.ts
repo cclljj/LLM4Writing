@@ -3,6 +3,7 @@ import { buildCourseReportTimelineItems } from "@/src/lib/course-report-pdf-time
 import { buildOutlinePreview } from "@/src/lib/outline-utils";
 import { maskPeerUsernames, normalizeReportMarkdownText } from "@/src/lib/report-rendering";
 import { formatTaipeiDateTime } from "@/src/lib/time-format";
+import { COURSE_REPORT_VERSION } from "@/src/lib/course-report-version";
 
 export type PdfStudentMetric = {
   stars: number;
@@ -690,7 +691,7 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
   doc.text("課程實施報告", PAGE.marginX + 16, y + 20);
   doc.setFontSize(12);
   setTextColor(COLORS.muted);
-  doc.text("Version: 1.1", PAGE.marginX + 18, y + 42);
+  doc.text(`Version: ${COURSE_REPORT_VERSION}`, PAGE.marginX + 18, y + 42);
   setTextColor(COLORS.text);
   doc.setFontSize(11);
   doc.text(`產出時間：${formatTaipeiDateTime(input.generatedAtIso)}`, PAGE.marginX + 18, y + 62);

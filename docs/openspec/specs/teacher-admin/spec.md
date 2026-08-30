@@ -273,7 +273,7 @@ The course management area SHALL provide ended-course reports and student-level 
 
 - **GIVEN** a teacher or admin generates a course implementation PDF
 - **WHEN** the PDF cover is rendered
-- **THEN** the cover shows `Version: 1.1`
+- **THEN** the cover shows the shared report version, currently `Version: 1.4`
 
 #### Scenario: Ended course list
 
@@ -461,6 +461,7 @@ The course implementation report SHALL preserve both the student's original Step
 - **GIVEN** a teacher views an ended course implementation report
 - **WHEN** the teacher exports an individual student's portfolio JSON
 - **THEN** the JSON schema is `student-portfolio-report-v1.4`
+- **AND** JSON `reportVersion` is `1.4`, matching the PDF cover and the shared report-version source
 - **AND** individual and all-class JSON exports use the same server-side student report assembly flow
 - **AND** it includes the same major source data as the student's PDF report: course ID, deliberately deidentified school and class, student account, deliberately deidentified student name, summary metrics, completion time, timeline messages, and Step1/2/3/4/5/6/7/8/10 learning artifacts
 - **AND** `course.school` and `course.classNumber` are always `*****`

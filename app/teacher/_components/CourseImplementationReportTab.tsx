@@ -10,6 +10,7 @@ import { injectStep8DraftTimeline } from "@/src/lib/course-report-pdf-timeline";
 import { shouldTreatAsZipDownload } from "@/src/lib/course-report-download";
 import { resolveStudentReportCompletedAtIso } from "@/src/lib/course-report-completion-time";
 import { stepNameMap } from "@/src/lib/step-names";
+import { COURSE_REPORT_FILE_VERSION } from "@/src/lib/course-report-version";
 
 type CourseImplementationReportTabProps = {
   loginRole: "teacher" | "admin";
@@ -452,7 +453,7 @@ export default function CourseImplementationReportTab({
       if (!input) return;
       const blob = await generateCourseImplementationPdf(input);
 
-      const filename = `${input.activityId}_${input.classNumber}_${username}_course-report-v1.pdf`;
+      const filename = `${input.activityId}_${input.classNumber}_${username}_course-report-${COURSE_REPORT_FILE_VERSION}.pdf`;
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -489,7 +490,7 @@ export default function CourseImplementationReportTab({
         return;
       }
       const blob = await response.blob();
-      const filename = `${selectedCourse.activityId}_${selectedCourse.classNumber}_${username}_course-report-v1.json`;
+      const filename = `${selectedCourse.activityId}_${selectedCourse.classNumber}_${username}_course-report-${COURSE_REPORT_FILE_VERSION}.json`;
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -564,7 +565,7 @@ export default function CourseImplementationReportTab({
     const objectUrl = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = objectUrl;
-    a.download = job.zipFileName || `${course?.activityId ?? "course"}_${course?.classNumber ?? "class"}_course-report-${format}-v1.zip`;
+    a.download = job.zipFileName || `${course?.activityId ?? "course"}_${course?.classNumber ?? "class"}_course-report-${format}-${COURSE_REPORT_FILE_VERSION}.zip`;
     document.body.appendChild(a);
     a.click();
     a.remove();

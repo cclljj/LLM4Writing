@@ -9,6 +9,7 @@ import { recordAuditLog } from "@/src/lib/audit-log-store";
 import { resolveStudentReportCompletedAtIso } from "@/src/lib/course-report-completion-time";
 import { injectStep8DraftTimeline } from "@/src/lib/course-report-pdf-timeline";
 import { buildCourseImplementationPortfolioJsonString } from "@/src/lib/courseImplementationPortfolioJson";
+import { COURSE_REPORT_FILE_VERSION } from "@/src/lib/course-report-version";
 
 export type ExportJobStatus = "queued" | "running" | "retrying" | "packaging" | "succeeded" | "failed" | "canceled";
 export type ExportJobFormat = "pdf" | "json";
@@ -346,7 +347,7 @@ export async function generateIndividualStudentPortfolioJson(input: {
   });
   return {
     bytes,
-    filename: `${sanitizeFilename(input.activityId)}_${sanitizeFilename(input.classNumber)}_${sanitizeFilename(student.username)}_course-report-v1.json`,
+    filename: `${sanitizeFilename(input.activityId)}_${sanitizeFilename(input.classNumber)}_${sanitizeFilename(student.username)}_course-report-${COURSE_REPORT_FILE_VERSION}.json`,
     school: bootstrap.school,
     title: bootstrap.title,
   };
@@ -431,8 +432,8 @@ export async function createExportJob(input: {
   const id = `exp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   const zipFileName =
     format === "json"
-      ? `${sanitizeFilename(input.activityId)}_${sanitizeFilename(input.classNumber)}_course-report-json-v1.zip`
-      : `${sanitizeFilename(input.activityId)}_${sanitizeFilename(input.classNumber)}_course-report-v1.zip`;
+      ? `${sanitizeFilename(input.activityId)}_${sanitizeFilename(input.classNumber)}_course-report-json-${COURSE_REPORT_FILE_VERSION}.zip`
+      : `${sanitizeFilename(input.activityId)}_${sanitizeFilename(input.classNumber)}_course-report-${COURSE_REPORT_FILE_VERSION}.zip`;
   const job: ExportJob = {
     id,
     format,
@@ -509,7 +510,7 @@ async function runExportJob(jobId: string, bootstrap: Awaited<ReturnType<typeof 
         };
         const bytes = job.format === "json" ? await generateStudentJsonBytes(reportInput) : await generateStudentPdfBytes(reportInput);
         const extension = job.format === "json" ? "json" : "pdf";
-        const fileName = `${sanitizeFilename(job.activityId)}_${sanitizeFilename(job.classNumber)}_${sanitizeFilename(student.username)}_course-report-v1.${extension}`;
+        const fileName = `${sanitizeFilename(job.activityId)}_${sanitizeFilename(job.classNumber)}_${sanitizeFilename(student.username)}_course-report-${COURSE_REPORT_FILE_VERSION}.${extension}`;
         zip.file(fileName, bytes);
         job.completedStudents += 1;
         job.updatedAt = nowIso();
