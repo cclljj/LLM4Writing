@@ -320,6 +320,7 @@ test("source-guard: research export is scoped, ended-only, and audited", async (
 test("source-guard: course report UI exposes PDF and portfolio JSON exports separately", async () => {
   const uiSrc = await read("../app/teacher/_components/CourseImplementationReportTab.tsx");
   const routeSrc = await read("../app/api/teacher/course-report-exports/route.ts");
+  const individualJsonRouteSrc = await read("../app/api/teacher/course-report-exports/student/route.ts");
   const exportSrc = await read("../src/lib/course-report-export.ts");
   assert.ok(uiSrc.includes("一鍵下載全班 PDF"), "class report button should name PDF export");
   assert.ok(uiSrc.includes("一鍵下載全班 JSON"), "class report button should name portfolio JSON export");
@@ -331,4 +332,10 @@ test("source-guard: course report UI exposes PDF and portfolio JSON exports sepa
   assert.ok(routeSrc.includes('["pdf", "json"].includes(format)'), "class report export route should validate export format");
   assert.ok(exportSrc.includes('ExportJobFormat = "pdf" | "json"'), "class report export job should track output format");
   assert.ok(exportSrc.includes("buildCourseImplementationPortfolioJsonString"), "class JSON export should use the portfolio JSON builder");
+  assert.ok(uiSrc.includes("/api/teacher/course-report-exports/student?"), "individual JSON should use the server export endpoint");
+  assert.ok(!uiSrc.includes("buildCourseImplementationPortfolioJsonString"), "individual JSON should not assemble a reduced browser-side payload");
+  assert.ok(individualJsonRouteSrc.includes("generateIndividualStudentPortfolioJson"), "individual JSON route should reuse the complete server-side student report assembly");
+  assert.ok(individualJsonRouteSrc.includes("getCurrentUser"), "individual JSON route should enforce authentication");
+  assert.ok(individualJsonRouteSrc.includes("recordAuditLog"), "individual JSON route should write an audit log");
+  assert.ok(exportSrc.includes("generateStudentJsonBytes"), "individual JSON export should use the same JSON builder as class exports");
 });

@@ -318,6 +318,40 @@ async function generateStudentJsonBytes(input: Parameters<typeof buildStudentRep
   return Buffer.from(buildCourseImplementationPortfolioJsonString(payload), "utf8");
 }
 
+export async function generateIndividualStudentPortfolioJson(input: {
+  ownerUsername: string;
+  ownerRole: "teacher" | "admin";
+  activityId: string;
+  classNumber: string;
+  username: string;
+}): Promise<{ bytes: Uint8Array; filename: string; school: string; title: string }> {
+  const bootstrap = await resolveExportInput(
+    { username: input.ownerUsername, role: input.ownerRole },
+    input.activityId,
+    input.classNumber
+  );
+  const student = bootstrap.students.find((candidate) => candidate.username === input.username);
+  if (!student) throw new Error("student_report_not_found");
+
+  const bytes = await generateStudentJsonBytes({
+    activityId: input.activityId,
+    school: bootstrap.school,
+    classNumber: input.classNumber,
+    title: bootstrap.title,
+    courseEndedAt: bootstrap.courseEndedAt,
+    username: student.username,
+    name: student.name,
+    sessionId: student.sessionId,
+    metric: student.metric,
+  });
+  return {
+    bytes,
+    filename: `${sanitizeFilename(input.activityId)}_${sanitizeFilename(input.classNumber)}_${sanitizeFilename(student.username)}_course-report-v1.json`,
+    school: bootstrap.school,
+    title: bootstrap.title,
+  };
+}
+
 async function runPool(tasks: Array<() => Promise<void>>, concurrency: number): Promise<void> {
   let index = 0;
   const workers = Array.from({ length: Math.max(1, concurrency) }, async () => {

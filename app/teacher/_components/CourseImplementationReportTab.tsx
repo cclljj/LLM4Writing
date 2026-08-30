@@ -6,7 +6,6 @@ import { renderMessageHtml } from "@/app/student/_components/renderMessageHtml";
 import { deferStateUpdate } from "@/src/lib/defer-state-update";
 import { ActivityRow, MonitorSession, OpenClassRow, UserRow } from "./types";
 import { generateCourseImplementationPdf, type CourseImplementationPdfInput } from "@/src/lib/courseImplementationPdf";
-import { buildCourseImplementationPortfolioJsonString } from "@/src/lib/courseImplementationPortfolioJson";
 import { injectStep8DraftTimeline } from "@/src/lib/course-report-pdf-timeline";
 import { shouldTreatAsZipDownload } from "@/src/lib/course-report-download";
 import { resolveStudentReportCompletedAtIso } from "@/src/lib/course-report-completion-time";
@@ -468,10 +467,20 @@ export default function CourseImplementationReportTab({
   async function downloadStudentReportJson(username: string) {
     setDownloadingStudentJson(username);
     try {
-      const input = await loadStudentReportInput(username);
-      if (!input) return;
-      const blob = new Blob([buildCourseImplementationPortfolioJsonString(input)], { type: "application/json;charset=utf-8" });
-      const filename = `${input.activityId}_${input.classNumber}_${username}_course-report-v1.json`;
+      if (!selectedCourse) return;
+      const query = new URLSearchParams({
+        activityId: selectedCourse.activityId,
+        classNumber: selectedCourse.classNumber,
+        username,
+      });
+      const response = await fetch(`/api/teacher/course-report-exports/student?${query.toString()}`, { cache: "no-store" });
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        setError(data?.error ?? "student_report_json_failed");
+        return;
+      }
+      const blob = await response.blob();
+      const filename = `${selectedCourse.activityId}_${selectedCourse.classNumber}_${username}_course-report-v1.json`;
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
