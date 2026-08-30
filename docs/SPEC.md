@@ -1163,7 +1163,7 @@ Loading 規則（#270）：
 - 第一張卡片顯示目前使用者權限內所有 `courseStatus=ended` 的課程。
 - admin 額外提供學校與教師篩選；teacher 不顯示這兩個篩選。
 - 第一張卡片每頁最多 10 筆，需提供上一頁/下一頁。
-- 每列課程需有「查看」按鈕，點擊後載入該課程報告資料。
+- 每列課程的「操作」欄需有「查看」、「下載PDF」與「下載JSON」按鈕；後兩者直接針對該列已結束課程建立全班匯出工作，完成後由同一列下載 ZIP，不需先載入課程報告內容。
 - 第二張卡片顯示課程資訊（學校、班級、作文題目）與學生清單。
 - 學生清單欄位：班級、帳號、姓名、完成度、目前進度、課程紀錄、下載。
 - 完成度以 1~5 星呈現，依學生在該課程 sessions 的參與進度、輸入品質與產出完整度做簡易評分：
@@ -1174,8 +1174,8 @@ Loading 規則（#270）：
 - 第三張卡片呈現方式需比照學習管理「個人對話紀錄」：依 Step 分卡、可展開/閉合、訊息角色標示一致、Step3/4 結構樹附圖、Step8 潤飾稿。
 - 第三張卡片若 Step3/Step4/Step8 無互動訊息，但已有 `userStep3SubmittedOutline` / `userOutline` / `userDraftStep8`，仍需顯示 Step3/Step4/Step8 卡片與對應成果內容。
 - 學生清單下載欄需提供「PDF」與「JSON」按鈕：「PDF」產生「課程實施報告 PDF v1.1（學生個人）」；「JSON」產生同一位學生的學習成果 JSON，作為 PDF 的機器可讀版本。
-- 需提供「一鍵下載全班 PDF」：由後端批次產生每位學生 PDF（檔名規則同個別下載）後打包下載。
-- 需提供「一鍵下載全班 JSON」：由後端批次產生每位學生的學習成果 JSON（檔名規則同個別下載）後打包下載；按鈕文字不需標示 ZIP。
+- 「下載PDF」需由後端批次產生每位學生 PDF（檔名規則同個別下載）後打包下載。
+- 「下載JSON」需由後端批次產生每位學生的學習成果 JSON（檔名規則同個別下載）後打包下載；按鈕文字不需標示 ZIP。
 - 已結束課程需保留「系統 Log JSON」下載，定位為系統 log / 歷史紀錄，輸出學生輸入內容事件列與學生產物，供 IRB/研究分析使用。預設採匿名化模式；若切換為「包含學生帳號」，UI 需提示該檔案含可識別個資，需符合 IRB/同意書範圍。
 - 系統 Log JSON 每筆至少包含 `activityId`、`sessionId`、`groupId/groupName`、`type`、`studentHash`、`step`、`role="student"`、`at`、`text`；帳號模式另含 `studentAccount`。不得輸出 AI/system/internal prompt 訊息。`text` 若含其他同組成員帳號，必須以「有一位組員」遮蔽；即使帳號模式輸出該筆發言者 `studentAccount`，仍不得在文字中揭露其他組員帳號。
 - 系統 Log JSON schema `research-student-inputs-v3` 需包含 `student_message`、`makeup_outline`、`step3_submitted_outline`、`step4_revised_outline`、`draft_step6`、`draft_step8` 等 `type`。產物內容維持原始文字/Mermaid/Markdown，不轉成 HTML。
@@ -1185,7 +1185,7 @@ Loading 規則（#270）：
 - 全班 ZIP 採全成功策略：任一學生最終失敗即 job 失敗，不提供 ZIP，前端需可重新執行。
 - 全班匯出需支援取消，並保留下載成品 TTL 與清理機制（預設 24 小時）。
 - `start/status/download/cancel` 全流程皆需做教師/admin 權限檢查與 audit log。
-- 學生成果 JSON schema `student-portfolio-report-v1.2` 需對應 PDF v1.1 的主要資料來源，至少包含課程資訊、學生帳號/姓名、摘要評分、產出時間、完成時間與完整互動歷程。個別「JSON」下載與一鍵下載全班 JSON 必須使用同一個伺服器端學生報告資料組裝流程，不得由前端以個人進度摘要自行產製。`stepArtifacts` 必須列出 Step1/2 討論紀錄、Step3 原始架構圖、Step4 討論過程與修正版架構圖、Step5 摘要報告、Step6 初稿、Step7 分析回饋、Step8 潤飾稿、Step10 總結報告；即使某一步沒有內容也需列出並標示 `available=false`。Step1/2 的 `contentFormat="conversation"` 內容是可讀討論紀錄，逐筆訊息位於 `processMessages`；其原始訊息已存在於 `timelineMessages`，不另投影重複成果事件。其他每一個可用的 `stepArtifacts` 成果必須同步投影到 `timelineMessages`，以 `entryType="artifact"`、`artifactType` 與 `contentFormat` 標示；原始對話為 `entryType="message"`，不得遺失。Step3/Step4 架構圖提供 Mermaid 原始碼與 Mermaid fenced Markdown，讓架構圖可完整重建。`artifacts` 已自 v1.2 移除，避免與 `stepArtifacts` 重複。Step9 的互動內容由 `timelineMessages` 完整保留。輸出內容保留原始文字/Mermaid/Markdown，不轉 HTML；若文字含其他同組成員帳號，需以「有一位組員」遮蔽。
+- 學生成果 JSON schema `student-portfolio-report-v1.2` 需對應 PDF v1.1 的主要資料來源，至少包含課程資訊、學生帳號/姓名、摘要評分、產出時間、完成時間與完整互動歷程。個別「JSON」下載與全班 JSON 匯出必須使用同一個伺服器端學生報告資料組裝流程，不得由前端以個人進度摘要自行產製。`stepArtifacts` 必須列出 Step1/2 討論紀錄、Step3 原始架構圖、Step4 討論過程與修正版架構圖、Step5 摘要報告、Step6 初稿、Step7 分析回饋、Step8 潤飾稿、Step10 總結報告；即使某一步沒有內容也需列出並標示 `available=false`。Step1/2 的 `contentFormat="conversation"` 內容是可讀討論紀錄，逐筆訊息位於 `processMessages`；其原始訊息已存在於 `timelineMessages`，不另投影重複成果事件。其他每一個可用的 `stepArtifacts` 成果必須同步投影到 `timelineMessages`，以 `entryType="artifact"`、`artifactType` 與 `contentFormat` 標示；原始對話為 `entryType="message"`，不得遺失。Step3/Step4 架構圖提供 Mermaid 原始碼與 Mermaid fenced Markdown，讓架構圖可完整重建。`artifacts` 已自 v1.2 移除，避免與 `stepArtifacts` 重複。Step9 的互動內容由 `timelineMessages` 完整保留。輸出內容保留原始文字/Mermaid/Markdown，不轉 HTML；若文字含其他同組成員帳號，需以「有一位組員」遮蔽。
 - PDF v1.1 至少需含：
   - 封面版本標示為 `Version: 1.1`（不顯示 `Student Portfolio PDF v1`）
   - 學生摘要（帳號、姓名、班級、校名、課程 ID）

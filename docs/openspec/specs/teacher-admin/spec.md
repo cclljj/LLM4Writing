@@ -469,12 +469,13 @@ The course implementation report SHALL preserve both the student's original Step
 - **AND** every available Step3/4/5/6/7/8/10 learning artifact is also present in `timelineMessages` as an `entryType="artifact"` event, while original dialogue remains `entryType="message"`; Step1/2 discussion artifacts are not re-projected because their original messages already appear in the timeline
 - **AND** peer account names inside exported text are masked
 
-#### Scenario: All-class portfolio export labels
+#### Scenario: All-class portfolio export actions
 
 - **GIVEN** a teacher views an ended course implementation report
-- **WHEN** the teacher uses class-level exports
-- **THEN** the UI exposes `一鍵下載全班 PDF` and `一鍵下載全班 JSON`
-- **AND** the UI does not label those buttons as ZIP even when the backend packages class outputs as zip archives
+- **WHEN** the teacher uses the completed-course list
+- **THEN** the matching row's action column exposes `查看`, `下載PDF`, and `下載JSON`
+- **AND** the teacher can start each class-level export without opening the report content card first
+- **AND** the row shows that export's progress and lets the teacher download the zip archive when it is ready, without labeling the button as ZIP
 
 ### Requirement: Audit Log
 

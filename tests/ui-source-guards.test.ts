@@ -322,9 +322,13 @@ test("source-guard: course report UI exposes PDF and portfolio JSON exports sepa
   const routeSrc = await read("../app/api/teacher/course-report-exports/route.ts");
   const individualJsonRouteSrc = await read("../app/api/teacher/course-report-exports/student/route.ts");
   const exportSrc = await read("../src/lib/course-report-export.ts");
-  assert.ok(uiSrc.includes("一鍵下載全班 PDF"), "class report button should name PDF export");
-  assert.ok(uiSrc.includes("一鍵下載全班 JSON"), "class report button should name portfolio JSON export");
+  assert.ok(uiSrc.includes('"下載PDF"'), "completed-course rows should name PDF export");
+  assert.ok(uiSrc.includes('"下載JSON"'), "completed-course rows should name portfolio JSON export");
+  assert.ok(!uiSrc.includes("一鍵下載全班 PDF"), "class PDF export should move out of the report content card");
+  assert.ok(!uiSrc.includes("一鍵下載全班 JSON"), "class JSON export should move out of the report content card");
   assert.ok(!uiSrc.includes("一鍵下載全班 ZIP"), "class report button should not describe the zip packaging");
+  assert.ok(uiSrc.includes("startClassExport(course, \"pdf\")"), "completed-course rows should start the matching PDF export");
+  assert.ok(uiSrc.includes("startClassExport(course, \"json\")"), "completed-course rows should start the matching JSON export");
   assert.ok(uiSrc.includes("downloadStudentReportJson"), "student rows should expose individual portfolio JSON download");
   assert.ok(uiSrc.includes(">PDF<") || uiSrc.includes(": \"PDF\""), "student rows should label individual PDF button as PDF");
   assert.ok(uiSrc.includes(">JSON<") || uiSrc.includes(": \"JSON\""), "student rows should label individual JSON button as JSON");

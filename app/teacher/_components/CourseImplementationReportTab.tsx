@@ -85,6 +85,17 @@ function renderStars(stars: number): string {
   return "★".repeat(safe) + "☆".repeat(5 - safe);
 }
 
+function classExportStatusText(format: "pdf" | "json", job: ClassExportJob): string {
+  const label = format.toUpperCase();
+  if (job.status === "queued") return `全班 ${label} 已加入佇列，準備開始...`;
+  if (job.status === "running") return `正在產生全班 ${label}：${job.completedStudents}/${job.totalStudents}`;
+  if (job.status === "retrying") return `全班 ${label} 重試中：${job.currentStudent || "—"}（第 ${job.currentAttempt}/${job.maxAttempts} 次）`;
+  if (job.status === "packaging") return `正在打包全班 ${label}，請稍候...`;
+  if (job.status === "succeeded") return `全班 ${label} 匯出完成，可下載 ${job.zipFileName}`;
+  if (job.status === "failed") return `全班 ${label} 匯出失敗：${job.failedStudents} 位學生未成功產出，請重新執行。`;
+  return `全班 ${label} 匯出已取消。`;
+}
+
 function getStepsFromMessages(
   messages: PersonalMessage[],
   options?: { includeStep3?: boolean; includeStep4?: boolean; includeStep8?: boolean }
@@ -131,8 +142,10 @@ export default function CourseImplementationReportTab({
   const [downloadingStudentJson, setDownloadingStudentJson] = useState("");
   const [classPdfExportJobId, setClassPdfExportJobId] = useState("");
   const [classPdfExportJob, setClassPdfExportJob] = useState<ClassExportJob | null>(null);
+  const [classPdfExportCourse, setClassPdfExportCourse] = useState<EndedCourseRow | null>(null);
   const [classJsonExportJobId, setClassJsonExportJobId] = useState("");
   const [classJsonExportJob, setClassJsonExportJob] = useState<ClassExportJob | null>(null);
+  const [classJsonExportCourse, setClassJsonExportCourse] = useState<EndedCourseRow | null>(null);
   const [startingClassPdfExport, setStartingClassPdfExport] = useState(false);
   const [startingClassJsonExport, setStartingClassJsonExport] = useState(false);
   const [researchIdentityMode, setResearchIdentityMode] = useState<"anonymous" | "account">("anonymous");
@@ -289,10 +302,6 @@ export default function CourseImplementationReportTab({
     setUserStep3SubmittedOutline("");
     setUserDraftStep8("");
     setPersonalStepExpanded({});
-    setClassPdfExportJobId("");
-    setClassPdfExportJob(null);
-    setClassJsonExportJobId("");
-    setClassJsonExportJob(null);
     setReportSessions([]);
     setLoadingReport(true);
     try {
@@ -496,27 +505,40 @@ export default function CourseImplementationReportTab({
     }
   }
 
-  async function startClassExport(format: "pdf" | "json") {
+  async function startClassExport(course: EndedCourseRow, format: "pdf" | "json") {
     setError("");
-    if (!selectedCourse) {
-      setError("尚未選擇課程，無法下載全班報告。");
+    const activeJob = format === "json" ? classJsonExportJob : classPdfExportJob;
+    if (activeJob && !["succeeded", "failed", "canceled"].includes(activeJob.status)) {
+      setError(`目前正在產製全班 ${format.toUpperCase()}，完成後再下載其他課程的檔案。`);
       return;
     }
-    if (format === "json") setStartingClassJsonExport(true);
-    else setStartingClassPdfExport(true);
+    if (format === "json") {
+      setClassJsonExportCourse(course);
+      setClassJsonExportJob(null);
+      setStartingClassJsonExport(true);
+    } else {
+      setClassPdfExportCourse(course);
+      setClassPdfExportJob(null);
+      setStartingClassPdfExport(true);
+    }
     try {
       const response = await fetch("/api/teacher/course-report-exports", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ activityId: selectedCourse.activityId, classNumber: selectedCourse.classNumber, format }),
+        body: JSON.stringify({ activityId: course.activityId, classNumber: course.classNumber, format }),
       });
       const data = await response.json();
       if (!response.ok) {
         setError(data.error ?? "class_export_start_failed");
         return;
       }
-      if (format === "json") setClassJsonExportJobId(data.jobId ?? "");
-      else setClassPdfExportJobId(data.jobId ?? "");
+      if (format === "json") {
+        setClassJsonExportCourse(course);
+        setClassJsonExportJobId(data.jobId ?? "");
+      } else {
+        setClassPdfExportCourse(course);
+        setClassPdfExportJobId(data.jobId ?? "");
+      }
     } catch {
       setError("class_export_start_failed");
     } finally {
@@ -528,6 +550,7 @@ export default function CourseImplementationReportTab({
   async function downloadClassExport(format: "pdf" | "json") {
     const jobId = format === "json" ? classJsonExportJobId : classPdfExportJobId;
     const job = format === "json" ? classJsonExportJob : classPdfExportJob;
+    const course = format === "json" ? classJsonExportCourse : classPdfExportCourse;
     if (!jobId || job?.status !== "succeeded") return;
     const url = `/api/teacher/course-report-exports/${encodeURIComponent(jobId)}/download`;
     const response = await fetch(url, { cache: "no-store" });
@@ -541,7 +564,7 @@ export default function CourseImplementationReportTab({
     const objectUrl = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = objectUrl;
-    a.download = job.zipFileName || `${selectedCourse?.activityId ?? "course"}_${selectedCourse?.classNumber ?? "class"}_course-report-${format}-v1.zip`;
+    a.download = job.zipFileName || `${course?.activityId ?? "course"}_${course?.classNumber ?? "class"}_course-report-${format}-v1.zip`;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -703,7 +726,22 @@ export default function CourseImplementationReportTab({
               </tr>
             </thead>
             <tbody>
-              {pagedCourses.map((course) => (
+              {pagedCourses.map((course) => {
+                const isPdfExportCourse = classPdfExportCourse?.activityId === course.activityId;
+                const isJsonExportCourse = classJsonExportCourse?.activityId === course.activityId;
+                const pdfJobIsActive = Boolean(classPdfExportJob && !["succeeded", "failed", "canceled"].includes(classPdfExportJob.status));
+                const jsonJobIsActive = Boolean(classJsonExportJob && !["succeeded", "failed", "canceled"].includes(classJsonExportJob.status));
+                const pdfButtonLabel = isPdfExportCourse && classPdfExportJob?.status === "succeeded"
+                  ? "下載PDF"
+                  : isPdfExportCourse && (startingClassPdfExport || pdfJobIsActive)
+                    ? "產製 PDF 中..."
+                    : "下載PDF";
+                const jsonButtonLabel = isJsonExportCourse && classJsonExportJob?.status === "succeeded"
+                  ? "下載JSON"
+                  : isJsonExportCourse && (startingClassJsonExport || jsonJobIsActive)
+                    ? "產製 JSON 中..."
+                    : "下載JSON";
+                return (
                 <tr key={course.activityId}>
                   <td>{course.activityId}</td>
                   <td>{course.school}</td>
@@ -713,20 +751,59 @@ export default function CourseImplementationReportTab({
                     <td>{course.ownerTeacherUsername ? `${course.ownerTeacherName} (${course.ownerTeacherUsername})` : "未指派"}</td>
                   ) : null}
                   <td>
-                    <button
-                      type="button"
-                      className="secondary"
-                      style={{ width: "auto" }}
-                      disabled={loadingReport && selectedActivityId === course.activityId}
-                      onClick={() => {
-                        viewCourse(course.activityId).catch(() => undefined);
-                      }}
-                    >
-                      {loadingReport && selectedActivityId === course.activityId ? "載入中..." : "查看"}
-                    </button>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                      <button
+                        type="button"
+                        className="secondary"
+                        style={{ width: "auto" }}
+                        disabled={loadingReport && selectedActivityId === course.activityId}
+                        onClick={() => {
+                          viewCourse(course.activityId).catch(() => undefined);
+                        }}
+                      >
+                        {loadingReport && selectedActivityId === course.activityId ? "載入中..." : "查看"}
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary"
+                        style={{ width: "auto" }}
+                        disabled={startingClassPdfExport || pdfJobIsActive}
+                        onClick={() => {
+                          if (isPdfExportCourse && classPdfExportJob?.status === "succeeded") {
+                            downloadClassExport("pdf").catch(() => undefined);
+                            return;
+                          }
+                          startClassExport(course, "pdf").catch(() => undefined);
+                        }}
+                      >
+                        {pdfButtonLabel}
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary"
+                        style={{ width: "auto" }}
+                        disabled={startingClassJsonExport || jsonJobIsActive}
+                        onClick={() => {
+                          if (isJsonExportCourse && classJsonExportJob?.status === "succeeded") {
+                            downloadClassExport("json").catch(() => undefined);
+                            return;
+                          }
+                          startClassExport(course, "json").catch(() => undefined);
+                        }}
+                      >
+                        {jsonButtonLabel}
+                      </button>
+                    </div>
+                    {isPdfExportCourse && classPdfExportJob ? (
+                      <small style={{ display: "block", marginTop: 6 }}>{classExportStatusText("pdf", classPdfExportJob)}</small>
+                    ) : null}
+                    {isJsonExportCourse && classJsonExportJob ? (
+                      <small style={{ display: "block", marginTop: 6 }}>{classExportStatusText("json", classJsonExportJob)}</small>
+                    ) : null}
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -767,26 +844,6 @@ export default function CourseImplementationReportTab({
             {selectedCourse.school} / {selectedCourse.classNumber} / {selectedCourse.title}
           </small>
           <div className="row" style={{ alignItems: "center", gap: 8, marginBottom: 10 }}>
-            <div style={{ width: 210 }}>
-              <button type="button" className="secondary" onClick={() => startClassExport("pdf").catch(() => undefined)} disabled={startingClassPdfExport}>
-                {startingClassPdfExport ? "建立匯出作業中..." : "一鍵下載全班 PDF"}
-              </button>
-            </div>
-            {classPdfExportJob?.status === "succeeded" ? (
-              <div style={{ width: 100 }}>
-                <button type="button" className="secondary" onClick={() => downloadClassExport("pdf").catch(() => undefined)}>下載 PDF</button>
-              </div>
-            ) : null}
-            <div style={{ width: 210 }}>
-              <button type="button" className="secondary" onClick={() => startClassExport("json").catch(() => undefined)} disabled={startingClassJsonExport}>
-                {startingClassJsonExport ? "建立匯出作業中..." : "一鍵下載全班 JSON"}
-              </button>
-            </div>
-            {classJsonExportJob?.status === "succeeded" ? (
-              <div style={{ width: 100 }}>
-                <button type="button" className="secondary" onClick={() => downloadClassExport("json").catch(() => undefined)}>下載 JSON</button>
-              </div>
-            ) : null}
             <div style={{ width: 170 }}>
               <select value={researchIdentityMode} onChange={(e) => setResearchIdentityMode(e.target.value as "anonymous" | "account")}>
                 <option value="anonymous">匿名化研究資料</option>
@@ -809,37 +866,6 @@ export default function CourseImplementationReportTab({
               目前匯出會包含學生帳號，請確認符合 IRB/同意書使用範圍。
             </small>
           ) : null}
-          {classPdfExportJob ? (
-            <small style={{ display: "block", marginBottom: 10 }}>
-              {classPdfExportJob.status === "queued" ? "全班 PDF 已加入佇列，準備開始..." : null}
-              {classPdfExportJob.status === "running" ? `正在產生全班 PDF：${classPdfExportJob.completedStudents}/${classPdfExportJob.totalStudents}` : null}
-              {classPdfExportJob.status === "retrying"
-                ? `全班 PDF 重試中：${classPdfExportJob.currentStudent || "—"}（第 ${classPdfExportJob.currentAttempt}/${classPdfExportJob.maxAttempts} 次）`
-                : null}
-              {classPdfExportJob.status === "packaging" ? "正在打包全班 PDF，請稍候..." : null}
-              {classPdfExportJob.status === "succeeded" ? `全班 PDF 匯出完成，可下載 ${classPdfExportJob.zipFileName}` : null}
-              {classPdfExportJob.status === "failed"
-                ? `全班 PDF 匯出失敗：${classPdfExportJob.failedStudents} 位學生未成功產出，請重新執行。`
-                : null}
-              {classPdfExportJob.status === "canceled" ? "全班 PDF 匯出已取消。" : null}
-            </small>
-          ) : null}
-          {classJsonExportJob ? (
-            <small style={{ display: "block", marginBottom: 10 }}>
-              {classJsonExportJob.status === "queued" ? "全班 JSON 已加入佇列，準備開始..." : null}
-              {classJsonExportJob.status === "running" ? `正在產生全班 JSON：${classJsonExportJob.completedStudents}/${classJsonExportJob.totalStudents}` : null}
-              {classJsonExportJob.status === "retrying"
-                ? `全班 JSON 重試中：${classJsonExportJob.currentStudent || "—"}（第 ${classJsonExportJob.currentAttempt}/${classJsonExportJob.maxAttempts} 次）`
-                : null}
-              {classJsonExportJob.status === "packaging" ? "正在打包全班 JSON，請稍候..." : null}
-              {classJsonExportJob.status === "succeeded" ? `全班 JSON 匯出完成，可下載 ${classJsonExportJob.zipFileName}` : null}
-              {classJsonExportJob.status === "failed"
-                ? `全班 JSON 匯出失敗：${classJsonExportJob.failedStudents} 位學生未成功產出，請重新執行。`
-                : null}
-              {classJsonExportJob.status === "canceled" ? "全班 JSON 匯出已取消。" : null}
-            </small>
-          ) : null}
-
           <div className="table-scroll">
             <table className="pro-table">
               <thead>
