@@ -11,6 +11,8 @@ const activity: Activity = {
   id: "oc-101",
   school: "研究高中",
   classNumber: "701",
+  academicYear: "114",
+  academicYearTerm: "2",
   essayId: "essay-1",
   title: "研究題目",
   genre: "議論文",
@@ -131,6 +133,8 @@ test("research export: anonymous mode includes only participant student inputs",
 
   assert.equal(payload.schemaVersion, "research-student-inputs-v3");
   assert.equal(payload.identityMode, "anonymous");
+  assert.equal(payload.activity.academicYear, "114");
+  assert.equal(payload.activity.academicYearTerm, "2");
   assert.equal(payload.records.length, 10);
   assert.equal(payload.records[0]!.text, "我的想法\n第二行");
   assert.equal(payload.records[0]!.studentAccount, undefined);

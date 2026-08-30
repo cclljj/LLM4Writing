@@ -16,6 +16,8 @@ export type OpenClassTask = {
   id: string;
   school: string;
   classNumber: string;
+  academicYear: string;
+  academicYearTerm: string;
   essayId: string;
   durationMinutes: number;
   supplemental: string;
@@ -162,7 +164,13 @@ function normalizeDomainState(input: unknown): DomainState {
   });
 
   const openClassesFromPayload = Array.isArray(raw.openClasses)
-    ? raw.openClasses.filter((openClass): openClass is OpenClassTask => Boolean(openClass && typeof openClass.id === "string"))
+    ? raw.openClasses
+        .filter((openClass): openClass is OpenClassTask => Boolean(openClass && typeof openClass.id === "string"))
+        .map((openClass) => ({
+          ...openClass,
+          academicYear: typeof openClass.academicYear === "string" && openClass.academicYear.trim() ? openClass.academicYear.trim() : "114",
+          academicYearTerm: typeof openClass.academicYearTerm === "string" && openClass.academicYearTerm.trim() ? openClass.academicYearTerm.trim() : "2"
+        }))
     : [];
   const mergedOpenClasses = [...base.openClasses];
   openClassesFromPayload.forEach((openClass) => {
@@ -414,6 +422,8 @@ function toActivity(openClass: OpenClassTask): Activity {
     id: openClass.id,
     school: openClass.school,
     classNumber: openClass.classNumber,
+    academicYear: openClass.academicYear,
+    academicYearTerm: openClass.academicYearTerm,
     essayId: openClass.essayId,
     ownerTeacherUsername: openClass.ownerTeacherUsername,
     title: detail.essayTitle,
@@ -689,11 +699,15 @@ export function upsertOpenClass(input: {
   id?: string;
   school: string;
   classNumber: string;
+  academicYear?: string;
+  academicYearTerm?: string;
   essayId: string;
   durationMinutes: number;
   supplemental: string;
   ownerTeacherUsername?: string;
 }) {
+  const academicYear = input.academicYear?.trim() || "114";
+  const academicYearTerm = input.academicYearTerm?.trim() || "2";
   const essay = findEssay(input.essayId);
   if (!essay) {
     return { ok: false as const, error: "essay_not_found" };
@@ -720,6 +734,8 @@ export function upsertOpenClass(input: {
     if (existing) {
       existing.school = input.school;
       existing.classNumber = input.classNumber;
+      existing.academicYear = academicYear;
+      existing.academicYearTerm = academicYearTerm;
       existing.essayId = input.essayId;
       existing.durationMinutes = input.durationMinutes;
       existing.supplemental = input.supplemental;
@@ -735,6 +751,8 @@ export function upsertOpenClass(input: {
     id: computeNextOpenClassId(openClasses.map((openClass) => openClass.id)),
     school: input.school,
     classNumber: input.classNumber,
+    academicYear,
+    academicYearTerm,
     essayId: input.essayId,
     durationMinutes: input.durationMinutes,
     supplemental: input.supplemental,

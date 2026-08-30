@@ -49,6 +49,8 @@ export type CourseImplementationPortfolioJson = {
     activityId: string;
     school: typeof DEIDENTIFIED_COURSE_SCHOOL;
     classNumber: typeof DEIDENTIFIED_COURSE_CLASS_NUMBER;
+    academicYear: string;
+    academicYearTerm: string;
     title: string;
   };
   student: {
@@ -252,6 +254,8 @@ export function buildCourseImplementationPortfolioJson(input: CourseImplementati
       activityId: input.activityId,
       school: DEIDENTIFIED_COURSE_SCHOOL,
       classNumber: DEIDENTIFIED_COURSE_CLASS_NUMBER,
+      academicYear: input.academicYear || "114",
+      academicYearTerm: input.academicYearTerm || "2",
       title: input.title,
     },
     student: {

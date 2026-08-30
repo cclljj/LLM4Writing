@@ -64,6 +64,8 @@ export default function CourseManagementTab({
     id: "",
     school: "", // admin 才會用到；teacher 會自動填入自己的學校
     classNumber: "",
+    academicYear: "114",
+    academicYearTerm: "2",
     essayId: "",
     durationMinutes: 40,
     supplemental: ""
@@ -211,6 +213,10 @@ export default function CourseManagementTab({
       });
       return;
     }
+    if (!taskForm.academicYear.trim() || !taskForm.academicYearTerm.trim()) {
+      setError("請輸入學年與學期。");
+      return;
+    }
     const studentsForClass = users
       .filter((u) => u.role === "student" && u.school === currentFormSchool && u.classNumber === taskForm.classNumber)
       .map((u) => u.username);
@@ -263,6 +269,8 @@ export default function CourseManagementTab({
       id: "",
       school: "",
       classNumber: "",
+      academicYear: "114",
+      academicYearTerm: "2",
       essayId: "",
       durationMinutes: 40,
       supplemental: ""
@@ -336,6 +344,8 @@ export default function CourseManagementTab({
       id: openClass.id,
       school: openClass.school,
       classNumber: openClass.classNumber,
+      academicYear: openClass.academicYear,
+      academicYearTerm: openClass.academicYearTerm,
       essayId: openClass.essayId,
       durationMinutes: openClass.durationMinutes,
       supplemental: openClass.supplemental
@@ -484,6 +494,8 @@ export default function CourseManagementTab({
       const ocPayload: Record<string, unknown> = {
         id: taskForm.id || undefined,
         classNumber: taskForm.classNumber,
+        academicYear: taskForm.academicYear.trim(),
+        academicYearTerm: taskForm.academicYearTerm.trim(),
         essayId: taskForm.essayId,
         durationMinutes: taskForm.durationMinutes,
         supplemental: taskForm.supplemental ?? ""
@@ -817,6 +829,22 @@ export default function CourseManagementTab({
             ) : null}
           </div>
           <div className="col">
+            <label>學年</label>
+            <input
+              inputMode="numeric"
+              value={taskForm.academicYear}
+              onChange={(e) => setTaskForm({ ...taskForm, academicYear: e.target.value })}
+            />
+          </div>
+          <div className="col">
+            <label>學期</label>
+            <input
+              inputMode="numeric"
+              value={taskForm.academicYearTerm}
+              onChange={(e) => setTaskForm({ ...taskForm, academicYearTerm: e.target.value })}
+            />
+          </div>
+          <div className="col">
             <label>主題（含 ID）</label>
             <select
               value={taskForm.essayId}
@@ -1046,6 +1074,7 @@ export default function CourseManagementTab({
                 <th>ID</th>
                 <th>學校</th>
                 <th>班級</th>
+                <th>學年／學期</th>
                 <th>主題</th>
                 <th>教師</th>
                 <th>時長 (分鐘)</th>
@@ -1059,6 +1088,7 @@ export default function CourseManagementTab({
                   <td>{openClass.id}</td>
                   <td>{openClass.school}</td>
                   <td>{openClass.classNumber}</td>
+                  <td>{openClass.academicYear}／{openClass.academicYearTerm}</td>
                   <td>{openClass.essayTitle}</td>
                   <td>
                     {openClass.ownerTeacherUsername

@@ -217,6 +217,8 @@ export interface Activity {
   id: string;
   school: string;
   classNumber: string;
+  academicYear: string;
+  academicYearTerm: string;
   essayId: string;
   title: string;
   genre: string;

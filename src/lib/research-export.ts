@@ -32,6 +32,8 @@ export type ResearchStudentInputExport = {
     id: string;
     school: string;
     classNumber: string;
+    academicYear: string;
+    academicYearTerm: string;
     title: string;
   };
   records: ResearchStudentInputRecord[];
@@ -192,6 +194,8 @@ export function buildResearchStudentInputExport(input: {
       id: input.activity.id,
       school: input.activity.school,
       classNumber: input.activity.classNumber,
+      academicYear: input.activity.academicYear,
+      academicYearTerm: input.activity.academicYearTerm,
       title: input.activity.title
     },
     records

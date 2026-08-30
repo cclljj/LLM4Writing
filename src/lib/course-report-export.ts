@@ -118,6 +118,8 @@ async function resolveExportInput(
 ): Promise<{
   school: string;
   title: string;
+  academicYear: string;
+  academicYearTerm: string;
   courseEndedAt?: string;
   students: Array<{
     username: string;
@@ -208,7 +210,14 @@ async function resolveExportInput(
     })
     .filter((row): row is NonNullable<typeof row> => Boolean(row));
 
-  return { school: activity.school, title: activity.title, courseEndedAt: activity.courseEndedAt, students };
+  return {
+    school: activity.school,
+    title: activity.title,
+    academicYear: activity.academicYear,
+    academicYearTerm: activity.academicYearTerm,
+    courseEndedAt: activity.courseEndedAt,
+    students
+  };
 }
 
 function toTimelineMessages(session: SessionState, username: string): CourseImplementationPdfInput["timelineMessages"] {
@@ -235,6 +244,8 @@ async function buildStudentReportInput(input: {
   activityId: string;
   school: string;
   classNumber: string;
+  academicYear: string;
+  academicYearTerm: string;
   title: string;
   courseEndedAt?: string;
   username: string;
@@ -288,6 +299,8 @@ async function buildStudentReportInput(input: {
     activityId: input.activityId,
     school: input.school,
     classNumber: input.classNumber,
+    academicYear: input.academicYear,
+    academicYearTerm: input.academicYearTerm,
     title: input.title,
     username: input.username,
     name: input.name,
@@ -338,6 +351,8 @@ export async function generateIndividualStudentPortfolioJson(input: {
     activityId: input.activityId,
     school: bootstrap.school,
     classNumber: input.classNumber,
+    academicYear: bootstrap.academicYear,
+    academicYearTerm: bootstrap.academicYearTerm,
     title: bootstrap.title,
     courseEndedAt: bootstrap.courseEndedAt,
     username: student.username,
@@ -501,6 +516,8 @@ async function runExportJob(jobId: string, bootstrap: Awaited<ReturnType<typeof 
           activityId: job.activityId,
           school: bootstrap.school,
           classNumber: job.classNumber,
+          academicYear: bootstrap.academicYear,
+          academicYearTerm: bootstrap.academicYearTerm,
           title: bootstrap.title,
           courseEndedAt: bootstrap.courseEndedAt,
           username: student.username,

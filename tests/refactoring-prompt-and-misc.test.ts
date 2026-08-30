@@ -37,6 +37,9 @@ test("activity store behavior: course state transitions are valid", () => {
   if (!created.ok) return;
   const activityId = created.saved.id;
 
+  assert.equal(findActivity(activityId)?.academicYear, "114");
+  assert.equal(findActivity(activityId)?.academicYearTerm, "2");
+
   assert.equal(getCourseStatus(activityId), "not_started");
 
   const started = startCourse(activityId);

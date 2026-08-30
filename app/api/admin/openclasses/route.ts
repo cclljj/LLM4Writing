@@ -56,6 +56,8 @@ export async function POST(request: NextRequest) {
   const body = (await request.json()) as {
     id?: string;
     classNumber?: string;
+    academicYear?: string;
+    academicYearTerm?: string;
     essayId?: string;
     school?: string;
     durationMinutes?: number;
@@ -63,7 +65,7 @@ export async function POST(request: NextRequest) {
     ownerTeacherUsername?: string;
   };
 
-  if (!body.classNumber || !body.essayId || !body.durationMinutes || body.supplemental === undefined) {
+  if (!body.classNumber || !body.academicYear || !body.academicYearTerm || !body.essayId || !body.durationMinutes || body.supplemental === undefined) {
     return NextResponse.json({ error: "missing_required_fields" }, { status: 400 });
   }
 
@@ -73,8 +75,13 @@ export async function POST(request: NextRequest) {
   }
 
   const classNumber = body.classNumber.trim();
+  const academicYear = body.academicYear.trim();
+  const academicYearTerm = body.academicYearTerm.trim();
   if (!classNumber) {
     return NextResponse.json({ error: "missing_class_number" }, { status: 400 });
+  }
+  if (!academicYear || !academicYearTerm) {
+    return NextResponse.json({ error: "missing_academic_term" }, { status: 400 });
   }
 
   if (user.role === "teacher") {
@@ -124,6 +131,8 @@ export async function POST(request: NextRequest) {
     id: body.id,
     school: targetSchool,
     classNumber,
+    academicYear,
+    academicYearTerm,
     essayId: body.essayId,
     durationMinutes: body.durationMinutes,
     supplemental: body.supplemental,
@@ -144,6 +153,8 @@ export async function POST(request: NextRequest) {
     targetLabel: `${saved.saved.school}/${saved.saved.classNumber}/${saved.saved.essayId}`,
     details: {
       durationMinutes: saved.saved.durationMinutes,
+      academicYear: saved.saved.academicYear,
+      academicYearTerm: saved.saved.academicYearTerm,
       ownerTeacherUsername: saved.saved.ownerTeacherUsername ?? ""
     }
   }).catch(() => undefined);

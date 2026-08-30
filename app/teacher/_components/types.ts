@@ -13,6 +13,8 @@ export type OpenClassRow = {
   id: string;
   school: string;
   classNumber: string;
+  academicYear: string;
+  academicYearTerm: string;
   essayId: string;
   essayTitle: string;
   durationMinutes: number;
@@ -27,6 +29,8 @@ export type ActivityRow = {
   id: string;
   school: string;
   classNumber: string;
+  academicYear: string;
+  academicYearTerm: string;
   essayId: string;
   title: string;
   genre: string;

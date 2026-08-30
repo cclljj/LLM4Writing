@@ -27,6 +27,8 @@ export type CourseImplementationPdfInput = {
   activityId: string;
   school: string;
   classNumber: string;
+  academicYear?: string;
+  academicYearTerm?: string;
   title: string;
   username: string;
   name: string;
@@ -695,7 +697,9 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
   setTextColor(COLORS.text);
   doc.setFontSize(11);
   doc.text(`產出時間：${formatTaipeiDateTime(input.generatedAtIso)}`, PAGE.marginX + 18, y + 62);
-  doc.text(`${input.school} / ${input.classNumber} / ${input.title}`, PAGE.marginX + 18, y + 80);
+  const academicYear = input.academicYear || "114";
+  const academicYearTerm = input.academicYearTerm || "2";
+  doc.text(`${input.school} / ${input.classNumber} / ${academicYear} 學年第 ${academicYearTerm} 學期 / ${input.title}`, PAGE.marginX + 18, y + 80);
   y += 108;
 
   writeSectionHeader("學生摘要");
@@ -705,6 +709,8 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
       `- 學生姓名：${input.name}`,
       `- 班級：${input.classNumber}`,
       `- 校名：${input.school}`,
+      `- 學年：${academicYear}`,
+      `- 學期：第 ${academicYearTerm} 學期`,
       `- 課程 ID：${input.activityId}`,
       `- 完成課程日期時間：${input.completedAtIso ? formatTaipeiDateTime(input.completedAtIso) : "—"}`,
     ].join("\n"),

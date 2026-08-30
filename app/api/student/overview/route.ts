@@ -74,6 +74,8 @@ export async function GET() {
         activityId,
         title: activity?.title ?? activityId,
         classNumber: activity?.classNumber ?? "—",
+        academicYear: activity?.academicYear ?? "114",
+        academicYearTerm: activity?.academicYearTerm ?? "2",
         lastSessionId: value.lastSessionId,
         lastStep: value.lastStep,
         lastParticipatedAt: value.lastAt,

@@ -6,6 +6,8 @@ import { formatTaipeiDateTime } from "@/src/lib/time-format";
 type Course = {
   id: string;
   classNumber: string;
+  academicYear: string;
+  academicYearTerm: string;
   title: string;
   genre: string;
   essayDescription?: string;
@@ -19,6 +21,8 @@ type ParticipatedCourse = {
   activityId: string;
   title: string;
   classNumber: string;
+  academicYear: string;
+  academicYearTerm: string;
   lastSessionId: string;
   lastStep: number;
   lastParticipatedAt: string;
@@ -64,7 +68,7 @@ export default function StudentLobby({
         {activeCourses.length === 0 ? <small>目前沒有進行中的課程。</small> : null}
         {activeCourses.map((course) => (
           <div key={course.id} style={{ borderTop: "1px solid var(--line-soft)", padding: "10px 0" }}>
-            <strong>{course.title}</strong>（班級 {course.classNumber} / {course.genre} / {course.durationMinutes} 分鐘）
+            <strong>{course.title}</strong>（{course.academicYear} 學年第 {course.academicYearTerm} 學期 / 班級 {course.classNumber} / {course.genre} / {course.durationMinutes} 分鐘）
             <div>
               <small>分組狀態：{course.groupStatus ?? "尚未分組"}</small>
             </div>
@@ -87,7 +91,7 @@ export default function StudentLobby({
         {upcomingCourses.length === 0 ? <small style={{ display: "block", marginTop: 8 }}>目前沒有尚未開始課程。</small> : null}
         {upcomingCourses.map((course) => (
           <div key={course.id} style={{ borderTop: "1px solid var(--line-soft)", padding: "10px 0" }}>
-            <strong>{course.title}</strong>（班級 {course.classNumber} / {course.genre} / {course.durationMinutes} 分鐘）
+            <strong>{course.title}</strong>（{course.academicYear} 學年第 {course.academicYearTerm} 學期 / 班級 {course.classNumber} / {course.genre} / {course.durationMinutes} 分鐘）
             <div>
               <small>分組狀態：{course.groupStatus ?? "尚未分組"}</small>
             </div>
@@ -107,7 +111,7 @@ export default function StudentLobby({
         {pausedCourses.length === 0 ? <small>目前沒有暫停中的課程。</small> : null}
         {pausedCourses.map((course) => (
           <div key={course.id} style={{ borderTop: "1px solid var(--line-soft)", padding: "10px 0" }}>
-            <strong>{course.title}</strong>（班級 {course.classNumber} / {course.genre}）
+            <strong>{course.title}</strong>（{course.academicYear} 學年第 {course.academicYearTerm} 學期 / 班級 {course.classNumber} / {course.genre}）
             <div>
               <small>課程目前暫停中，請等待老師繼續上課。</small>
             </div>
@@ -125,7 +129,7 @@ export default function StudentLobby({
           <div key={course.activityId} style={{ borderTop: "1px solid var(--line-soft)", padding: "10px 0" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
               <div>
-                <strong>{course.title}</strong>（班級 {course.classNumber}）
+                <strong>{course.title}</strong>（{course.academicYear} 學年第 {course.academicYearTerm} 學期 / 班級 {course.classNumber}）
                 <div>
                   <small>
                     最近參與：{formatTaipeiDateTime(course.lastParticipatedAt)} / 最近步驟 Step {course.lastStep} / 參與次數 {course.sessionCount}

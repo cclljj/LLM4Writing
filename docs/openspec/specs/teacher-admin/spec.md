@@ -463,8 +463,9 @@ The course implementation report SHALL preserve both the student's original Step
 - **THEN** the JSON schema is `student-portfolio-report-v1.4`
 - **AND** JSON `reportVersion` is `1.4`, matching the PDF cover and the shared report-version source
 - **AND** individual and all-class JSON exports use the same server-side student report assembly flow
-- **AND** it includes the same major source data as the student's PDF report: course ID, deliberately deidentified school and class, student account, deliberately deidentified student name, summary metrics, completion time, timeline messages, and Step1/2/3/4/5/6/7/8/10 learning artifacts
+- **AND** it includes the same major source data as the student's PDF report: course ID, academic year, academic term, deliberately deidentified school and class, student account, deliberately deidentified student name, summary metrics, completion time, timeline messages, and Step1/2/3/4/5/6/7/8/10 learning artifacts
 - **AND** `course.school` and `course.classNumber` are always `*****`
+- **AND** `course.academicYear` and `course.academicYearTerm` identify the course offering
 - **AND** `student.name` is always `***`, while `student.username` remains available as the historical student identifier
 - **AND** Step1 and Step2 are explicitly listed as `contentFormat="conversation"` discussion artifacts, with readable content and structured `processMessages`
 - **AND** Step3 original outline and Step4 revised outline are explicitly listed in `stepArtifacts`, with Mermaid source and Mermaid fenced Markdown; the Step4 entry also includes its discussion process messages

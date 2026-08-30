@@ -3,6 +3,8 @@
 export type Course = {
   id: string;
   classNumber: string;
+  academicYear: string;
+  academicYearTerm: string;
   title: string;
   genre: string;
   essayDescription?: string;
@@ -16,6 +18,8 @@ export type ParticipatedCourse = {
   activityId: string;
   title: string;
   classNumber: string;
+  academicYear: string;
+  academicYearTerm: string;
   lastSessionId: string;
   lastStep: number;
   lastParticipatedAt: string;

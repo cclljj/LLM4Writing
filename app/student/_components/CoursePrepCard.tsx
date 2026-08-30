@@ -6,6 +6,8 @@ type PrepCourse = {
   id: string;
   title: string;
   classNumber: string;
+  academicYear: string;
+  academicYearTerm: string;
   genre: string;
   durationMinutes: number;
 };
@@ -25,7 +27,7 @@ function CoursePrepCard({
     <div className="card card-info">
       <h2>準備開始上課</h2>
       <p><strong>{course.title}</strong></p>
-      <p>班級：{course.classNumber} / 文體：{course.genre} / 討論時長：{course.durationMinutes} 分鐘</p>
+      <p>{course.academicYear} 學年第 {course.academicYearTerm} 學期 / 班級：{course.classNumber} / 文體：{course.genre} / 討論時長：{course.durationMinutes} 分鐘</p>
       <small>你已進入準備階段，請等待老師點選「開始上課」。</small>
       <div className="row" style={{ marginTop: 10 }}>
         <div style={{ width: 220 }}>

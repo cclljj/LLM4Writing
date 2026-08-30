@@ -315,6 +315,8 @@ export default function StudentPage() {
             genre={currentActivity?.genre ?? "—"}
             durationMinutes={currentActivity?.durationMinutes ?? "—"}
             classNumber={currentActivity?.classNumber ?? "—"}
+            academicYear={currentActivity?.academicYear ?? "114"}
+            academicYearTerm={currentActivity?.academicYearTerm ?? "2"}
             groupName={session.groupName ?? "—"}
             groupMemberNames={groupMemberNames}
             essayDescription={currentActivity?.essayDescription || "—"}

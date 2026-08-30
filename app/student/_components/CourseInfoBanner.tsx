@@ -8,6 +8,8 @@ function CourseInfoBanner({
   genre,
   durationMinutes,
   classNumber,
+  academicYear,
+  academicYearTerm,
   groupName,
   groupMemberNames,
   essayDescription,
@@ -18,6 +20,8 @@ function CourseInfoBanner({
   genre: string;
   durationMinutes: string | number;
   classNumber: string;
+  academicYear: string;
+  academicYearTerm: string;
   groupName: string;
   groupMemberNames: string[];
   essayDescription: string;
@@ -43,7 +47,7 @@ function CourseInfoBanner({
           文體：{genre} / 時長：{durationMinutes} 分鐘
         </p>
         <p style={{ margin: "4px 0 0", lineHeight: 1.5 }}>
-          班級：{classNumber} / 組別：{groupName}
+          {academicYear} 學年第 {academicYearTerm} 學期 / 班級：{classNumber} / 組別：{groupName}
         </p>
         <p style={{ margin: "4px 0 0", lineHeight: 1.5 }}>
           組員名單：{groupMemberNames.length > 0 ? groupMemberNames.join("、") : "—"}
