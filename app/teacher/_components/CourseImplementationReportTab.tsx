@@ -508,9 +508,11 @@ export default function CourseImplementationReportTab({
 
   async function startClassExport(course: EndedCourseRow, format: "pdf" | "json") {
     setError("");
-    const activeJob = format === "json" ? classJsonExportJob : classPdfExportJob;
-    if (activeJob && !["succeeded", "failed", "canceled"].includes(activeJob.status)) {
-      setError(`目前正在產製全班 ${format.toUpperCase()}，完成後再下載其他課程的檔案。`);
+    const hasActiveExport = [classPdfExportJob, classJsonExportJob].some(
+      (job) => job && !["succeeded", "failed", "canceled"].includes(job.status)
+    );
+    if (startingClassPdfExport || startingClassJsonExport || hasActiveExport) {
+      setError("目前正在產製合併檔，請等待完成後再產製其他合併檔。");
       return;
     }
     if (format === "json") {
@@ -678,11 +680,24 @@ export default function CourseImplementationReportTab({
     includeStep4: Boolean(userOutline),
     includeStep8: Boolean(userDraftStep8),
   });
+  const classPdfExportIsActive = Boolean(classPdfExportJob && !["succeeded", "failed", "canceled"].includes(classPdfExportJob.status));
+  const classJsonExportIsActive = Boolean(classJsonExportJob && !["succeeded", "failed", "canceled"].includes(classJsonExportJob.status));
+  const classExportInProgress = startingClassPdfExport || startingClassJsonExport || classPdfExportIsActive || classJsonExportIsActive;
+  const classExportWaitingNotice = startingClassPdfExport || classPdfExportIsActive
+    ? "正在產製 PDF 合併檔，請等待完成後再產製其他合併檔。"
+    : startingClassJsonExport || classJsonExportIsActive
+      ? "正在產製 JSON 合併檔，請等待完成後再產製其他合併檔。"
+      : "";
 
   return (
     <>
       <div className="card">
         <h2>課程實施報告 - 已完成課程清單</h2>
+        {classExportWaitingNotice ? (
+          <small style={{ display: "block", marginBottom: 10, color: "var(--warning-text)" }}>
+            {classExportWaitingNotice}
+          </small>
+        ) : null}
         {loginRole === "admin" ? (
           <div className="row" style={{ marginBottom: 10 }}>
             <div className="col">
@@ -730,18 +745,16 @@ export default function CourseImplementationReportTab({
               {pagedCourses.map((course) => {
                 const isPdfExportCourse = classPdfExportCourse?.activityId === course.activityId;
                 const isJsonExportCourse = classJsonExportCourse?.activityId === course.activityId;
-                const pdfJobIsActive = Boolean(classPdfExportJob && !["succeeded", "failed", "canceled"].includes(classPdfExportJob.status));
-                const jsonJobIsActive = Boolean(classJsonExportJob && !["succeeded", "failed", "canceled"].includes(classJsonExportJob.status));
                 const pdfButtonLabel = isPdfExportCourse && classPdfExportJob?.status === "succeeded"
-                  ? "下載PDF"
-                  : isPdfExportCourse && (startingClassPdfExport || pdfJobIsActive)
-                    ? "產製 PDF 中..."
-                    : "下載PDF";
+                  ? "下載PDF合併檔"
+                  : isPdfExportCourse && (startingClassPdfExport || classPdfExportIsActive)
+                    ? "正在產製PDF合併檔..."
+                    : "產製PDF合併檔";
                 const jsonButtonLabel = isJsonExportCourse && classJsonExportJob?.status === "succeeded"
-                  ? "下載JSON"
-                  : isJsonExportCourse && (startingClassJsonExport || jsonJobIsActive)
-                    ? "產製 JSON 中..."
-                    : "下載JSON";
+                  ? "下載JSON合併檔"
+                  : isJsonExportCourse && (startingClassJsonExport || classJsonExportIsActive)
+                    ? "正在產製JSON合併檔..."
+                    : "產製JSON合併檔";
                 return (
                 <tr key={course.activityId}>
                   <td>{course.activityId}</td>
@@ -768,7 +781,7 @@ export default function CourseImplementationReportTab({
                         type="button"
                         className="secondary"
                         style={{ width: "auto" }}
-                        disabled={startingClassPdfExport || pdfJobIsActive}
+                        disabled={classExportInProgress}
                         onClick={() => {
                           if (isPdfExportCourse && classPdfExportJob?.status === "succeeded") {
                             downloadClassExport("pdf").catch(() => undefined);
@@ -783,7 +796,7 @@ export default function CourseImplementationReportTab({
                         type="button"
                         className="secondary"
                         style={{ width: "auto" }}
-                        disabled={startingClassJsonExport || jsonJobIsActive}
+                        disabled={classExportInProgress}
                         onClick={() => {
                           if (isJsonExportCourse && classJsonExportJob?.status === "succeeded") {
                             downloadClassExport("json").catch(() => undefined);

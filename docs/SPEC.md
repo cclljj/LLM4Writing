@@ -1163,7 +1163,7 @@ Loading 規則（#270）：
 - 第一張卡片顯示目前使用者權限內所有 `courseStatus=ended` 的課程。
 - admin 額外提供學校與教師篩選；teacher 不顯示這兩個篩選。
 - 第一張卡片每頁最多 10 筆，需提供上一頁/下一頁。
-- 每列課程的「操作」欄需有「查看」、「下載PDF」與「下載JSON」按鈕；後兩者直接針對該列已結束課程建立全班匯出工作，完成後由同一列下載 ZIP，不需先載入課程報告內容。
+- 每列課程的「操作」欄需有「查看」、「產製PDF合併檔」與「產製JSON合併檔」按鈕；後兩者直接針對該列已結束課程建立全班 ZIP 匯出工作，完成後同一按鈕需改為「下載PDF合併檔」或「下載JSON合併檔」，不需先載入課程報告內容。
 - 第二張卡片顯示課程資訊（學校、班級、作文題目）與學生清單。
 - 學生清單欄位：班級、帳號、姓名、完成度、目前進度、課程紀錄、下載。
 - 完成度以 1~5 星呈現，依學生在該課程 sessions 的參與進度、輸入品質與產出完整度做簡易評分：
@@ -1174,8 +1174,9 @@ Loading 規則（#270）：
 - 第三張卡片呈現方式需比照學習管理「個人對話紀錄」：依 Step 分卡、可展開/閉合、訊息角色標示一致、Step3/4 結構樹附圖、Step8 潤飾稿。
 - 第三張卡片若 Step3/Step4/Step8 無互動訊息，但已有 `userStep3SubmittedOutline` / `userOutline` / `userDraftStep8`，仍需顯示 Step3/Step4/Step8 卡片與對應成果內容。
 - 學生清單下載欄需提供「PDF」與「JSON」按鈕：「PDF」產生目前共同報告版本的學生個人課程實施報告；「JSON」產生同一位學生的學習成果 JSON，作為 PDF 的機器可讀版本。
-- 「下載PDF」需由後端批次產生每位學生 PDF（檔名規則同個別下載）後打包下載。
-- 「下載JSON」需由後端批次產生每位學生的學習成果 JSON（檔名規則同個別下載）後打包下載；按鈕文字不需標示 ZIP。
+- 「產製PDF合併檔」需由後端批次產生每位學生 PDF（檔名規則同個別下載）後打包下載。
+- 「產製JSON合併檔」需由後端批次產生每位學生的學習成果 JSON（檔名規則同個別下載）後打包下載；按鈕文字不需標示 ZIP。
+- 任一 PDF 或 JSON 合併檔產製進行中，清單需顯示「請等待完成後再產製其他合併檔」提示，並停用所有合併檔產製按鈕，避免同時建立多個工作。
 - 已結束課程需保留「系統 Log JSON」下載，定位為系統 log / 歷史紀錄，輸出學生輸入內容事件列與學生產物，供 IRB/研究分析使用。預設採匿名化模式；若切換為「包含學生帳號」，UI 需提示該檔案含可識別個資，需符合 IRB/同意書範圍。
 - 系統 Log JSON 每筆至少包含 `activityId`、`sessionId`、`groupId/groupName`、`type`、`studentHash`、`step`、`role="student"`、`at`、`text`；帳號模式另含 `studentAccount`。不得輸出 AI/system/internal prompt 訊息。`text` 若含其他同組成員帳號，必須以「有一位組員」遮蔽；即使帳號模式輸出該筆發言者 `studentAccount`，仍不得在文字中揭露其他組員帳號。
 - 系統 Log JSON schema `research-student-inputs-v3` 需包含 `student_message`、`makeup_outline`、`step3_submitted_outline`、`step4_revised_outline`、`draft_step6`、`draft_step8` 等 `type`。產物內容維持原始文字/Mermaid/Markdown，不轉成 HTML。

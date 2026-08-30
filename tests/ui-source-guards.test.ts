@@ -328,8 +328,15 @@ test("source-guard: course report UI exposes PDF and portfolio JSON exports sepa
   const routeSrc = await read("../app/api/teacher/course-report-exports/route.ts");
   const individualJsonRouteSrc = await read("../app/api/teacher/course-report-exports/student/route.ts");
   const exportSrc = await read("../src/lib/course-report-export.ts");
-  assert.ok(uiSrc.includes('"下載PDF"'), "completed-course rows should name PDF export");
-  assert.ok(uiSrc.includes('"下載JSON"'), "completed-course rows should name portfolio JSON export");
+  assert.ok(uiSrc.includes('"產製PDF合併檔"'), "completed-course rows should distinguish PDF archive generation");
+  assert.ok(uiSrc.includes('"下載PDF合併檔"'), "completed-course rows should distinguish PDF archive download");
+  assert.ok(uiSrc.includes('"產製JSON合併檔"'), "completed-course rows should distinguish JSON archive generation");
+  assert.ok(uiSrc.includes('"下載JSON合併檔"'), "completed-course rows should distinguish JSON archive download");
+  assert.ok(uiSrc.includes("請等待完成後再產製其他合併檔"), "class export UI should warn against concurrent archive generation");
+  assert.ok(
+    (uiSrc.match(/disabled=\{classExportInProgress\}/g) ?? []).length >= 2,
+    "PDF and JSON archive generation should share one concurrent-export lock"
+  );
   assert.ok(!uiSrc.includes("一鍵下載全班 PDF"), "class PDF export should move out of the report content card");
   assert.ok(!uiSrc.includes("一鍵下載全班 JSON"), "class JSON export should move out of the report content card");
   assert.ok(!uiSrc.includes("一鍵下載全班 ZIP"), "class report button should not describe the zip packaging");

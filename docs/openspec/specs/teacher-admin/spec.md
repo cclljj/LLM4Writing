@@ -476,9 +476,10 @@ The course implementation report SHALL preserve both the student's original Step
 
 - **GIVEN** a teacher views an ended course implementation report
 - **WHEN** the teacher uses the completed-course list
-- **THEN** the matching row's action column exposes `查看`, `下載PDF`, and `下載JSON`
+- **THEN** the matching row's action column exposes `查看`, `產製PDF合併檔`, and `產製JSON合併檔`
 - **AND** the teacher can start each class-level export without opening the report content card first
-- **AND** the row shows that export's progress and lets the teacher download the zip archive when it is ready, without labeling the button as ZIP
+- **AND** the matching button changes to `下載PDF合併檔` or `下載JSON合併檔` when its zip archive is ready
+- **AND** while either archive is being generated, the UI tells the teacher to wait and disables all archive-generation buttons to prevent concurrent jobs
 
 ### Requirement: Audit Log
 
