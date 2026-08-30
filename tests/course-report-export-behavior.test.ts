@@ -82,12 +82,16 @@ test("student portfolio JSON mirrors report input and masks peer accounts", () =
     completedAtIso: "2026-05-26T10:30:00.000Z",
   });
 
-  assert.equal(payload.schemaVersion, "student-portfolio-report-v1.3");
+  assert.equal(payload.schemaVersion, "student-portfolio-report-v1.4");
   assert.equal(payload.reportVersion, "1.1");
   assert.equal(payload.student.username, "alice");
   assert.equal(payload.student.name, "***");
   assert.equal(JSON.stringify(payload).includes("Alice"), false);
   assert.equal(payload.course.activityId, "oc-001");
+  assert.equal(payload.course.school, "*****");
+  assert.equal(payload.course.classNumber, "*****");
+  assert.equal(JSON.stringify(payload).includes("DemoSchool"), false);
+  assert.equal(JSON.stringify(payload).includes('"701"'), false);
   assert.equal(payload.summary.starLabel, "★★★★★");
   assert.equal(payload.timelineMessages[0]?.stepName, "審視題目");
   assert.equal(payload.timelineMessages[0]?.text, "有一位組員 的 Step1 提醒");
@@ -216,6 +220,10 @@ test("student portfolio JSON lists every saved learning artifact even when conte
 
   assert.equal(payload.student.name, "***");
   assert.equal(JSON.stringify(payload).includes("Alice"), false);
+  assert.equal(payload.course.school, "*****");
+  assert.equal(payload.course.classNumber, "*****");
+  assert.equal(JSON.stringify(payload).includes("DemoSchool"), false);
+  assert.equal(JSON.stringify(payload).includes('"701"'), false);
   assert.deepEqual(
     payload.stepArtifacts.map((artifact) => ({
       step: artifact.step,
