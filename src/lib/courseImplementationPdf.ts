@@ -35,6 +35,12 @@ export type CourseImplementationPdfInput = {
   timelineMessages: PdfMessage[];
   step3SubmittedOutline: string;
   step4RevisedOutline: string;
+  step4ProcessMessages?: PdfMessage[];
+  step5Report?: string;
+  step6Draft?: string;
+  step7Report?: string;
+  step8Draft?: string;
+  step10Report?: string;
   privacyPeerUsernames?: string[];
   generatedAtIso: string;
   /** ISO timestamp of the student's Step10 completion; falls back to course-ended or legacy activity time. */

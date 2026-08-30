@@ -222,6 +222,14 @@ function toTimelineMessages(session: SessionState, username: string): CourseImpl
     .map((message) => ({ role: message.role, step: message.step, text: message.text, at: message.at }));
 }
 
+function firstCourseArtifact(sessions: SessionState[], read: (session: SessionState) => string | undefined): string {
+  for (const candidate of sessions) {
+    const value = read(candidate)?.trim();
+    if (value) return value;
+  }
+  return "";
+}
+
 async function buildStudentReportInput(input: {
   activityId: string;
   school: string;
@@ -260,6 +268,12 @@ async function buildStudentReportInput(input: {
   );
   const step3SubmittedOutline = step3Session?.step3SubmittedOutlines?.[input.username] ?? "";
   const step4RevisedOutline = step4Session?.outlines?.[input.username] ?? "";
+  const step4ProcessMessages = toTimelineMessages(step4Session ?? session, input.username).filter((message) => message.step === 4);
+  const step5Report = firstCourseArtifact(courseSessions, (candidate) => candidate.reports?.step5?.[input.username]);
+  const step6Draft = firstCourseArtifact(courseSessions, (candidate) => candidate.draftStep6?.[input.username]);
+  const step7Report = firstCourseArtifact(courseSessions, (candidate) => candidate.reports?.step7?.[input.username]);
+  const step8Draft = firstCourseArtifact(courseSessions, (candidate) => candidate.draftStep8?.[input.username]);
+  const step10Report = firstCourseArtifact(courseSessions, (candidate) => candidate.reports?.step10?.[input.username]);
   const legacyCompletedAtIso = session.messages
     .filter((message) => message.userId === input.username || (!message.userId && (message.role === "ai" || message.role === "system")))
     .at(-1)?.at;
@@ -282,6 +296,12 @@ async function buildStudentReportInput(input: {
     timelineMessages,
     step3SubmittedOutline,
     step4RevisedOutline,
+    step4ProcessMessages,
+    step5Report,
+    step6Draft,
+    step7Report,
+    step8Draft,
+    step10Report,
     privacyPeerUsernames: session.participants.filter((participant) => participant !== input.username),
     generatedAtIso: nowIso(),
     completedAtIso,

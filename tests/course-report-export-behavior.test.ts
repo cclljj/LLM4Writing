@@ -62,10 +62,19 @@ test("student portfolio JSON mirrors report input and masks peer accounts", () =
     starRationales: ["完成到 Step 10。"],
     timelineMessages: [
       { role: "student", step: 3, text: "bob 給我的提醒", at: "2026-05-26T10:00:00.000Z" },
+      { role: "ai", step: 4, text: "bob 建議補上例子", at: "2026-05-26T10:10:00.000Z" },
       { role: "ai", step: 10, text: "## 總結報告\\n內容", at: "2026-05-26T10:30:00.000Z" },
     ],
     step3SubmittedOutline: "graph TD\nA[alice 原始想法]",
     step4RevisedOutline: "graph TD\nA[alice] --> B[bob 的建議]",
+    step4ProcessMessages: [
+      { role: "student", step: 4, text: "bob 讓我補上例子", at: "2026-05-26T10:05:00.000Z" },
+    ],
+    step5Report: "## Step5\nbob 的摘要",
+    step6Draft: "alice 的初稿",
+    step7Report: "bob 的 Step7 回饋",
+    step8Draft: "alice 的潤飾稿",
+    step10Report: "bob 的 Step10 總結",
     privacyPeerUsernames: ["bob"],
     generatedAtIso: "2026-05-26T11:00:00.000Z",
     completedAtIso: "2026-05-26T10:30:00.000Z",
@@ -100,11 +109,53 @@ test("student portfolio JSON mirrors report input and masks peer accounts", () =
         available: true,
         content: "graph TD\nA[alice] --> B[有一位組員 的建議]",
       },
+      {
+        step: 5,
+        artifactType: "step5_summary_report",
+        available: true,
+        content: "## Step5\n有一位組員 的摘要",
+      },
+      {
+        step: 6,
+        artifactType: "step6_draft",
+        available: true,
+        content: "alice 的初稿",
+      },
+      {
+        step: 7,
+        artifactType: "step7_feedback_report",
+        available: true,
+        content: "有一位組員 的 Step7 回饋",
+      },
+      {
+        step: 8,
+        artifactType: "step8_revised_draft",
+        available: true,
+        content: "alice 的潤飾稿",
+      },
+      {
+        step: 10,
+        artifactType: "step10_final_report",
+        available: true,
+        content: "有一位組員 的 Step10 總結",
+      },
     ]
   );
+  assert.deepEqual(payload.stepArtifacts[1]?.processMessages, [
+    {
+      role: "student",
+      step: 4,
+      text: "有一位組員 讓我補上例子",
+      at: "2026-05-26T10:05:00.000Z",
+      stepName: "對比修正",
+    },
+  ]);
+  assert.equal(payload.stepArtifacts[0]?.mermaid?.source, "graph TD\nA[alice 原始想法]");
+  assert.equal(payload.stepArtifacts[0]?.mermaid?.fencedMarkdown, "```mermaid\ngraph TD\nA[alice 原始想法]\n```");
+  assert.equal(payload.stepArtifacts[1]?.mermaid?.fencedMarkdown, "```mermaid\ngraph TD\nA[alice] --> B[有一位組員 的建議]\n```");
 });
 
-test("student portfolio JSON lists Step 3 and Step 4 artifacts even when content is missing", () => {
+test("student portfolio JSON lists every saved learning artifact even when content is missing", () => {
   const payload = buildCourseImplementationPortfolioJson({
     activityId: "oc-001",
     school: "DemoSchool",
@@ -154,8 +205,45 @@ test("student portfolio JSON lists Step 3 and Step 4 artifacts even when content
         available: false,
         content: "",
       },
+      {
+        step: 5,
+        stepName: "摘要報告",
+        contentFormat: "markdown",
+        available: false,
+        content: "",
+      },
+      {
+        step: 6,
+        stepName: "撰寫初稿",
+        contentFormat: "markdown",
+        available: false,
+        content: "",
+      },
+      {
+        step: 7,
+        stepName: "分析回饋",
+        contentFormat: "markdown",
+        available: false,
+        content: "",
+      },
+      {
+        step: 8,
+        stepName: "修改潤飾",
+        contentFormat: "markdown",
+        available: false,
+        content: "",
+      },
+      {
+        step: 10,
+        stepName: "總結報告",
+        contentFormat: "markdown",
+        available: false,
+        content: "",
+      },
     ]
   );
+  assert.equal(payload.stepArtifacts[0]?.mermaid?.fencedMarkdown, "");
+  assert.equal(payload.stepArtifacts[1]?.mermaid?.fencedMarkdown, "");
 });
 
 test("class ZIP export behavior: getDownloadBuffer returns only for succeeded jobs with zip payload", () => {
