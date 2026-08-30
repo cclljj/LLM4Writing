@@ -35,8 +35,10 @@ type PortfolioStepArtifact = {
   };
 };
 
+const DEIDENTIFIED_STUDENT_NAME = "***";
+
 export type CourseImplementationPortfolioJson = {
-  schemaVersion: "student-portfolio-report-v1.2";
+  schemaVersion: "student-portfolio-report-v1.3";
   reportVersion: "1.1";
   generatedAtIso: string;
   completedAtIso?: string;
@@ -48,7 +50,7 @@ export type CourseImplementationPortfolioJson = {
   };
   student: {
     username: string;
-    name: string;
+    name: typeof DEIDENTIFIED_STUDENT_NAME;
   };
   summary: {
     metric: CourseImplementationPdfInput["metric"];
@@ -239,7 +241,7 @@ export function buildCourseImplementationPortfolioJson(input: CourseImplementati
     return a.entryType === b.entryType ? 0 : a.entryType === "message" ? -1 : 1;
   });
   return {
-    schemaVersion: "student-portfolio-report-v1.2",
+    schemaVersion: "student-portfolio-report-v1.3",
     reportVersion: "1.1",
     generatedAtIso: input.generatedAtIso,
     completedAtIso: input.completedAtIso,
@@ -251,7 +253,7 @@ export function buildCourseImplementationPortfolioJson(input: CourseImplementati
     },
     student: {
       username: input.username,
-      name: input.name,
+      name: DEIDENTIFIED_STUDENT_NAME,
     },
     summary: {
       metric: input.metric,

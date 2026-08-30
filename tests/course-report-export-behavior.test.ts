@@ -82,9 +82,11 @@ test("student portfolio JSON mirrors report input and masks peer accounts", () =
     completedAtIso: "2026-05-26T10:30:00.000Z",
   });
 
-  assert.equal(payload.schemaVersion, "student-portfolio-report-v1.2");
+  assert.equal(payload.schemaVersion, "student-portfolio-report-v1.3");
   assert.equal(payload.reportVersion, "1.1");
   assert.equal(payload.student.username, "alice");
+  assert.equal(payload.student.name, "***");
+  assert.equal(JSON.stringify(payload).includes("Alice"), false);
   assert.equal(payload.course.activityId, "oc-001");
   assert.equal(payload.summary.starLabel, "★★★★★");
   assert.equal(payload.timelineMessages[0]?.stepName, "審視題目");
@@ -212,6 +214,8 @@ test("student portfolio JSON lists every saved learning artifact even when conte
     generatedAtIso: "2026-05-26T11:00:00.000Z",
   });
 
+  assert.equal(payload.student.name, "***");
+  assert.equal(JSON.stringify(payload).includes("Alice"), false);
   assert.deepEqual(
     payload.stepArtifacts.map((artifact) => ({
       step: artifact.step,
