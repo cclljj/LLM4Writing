@@ -12,6 +12,8 @@
 
 `main` 為唯一持續維護分支。系統規格與行為以 [`docs/SPEC.md`](./docs/SPEC.md) 為準。
 
+目前產品發行版本為 **v1.1**。完整發行說明與升級注意事項請參閱 [`CHANGELOG.md`](./CHANGELOG.md)。
+
 ---
 
 ## 研究計畫資訊
