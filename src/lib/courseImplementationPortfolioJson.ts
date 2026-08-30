@@ -2,6 +2,37 @@ import type { CourseImplementationPdfInput, PdfMessage } from "@/src/lib/courseI
 import { maskPeerUsernames, normalizeReportMarkdownText } from "@/src/lib/report-rendering";
 import { stepNameMap } from "@/src/lib/step-names";
 
+type PortfolioArtifactType =
+  | "step3_submitted_outline"
+  | "step4_revised_outline"
+  | "step5_summary_report"
+  | "step6_draft"
+  | "step7_feedback_report"
+  | "step8_revised_draft"
+  | "step10_final_report";
+
+type PortfolioTimelineMessage = PdfMessage & {
+  stepName: string;
+  entryType: "message" | "artifact";
+  artifactType?: PortfolioArtifactType;
+  contentFormat?: "mermaid" | "markdown";
+};
+
+type PortfolioStepArtifact = {
+  step: 3 | 4 | 5 | 6 | 7 | 8 | 10;
+  stepName: string;
+  artifactType: PortfolioArtifactType;
+  title: string;
+  contentFormat: "mermaid" | "markdown";
+  available: boolean;
+  content: string;
+  processMessages: Array<PdfMessage & { stepName: string }>;
+  mermaid?: {
+    source: string;
+    fencedMarkdown: string;
+  };
+};
+
 export type CourseImplementationPortfolioJson = {
   schemaVersion: "student-portfolio-report-v1.1";
   reportVersion: "1.1";
@@ -26,28 +57,8 @@ export type CourseImplementationPortfolioJson = {
     step3SubmittedOutline: string;
     step4RevisedOutline: string;
   };
-  stepArtifacts: Array<{
-    step: 3 | 4 | 5 | 6 | 7 | 8 | 10;
-    stepName: string;
-    artifactType:
-      | "step3_submitted_outline"
-      | "step4_revised_outline"
-      | "step5_summary_report"
-      | "step6_draft"
-      | "step7_feedback_report"
-      | "step8_revised_draft"
-      | "step10_final_report";
-    title: string;
-    contentFormat: "mermaid" | "markdown";
-    available: boolean;
-    content: string;
-    processMessages: Array<PdfMessage & { stepName: string }>;
-    mermaid?: {
-      source: string;
-      fencedMarkdown: string;
-    };
-  }>;
-  timelineMessages: Array<PdfMessage & { stepName: string }>;
+  stepArtifacts: PortfolioStepArtifact[];
+  timelineMessages: PortfolioTimelineMessage[];
 };
 
 function maskText(text: string, peerUsernames: string[]): string {
@@ -59,6 +70,17 @@ function mermaidFencedMarkdown(source: string): string {
   return trimmed ? `\`\`\`mermaid\n${trimmed}\n\`\`\`` : "";
 }
 
+function timelineMessageKey(message: Pick<PdfMessage, "role" | "step" | "text" | "at">): string {
+  return `${message.role}\u0000${message.step}\u0000${message.at}\u0000${message.text}`;
+}
+
+function artifactTimelineText(artifact: PortfolioStepArtifact): string {
+  if (artifact.contentFormat === "mermaid") {
+    return `## ${artifact.title}\n${artifact.mermaid?.fencedMarkdown ?? artifact.content}`;
+  }
+  return `## ${artifact.title}\n${artifact.content}`;
+}
+
 export function buildCourseImplementationPortfolioJson(input: CourseImplementationPdfInput): CourseImplementationPortfolioJson {
   const peerUsernames = input.privacyPeerUsernames ?? [];
   const step3SubmittedOutline = maskText(input.step3SubmittedOutline, peerUsernames);
@@ -68,17 +90,132 @@ export function buildCourseImplementationPortfolioJson(input: CourseImplementati
   const step7Report = maskText(input.step7Report ?? "", peerUsernames);
   const step8Draft = maskText(input.step8Draft ?? "", peerUsernames);
   const step10Report = maskText(input.step10Report ?? "", peerUsernames);
-  const timelineMessages = input.timelineMessages.map((message) => ({
+  const originalTimelineMessages: PortfolioTimelineMessage[] = input.timelineMessages.map((message) => ({
     ...message,
     text: maskText(message.text, peerUsernames),
     stepName: stepNameMap[message.step] ?? "",
+    entryType: "message",
   }));
   const step4ProcessMessages = (input.step4ProcessMessages ?? input.timelineMessages.filter((message) => message.step === 4)).map((message) => ({
     ...message,
     text: maskText(message.text, peerUsernames),
     stepName: stepNameMap[message.step] ?? "",
   }));
-  const processMessagesForStep = (step: number) => (step === 4 ? step4ProcessMessages : timelineMessages.filter((message) => message.step === step));
+  const timelineMessages: PortfolioTimelineMessage[] = [...originalTimelineMessages];
+  const timelineMessageKeys = new Set(timelineMessages.map(timelineMessageKey));
+  for (const message of step4ProcessMessages) {
+    const key = timelineMessageKey(message);
+    if (timelineMessageKeys.has(key)) continue;
+    timelineMessages.push({ ...message, entryType: "message" });
+    timelineMessageKeys.add(key);
+  }
+  const processMessagesForStep = (step: number) =>
+    step === 4 ? step4ProcessMessages : timelineMessages.filter((message) => message.step === step);
+  const stepArtifacts: PortfolioStepArtifact[] = [
+    {
+      step: 3,
+      stepName: stepNameMap[3] ?? "",
+      artifactType: "step3_submitted_outline",
+      title: "步驟三原始輸入架構圖",
+      contentFormat: "mermaid",
+      available: Boolean(step3SubmittedOutline.trim()),
+      content: step3SubmittedOutline,
+      processMessages: processMessagesForStep(3),
+      mermaid: {
+        source: step3SubmittedOutline,
+        fencedMarkdown: mermaidFencedMarkdown(step3SubmittedOutline),
+      },
+    },
+    {
+      step: 4,
+      stepName: stepNameMap[4] ?? "",
+      artifactType: "step4_revised_outline",
+      title: "步驟四討論後修正版架構圖",
+      contentFormat: "mermaid",
+      available: Boolean(step4RevisedOutline.trim()),
+      content: step4RevisedOutline,
+      processMessages: processMessagesForStep(4),
+      mermaid: {
+        source: step4RevisedOutline,
+        fencedMarkdown: mermaidFencedMarkdown(step4RevisedOutline),
+      },
+    },
+    {
+      step: 5,
+      stepName: stepNameMap[5] ?? "",
+      artifactType: "step5_summary_report",
+      title: "步驟五摘要報告",
+      contentFormat: "markdown",
+      available: Boolean(step5Report.trim()),
+      content: step5Report,
+      processMessages: processMessagesForStep(5),
+    },
+    {
+      step: 6,
+      stepName: stepNameMap[6] ?? "",
+      artifactType: "step6_draft",
+      title: "步驟六初稿",
+      contentFormat: "markdown",
+      available: Boolean(step6Draft.trim()),
+      content: step6Draft,
+      processMessages: processMessagesForStep(6),
+    },
+    {
+      step: 7,
+      stepName: stepNameMap[7] ?? "",
+      artifactType: "step7_feedback_report",
+      title: "步驟七分析回饋",
+      contentFormat: "markdown",
+      available: Boolean(step7Report.trim()),
+      content: step7Report,
+      processMessages: processMessagesForStep(7),
+    },
+    {
+      step: 8,
+      stepName: stepNameMap[8] ?? "",
+      artifactType: "step8_revised_draft",
+      title: "步驟八潤飾稿",
+      contentFormat: "markdown",
+      available: Boolean(step8Draft.trim()),
+      content: step8Draft,
+      processMessages: processMessagesForStep(8),
+    },
+    {
+      step: 10,
+      stepName: stepNameMap[10] ?? "",
+      artifactType: "step10_final_report",
+      title: "步驟十總結報告",
+      contentFormat: "markdown",
+      available: Boolean(step10Report.trim()),
+      content: step10Report,
+      processMessages: processMessagesForStep(10),
+    },
+  ];
+
+  for (const artifact of stepArtifacts) {
+    if (!artifact.available) continue;
+    const alreadyIncluded = timelineMessages.some(
+      (message) => message.step === artifact.step && message.text.includes(artifact.content)
+    );
+    if (alreadyIncluded) continue;
+    const stepMessages = timelineMessages.filter((message) => message.step === artifact.step);
+    timelineMessages.push({
+      role: "artifact",
+      step: artifact.step,
+      text: artifactTimelineText(artifact),
+      at: stepMessages.at(-1)?.at ?? input.generatedAtIso,
+      stepName: artifact.stepName,
+      entryType: "artifact",
+      artifactType: artifact.artifactType,
+      contentFormat: artifact.contentFormat,
+    });
+  }
+  timelineMessages.sort((a, b) => {
+    if (a.step !== b.step) return a.step - b.step;
+    const byTime = a.at.localeCompare(b.at);
+    if (byTime !== 0) return byTime;
+    return a.entryType === b.entryType ? 0 : a.entryType === "message" ? -1 : 1;
+  });
   return {
     schemaVersion: "student-portfolio-report-v1.1",
     reportVersion: "1.1",
@@ -103,86 +240,7 @@ export function buildCourseImplementationPortfolioJson(input: CourseImplementati
       step3SubmittedOutline,
       step4RevisedOutline,
     },
-    stepArtifacts: [
-      {
-        step: 3,
-        stepName: stepNameMap[3] ?? "",
-        artifactType: "step3_submitted_outline",
-        title: "步驟三原始輸入架構圖",
-        contentFormat: "mermaid",
-        available: Boolean(step3SubmittedOutline.trim()),
-        content: step3SubmittedOutline,
-        processMessages: processMessagesForStep(3),
-        mermaid: {
-          source: step3SubmittedOutline,
-          fencedMarkdown: mermaidFencedMarkdown(step3SubmittedOutline),
-        },
-      },
-      {
-        step: 4,
-        stepName: stepNameMap[4] ?? "",
-        artifactType: "step4_revised_outline",
-        title: "步驟四討論後修正版架構圖",
-        contentFormat: "mermaid",
-        available: Boolean(step4RevisedOutline.trim()),
-        content: step4RevisedOutline,
-        processMessages: processMessagesForStep(4),
-        mermaid: {
-          source: step4RevisedOutline,
-          fencedMarkdown: mermaidFencedMarkdown(step4RevisedOutline),
-        },
-      },
-      {
-        step: 5,
-        stepName: stepNameMap[5] ?? "",
-        artifactType: "step5_summary_report",
-        title: "步驟五摘要報告",
-        contentFormat: "markdown",
-        available: Boolean(step5Report.trim()),
-        content: step5Report,
-        processMessages: processMessagesForStep(5),
-      },
-      {
-        step: 6,
-        stepName: stepNameMap[6] ?? "",
-        artifactType: "step6_draft",
-        title: "步驟六初稿",
-        contentFormat: "markdown",
-        available: Boolean(step6Draft.trim()),
-        content: step6Draft,
-        processMessages: processMessagesForStep(6),
-      },
-      {
-        step: 7,
-        stepName: stepNameMap[7] ?? "",
-        artifactType: "step7_feedback_report",
-        title: "步驟七分析回饋",
-        contentFormat: "markdown",
-        available: Boolean(step7Report.trim()),
-        content: step7Report,
-        processMessages: processMessagesForStep(7),
-      },
-      {
-        step: 8,
-        stepName: stepNameMap[8] ?? "",
-        artifactType: "step8_revised_draft",
-        title: "步驟八潤飾稿",
-        contentFormat: "markdown",
-        available: Boolean(step8Draft.trim()),
-        content: step8Draft,
-        processMessages: processMessagesForStep(8),
-      },
-      {
-        step: 10,
-        stepName: stepNameMap[10] ?? "",
-        artifactType: "step10_final_report",
-        title: "步驟十總結報告",
-        contentFormat: "markdown",
-        available: Boolean(step10Report.trim()),
-        content: step10Report,
-        processMessages: processMessagesForStep(10),
-      },
-    ],
+    stepArtifacts,
     timelineMessages,
   };
 }

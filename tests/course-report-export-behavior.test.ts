@@ -87,6 +87,7 @@ test("student portfolio JSON mirrors report input and masks peer accounts", () =
   assert.equal(payload.summary.starLabel, "★★★★★");
   assert.equal(payload.timelineMessages[0]?.stepName, "生成論點");
   assert.equal(payload.timelineMessages[0]?.text, "有一位組員 給我的提醒");
+  assert.equal(payload.timelineMessages[0]?.entryType, "message");
   assert.equal(payload.artifacts.step3SubmittedOutline, "graph TD\nA[alice 原始想法]");
   assert.equal(payload.artifacts.step4RevisedOutline, "graph TD\nA[alice] --> B[有一位組員 的建議]");
   assert.deepEqual(
@@ -153,6 +154,22 @@ test("student portfolio JSON mirrors report input and masks peer accounts", () =
   assert.equal(payload.stepArtifacts[0]?.mermaid?.source, "graph TD\nA[alice 原始想法]");
   assert.equal(payload.stepArtifacts[0]?.mermaid?.fencedMarkdown, "```mermaid\ngraph TD\nA[alice 原始想法]\n```");
   assert.equal(payload.stepArtifacts[1]?.mermaid?.fencedMarkdown, "```mermaid\ngraph TD\nA[alice] --> B[有一位組員 的建議]\n```");
+  assert.deepEqual(
+    payload.timelineMessages
+      .filter((message) => message.entryType === "artifact")
+      .map((message) => ({ step: message.step, artifactType: message.artifactType, contentFormat: message.contentFormat })),
+    [
+      { step: 3, artifactType: "step3_submitted_outline", contentFormat: "mermaid" },
+      { step: 4, artifactType: "step4_revised_outline", contentFormat: "mermaid" },
+      { step: 5, artifactType: "step5_summary_report", contentFormat: "markdown" },
+      { step: 6, artifactType: "step6_draft", contentFormat: "markdown" },
+      { step: 7, artifactType: "step7_feedback_report", contentFormat: "markdown" },
+      { step: 8, artifactType: "step8_revised_draft", contentFormat: "markdown" },
+      { step: 10, artifactType: "step10_final_report", contentFormat: "markdown" },
+    ]
+  );
+  assert.ok(payload.timelineMessages.some((message) => message.entryType === "artifact" && message.step === 3 && message.text.includes("```mermaid")));
+  assert.ok(payload.timelineMessages.some((message) => message.entryType === "message" && message.step === 4 && message.text === "有一位組員 讓我補上例子"));
 });
 
 test("student portfolio JSON lists every saved learning artifact even when content is missing", () => {
@@ -244,6 +261,7 @@ test("student portfolio JSON lists every saved learning artifact even when conte
   );
   assert.equal(payload.stepArtifacts[0]?.mermaid?.fencedMarkdown, "");
   assert.equal(payload.stepArtifacts[1]?.mermaid?.fencedMarkdown, "");
+  assert.equal(payload.timelineMessages.length, 0);
 });
 
 test("class ZIP export behavior: getDownloadBuffer returns only for succeeded jobs with zip payload", () => {
