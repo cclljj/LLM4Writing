@@ -3,6 +3,8 @@ import { maskPeerUsernames, normalizeReportMarkdownText } from "@/src/lib/report
 import { stepNameMap } from "@/src/lib/step-names";
 
 type PortfolioArtifactType =
+  | "step1_discussion"
+  | "step2_discussion"
   | "step3_submitted_outline"
   | "step4_revised_outline"
   | "step5_summary_report"
@@ -15,15 +17,15 @@ type PortfolioTimelineMessage = PdfMessage & {
   stepName: string;
   entryType: "message" | "artifact";
   artifactType?: PortfolioArtifactType;
-  contentFormat?: "mermaid" | "markdown";
+  contentFormat?: "conversation" | "mermaid" | "markdown";
 };
 
 type PortfolioStepArtifact = {
-  step: 3 | 4 | 5 | 6 | 7 | 8 | 10;
+  step: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 10;
   stepName: string;
   artifactType: PortfolioArtifactType;
   title: string;
-  contentFormat: "mermaid" | "markdown";
+  contentFormat: "conversation" | "mermaid" | "markdown";
   available: boolean;
   content: string;
   processMessages: Array<PdfMessage & { stepName: string }>;
@@ -34,7 +36,7 @@ type PortfolioStepArtifact = {
 };
 
 export type CourseImplementationPortfolioJson = {
-  schemaVersion: "student-portfolio-report-v1.1";
+  schemaVersion: "student-portfolio-report-v1.2";
   reportVersion: "1.1";
   generatedAtIso: string;
   completedAtIso?: string;
@@ -52,10 +54,6 @@ export type CourseImplementationPortfolioJson = {
     metric: CourseImplementationPdfInput["metric"];
     starLabel: string;
     starRationales: string[];
-  };
-  artifacts: {
-    step3SubmittedOutline: string;
-    step4RevisedOutline: string;
   };
   stepArtifacts: PortfolioStepArtifact[];
   timelineMessages: PortfolioTimelineMessage[];
@@ -79,6 +77,10 @@ function artifactTimelineText(artifact: PortfolioStepArtifact): string {
     return `## ${artifact.title}\n${artifact.mermaid?.fencedMarkdown ?? artifact.content}`;
   }
   return `## ${artifact.title}\n${artifact.content}`;
+}
+
+function discussionTranscript(messages: Array<PdfMessage & { stepName: string }>): string {
+  return messages.map((message) => `### ${message.role} · ${message.at}\n${message.text}`).join("\n\n");
 }
 
 export function buildCourseImplementationPortfolioJson(input: CourseImplementationPdfInput): CourseImplementationPortfolioJson {
@@ -112,6 +114,26 @@ export function buildCourseImplementationPortfolioJson(input: CourseImplementati
   const processMessagesForStep = (step: number) =>
     step === 4 ? step4ProcessMessages : timelineMessages.filter((message) => message.step === step);
   const stepArtifacts: PortfolioStepArtifact[] = [
+    {
+      step: 1,
+      stepName: stepNameMap[1] ?? "",
+      artifactType: "step1_discussion",
+      title: "步驟一討論紀錄",
+      contentFormat: "conversation",
+      available: processMessagesForStep(1).length > 0,
+      content: discussionTranscript(processMessagesForStep(1)),
+      processMessages: processMessagesForStep(1),
+    },
+    {
+      step: 2,
+      stepName: stepNameMap[2] ?? "",
+      artifactType: "step2_discussion",
+      title: "步驟二討論紀錄",
+      contentFormat: "conversation",
+      available: processMessagesForStep(2).length > 0,
+      content: discussionTranscript(processMessagesForStep(2)),
+      processMessages: processMessagesForStep(2),
+    },
     {
       step: 3,
       stepName: stepNameMap[3] ?? "",
@@ -193,7 +215,7 @@ export function buildCourseImplementationPortfolioJson(input: CourseImplementati
   ];
 
   for (const artifact of stepArtifacts) {
-    if (!artifact.available) continue;
+    if (!artifact.available || artifact.contentFormat === "conversation") continue;
     const alreadyIncluded = timelineMessages.some(
       (message) => message.step === artifact.step && message.text.includes(artifact.content)
     );
@@ -217,7 +239,7 @@ export function buildCourseImplementationPortfolioJson(input: CourseImplementati
     return a.entryType === b.entryType ? 0 : a.entryType === "message" ? -1 : 1;
   });
   return {
-    schemaVersion: "student-portfolio-report-v1.1",
+    schemaVersion: "student-portfolio-report-v1.2",
     reportVersion: "1.1",
     generatedAtIso: input.generatedAtIso,
     completedAtIso: input.completedAtIso,
@@ -235,10 +257,6 @@ export function buildCourseImplementationPortfolioJson(input: CourseImplementati
       metric: input.metric,
       starLabel: input.starLabel,
       starRationales: input.starRationales,
-    },
-    artifacts: {
-      step3SubmittedOutline,
-      step4RevisedOutline,
     },
     stepArtifacts,
     timelineMessages,

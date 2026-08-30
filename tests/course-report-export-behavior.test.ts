@@ -61,6 +61,8 @@ test("student portfolio JSON mirrors report input and masks peer accounts", () =
     starLabel: "★★★★★",
     starRationales: ["完成到 Step 10。"],
     timelineMessages: [
+      { role: "system", step: 1, text: "bob 的 Step1 提醒", at: "2026-05-26T09:40:00.000Z" },
+      { role: "student", step: 2, text: "bob 的 Step2 資料", at: "2026-05-26T09:50:00.000Z" },
       { role: "student", step: 3, text: "bob 給我的提醒", at: "2026-05-26T10:00:00.000Z" },
       { role: "ai", step: 4, text: "bob 建議補上例子", at: "2026-05-26T10:10:00.000Z" },
       { role: "ai", step: 10, text: "## 總結報告\\n內容", at: "2026-05-26T10:30:00.000Z" },
@@ -80,16 +82,15 @@ test("student portfolio JSON mirrors report input and masks peer accounts", () =
     completedAtIso: "2026-05-26T10:30:00.000Z",
   });
 
-  assert.equal(payload.schemaVersion, "student-portfolio-report-v1.1");
+  assert.equal(payload.schemaVersion, "student-portfolio-report-v1.2");
   assert.equal(payload.reportVersion, "1.1");
   assert.equal(payload.student.username, "alice");
   assert.equal(payload.course.activityId, "oc-001");
   assert.equal(payload.summary.starLabel, "★★★★★");
-  assert.equal(payload.timelineMessages[0]?.stepName, "生成論點");
-  assert.equal(payload.timelineMessages[0]?.text, "有一位組員 給我的提醒");
+  assert.equal(payload.timelineMessages[0]?.stepName, "審視題目");
+  assert.equal(payload.timelineMessages[0]?.text, "有一位組員 的 Step1 提醒");
   assert.equal(payload.timelineMessages[0]?.entryType, "message");
-  assert.equal(payload.artifacts.step3SubmittedOutline, "graph TD\nA[alice 原始想法]");
-  assert.equal(payload.artifacts.step4RevisedOutline, "graph TD\nA[alice] --> B[有一位組員 的建議]");
+  assert.equal("artifacts" in payload, false);
   assert.deepEqual(
     payload.stepArtifacts.map((artifact) => ({
       step: artifact.step,
@@ -98,6 +99,18 @@ test("student portfolio JSON mirrors report input and masks peer accounts", () =
       content: artifact.content,
     })),
     [
+      {
+        step: 1,
+        artifactType: "step1_discussion",
+        available: true,
+        content: "### system · 2026-05-26T09:40:00.000Z\n有一位組員 的 Step1 提醒",
+      },
+      {
+        step: 2,
+        artifactType: "step2_discussion",
+        available: true,
+        content: "### student · 2026-05-26T09:50:00.000Z\n有一位組員 的 Step2 資料",
+      },
       {
         step: 3,
         artifactType: "step3_submitted_outline",
@@ -142,7 +155,7 @@ test("student portfolio JSON mirrors report input and masks peer accounts", () =
       },
     ]
   );
-  assert.deepEqual(payload.stepArtifacts[1]?.processMessages, [
+  assert.deepEqual(payload.stepArtifacts[3]?.processMessages, [
     {
       role: "student",
       step: 4,
@@ -151,9 +164,9 @@ test("student portfolio JSON mirrors report input and masks peer accounts", () =
       stepName: "對比修正",
     },
   ]);
-  assert.equal(payload.stepArtifacts[0]?.mermaid?.source, "graph TD\nA[alice 原始想法]");
-  assert.equal(payload.stepArtifacts[0]?.mermaid?.fencedMarkdown, "```mermaid\ngraph TD\nA[alice 原始想法]\n```");
-  assert.equal(payload.stepArtifacts[1]?.mermaid?.fencedMarkdown, "```mermaid\ngraph TD\nA[alice] --> B[有一位組員 的建議]\n```");
+  assert.equal(payload.stepArtifacts[2]?.mermaid?.source, "graph TD\nA[alice 原始想法]");
+  assert.equal(payload.stepArtifacts[2]?.mermaid?.fencedMarkdown, "```mermaid\ngraph TD\nA[alice 原始想法]\n```");
+  assert.equal(payload.stepArtifacts[3]?.mermaid?.fencedMarkdown, "```mermaid\ngraph TD\nA[alice] --> B[有一位組員 的建議]\n```");
   assert.deepEqual(
     payload.timelineMessages
       .filter((message) => message.entryType === "artifact")
@@ -209,6 +222,20 @@ test("student portfolio JSON lists every saved learning artifact even when conte
     })),
     [
       {
+        step: 1,
+        stepName: "審視題目",
+        contentFormat: "conversation",
+        available: false,
+        content: "",
+      },
+      {
+        step: 2,
+        stepName: "蒐集資料",
+        contentFormat: "conversation",
+        available: false,
+        content: "",
+      },
+      {
         step: 3,
         stepName: "生成論點",
         contentFormat: "mermaid",
@@ -259,8 +286,8 @@ test("student portfolio JSON lists every saved learning artifact even when conte
       },
     ]
   );
-  assert.equal(payload.stepArtifacts[0]?.mermaid?.fencedMarkdown, "");
-  assert.equal(payload.stepArtifacts[1]?.mermaid?.fencedMarkdown, "");
+  assert.equal(payload.stepArtifacts[2]?.mermaid?.fencedMarkdown, "");
+  assert.equal(payload.stepArtifacts[3]?.mermaid?.fencedMarkdown, "");
   assert.equal(payload.timelineMessages.length, 0);
 });
 
