@@ -8,6 +8,8 @@ type LifecycleActivity = {
   id: string;
   school: string;
   classNumber: string;
+  academicYear: string;
+  academicYearTerm: string;
   title: string;
   ownerTeacherUsername?: string;
   courseStatus?: CourseStatus;
@@ -59,6 +61,7 @@ function CourseLifecycleTable({
             <tr>
               <th>學校</th>
               <th>班級</th>
+              <th>學年／學期</th>
               <th>課程</th>
               <th>教師</th>
               <th>目前狀態</th>
@@ -90,6 +93,7 @@ function CourseLifecycleTable({
                 <tr key={activity.id}>
                   <td>{activity.school}</td>
                   <td>{activity.classNumber}</td>
+                  <td>{activity.academicYear}／{activity.academicYearTerm}</td>
                   <td>{activity.title}</td>
                   <td>
                     {activity.ownerTeacherUsername

@@ -68,6 +68,7 @@ export default function LearningMonitorTab({
   const [personalLogStepExpanded, setPersonalLogStepExpanded] = useState<Record<number, boolean>>({});
   const [learningSchoolFilter, setLearningSchoolFilter] = useState("all");
   const [learningClassFilter, setLearningClassFilter] = useState("all");
+  const [learningAcademicTermFilter, setLearningAcademicTermFilter] = useState("all");
   const [learningCourseFilter, setLearningCourseFilter] = useState("all");
   const [learningStatusFilter, setLearningStatusFilter] = useState("all");
   const [learningPage, setLearningPage] = useState(1);
@@ -142,18 +143,33 @@ export default function LearningMonitorTab({
     let scoped = activities;
     if (learningSchoolFilter !== "all") scoped = scoped.filter((item) => item.school === learningSchoolFilter);
     if (learningClassFilter !== "all") scoped = scoped.filter((item) => item.classNumber === learningClassFilter);
+    if (learningAcademicTermFilter !== "all") scoped = scoped.filter((item) => `${item.academicYear}::${item.academicYearTerm}` === learningAcademicTermFilter);
     return scoped.map((item) => ({ id: item.id, label: item.title }));
+  }, [activities, learningSchoolFilter, learningClassFilter, learningAcademicTermFilter]);
+
+  const learningAcademicTermOptions = useMemo(() => {
+    const scoped = activities.filter((item) =>
+      (learningSchoolFilter === "all" || item.school === learningSchoolFilter) &&
+      (learningClassFilter === "all" || item.classNumber === learningClassFilter)
+    );
+    return Array.from(new Map(
+      scoped.map((item) => {
+        const value = `${item.academicYear}::${item.academicYearTerm}`;
+        return [value, { value, label: `${item.academicYear} 學年第 ${item.academicYearTerm} 學期` }];
+      })
+    ).values()).sort((a, b) => b.value.localeCompare(a.value, "zh-Hant"));
   }, [activities, learningSchoolFilter, learningClassFilter]);
 
   const filteredLearningActivities = useMemo(() => {
     return activities.filter((item) => {
       if (learningSchoolFilter !== "all" && item.school !== learningSchoolFilter) return false;
       if (learningClassFilter !== "all" && item.classNumber !== learningClassFilter) return false;
+      if (learningAcademicTermFilter !== "all" && `${item.academicYear}::${item.academicYearTerm}` !== learningAcademicTermFilter) return false;
       if (learningCourseFilter !== "all" && item.id !== learningCourseFilter) return false;
       if (learningStatusFilter !== "all" && (item.courseStatus ?? "not_started") !== learningStatusFilter) return false;
       return true;
     });
-  }, [activities, learningSchoolFilter, learningClassFilter, learningCourseFilter, learningStatusFilter]);
+  }, [activities, learningSchoolFilter, learningClassFilter, learningAcademicTermFilter, learningCourseFilter, learningStatusFilter]);
 
   const learningPageSize = 10;
   const totalLearningPages = Math.max(1, Math.ceil(filteredLearningActivities.length / learningPageSize));
@@ -577,13 +593,16 @@ export default function LearningMonitorTab({
         <MonitorFilterBar
           schoolFilter={learningSchoolFilter}
           classFilter={learningClassFilter}
+          academicTermFilter={learningAcademicTermFilter}
           courseFilter={learningCourseFilter}
           statusFilter={learningStatusFilter}
           schoolOptions={learningSchoolOptions}
           classOptions={learningClassOptions}
+          academicTermOptions={learningAcademicTermOptions}
           courseOptions={learningCourseOptions}
           onSchoolChange={setLearningSchoolFilter}
           onClassChange={setLearningClassFilter}
+          onAcademicTermChange={setLearningAcademicTermFilter}
           onCourseChange={setLearningCourseFilter}
           onStatusChange={setLearningStatusFilter}
         />

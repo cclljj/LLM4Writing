@@ -103,6 +103,13 @@ The learning management UI SHALL expose course state controls consistent with th
 - **WHEN** the course appears in the learning management list
 - **THEN** the primary state action is to start the course
 
+#### Scenario: Course list academic term filter
+
+- **GIVEN** learning management has visible courses from one or more academic year/term offerings
+- **WHEN** teacher/admin opens the course list or changes school/class filters
+- **THEN** every course row shows its academic year and academic term
+- **AND** the academic year/term filter contains only combinations that exist in the current filtered course data
+
 #### Scenario: In-progress course
 
 - **GIVEN** a course is `in_progress`
@@ -131,6 +138,7 @@ The teacher monitor SHALL load course-scoped summaries before loading full sessi
 - **GIVEN** a teacher clicks view status for a course
 - **WHEN** monitor data is loaded
 - **THEN** the dashboard and session list are scoped to that course's `activityId`
+- **AND** the monitor context labels include the selected course's academic year and academic term
 
 #### Scenario: Summary polling
 
@@ -280,6 +288,7 @@ The course management area SHALL provide ended-course reports and student-level 
 - **GIVEN** a teacher or admin opens course implementation reports
 - **WHEN** report courses are listed
 - **THEN** only `courseStatus=ended` courses visible to that user are shown, with pagination
+- **AND** each course row and selected-course context shows academic year and academic term
 
 #### Scenario: Student report
 
@@ -389,6 +398,12 @@ The admin console SHALL provide Prompt/LLM diagnostics, KPI trends, and non-sens
 - **WHEN** the per-step KPI section renders
 - **THEN** it shows only the selected course's Step1~10 KPI rows instead of global cross-course aggregates
 
+#### Scenario: Diagnostics course labels include academic term
+
+- **GIVEN** diagnostics renders course KPI ranking, course trend, or recent-session rows
+- **WHEN** a row is associated with a course activity
+- **THEN** it shows the activity's academic year and academic term alongside its school, class, and course title
+
 #### Scenario: Step drill-down filters fallback investigation
 
 - **GIVEN** an admin selects a course and then selects a step row
@@ -438,6 +453,7 @@ The admin console SHALL provide Prompt/LLM diagnostics, KPI trends, and non-sens
 - **GIVEN** diagnostics renders course/class trend tables
 - **WHEN** event-backed trend rows are aggregated
 - **THEN** school/class/course labels prefer session-snapshot metadata (by `session_id`) before activity lookup
+- **AND** academic year/term labels use the same metadata-resolution order
 - **AND** labels fall back to activity-id metadata when session snapshot metadata is unavailable
 
 #### Scenario: Run store migration from diagnostics

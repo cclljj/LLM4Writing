@@ -5,25 +5,31 @@ import { memo } from "react";
 function MonitorFilterBar({
   schoolFilter,
   classFilter,
+  academicTermFilter,
   courseFilter,
   statusFilter,
   schoolOptions,
   classOptions,
+  academicTermOptions,
   courseOptions,
   onSchoolChange,
   onClassChange,
+  onAcademicTermChange,
   onCourseChange,
   onStatusChange
 }: {
   schoolFilter: string;
   classFilter: string;
+  academicTermFilter: string;
   courseFilter: string;
   statusFilter: string;
   schoolOptions: string[];
   classOptions: string[];
+  academicTermOptions: Array<{ value: string; label: string }>;
   courseOptions: Array<{ id: string; label: string }>;
   onSchoolChange: (value: string) => void;
   onClassChange: (value: string) => void;
+  onAcademicTermChange: (value: string) => void;
   onCourseChange: (value: string) => void;
   onStatusChange: (value: string) => void;
 }) {
@@ -48,6 +54,15 @@ function MonitorFilterBar({
             <option key={classNumber} value={classNumber}>
               {classNumber}
             </option>
+          ))}
+        </select>
+      </div>
+      <div className="col">
+        <label>學年／學期篩選</label>
+        <select value={academicTermFilter} onChange={(e) => onAcademicTermChange(e.target.value)}>
+          <option value="all">全部</option>
+          {academicTermOptions.map((term) => (
+            <option key={term.value} value={term.value}>{term.label}</option>
           ))}
         </select>
       </div>

@@ -76,6 +76,8 @@ type DiagnosticsPayload = {
       activityTitle: string;
       school: string;
       classNumber: string;
+      academicYear: string;
+      academicYearTerm: string;
       groupName: string;
       currentStep: number;
       participantCount: number;
@@ -114,6 +116,8 @@ type DiagnosticsPayload = {
     activityId: string;
     school: string;
     classNumber: string;
+    academicYear: string;
+    academicYearTerm: string;
     activityTitle: string;
     ownerTeacherName: string;
     ownerTeacherUsername: string;
@@ -152,6 +156,8 @@ type DiagnosticsPayload = {
       key: string;
       school: string;
       classNumber: string;
+      academicYear: string;
+      academicYearTerm: string;
       activityTitle: string;
       points: Array<{
         date: string;
@@ -467,6 +473,7 @@ export default function AdminPromptDiagnostics() {
                     <th>課程</th>
                     <th>學校</th>
                     <th>班級</th>
+                    <th>學年／學期</th>
                     <th>教師</th>
                     <th>成功率</th>
                     <th>Fallback 率</th>
@@ -490,6 +497,7 @@ export default function AdminPromptDiagnostics() {
                       <td>{course.activityTitle}</td>
                       <td>{course.school}</td>
                       <td>{course.classNumber}</td>
+                      <td>{course.academicYear}／{course.academicYearTerm}</td>
                       <td>
                         {course.ownerTeacherUsername
                           ? `${course.ownerTeacherName || course.ownerTeacherUsername}(${course.ownerTeacherUsername})`
@@ -511,7 +519,7 @@ export default function AdminPromptDiagnostics() {
 
             <hr style={{ border: 0, borderTop: "1px solid var(--line-soft)", margin: "14px 0" }} />
             <h4 style={{ marginBottom: 6 }}>
-              課程步驟分析（{selectedCourse ? `${selectedCourse.activityTitle} / ${selectedCourse.classNumber}` : "—"}）
+              課程步驟分析（{selectedCourse ? `${selectedCourse.activityTitle} / ${selectedCourse.classNumber} / ${selectedCourse.academicYear} 學年第 ${selectedCourse.academicYearTerm} 學期` : "—"}）
             </h4>
             <small style={{ display: "block", marginBottom: 8, color: "var(--muted)" }}>
               先選課程，再看 Step1~10 的成功率 / fallback 率 / 拒答率 / 平均等待。點步驟可篩選下方追查樣本。
@@ -673,6 +681,7 @@ export default function AdminPromptDiagnostics() {
                   <tr>
                     <th>學校</th>
                     <th>班級</th>
+                    <th>學年／學期</th>
                     <th>課程</th>
                     <th>日期點</th>
                     <th>成功率趨勢</th>
@@ -688,6 +697,7 @@ export default function AdminPromptDiagnostics() {
                       <tr key={series.key}>
                         <td>{series.school}</td>
                         <td>{series.classNumber}</td>
+                        <td>{series.academicYear}／{series.academicYearTerm}</td>
                         <td>{series.activityTitle}</td>
                         <td>{series.points.length}</td>
                         <td>{trendValuesText(series.points.map((point) => point.successRate))}</td>
@@ -942,6 +952,7 @@ export default function AdminPromptDiagnostics() {
                     <th>近期 Session</th>
                     <th>學校</th>
                     <th>班級</th>
+                    <th>學年／學期</th>
                     <th>組別</th>
                     <th>Step</th>
                     <th>成員</th>
@@ -960,6 +971,7 @@ export default function AdminPromptDiagnostics() {
                       <td>{session.activityTitle}</td>
                       <td>{session.school}</td>
                       <td>{session.classNumber}</td>
+                      <td>{session.academicYear}／{session.academicYearTerm}</td>
                       <td>{session.groupName}</td>
                       <td>Step {session.currentStep}</td>
                       <td>{session.participantCount}</td>

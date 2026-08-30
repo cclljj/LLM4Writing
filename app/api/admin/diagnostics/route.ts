@@ -605,6 +605,8 @@ type TrendSeries = {
   key: string;
   school: string;
   classNumber: string;
+  academicYear: string;
+  academicYearTerm: string;
   activityTitle: string;
   points: TrendPoint[];
 };
@@ -623,12 +625,16 @@ type TrendMeta = {
   key: string;
   school: string;
   classNumber: string;
+  academicYear: string;
+  academicYearTerm: string;
   activityTitle: string;
 };
 
 type TrendBaseMeta = {
   school: string;
   classNumber: string;
+  academicYear: string;
+  academicYearTerm: string;
   activityTitle: string;
 };
 
@@ -637,6 +643,8 @@ type CourseAggregate = {
   activityId: string;
   school: string;
   classNumber: string;
+  academicYear: string;
+  academicYearTerm: string;
   activityTitle: string;
   ownerTeacherName: string;
   ownerTeacherUsername: string;
@@ -683,6 +691,14 @@ function mergeTrendMeta(
       isTrendMetaPlaceholder(current.classNumber) && !isTrendMetaPlaceholder(incoming.classNumber)
         ? incoming.classNumber
         : current.classNumber,
+    academicYear:
+      isTrendMetaPlaceholder(current.academicYear) && !isTrendMetaPlaceholder(incoming.academicYear)
+        ? incoming.academicYear
+        : current.academicYear,
+    academicYearTerm:
+      isTrendMetaPlaceholder(current.academicYearTerm) && !isTrendMetaPlaceholder(incoming.academicYearTerm)
+        ? incoming.academicYearTerm
+        : current.academicYearTerm,
     activityTitle:
       isTrendMetaPlaceholder(current.activityTitle) && !isTrendMetaPlaceholder(incoming.activityTitle)
         ? incoming.activityTitle
@@ -692,17 +708,21 @@ function mergeTrendMeta(
 
 function buildTrendMeta(
   session: SessionState,
-  activity: { school?: string; classNumber?: string; title?: string } | undefined,
+  activity: { school?: string; classNumber?: string; academicYear?: string; academicYearTerm?: string; title?: string } | undefined,
   dimension: TrendDimension
 ): TrendMeta {
   const school = activity?.school ?? "—";
   const classNumber = activity?.classNumber ?? "—";
+  const academicYear = activity?.academicYear ?? "—";
+  const academicYearTerm = activity?.academicYearTerm ?? "—";
   const activityTitle = activity?.title ?? session.activityTitle ?? session.activityId ?? "未命名課程";
   if (dimension === "class") {
     return {
       key: `${school}::${classNumber}`,
       school,
       classNumber,
+      academicYear,
+      academicYearTerm,
       activityTitle: "全部課程"
     };
   }
@@ -710,6 +730,8 @@ function buildTrendMeta(
     key: `${school}::${classNumber}::${activityTitle}`,
     school,
     classNumber,
+    academicYear,
+    academicYearTerm,
     activityTitle
   };
 }
@@ -725,6 +747,8 @@ function buildSessionTrendMetaMaps(sessions: SessionState[]): {
     const meta: TrendBaseMeta = {
       school: activity?.school ?? "—",
       classNumber: activity?.classNumber ?? "—",
+      academicYear: activity?.academicYear ?? "—",
+      academicYearTerm: activity?.academicYearTerm ?? "—",
       activityTitle: activity?.title ?? session.activityTitle ?? session.activityId ?? "未命名課程"
     };
     if (!hasMeaningfulTrendMeta(meta)) continue;
@@ -744,6 +768,8 @@ function resolveCourseMeta(
   activityId: string;
   school: string;
   classNumber: string;
+  academicYear: string;
+  academicYearTerm: string;
   activityTitle: string;
   ownerTeacherName: string;
   ownerTeacherUsername: string;
@@ -752,6 +778,8 @@ function resolveCourseMeta(
   const activityId = session.activityId ?? "__unknown_activity__";
   const school = activity?.school ?? "—";
   const classNumber = activity?.classNumber ?? "—";
+  const academicYear = activity?.academicYear ?? "—";
+  const academicYearTerm = activity?.academicYearTerm ?? "—";
   const activityTitle = activity?.title ?? session.activityTitle ?? session.activityId ?? "未命名課程";
   const ownerTeacherUsername = activity?.ownerTeacherUsername ?? "";
   const ownerTeacherName = ownerTeacherUsername
@@ -762,6 +790,8 @@ function resolveCourseMeta(
     activityId,
     school,
     classNumber,
+    academicYear,
+    academicYearTerm,
     activityTitle,
     ownerTeacherName,
     ownerTeacherUsername
@@ -1011,6 +1041,8 @@ function computeTrendSeries(
         key: groupKey,
         school: meta?.school ?? "—",
         classNumber: meta?.classNumber ?? "—",
+        academicYear: meta?.academicYear ?? "—",
+        academicYearTerm: meta?.academicYearTerm ?? "—",
         activityTitle: meta?.activityTitle ?? "未命名課程",
         points: points.sort((a, b) => a.date.localeCompare(b.date))
       };
@@ -1034,6 +1066,8 @@ function computeTrendSeriesFromLearningEvents(
     const activity = activityId ? findActivity(activityId) : undefined;
     const school = activity?.school ?? activityMeta?.school ?? sessionMeta?.school ?? "—";
     const classNumber = activity?.classNumber ?? activityMeta?.classNumber ?? sessionMeta?.classNumber ?? "—";
+    const academicYear = activity?.academicYear ?? activityMeta?.academicYear ?? sessionMeta?.academicYear ?? "—";
+    const academicYearTerm = activity?.academicYearTerm ?? activityMeta?.academicYearTerm ?? sessionMeta?.academicYearTerm ?? "—";
     const activityTitle =
       activity?.title ?? activityMeta?.activityTitle ?? sessionMeta?.activityTitle ?? activityId ?? "未命名課程";
     const key =
@@ -1046,6 +1080,8 @@ function computeTrendSeriesFromLearningEvents(
       key,
       school,
       classNumber,
+      academicYear,
+      academicYearTerm,
       activityTitle: dimension === "class" ? "全部課程" : activityTitle
     };
     if (!hasMeaningfulTrendMeta(meta)) continue;
@@ -1054,6 +1090,8 @@ function computeTrendSeriesFromLearningEvents(
       ...meta,
       school: mergedMeta.school,
       classNumber: mergedMeta.classNumber,
+      academicYear: mergedMeta.academicYear,
+      academicYearTerm: mergedMeta.academicYearTerm,
       activityTitle: dimension === "class" ? "全部課程" : mergedMeta.activityTitle
     });
 
@@ -1119,6 +1157,8 @@ function computeTrendSeriesFromLearningEvents(
         key: groupKey,
         school: meta?.school ?? "—",
         classNumber: meta?.classNumber ?? "—",
+        academicYear: meta?.academicYear ?? "—",
+        academicYearTerm: meta?.academicYearTerm ?? "—",
         activityTitle: meta?.activityTitle ?? "未命名課程",
         points: points.sort((a, b) => a.date.localeCompare(b.date))
       };
@@ -1271,6 +1311,8 @@ async function buildDiagnosticsPayload(selectedWindow: DiagnosticsWindow, nowMs:
         activityTitle: session.activityTitle ?? session.activityId ?? "未命名課程",
         school: activity?.school ?? "—",
         classNumber: activity?.classNumber ?? "—",
+        academicYear: activity?.academicYear ?? "—",
+        academicYearTerm: activity?.academicYearTerm ?? "—",
         groupName: session.groupName ?? session.groupId ?? "未命名組",
         currentStep: session.currentStep,
         participantCount: session.participants.length,

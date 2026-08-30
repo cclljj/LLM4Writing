@@ -107,11 +107,11 @@ export function useMonitorData(input: {
     () => activities.find((activity) => activity.id === selectedLearningActivityId),
     [activities, selectedLearningActivityId]
   );
-  // 各區塊 header 的上下文後綴 (#258)：「學校 / 班級 / 文章題目」
+  // 各區塊 header 的上下文後綴 (#258)：「學校 / 班級 / 學年學期 / 文章題目」
   const contextLabel = useMemo(() => {
     if (!selectedLearningActivity) return "";
-    const { school, classNumber, title } = selectedLearningActivity;
-    return `${school} / ${classNumber} / ${title}`;
+    const { school, classNumber, academicYear, academicYearTerm, title } = selectedLearningActivity;
+    return `${school} / ${classNumber} / ${academicYear} 學年第 ${academicYearTerm} 學期 / ${title}`;
   }, [selectedLearningActivity]);
 
   const filteredMonitorSessions = useMemo(

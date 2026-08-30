@@ -24,6 +24,8 @@ type EndedCourseRow = {
   activityId: string;
   school: string;
   classNumber: string;
+  academicYear: string;
+  academicYearTerm: string;
   title: string;
   ownerTeacherUsername: string;
   ownerTeacherName: string;
@@ -182,6 +184,8 @@ export default function CourseImplementationReportTab({
           activityId: activity.id,
           school: activity.school,
           classNumber: activity.classNumber,
+          academicYear: activity.academicYear,
+          academicYearTerm: activity.academicYearTerm,
           title: activity.title,
           ownerTeacherUsername,
           ownerTeacherName,
@@ -422,6 +426,8 @@ export default function CourseImplementationReportTab({
       activityId: selectedCourse.activityId,
       school: selectedCourse.school,
       classNumber: selectedCourse.classNumber,
+      academicYear: selectedCourse.academicYear,
+      academicYearTerm: selectedCourse.academicYearTerm,
       title: selectedCourse.title,
       username,
       name: metric.name,
@@ -736,6 +742,7 @@ export default function CourseImplementationReportTab({
                 <th>課程 ID</th>
                 <th>學校</th>
                 <th>班級</th>
+                <th>學年／學期</th>
                 <th>作文題目</th>
                 {loginRole === "admin" ? <th>教師</th> : null}
                 <th>操作</th>
@@ -760,6 +767,7 @@ export default function CourseImplementationReportTab({
                   <td>{course.activityId}</td>
                   <td>{course.school}</td>
                   <td>{course.classNumber}</td>
+                  <td>{course.academicYear}／{course.academicYearTerm}</td>
                   <td>{course.title}</td>
                   {loginRole === "admin" ? (
                     <td>{course.ownerTeacherUsername ? `${course.ownerTeacherName} (${course.ownerTeacherUsername})` : "未指派"}</td>
@@ -855,7 +863,7 @@ export default function CourseImplementationReportTab({
         <div className="card">
           <h2>課程實施報告內容</h2>
           <small style={{ display: "block", marginBottom: 10 }}>
-            {selectedCourse.school} / {selectedCourse.classNumber} / {selectedCourse.title}
+            {selectedCourse.school} / {selectedCourse.classNumber} / {selectedCourse.academicYear} 學年第 {selectedCourse.academicYearTerm} 學期 / {selectedCourse.title}
           </small>
           <div className="row" style={{ alignItems: "center", gap: 8, marginBottom: 10 }}>
             <div style={{ width: 170 }}>

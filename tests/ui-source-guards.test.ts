@@ -356,3 +356,19 @@ test("source-guard: course report UI exposes PDF and portfolio JSON exports sepa
   assert.ok(individualJsonRouteSrc.includes("recordAuditLog"), "individual JSON route should write an audit log");
   assert.ok(exportSrc.includes("generateStudentJsonBytes"), "individual JSON export should use the same JSON builder as class exports");
 });
+
+test("source-guard: teacher course views show and filter by academic year and term", async () => {
+  const monitorSrc = await read("../app/teacher/_components/LearningMonitorTab.tsx");
+  const filterSrc = await read("../app/teacher/_components/MonitorFilterBar.tsx");
+  const lifecycleSrc = await read("../app/teacher/_components/CourseLifecycleTable.tsx");
+  const reportSrc = await read("../app/teacher/_components/CourseImplementationReportTab.tsx");
+  const diagnosticsSrc = await read("../app/teacher/_components/AdminPromptDiagnostics.tsx");
+  const diagnosticsRouteSrc = await read("../app/api/admin/diagnostics/route.ts");
+  assert.ok(monitorSrc.includes("learningAcademicTermOptions"), "learning management should derive available academic term options from activities");
+  assert.ok(filterSrc.includes("學年／學期篩選"), "learning management should render the academic year/term filter");
+  assert.ok(lifecycleSrc.includes("學年／學期"), "learning management list should render academic year/term");
+  assert.ok(reportSrc.includes("academicYear} 學年第"), "course implementation report should show selected course academic term");
+  assert.ok(diagnosticsSrc.includes("course.academicYear"), "diagnostics ranking should render academic year");
+  assert.ok(diagnosticsSrc.includes("series.academicYear"), "diagnostics trends should render academic year");
+  assert.ok(diagnosticsRouteSrc.includes("academicYear: activity?.academicYear"), "diagnostics API should expose activity academic year");
+});

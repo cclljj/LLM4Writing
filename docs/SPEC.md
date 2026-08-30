@@ -977,7 +977,7 @@ classnumber,username,name,school,role,password,ownerTeacherUsername
 
 #### 6.6.2 學習管理：課程清單
 
-課程清單欄位：學校、班級、課程、目前狀態、操作。
+課程清單欄位：學校、班級、學年／學期、課程、目前狀態、操作。
 
 每列操作：
 
@@ -992,7 +992,7 @@ classnumber,username,name,school,role,password,ownerTeacherUsername
 
 - 每頁固定最多 10 筆。
 - 提供上一頁、下一頁、跳到第 N 頁。
-- 篩選選單：學校、班級、課程、狀態，預設全部。
+- 篩選選單：學校、班級、學年／學期、課程、狀態，預設全部；學年／學期只列出目前資料庫中、且符合已選學校／班級範圍的實際組合。
 - 進入分頁時主動刷新資料。
 - 課程清單載入不得被 monitor/session 查詢阻塞。
 
@@ -1021,7 +1021,7 @@ classnumber,username,name,school,role,password,ownerTeacherUsername
 - monitor 摘要列表需支援 `If-None-Match` / `ETag`；同一課程 revision 與短期 presence refresh bucket 都未改變時回 304，前端保留既有 state。presence bucket 最長 10 秒需變更一次，避免在線狀態被 session revision 永久凍結。
 - Step3/Step4 等待教師推進期間，monitor 摘要輪詢需維持低延遲（約 1 秒）以快速反映 `groupGate["3-complete"]` / `groupGate["4-complete"]` 變化；輪詢變更偵測與前端 analytics cache signature 必須納入 `groupGate` 完成名單內容、`attendanceOverrides` 與 `makeupWork`，而非只看 gate key 數量。
 - monitor 列表查詢在 Postgres 模式下需使用 summary-first DB 查詢；一般情況不得回傳完整 messages/artifacts，僅為 legacy JSON-string payload 欄位回補可讀 raw payload。
-- 課堂儀表板、全班加入狀態、小組對話紀錄、個人對話紀錄四個 h2 標題後附加「— 學校 / 班級 / 文章題目」（#258）。
+- 課堂儀表板、全班加入狀態、小組對話紀錄、個人對話紀錄四個 h2 標題後附加「— 學校 / 班級 / 學年學期 / 文章題目」（#258）。
 - 「查看狀態」需同時顯示課程診斷摘要，內容以「台北日期的實施日期 + 同一小組」彙整同一課程的上課場次；實施日期以訊息或 `learning_events` 實際發生日期為準，不可以課程或 session 開始日期代替。同一組跨不同實施日期需分列，同一實施日期同組若有多個 session 需合併為一列。每列包含 Fallback 次數與比率、拒答次數與比率、平均步驟停留時間、風險步驟，以及跨場次的每步平均停留時間。
 - 課程診斷摘要的 Fallback/拒答統計優先使用 `learning_events`；若事件表不可用或舊資料缺少事件，需從 session 訊息與 `qualitySignals` 估算並標示來源。步驟停留時間以同一 session、同一台北實施日期內各 step 首次訊息到下一 step 首次訊息估算，並歸入該 step 首次訊息所在的台北實施日期；跨日上課不可把隔夜時間算入前一天停留時間。Step5 後個人步調統計需在 UI/文件中標示為彙整估算。
 - 課程診斷摘要表格每頁最多 10 列，超過時需提供上一頁/下一頁。
@@ -1168,7 +1168,7 @@ Loading 規則（#270）：
 - admin 額外提供學校與教師篩選；teacher 不顯示這兩個篩選。
 - 第一張卡片每頁最多 10 筆，需提供上一頁/下一頁。
 - 每列課程的「操作」欄需有「查看」、「產製PDF合併檔」與「產製JSON合併檔」按鈕；後兩者直接針對該列已結束課程建立全班 ZIP 匯出工作，完成後同一按鈕需改為「下載PDF合併檔」或「下載JSON合併檔」，不需先載入課程報告內容。
-- 第二張卡片顯示課程資訊（學校、班級、作文題目）與學生清單。
+- 已結束課程清單與第二張卡片的課程資訊均需顯示學校、班級、學年／學期、作文題目。
 - 學生清單欄位：班級、帳號、姓名、完成度、目前進度、課程紀錄、下載。
 - 完成度以 1~5 星呈現，依學生在該課程 sessions 的參與進度、輸入品質與產出完整度做簡易評分：
   - 參與與步驟推進越完整，星等越高。
@@ -1222,14 +1222,14 @@ Loading 規則（#270）：
 - 近期 spec10 session 摘要。
 - LLM 回應時間（依步驟），過大閒置間隔需濾除。
 - LLM fallback 觸發率；> 5% 紅燈，1~5% 黃燈，< 1% 綠燈。
-- 課程維度 KPI 排行：成功率、fallback 率、拒答率、平均等待時間、風險分數。
+- 課程維度 KPI 排行：課程識別需包含學年／學期，並顯示成功率、fallback 率、拒答率、平均等待時間、風險分數。
 - 每步驟 KPI 改為課程內維度：先選課程，再顯示該課程 Step1~10 的成功率、fallback 率、拒答率、平均等待時間。
-- 趨勢僅保留課程維度（至少日粒度）：成功率、fallback 率、拒答率、平均等待時間。
+- 趨勢僅保留課程維度（至少日粒度）：課程識別需包含學年／學期，並顯示成功率、fallback 率、拒答率、平均等待時間。
 - fallback 樣本與 trace 需支援依「已選課程 / 步驟」篩選，便於 drill-down 追查。
 - LLM 錯誤分類：`timeout`、`truncation`、`parse fail`（其餘歸 `other`）。
 - 作品 artifact 健康度：Step3 結構樹、Step6 初稿、Step8 潤飾稿、Step10 報告完成率與平均字元數（以所選時間窗內有活動之 spec10 sessions 計算）。
 - Token 使用量（估算 completion tokens）：整體與分步驟統計，需隨 `2h/24h/7d/14d/30d` 時間窗切換更新。
-- 「近期使用狀況」清單需含學校、班級，並顯示各 session 在時間窗內的估算 token 使用量。
+- 「近期使用狀況」清單需含學校、班級、學年／學期，並顯示各 session 在時間窗內的估算 token 使用量。
 - 「近期使用狀況」需額外顯示：活躍度（活躍/閒置/可能卡住）、目前步驟停留時長（分鐘）、小組進度分布（各 step 人數）、拒答次數（qualitySignals 累計）。
 - 不得回傳 `LLM_KEY`、DB URL 或其他 secret。
 
