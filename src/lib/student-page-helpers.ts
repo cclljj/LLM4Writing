@@ -1,7 +1,7 @@
 // Pure helpers extracted from app/student/page.tsx (#457). Keep this module
 // free of React so the logic stays unit-testable in Node.
 
-import type { CourseWorkflowStep, WorkflowCapability } from "@/src/lib/types";
+import type { CourseWorkflowStep, GuidedDiscussionSubsteps, WorkflowCapability } from "@/src/lib/types";
 import {
   getGuidedDiscussionPromptStep,
   getSessionWorkflowSteps,
@@ -119,18 +119,28 @@ export function getCapabilityStep(session: WorkflowSessionLike | null | undefine
 
 export type GroupGateSessionLike = {
   workflowSteps?: CourseWorkflowStep[];
+  guidedDiscussionSubsteps?: GuidedDiscussionSubsteps;
   stepState?: {
     step1Substep?: number;
     step2Substep?: number;
     step1Substep3Question?: number;
     step1Substep4Question?: number;
     step2Substep1Question?: number;
+    guidedDiscussionSubstepIndex?: number;
   } | null;
 };
 
 export function getActiveGroupGateKey(session: GroupGateSessionLike | null, step: number): string | null {
   if (!session) return null;
   const guidedStep = getGuidedDiscussionPromptStep(getCurrentCapability(session, step)) ?? (step === 1 || step === 2 ? step : undefined);
+  if (guidedStep === 1 || guidedStep === 2) {
+    const capability = guidedStep === 1 ? "topic_discussion" : "research_discussion";
+    const configured = session.guidedDiscussionSubsteps?.[capability];
+    if (configured?.length) {
+      const index = session.stepState?.guidedDiscussionSubstepIndex ?? 0;
+      return configured[index] ?? configured[0]!;
+    }
+  }
   if (guidedStep === 1) {
     const sub = session.stepState?.step1Substep ?? 1;
     if (sub === 3) return `1-3-${session.stepState?.step1Substep3Question ?? 1}`;

@@ -1,5 +1,5 @@
 // Shared UI-level session types for the student page and its hooks (#459).
-import type { CourseWorkflowStep } from "@/src/lib/types";
+import type { CourseWorkflowStep, GuidedDiscussionSubsteps } from "@/src/lib/types";
 
 export type Course = {
   id: string;
@@ -57,6 +57,7 @@ export type SessionState = {
     step1Substep3Question?: number;
     step1Substep4Question?: number;
     step2Substep1Question?: number;
+    guidedDiscussionSubstepIndex?: number;
   };
   outlines: Record<string, string>;
   step3SubmittedOutlines?: Record<string, string>;
@@ -69,6 +70,7 @@ export type SessionState = {
     step9Questions?: Record<string, string>;
   };
   workflowSteps?: CourseWorkflowStep[];
+  guidedDiscussionSubsteps?: GuidedDiscussionSubsteps;
   messages: Array<{
     id: string;
     role: string;

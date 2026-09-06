@@ -1,5 +1,6 @@
 import { SessionState } from "./types";
 import { getStep9QuestionsFromConfig } from "./spec";
+import { getConfiguredSubstepIndex, getGuidedDiscussionSubsteps, usesConfiguredGuidedDiscussionSubsteps } from "./guided-discussion-workflow";
 
 export function pickQuestionFromBank(session: SessionState, key: string, fallback: string): string {
   const bank = session.promptConfig?.questionBanks?.[key];
@@ -96,7 +97,39 @@ export function buildStep2Question(session: SessionState): string {
   return candidate;
 }
 
+const defaultQuestionBySubstep: Record<string, string> = {
+  "1-1": "請先說明你對題目的初步理解。",
+  "1-2": "請補充你們小組目前的立場。",
+  "1-3-1": "請先用一個生活中的具體例子，說明你認為題目關鍵詞在這裡代表什麼。",
+  "1-3-2": "請用自己的話說明：題目關鍵詞在你的理解中包含哪些情況、不包含哪些情況？",
+  "1-3-3": "請再補上一個理由，說明你怎麼判斷這個情況算或不算。",
+  "1-4-1": "請根據剛才的討論，用一句話說出你們最核心、最想傳達的觀點。",
+  "1-4-2": "請說明：你們的核心主張想解決的關鍵問題是什麼？",
+  "1-4-3": "請再收斂一次：用一句話寫出你們最終核心主張。",
+  "1-5": "請總結本步驟結論。",
+  "2-1-1": "請挑一個最能支持你主張的具體例子，並說明為什麼選它。",
+  "2-1-2": "請挑一個你覺得最好用的具體例子（可以是生活經驗/新聞/歷史），並用 1-2 句話說明這個例子是什麼。",
+  "2-1-3": "請說明：你選的這個例子，哪一個部分最能支持你的觀點？為什麼？",
+  "2-2": "請把你的例子補充得更具體：時間、地點、人物、發生了什麼，以及它如何連回你的主張？",
+  "2-3": "請再往前一步：根據你剛才的例子，推論造成這個現象的深層原因是什麼？請至少說出一個因果鏈。",
+  "2-4": "請補上一個具體案例。"
+};
+
+/** Builds the first visible question for a configured child-step without exposing internal LLM instructions. */
+export function buildGuidedDiscussionQuestion(session: SessionState, key: string): string {
+  const fallback = defaultQuestionBySubstep[key] ?? "請繼續討論。";
+  const bankQuestion = session.promptConfig?.questionBanks?.[key];
+  if (bankQuestion?.length) return pickQuestionFromBank(session, key, fallback);
+  const candidate = session.promptConfig?.subStepPrompts?.[key];
+  if (candidate && !looksLikeInstructionPrompt(candidate)) return candidate;
+  return pickQuestionFromSubStepFallback(session, key, fallback);
+}
+
 export function getCurrentSubstepKey(session: SessionState, step: number): string | null {
+  if ((step === 1 || step === 2) && usesConfiguredGuidedDiscussionSubsteps(session)) {
+    const guidedStep = step as 1 | 2;
+    return getGuidedDiscussionSubsteps(session, guidedStep)[getConfiguredSubstepIndex(session, guidedStep)] ?? null;
+  }
   if (step === 1) {
     if (session.stepState.step1Substep === 3) return `1-3-${session.stepState.step1Substep3Question ?? 1}`;
     if (session.stepState.step1Substep === 4) return `1-4-${session.stepState.step1Substep4Question ?? 1}`;
@@ -110,6 +143,9 @@ export function getCurrentSubstepKey(session: SessionState, step: number): strin
 }
 
 export function getCurrentGroupGateKey(session: SessionState, step: 1 | 2): string {
+  if (usesConfiguredGuidedDiscussionSubsteps(session)) {
+    return getGuidedDiscussionSubsteps(session, step)[getConfiguredSubstepIndex(session, step)] ?? `${step}-unknown`;
+  }
   if (step === 1) {
     const substep = session.stepState.step1Substep;
     if (substep === 3) return `1-3-${session.stepState.step1Substep3Question ?? 1}`;

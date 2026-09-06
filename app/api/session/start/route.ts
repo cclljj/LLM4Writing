@@ -58,6 +58,7 @@ export async function POST(request: NextRequest) {
       ? {
           promptConfig: loaded.promptConfig,
           workflowSteps: loaded.workflowSteps,
+          guidedDiscussionSubsteps: loaded.guidedDiscussionSubsteps,
           activityTitle: payload.activityTitle ?? loaded.activity.title,
           activityEssayDescription: payload.activityEssayDescription ?? loaded.activity.essayDescription ?? "",
           activitySupplemental: payload.activitySupplemental ?? loaded.activity.supplemental ?? ""

@@ -109,11 +109,30 @@ Students marked as `本次不列入等待` for the current session SHALL be excl
 
 The system SHALL choose Step1/2 next questions from the configured prompt or question bank hierarchy and SHALL never show internal prompt text as the student question.
 
+### Requirement: Term-Configured Guided Discussion Substeps
+
+The system SHALL resolve the ordered child-step sequence for `topic_discussion` and `research_discussion` from the term's `guidedDiscussionSubsteps` workflow configuration. The sequence SHALL contain valid, non-duplicated child-step keys for its capability and SHALL be snapshotted in each new session. Prompt text, fallback text, and question banks SHALL continue to resolve by the configured child-step key.
+
+#### Scenario: 115-1 uses its shortened child workflow
+
+- **GIVEN** a new session is created for a `115-1` activity
+- **WHEN** the session enters the topic discussion capability
+- **THEN** it presents `1-2`, then `1-3-1`, then `1-4-1`
+- **AND** it does not present `1-1`, `1-3-2`, `1-3-3`, `1-4-2`, `1-4-3`, or `1-5`
+- **AND** its research discussion sequence is `2-1-1`, `2-2`, `2-3`, then `2-4`
+
+#### Scenario: Existing and 114-2 sessions preserve the complete workflow
+
+- **GIVEN** a `114-2` session or a session created before child-workflow snapshots were introduced
+- **WHEN** the session advances through Step1 or Step2
+- **THEN** it retains the original complete child-step sequence
+- **AND** a later edit to another term's child workflow does not change it
+
 ### Requirement: Term-Versioned Course Step Configuration
 
 The system SHALL resolve course-step prompts, question banks, reports, and step openings from the activity's academic year and term key (for example, `114-2` or `115-1`).
 
-The workflow-only term configuration SHALL also define an ordered `workflowSteps` list. Each step SHALL use an existing interaction capability and declare its numeric step ID, display name, and interaction mode. A session SHALL persist this resolved list as an immutable workflow snapshot. Runtime course operation, student and teacher displays, history, PDF export, portfolio JSON export, and research JSON export SHALL resolve workflow order and labels from the stored snapshot, not from hard-coded Step 1-10 positions or numeric step comparisons. Missing workflow snapshots SHALL fall back only to the configured default term workflow; the implementation SHALL NOT define a separate hard-coded legacy Step 1-10 workflow list.
+The workflow-only term configuration SHALL also define an ordered `workflowSteps` list and optional `guidedDiscussionSubsteps` lists for the topic and research discussion capabilities. Each step SHALL use an existing interaction capability and declare its numeric step ID, display name, and interaction mode. A session SHALL persist these resolved lists as immutable workflow snapshots. Runtime course operation, student and teacher displays, history, PDF export, portfolio JSON export, and research JSON export SHALL resolve workflow order and labels from the stored snapshot, not from hard-coded Step 1-10 positions or numeric step comparisons. Sessions created before child-workflow snapshots SHALL retain the legacy full child-step sequence.
 
 #### Scenario: New term changes do not alter historical courses
 

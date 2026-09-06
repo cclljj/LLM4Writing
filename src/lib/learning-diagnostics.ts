@@ -1,4 +1,4 @@
-import { CourseWorkflowStep, QualitySignals } from "@/src/lib/types";
+import { CourseWorkflowStep, GuidedDiscussionSubsteps, QualitySignals } from "@/src/lib/types";
 import { getGuidedDiscussionPromptStep, getWorkflowCapability, getWorkflowStepByCapability } from "@/src/lib/course-workflow";
 
 export type { QualitySignals };
@@ -21,6 +21,7 @@ export type ArtifactDiagnostics = {
 export type DiagnosticSession = {
   currentStep: number;
   workflowSteps?: CourseWorkflowStep[];
+  guidedDiscussionSubsteps?: GuidedDiscussionSubsteps;
   participants: string[];
   groupGate?: Record<string, string[]>;
   personalSteps?: Record<string, number>;
@@ -30,6 +31,7 @@ export type DiagnosticSession = {
     step1Substep3Question?: number;
     step1Substep4Question?: number;
     step2Substep1Question?: number;
+    guidedDiscussionSubstepIndex?: number;
   };
   messages: DiagnosticMessage[];
   qualitySignals?: QualitySignals;
@@ -78,6 +80,11 @@ function parseRejectionKey(key: string): { userId: string; scope: string } | nul
 
 export function getDiagnosticGateKey(session: DiagnosticSession): string | null {
   const guidedStep = getGuidedDiscussionPromptStep(getWorkflowCapability(session, session.currentStep));
+  if (guidedStep) {
+    const capability = guidedStep === 1 ? "topic_discussion" : "research_discussion";
+    const configured = session.guidedDiscussionSubsteps?.[capability];
+    if (configured?.length) return configured[session.stepState?.guidedDiscussionSubstepIndex ?? 0] ?? configured[0]!;
+  }
   if (guidedStep === 1) {
     const sub = session.stepState?.step1Substep ?? 1;
     if (sub === 3) return `1-3-${session.stepState?.step1Substep3Question ?? 1}`;

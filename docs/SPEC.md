@@ -428,7 +428,12 @@ Artifact 類型：
 
 ### 5.2 Step1/2 子步驟與題目來源
 
-Step1 有 5 個子步驟，Step2 有 4 個子步驟。每個子步驟需先收齊 gate 成員回覆，才會觸發 Step1/2 的兩段式處理（先回饋，再產生下一題）。
+Step1/2 的子步驟順序由 `course-workflow-configs.json` 各 term 的 `guidedDiscussionSubsteps` 決定，並以 workflow capability 為 key：`topic_discussion`（Step1 能力）與 `research_discussion`（Step2 能力）。清單元素為既有子步驟 key，順序即為學生作答順序；題目 prompt、fallback 與題庫仍由 `course-step-configs.json` 的同名 key 提供。每個子步驟需先收齊 gate 成員回覆，才會觸發 Step1/2 的兩段式處理（先回饋，再產生下一題）。
+
+- `114-2` 保留完整序列：`1-1 → 1-2 → 1-3-1 → 1-3-2 → 1-3-3 → 1-4-1 → 1-4-2 → 1-4-3 → 1-5`，以及 `2-1-1 → 2-1-2 → 2-1-3 → 2-2 → 2-3 → 2-4`。
+- `115-1` 使用精簡序列：`1-2 → 1-3-1 → 1-4-1`，以及 `2-1-1 → 2-2 → 2-3 → 2-4`。
+- 新 session 必須保存 resolved `guidedDiscussionSubsteps` 快照；日後修改 term config 不得改變已建立 session 的子步驟。缺少此快照的舊 session 一律使用原有完整序列，以維持歷史相容性。
+- 每個 capability 的清單必須至少有一個有效、同 capability 前綴且不重複的子步驟 key；無效值不可靜默加入流程。
 Step1/2 gate 成員判定：優先使用 `joinedUsers`（已實際加入課程者）；若 `joinedUsers` 為空才回退 `participants`。
 `joinedUsers` 維護需採 append-only（僅移除非本 session `participants` 的無效帳號）；不可因某成員尚未發言就把該成員從 `joinedUsers` 移除，避免 gate 成員縮減導致同組誤判全員作答並提前跳題。
 
@@ -465,7 +470,7 @@ Gate key 範例：
 - 第一位學生提交後，其餘尚未提交者仍可輸入；已提交者進入等待狀態。
 - 最後一位學生送出後，全組已作答同學顯示「等待遠端 AI 回答中...」（此時後端會依序執行回饋階段與下一題階段）。
 - 若全員已完成但 AI 或 system 下一題沒有出現，學生端輪詢 `/api/session/[sessionId]` 需在安全等待時間後補推進，避免永久卡住。
-- 自動補推進需涵蓋子題邊界，如 `1-3-3 -> 1-4-1`、`1-4-3 -> 1-5`、`2-1-3 -> 2-2`。
+- 自動補推進需依 session 的子步驟快照找出下一個 key；例如完整序列可為 `1-3-3 -> 1-4-1`、`1-4-3 -> 1-5`、`2-1-3 -> 2-2`，115-1 精簡序列則為 `1-2 -> 1-3-1`、`1-3-1 -> 1-4-1`、`2-1-1 -> 2-2`。
 - 後端需有重入保護，避免同一 gate 在併發情境下重複推進。
 
 ### 5.4 LLM Prompt 組裝與輸出契約

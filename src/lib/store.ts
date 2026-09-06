@@ -703,6 +703,7 @@ export type MonitorSessionSummary = {
   makeupWork?: SessionState["makeupWork"];
   currentStep: number;
   workflowSteps: SessionState["workflowSteps"];
+  guidedDiscussionSubsteps?: SessionState["guidedDiscussionSubsteps"];
   personalSteps: Record<string, number>;
   groupGate: Record<string, string[]>;
   stepState: {
@@ -711,6 +712,7 @@ export type MonitorSessionSummary = {
     step1Substep3Question?: number;
     step1Substep4Question?: number;
     step2Substep1Question?: number;
+    guidedDiscussionSubstepIndex?: number;
   };
   reflectionIndex: Record<string, number>;
   qualitySignals: {
@@ -1448,6 +1450,7 @@ export async function listMonitorSessionSummariesByActivityId(
         joinedUsers: session.joinedUsers ?? [],
         currentStep: session.currentStep,
         workflowSteps: session.workflowSteps ?? [],
+        guidedDiscussionSubsteps: session.guidedDiscussionSubsteps,
         personalSteps: session.personalSteps ?? {},
         groupGate: session.groupGate ?? {},
         stepState: session.stepState ?? { step1Substep: 1, step2Substep: 1 },
@@ -1594,6 +1597,7 @@ export async function listMonitorSessionSummariesByActivityId(
     if (Number.isFinite(Number(effectiveStepStateRaw.step1Substep3Question))) stepState.step1Substep3Question = Number(effectiveStepStateRaw.step1Substep3Question);
     if (Number.isFinite(Number(effectiveStepStateRaw.step1Substep4Question))) stepState.step1Substep4Question = Number(effectiveStepStateRaw.step1Substep4Question);
     if (Number.isFinite(Number(effectiveStepStateRaw.step2Substep1Question))) stepState.step2Substep1Question = Number(effectiveStepStateRaw.step2Substep1Question);
+    if (Number.isFinite(Number(effectiveStepStateRaw.guidedDiscussionSubstepIndex))) stepState.guidedDiscussionSubstepIndex = Number(effectiveStepStateRaw.guidedDiscussionSubstepIndex);
 
     const qualitySignalsJson = asRecord(row.quality_signals_json);
     const payloadQualitySignals = asRecord(payload?.qualitySignals);
@@ -1614,6 +1618,7 @@ export async function listMonitorSessionSummariesByActivityId(
       makeupWork: payload?.makeupWork,
       currentStep: row.current_step ?? payload?.currentStep ?? 1,
       workflowSteps: payload?.workflowSteps ?? [],
+      guidedDiscussionSubsteps: payload?.guidedDiscussionSubsteps,
       personalSteps: Object.keys(asNumberRecord(row.personal_steps_json)).length > 0 ? asNumberRecord(row.personal_steps_json) : asNumberRecord(payload?.personalSteps),
       groupGate: Object.keys(asStringArrayRecord(row.group_gate_json)).length > 0 ? asStringArrayRecord(row.group_gate_json) : asStringArrayRecord(payload?.groupGate),
       stepState,

@@ -1,7 +1,8 @@
 import { Activity, CourseWorkflowStep, PromptConfig, Step10ReportConfig } from "@/src/lib/types";
 import {
   resolveCourseWorkflowStepsFromConfig,
-  resolveDefaultCourseWorkflowStepsFromConfig
+  resolveDefaultCourseWorkflowStepsFromConfig,
+  resolveCourseGuidedDiscussionSubstepsFromConfig
 } from "@/src/lib/course-workflow";
 import { DEFAULT_ACADEMIC_TERM_CONFIG_KEY } from "@/src/lib/academic-term-defaults";
 import courseStepConfigs from "@/src/config/course-step-configs.json";
@@ -155,8 +156,13 @@ export function resolveDefaultCourseWorkflowSteps(): CourseWorkflowStep[] {
  *  to remember to invoke both findActivity and resolvePromptConfigForActivity. */
 export function loadActivityWithConfig(
   activityId: string
-): { activity: Activity; promptConfig: PromptConfig; workflowSteps: CourseWorkflowStep[] } | undefined {
+): { activity: Activity; promptConfig: PromptConfig; workflowSteps: CourseWorkflowStep[]; guidedDiscussionSubsteps: import("@/src/lib/types").GuidedDiscussionSubsteps } | undefined {
   const activity = findActivity(activityId);
   if (!activity) return undefined;
-  return { activity, promptConfig: resolvePromptConfigForActivity(activityId), workflowSteps: resolveCourseWorkflowForActivity(activityId) };
+  return {
+    activity,
+    promptConfig: resolvePromptConfigForActivity(activityId),
+    workflowSteps: resolveCourseWorkflowForActivity(activityId),
+    guidedDiscussionSubsteps: resolveCourseGuidedDiscussionSubstepsFromConfig(activity.academicYear, activity.academicYearTerm)
+  };
 }

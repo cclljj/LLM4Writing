@@ -33,6 +33,13 @@ test("getActiveGroupGateKey derives step1/step2 substep gate keys", () => {
   assert.equal(getActiveGroupGateKey({ stepState: { step2Substep: 1, step2Substep1Question: 3 } }, 2), "2-1-3");
   assert.equal(getActiveGroupGateKey({ stepState: { step2Substep: 2 } }, 2), "2-2");
   assert.equal(getActiveGroupGateKey({ stepState: {} }, 1), "1-1");
+  assert.equal(
+    getActiveGroupGateKey({
+      guidedDiscussionSubsteps: { topic_discussion: ["1-2", "1-3-1"] },
+      stepState: { guidedDiscussionSubstepIndex: 1 }
+    }, 1),
+    "1-3-1"
+  );
   assert.equal(getActiveGroupGateKey({ stepState: {} }, 3), null);
 });
 

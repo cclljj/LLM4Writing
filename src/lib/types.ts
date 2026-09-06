@@ -38,6 +38,10 @@ export interface CourseWorkflowStep {
   exportTitle?: string;
 }
 
+export type GuidedDiscussionCapability = "topic_discussion" | "research_discussion";
+/** Ordered, client-safe child-step keys for the two guided discussion capabilities. */
+export type GuidedDiscussionSubsteps = Partial<Record<GuidedDiscussionCapability, string[]>>;
+
 export interface PromptConfig {
   /**
    * Optional global system prompt for the remote LLM (provider-agnostic).
@@ -185,6 +189,8 @@ export interface SessionState {
   promptConfig: PromptConfig;
   /** Immutable workflow snapshot selected from the activity's academic year and term. */
   workflowSteps?: CourseWorkflowStep[];
+  /** Immutable child-workflow snapshot selected with the term workflow. */
+  guidedDiscussionSubsteps?: GuidedDiscussionSubsteps;
   /**
    * Cache of assembled system prompt strings, keyed by `${step}` or `${step}:${substepKey}` (#243).
    * Safe to persist because `promptConfig` is fixed for a session's lifetime — if a session is
@@ -197,6 +203,7 @@ export interface SessionState {
     step1Substep3Question?: number;
     step1Substep4Question?: number;
     step2Substep1Question?: number;
+    guidedDiscussionSubstepIndex?: number;
   };
   outlines: Record<string, string>;
   step3SubmittedOutlines?: Record<string, string>;
@@ -221,6 +228,7 @@ export interface StartSessionPayload {
   groupName?: string;
   promptConfig?: PromptConfig;
   workflowSteps?: CourseWorkflowStep[];
+  guidedDiscussionSubsteps?: GuidedDiscussionSubsteps;
 }
 
 export interface SendMessagePayload {

@@ -79,25 +79,10 @@ export function buildStudentGateView(input: {
           : "個人反思";
   const isInputEnabled = currentMode !== "non_interactive" && (!currentActivityStatus || currentActivityStatus === "in_progress");
 
-  const stepSubstepText =
-    isTopicDiscussionStep
-      ? `目前子步驟：${
-          (session?.stepState.step1Substep ?? 1) === 3
-            ? `1-3-${session?.stepState.step1Substep3Question ?? 1}`
-            : (session?.stepState.step1Substep ?? 1) === 4
-              ? `1-4-${session?.stepState.step1Substep4Question ?? 1}`
-              : `1-${session?.stepState.step1Substep ?? 1}`
-        }`
-      : isResearchDiscussionStep
-        ? `目前子步驟：${
-            (session?.stepState.step2Substep ?? 1) === 1
-              ? `2-1-${session?.stepState.step2Substep1Question ?? 1}`
-              : `2-${session?.stepState.step2Substep ?? 1}`
-          }`
-        : null;
+  const activeGateKey = getActiveGroupGateKey(session, currentStep);
+  const stepSubstepText = (isTopicDiscussionStep || isResearchDiscussionStep) && activeGateKey ? `目前子步驟：${activeGateKey}` : null;
   const stepModeLine = `${stepSubstepText ?? "目前子步驟：—"} ｜ 模式：${currentModeLabel}`;
   const lastIsQuestion = lastInteractiveKind === "question";
-  const activeGateKey = getActiveGroupGateKey(session, currentStep);
   const usernameToName = session?.participantDisplayNames ?? {};
   const toDisplayName = (username: string) => usernameToName[username] || username;
   const responders = activeGateKey ? session?.groupGate?.[activeGateKey] ?? [] : [];

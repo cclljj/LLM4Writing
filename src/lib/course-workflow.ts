@@ -1,10 +1,11 @@
-import { CourseWorkflowStep, InteractionMode, WorkflowCapability } from "@/src/lib/types";
+import { CourseWorkflowStep, GuidedDiscussionSubsteps, InteractionMode, WorkflowCapability } from "@/src/lib/types";
+import { cloneGuidedDiscussionSubsteps, normalizeGuidedDiscussionSubsteps } from "@/src/lib/guided-discussion-workflow";
 import courseWorkflowConfigs from "@/src/config/course-workflow-configs.json";
 import { DEFAULT_ACADEMIC_TERM_CONFIG_KEY } from "@/src/lib/academic-term-defaults";
 
 type CourseWorkflowConfigRegistry = {
   default?: string;
-  terms?: Record<string, { extends?: string; workflowSteps?: unknown }>;
+  terms?: Record<string, { extends?: string; workflowSteps?: unknown; guidedDiscussionSubsteps?: unknown }>;
 };
 
 const courseWorkflowConfigRegistry = courseWorkflowConfigs as CourseWorkflowConfigRegistry;
@@ -49,6 +50,17 @@ function resolveConfigWorkflowSteps(key: string | undefined, resolving = new Set
   return ownSteps.length > 0 ? ownSteps : parentSteps;
 }
 
+function resolveConfigGuidedDiscussionSubsteps(key: string | undefined, resolving = new Set<string>()): GuidedDiscussionSubsteps {
+  if (!key || resolving.has(key)) return {};
+  const entry = courseWorkflowConfigRegistry.terms?.[key];
+  if (!entry) return {};
+  resolving.add(key);
+  const parent = entry.extends ? resolveConfigGuidedDiscussionSubsteps(entry.extends, resolving) : {};
+  resolving.delete(key);
+  const own = normalizeGuidedDiscussionSubsteps(entry.guidedDiscussionSubsteps);
+  return { ...parent, ...own };
+}
+
 export function resolveDefaultCourseWorkflowStepsFromConfig(): CourseWorkflowStep[] {
   return resolveConfigWorkflowSteps(courseWorkflowConfigRegistry.default ?? DEFAULT_ACADEMIC_TERM_CONFIG_KEY).map((step) => ({ ...step }));
 }
@@ -58,6 +70,13 @@ export function resolveCourseWorkflowStepsFromConfig(academicYear: string, acade
   const terms = courseWorkflowConfigRegistry.terms ?? {};
   const steps = resolveConfigWorkflowSteps(terms[requestedKey] ? requestedKey : courseWorkflowConfigRegistry.default ?? DEFAULT_ACADEMIC_TERM_CONFIG_KEY);
   return steps.length > 0 ? steps.map((step) => ({ ...step })) : resolveDefaultCourseWorkflowStepsFromConfig();
+}
+
+export function resolveCourseGuidedDiscussionSubstepsFromConfig(academicYear: string, academicYearTerm: string): GuidedDiscussionSubsteps {
+  const requestedKey = `${academicYear.trim()}-${academicYearTerm.trim()}`;
+  const terms = courseWorkflowConfigRegistry.terms ?? {};
+  const key = terms[requestedKey] ? requestedKey : courseWorkflowConfigRegistry.default ?? DEFAULT_ACADEMIC_TERM_CONFIG_KEY;
+  return cloneGuidedDiscussionSubsteps(resolveConfigGuidedDiscussionSubsteps(key));
 }
 
 export function normalizeCourseWorkflowSteps(input: unknown): CourseWorkflowStep[] {

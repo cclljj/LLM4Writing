@@ -1,8 +1,9 @@
 import { ChatMessage, SessionState } from "./types";
 import { isUsableNextQuestion } from "./llm-response";
-import { buildStep1Question, buildStep2Question, getCurrentGroupGateKey, pickQuestionFromSubStepFallback } from "./workflow-questions";
+import { buildGuidedDiscussionQuestion, buildStep1Question, buildStep2Question, getCurrentGroupGateKey, pickQuestionFromSubStepFallback } from "./workflow-questions";
 import { resolveStep12GateMembers } from "./session-attendance";
 import { getGuidedDiscussionPromptStep, getWorkflowCapability } from "./course-workflow";
+import { getConfiguredSubstepIndex, getGuidedDiscussionSubsteps, usesConfiguredGuidedDiscussionSubsteps } from "./guided-discussion-workflow";
 
 export type MessageFactory = (input: Omit<ChatMessage, "id" | "at">) => ChatMessage;
 
@@ -33,6 +34,10 @@ export function handleStep1Or2Group(
 }
 
 export function isNextQuestionSubStepPromptDriven(session: SessionState, step: 1 | 2, completedSubstep: number): boolean {
+  if (usesConfiguredGuidedDiscussionSubsteps(session)) {
+    const nextKey = getGuidedDiscussionSubsteps(session, step)[getConfiguredSubstepIndex(session, step) + 1];
+    return Boolean(nextKey && session.promptConfig.subStepPrompts?.[nextKey]);
+  }
   if (step === 1) {
     if (completedSubstep === 3 && (session.stepState.step1Substep3Question ?? 1) < 3) return true;
     if (completedSubstep === 4 && (session.stepState.step1Substep4Question ?? 1) < 3) return true;
@@ -56,6 +61,9 @@ export function getNextSubstepKeyAfterCompletion(
   step: 1 | 2,
   completedSubstep: number
 ): string | null {
+  if (usesConfiguredGuidedDiscussionSubsteps(session)) {
+    return getGuidedDiscussionSubsteps(session, step)[getConfiguredSubstepIndex(session, step) + 1] ?? null;
+  }
   if (step === 1) {
     if (completedSubstep === 3 && (session.stepState.step1Substep3Question ?? 1) < 3) {
       return `1-3-${(session.stepState.step1Substep3Question ?? 1) + 1}`;
@@ -92,6 +100,19 @@ export function advanceStep1Or2SubstepAfterAi(
   makeMessage: MessageFactory
 ): void {
   const safeNextQuestion = isUsableNextQuestion(nextQuestionFromAi) ? nextQuestionFromAi!.trim() : "";
+
+  if (usesConfiguredGuidedDiscussionSubsteps(session)) {
+    const nextIndex = getConfiguredSubstepIndex(session, step) + 1;
+    const nextKey = getGuidedDiscussionSubsteps(session, step)[nextIndex];
+    if (!nextKey) {
+      session.messages.push(makeMessage({ role: "system", step: actualStep, text: `步驟 ${step} 子步驟已完成，等待教師切換下一步。` }));
+      return;
+    }
+    session.stepState.guidedDiscussionSubstepIndex = nextIndex;
+    const question = safeNextQuestion || buildGuidedDiscussionQuestion(session, nextKey);
+    session.messages.push(makeMessage({ role: "system", step: actualStep, text: `子步驟 ${nextKey}：${question}` }));
+    return;
+  }
 
   if (step === 1) {
     if (completedSubstep === 3 && (session.stepState.step1Substep3Question ?? 1) < 3) {

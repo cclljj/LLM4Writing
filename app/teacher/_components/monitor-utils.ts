@@ -12,6 +12,7 @@ import {
   getWorkflowStepOrderIndex
 } from "@/src/lib/course-workflow";
 import { MonitorSession } from "./types";
+import { getActiveGroupGateKey } from "@/src/lib/student-page-helpers";
 
 export function getGroupCurrentStep(session: MonitorSession): number {
   const participants = session.participants ?? [];
@@ -85,6 +86,8 @@ export function computeUserStepDurations(session: MonitorSession, username: stri
 }
 
 export function getMonitorGateKey(session: MonitorSession): string | null {
+  const configuredKey = getActiveGroupGateKey(session, session.currentStep);
+  if (configuredKey) return configuredKey;
   const guidedStep = getGuidedDiscussionPromptStep(getWorkflowCapability(session, session.currentStep));
   if (guidedStep === 1) {
     const sub = session.stepState?.step1Substep ?? 1;
@@ -104,6 +107,8 @@ export function getMonitorGateKey(session: MonitorSession): string | null {
 
 export function getDetailedStepCode(session: MonitorSession, step: number = session.currentStep): string {
   if (step !== session.currentStep) return String(step);
+  const configuredKey = getActiveGroupGateKey(session, step);
+  if (configuredKey) return configuredKey;
   const guidedStep = getGuidedDiscussionPromptStep(getWorkflowCapability(session, step));
   if (guidedStep === 1) {
     const sub = session.stepState?.step1Substep ?? 1;

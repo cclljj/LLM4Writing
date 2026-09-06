@@ -1,5 +1,6 @@
 import type { MakeupOutlineReason, SessionState } from "@/src/lib/types";
 import { getGuidedDiscussionPromptStep, getWorkflowCapability } from "@/src/lib/course-workflow";
+import { getCurrentSubstepKey } from "@/src/lib/workflow-questions";
 
 export const WAITING_EXCLUSION_LABEL = "本次不列入等待";
 export const MAKEUP_OUTLINE_LABEL = "需補個人結構圖";
@@ -10,18 +11,7 @@ function unique(values: string[]): string[] {
 
 function currentSubstepKey(session: SessionState): string | undefined {
   const guidedStep = getGuidedDiscussionPromptStep(getWorkflowCapability(session, session.currentStep));
-  if (guidedStep === 1) {
-    const sub = session.stepState?.step1Substep ?? 1;
-    if (sub === 3) return `1-3-${session.stepState?.step1Substep3Question ?? 1}`;
-    if (sub === 4) return `1-4-${session.stepState?.step1Substep4Question ?? 1}`;
-    return `1-${sub}`;
-  }
-  if (guidedStep === 2) {
-    const sub = session.stepState?.step2Substep ?? 1;
-    if (sub === 1) return `2-1-${session.stepState?.step2Substep1Question ?? 1}`;
-    return `2-${sub}`;
-  }
-  return undefined;
+  return guidedStep ? getCurrentSubstepKey(session, guidedStep) ?? undefined : undefined;
 }
 
 export function getWaitingExcludedUsernames(session: Pick<SessionState, "attendanceOverrides">): string[] {

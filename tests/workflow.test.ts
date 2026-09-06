@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { ChatMessage, SessionState } from "../src/lib/types";
+import { resolveCourseGuidedDiscussionSubstepsFromConfig, resolveCourseWorkflowStepsFromConfig } from "../src/lib/course-workflow";
 import { validateStep4DiscussionMessage, validateStudentAnswer, validateDraftContent, validateStudentAnswerSimple } from "../src/lib/answer-validation";
 import { buildAdvancedStuckRisk, recordRejectedAnswerSignal } from "../src/lib/learning-diagnostics";
 import { isTruncatedFinishReason, pickAssistantTextResult } from "../src/lib/llm-openai-response";
@@ -17,7 +18,7 @@ import { getStructureTreeNodePermissions } from "../src/lib/structure-tree-permi
 import { validateStep3OutlineCompletion } from "../src/lib/step3-outline-validation";
 import { buildStudentNextAction } from "../src/lib/student-next-action";
 import { computeNextOpenClassId } from "../src/lib/activity-store";
-import { buildStep1Question, buildStep2Question } from "../src/lib/workflow-questions";
+import { buildGuidedDiscussionQuestion, buildStep1Question, buildStep2Question } from "../src/lib/workflow-questions";
 import { maskPeerUsernames, normalizeReportMarkdownText } from "../src/lib/report-rendering";
 import { advanceStep1Or2SubstepAfterAi, getNextSubstepKeyAfterCompletion, handleStep1Or2Group, recoverStalledStep1Or2AiWait } from "../src/lib/workflow-step1-2";
 import { isStep12FeedbackQualityRisk } from "../src/lib/step12-feedback-quality";
@@ -673,6 +674,44 @@ test("next-substep key transitions are explicit and deterministic", () => {
   assert.equal(getNextSubstepKeyAfterCompletion(s2, 2, 1), "2-1-2");
   s2.stepState.step2Substep1Question = 3;
   assert.equal(getNextSubstepKeyAfterCompletion(s2, 2, 1), "2-2");
+});
+
+test("term-configured guided-discussion substeps control new-session questions and advancement", () => {
+  const guidedDiscussionSubsteps = resolveCourseGuidedDiscussionSubstepsFromConfig("115", "1");
+  assert.deepEqual(guidedDiscussionSubsteps.topic_discussion, ["1-2", "1-3-1", "1-4-1"]);
+  assert.deepEqual(guidedDiscussionSubsteps.research_discussion, ["2-1-1", "2-2", "2-3", "2-4"]);
+  assert.deepEqual(
+    resolveCourseGuidedDiscussionSubstepsFromConfig("114", "2").topic_discussion,
+    ["1-1", "1-2", "1-3-1", "1-3-2", "1-3-3", "1-4-1", "1-4-2", "1-4-3", "1-5"]
+  );
+
+  assert.ok(resolveCourseWorkflowStepsFromConfig("115", "1").length > 0);
+  const session = baseSession({
+    guidedDiscussionSubsteps,
+    stepState: { step1Substep: 1, step2Substep: 1, guidedDiscussionSubstepIndex: 0 },
+    promptConfig: {
+      stepPrompts: {}, subStepPrompts: {}, subStepPromptsFallbacks: {},
+      questionBanks: { "1-2": ["115-1 的第一題"], "2-4": ["115-1 的資料題"] },
+      step9Questions: {}, stepOpenings: {}
+    }
+  });
+  assert.equal(buildGuidedDiscussionQuestion(session, "1-2"), "115-1 的第一題");
+
+  assert.equal(getNextSubstepKeyAfterCompletion(session, 1, 1), "1-3-1");
+  advanceStep1Or2SubstepAfterAi(session, 1, 1, 1, "下一題：定義範圍？", makeMessage);
+  assert.equal(session.stepState.guidedDiscussionSubstepIndex, 1);
+  assert.match(session.messages.at(-1)?.text ?? "", /^子步驟 1-3-1：下一題：定義範圍？/);
+
+  session.stepState.guidedDiscussionSubstepIndex = 2;
+  assert.equal(getNextSubstepKeyAfterCompletion(session, 1, 1), null);
+  advanceStep1Or2SubstepAfterAi(session, 1, 1, 1, undefined, makeMessage);
+  assert.match(session.messages.at(-1)?.text ?? "", /子步驟已完成/);
+
+  session.currentStep = 2;
+  session.stepState.guidedDiscussionSubstepIndex = 0;
+  assert.equal(getNextSubstepKeyAfterCompletion(session, 2, 1), "2-2");
+  advanceStep1Or2SubstepAfterAi(session, 2, 2, 1, "下一題：補充細節？", makeMessage);
+  assert.match(session.messages.at(-1)?.text ?? "", /^子步驟 2-2：下一題：補充細節？/);
 });
 
 test("Step1/2 advancement accepts resolved next question for Step2 branches", () => {

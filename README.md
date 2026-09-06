@@ -33,7 +33,7 @@
 
 ## Core Capabilities
 
-- 學生端依學年學期 `workflowSteps` 執行完整寫作學習流程（流程來源為 `src/config/course-workflow-configs.json`；目前 114-2／115-1 為 Step 1–10，結構樹、草稿、總結報告等既有能力可在未來學期重排）
+- 學生端依學年學期 `workflowSteps` 與 `guidedDiscussionSubsteps` 執行完整寫作學習流程（流程來源為 `src/config/course-workflow-configs.json`；主流程與 Step 1／2 子流程皆可在未來學期獨立增刪、重排）
 - Step 1/2 小組 gate 與兩段式 AI 流程（先回饋、再出題，AI 回饋不得提前揭露後續課程步驟）
 - 教師端課程管理、分組、切步驟、學習監控與課堂儀表板
 - 管理端診斷面板（KPI、fallback 率、錯誤分類、趨勢）

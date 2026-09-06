@@ -29,8 +29,9 @@ import {
   splitAiFeedbackAndQuestion,
   isUsableNextQuestion
 } from "@/src/lib/llm-response";
-import { buildStep1Question, buildStep2Question, buildStep9BatchPrompt, getCurrentGroupGateKey, getCurrentSubstepKey, getStep9Questions } from "@/src/lib/workflow-questions";
+import { buildGuidedDiscussionQuestion, buildStep1Question, buildStep2Question, buildStep9BatchPrompt, getCurrentGroupGateKey, getCurrentSubstepKey, getStep9Questions } from "@/src/lib/workflow-questions";
 import { advanceStep1Or2SubstepAfterAi, getNextSubstepKeyAfterCompletion, handleStep1Or2Group } from "@/src/lib/workflow-step1-2";
+import { getGuidedDiscussionSubsteps, usesConfiguredGuidedDiscussionSubsteps } from "@/src/lib/guided-discussion-workflow";
 import { excludeWaitingMembers } from "@/src/lib/session-attendance";
 import { parseStep9ReflectionAnswers } from "@/src/lib/step9-reflection-parser";
 import {
@@ -70,6 +71,12 @@ function makeMessage(input: Omit<ChatMessage, "id" | "at">): ChatMessage {
 function initializeStepQuestion(session: SessionState, step: number): void {
   const guidedPromptStep = getGuidedDiscussionPromptStep(getWorkflowCapability(session, step));
   if (guidedPromptStep === 1) {
+    if (usesConfiguredGuidedDiscussionSubsteps(session)) {
+      session.stepState.guidedDiscussionSubstepIndex = 0;
+      const key = getGuidedDiscussionSubsteps(session, 1)[0];
+      if (key) session.messages.push(makeMessage({ role: "system", step, text: `子步驟 ${key}：${buildGuidedDiscussionQuestion(session, key)}` }));
+      return;
+    }
     session.stepState.step1Substep = 1;
     session.stepState.step1Substep3Question = 1;
     session.stepState.step1Substep4Question = 1;
@@ -84,6 +91,12 @@ function initializeStepQuestion(session: SessionState, step: number): void {
   }
 
   if (guidedPromptStep === 2) {
+    if (usesConfiguredGuidedDiscussionSubsteps(session)) {
+      session.stepState.guidedDiscussionSubstepIndex = 0;
+      const key = getGuidedDiscussionSubsteps(session, 2)[0];
+      if (key) session.messages.push(makeMessage({ role: "system", step, text: `子步驟 ${key}：${buildGuidedDiscussionQuestion(session, key)}` }));
+      return;
+    }
     session.stepState.step2Substep = 1;
     session.stepState.step2Substep1Question = 1;
     const q = buildStep2Question(session);
@@ -142,6 +155,7 @@ export function createSession(payload: StartSessionPayload): SessionState {
         stepOpenings: {}
       },
     workflowSteps,
+    guidedDiscussionSubsteps: payload.guidedDiscussionSubsteps,
     stepState: { step1Substep: 1, step2Substep: 1, step1Substep3Question: 1, step1Substep4Question: 1, step2Substep1Question: 1 },
     outlines: {},
     step3SubmittedOutlines: {},
