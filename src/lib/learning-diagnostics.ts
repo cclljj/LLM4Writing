@@ -1,4 +1,5 @@
-import { QualitySignals } from "@/src/lib/types";
+import { CourseWorkflowStep, QualitySignals } from "@/src/lib/types";
+import { getGuidedDiscussionPromptStep, getWorkflowCapability, getWorkflowStepByCapability } from "@/src/lib/course-workflow";
 
 export type { QualitySignals };
 
@@ -19,6 +20,7 @@ export type ArtifactDiagnostics = {
 
 export type DiagnosticSession = {
   currentStep: number;
+  workflowSteps?: CourseWorkflowStep[];
   participants: string[];
   groupGate?: Record<string, string[]>;
   personalSteps?: Record<string, number>;
@@ -75,19 +77,20 @@ function parseRejectionKey(key: string): { userId: string; scope: string } | nul
 }
 
 export function getDiagnosticGateKey(session: DiagnosticSession): string | null {
-  if (session.currentStep === 1) {
+  const guidedStep = getGuidedDiscussionPromptStep(getWorkflowCapability(session, session.currentStep));
+  if (guidedStep === 1) {
     const sub = session.stepState?.step1Substep ?? 1;
     if (sub === 3) return `1-3-${session.stepState?.step1Substep3Question ?? 1}`;
     if (sub === 4) return `1-4-${session.stepState?.step1Substep4Question ?? 1}`;
     return `1-${sub}`;
   }
-  if (session.currentStep === 2) {
+  if (guidedStep === 2) {
     const sub = session.stepState?.step2Substep ?? 1;
     if (sub === 1) return `2-1-${session.stepState?.step2Substep1Question ?? 1}`;
     return `2-${sub}`;
   }
-  if (session.currentStep === 3) return "3-complete";
-  if (session.currentStep === 4) return "4-complete";
+  if (getWorkflowCapability(session, session.currentStep) === "outline") return `${session.currentStep}-complete`;
+  if (getWorkflowCapability(session, session.currentStep) === "peer_outline") return `${session.currentStep}-complete`;
   return null;
 }
 
@@ -159,7 +162,7 @@ export function buildAdvancedStuckRisk(session: DiagnosticSession, nowMs = Date.
   const gateKey = getDiagnosticGateKey(session);
   const responders = gateKey ? session.groupGate?.[gateKey] ?? [] : [];
   const pendingMembers =
-    gateKey && session.currentStep <= 4
+    gateKey
       ? session.participants.filter((participant) => !responders.includes(participant))
       : [];
   const latest = getSessionLastEventAt(session);
@@ -192,14 +195,14 @@ export function buildAdvancedStuckRisk(session: DiagnosticSession, nowMs = Date.
     level = escalate(level, maxCount >= 3 ? "stuck" : "watch");
   }
 
-  if (session.currentStep === 3) {
-    const completed = new Set(session.groupGate?.["3-complete"] ?? []);
+  if (getWorkflowCapability(session, session.currentStep) === "outline") {
+    const completed = new Set(session.groupGate?.[`${session.currentStep}-complete`] ?? []);
     const outlineChars = session.artifactDiagnostics?.step3OutlineChars ?? {};
     const outlineUpdatedAt = session.artifactDiagnostics?.step3OutlineUpdatedAt ?? {};
     const lowOutlineUsers = session.participants.filter((participant) => !completed.has(participant) && (outlineChars[participant] ?? 0) < OUTLINE_MIN_CHARS);
     if (lowOutlineUsers.length > 0) {
       lowOutlineUsers.forEach((user) => addUnique(affectedUsers, user));
-      addUnique(reasons, `${lowOutlineUsers.join("、")} 的 Step3 結構樹仍未開始或內容過少。`);
+      addUnique(reasons, `${lowOutlineUsers.join("、")} 的結構樹仍未開始或內容過少。`);
       addUnique(suggestions, "提醒學生先新增主張、理由、例子三層節點，完成後按「完成結構樹」。");
       level = escalate(level, minutesSinceLastEvent !== null && minutesSinceLastEvent >= IDLE_STUCK_MINUTES ? "stuck" : "watch");
     }
@@ -213,18 +216,19 @@ export function buildAdvancedStuckRisk(session: DiagnosticSession, nowMs = Date.
     });
     if (inactiveOutlineUsers.length > 0) {
       inactiveOutlineUsers.forEach((user) => addUnique(affectedUsers, user));
-      addUnique(reasons, `${inactiveOutlineUsers.join("、")} 的 Step3 結構樹已一段時間未更新。`);
+      addUnique(reasons, `${inactiveOutlineUsers.join("、")} 的結構樹已一段時間未更新。`);
       addUnique(suggestions, "請提醒學生先移動或編輯一個節點，讓主張、理由、例子之間的層次更清楚。");
       level = escalate(level, "watch");
     }
   }
 
   const draftChars = session.artifactDiagnostics?.draftStep6Chars ?? {};
-  const step6Users = session.participants.filter((participant) => (session.personalSteps?.[participant] ?? session.currentStep) === 6);
+  const draftStep = getWorkflowStepByCapability(session, "draft")?.step ?? 6;
+  const step6Users = session.participants.filter((participant) => (session.personalSteps?.[participant] ?? session.currentStep) === draftStep);
   const lowDraftUsers = step6Users.filter((participant) => (draftChars[participant] ?? 0) < DRAFT6_MIN_CHARS);
   if (lowDraftUsers.length > 0) {
     lowDraftUsers.forEach((user) => addUnique(affectedUsers, user));
-    addUnique(reasons, `${lowDraftUsers.join("、")} 的 Step6 初稿字數偏低。`);
+    addUnique(reasons, `${lowDraftUsers.join("、")} 的初稿字數偏低。`);
     addUnique(suggestions, "建議學生先寫出開頭與一個完整理由段，再使用 AI 修改建議或進入下一步。");
     level = escalate(level, minutesSinceLastEvent !== null && minutesSinceLastEvent >= IDLE_STUCK_MINUTES ? "stuck" : "watch");
   }

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { recordArtifactUpdateSignal } from "@/src/lib/learning-diagnostics";
 import { saveSession } from "@/src/lib/store";
-import { requireStudentInSession } from "@/src/lib/api-helpers";
+import { getCapabilityStep, requireStudentInSession } from "@/src/lib/api-helpers";
 
 export async function POST(request: NextRequest) {
   const body = (await request.json()) as { sessionId?: string; outline?: string };
@@ -9,7 +9,8 @@ export async function POST(request: NextRequest) {
   if (result instanceof NextResponse) return result;
   const { user, session } = result;
 
-  if (session.currentStep !== 4) {
+  const peerOutlineStep = getCapabilityStep(session, "peer_outline");
+  if (!peerOutlineStep || session.currentStep !== peerOutlineStep) {
     return NextResponse.json({ error: "invalid_step" }, { status: 400 });
   }
   const outlineText = typeof body.outline === "string" ? body.outline : "";
@@ -19,7 +20,7 @@ export async function POST(request: NextRequest) {
   session.outlines[user.username] = outlineText;
   recordArtifactUpdateSignal(session, "outline", user.username);
 
-  const key = "4-complete";
+  const key = `${peerOutlineStep}-complete`;
   const doneUsers = new Set(session.groupGate[key] ?? []);
   doneUsers.add(user.username);
   session.groupGate[key] = Array.from(doneUsers);

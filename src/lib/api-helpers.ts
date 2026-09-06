@@ -4,6 +4,8 @@ import type { AuthUser } from "@/src/lib/auth";
 import { getSession } from "@/src/lib/store";
 import { markUserOnline } from "@/src/lib/session-presence";
 import type { SessionState } from "@/src/lib/types";
+import { getWorkflowStepByCapability } from "@/src/lib/course-workflow";
+import type { WorkflowCapability } from "@/src/lib/types";
 
 // #388: Maximum character length for student text input.
 // Prevents oversized payloads from consuming excessive LLM tokens or causing OOM.
@@ -13,6 +15,11 @@ export type StudentSession = {
   user: AuthUser;
   session: SessionState;
 };
+
+/** Resolves a term-configured capability to the session's immutable step ID. */
+export function getCapabilityStep(session: SessionState, capability: WorkflowCapability): number | undefined {
+  return getWorkflowStepByCapability(session, capability)?.step;
+}
 
 /**
  * Validates the common preamble shared by all student step routes:

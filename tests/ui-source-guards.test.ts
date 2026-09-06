@@ -34,8 +34,9 @@ test("source-guard: course implementation report renders artifact-only Step8 wor
   const src = await read("../app/teacher/_components/CourseImplementationReportTab.tsx");
   assert.ok(src.includes("userDraftStep8"), "course report should track the Step8 polished draft artifact");
   assert.ok(src.includes("setUserDraftStep8"), "course report should update Step8 artifact state from personal progress");
-  assert.ok(src.includes("includeStep8"), "course report should include artifact-only Step8 sections");
-  assert.ok(src.includes("步驟八潤飾稿"), "course report should label the Step8 polished draft block");
+  assert.ok(src.includes('getCapabilityRuntimeStep(selectedWorkflowSteps, "revision", 8)'), "course report should resolve the revision artifact step from workflow config");
+  assert.ok(src.includes("userDraftStep8 ? revisionStep : undefined"), "course report should include artifact-only revision sections");
+  assert.ok(src.includes("潤飾稿"), "course report should label the polished draft block without hard-coding Step8");
 });
 
 test("source-guard: course implementation PDF does not pre-page-break long message cards", async () => {
@@ -98,10 +99,10 @@ test("source-guard: learning monitor uses outline labels and participant mapping
   const groupSrc = await read("../app/teacher/_components/GroupLogPanel.tsx");
   const personalSrc = await read("../app/teacher/_components/PersonalLogPanel.tsx");
   const reportSrc = await read("../app/teacher/_components/CourseImplementationReportTab.tsx");
-  assert.ok(groupSrc.includes("步驟三 各組員完成結構樹"), "group log should render step3 submitted outline label");
-  assert.ok(personalSrc.includes("步驟三完成結構樹"), "personal log should render step3 submitted outline label");
-  assert.ok(groupSrc.includes("步驟四 各組員修正後結構樹"), "group log should render step4 revised outline label");
-  assert.ok(personalSrc.includes("步驟四對比修正後"), "personal log should render step4 revised outline label");
+  assert.ok(groupSrc.includes('getWorkflowStepByCapability(monitorSelected, "outline")'), "group log should resolve outline step from workflow config");
+  assert.ok(personalSrc.includes('getWorkflowStepByCapability(workflowOwner, "outline")'), "personal log should resolve outline step from workflow config");
+  assert.ok(groupSrc.includes('getWorkflowStepByCapability(monitorSelected, "peer_outline")'), "group log should resolve revised-outline step from workflow config");
+  assert.ok(personalSrc.includes('getWorkflowStepByCapability(workflowOwner, "peer_outline")'), "personal log should resolve revised-outline step from workflow config");
   assert.ok(
     groupSrc.includes("step3SubmittedOutlines?.[p]") || groupSrc.includes("step3SubmittedOutlines?.[participant]"),
     "group log should read per-participant step3 submitted outlines"
@@ -112,9 +113,9 @@ test("source-guard: learning monitor uses outline labels and participant mapping
   );
   assert.ok(tabSrc.includes("setUserOutline"), "learning monitor should track userOutline state updates");
   assert.ok(tabSrc.includes("setUserStep3SubmittedOutline"), "learning monitor should track userStep3SubmittedOutline state updates");
-  assert.ok(reportSrc.includes("includeStep3: Boolean(userStep3SubmittedOutline)"), "course report should create a Step3 section for outline-only artifacts");
-  assert.ok(reportSrc.includes("步驟三原始輸入架構圖"), "course report should label the original Step3 outline");
-  assert.ok(personalSrc.includes("步驟三完成結構樹"), "personal log should retain its Step3 outline label");
+  assert.ok(reportSrc.includes("userStep3SubmittedOutline ? outlineStep : undefined"), "course report should create an outline section from the configured step");
+  assert.ok(reportSrc.includes("原始輸入架構圖"), "course report should label the original outline");
+  assert.ok(personalSrc.includes("完成結構樹"), "personal log should retain its outline label");
 });
 
 test("source-guard: student route keeps classroom bootstrap failures recoverable", async () => {

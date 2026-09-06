@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { saveSession } from "@/src/lib/store";
 import { requireStudentInSession } from "@/src/lib/api-helpers";
+import { getNextWorkflowStep, getWorkflowStepByCapability } from "@/src/lib/course-workflow";
 
 export async function POST(request: NextRequest) {
   const body = (await request.json()) as { sessionId?: string };
@@ -9,7 +10,8 @@ export async function POST(request: NextRequest) {
   const { user, session } = result;
 
   const userStep = session.personalSteps?.[user.username] ?? session.currentStep;
-  if (userStep !== 5) {
+  const summaryStep = getWorkflowStepByCapability(session, "summary_report")?.step;
+  if (!summaryStep || userStep !== summaryStep) {
     return NextResponse.json({ error: "invalid_step" }, { status: 400 });
   }
   const ownStep5Report = session.reports?.step5?.[user.username];
@@ -18,7 +20,7 @@ export async function POST(request: NextRequest) {
   }
 
   session.personalSteps = session.personalSteps ?? {};
-  session.personalSteps[user.username] = 6;
+  session.personalSteps[user.username] = getNextWorkflowStep(session, summaryStep)?.step ?? summaryStep;
   await saveSession(session);
   return NextResponse.json(session);
 }

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { maskPeerUsernames } from "@/src/lib/report-rendering";
 import type { Activity, SessionState } from "@/src/lib/types";
+import { getWorkflowStepByCapability } from "@/src/lib/course-workflow";
 
 export type ResearchExportIdentityMode = "anonymous" | "account";
 
@@ -135,24 +136,28 @@ export function buildResearchStudentInputExport(input: {
       .filter((record): record is ResearchStudentInputRecord => Boolean(record));
     const artifactRecords = session.participants.flatMap((username) => {
       const personalStep = session.personalSteps?.[username] ?? session.currentStep;
+      const outlineStep = getWorkflowStepByCapability(session, "outline")?.step ?? 3;
+      const peerOutlineStep = getWorkflowStepByCapability(session, "peer_outline")?.step ?? 4;
+      const draftStep = getWorkflowStepByCapability(session, "draft")?.step ?? 6;
+      const revisionStep = getWorkflowStepByCapability(session, "revision")?.step ?? 8;
       const records: Array<ResearchStudentInputRecord | null> = [
         buildRecord({
           activityId: input.activity.id,
           session,
           type: "step3_submitted_outline",
           username,
-          step: 3,
+          step: outlineStep,
           at: artifactTimestamp(session, username, "outline"),
           text: session.step3SubmittedOutlines?.[username] ?? "",
           identityMode
         }),
-        personalStep >= 4
+        personalStep >= peerOutlineStep
           ? buildRecord({
               activityId: input.activity.id,
               session,
               type: "step4_revised_outline",
               username,
-              step: 4,
+              step: peerOutlineStep,
               at: artifactTimestamp(session, username, "outline"),
               text: session.outlines?.[username] ?? "",
               identityMode
@@ -163,7 +168,7 @@ export function buildResearchStudentInputExport(input: {
           session,
           type: "draft_step6",
           username,
-          step: 6,
+          step: draftStep,
           at: artifactTimestamp(session, username, "draftStep6"),
           text: session.draftStep6?.[username] ?? "",
           identityMode
@@ -173,7 +178,7 @@ export function buildResearchStudentInputExport(input: {
           session,
           type: "draft_step8",
           username,
-          step: 8,
+          step: revisionStep,
           at: artifactTimestamp(session, username, "draftStep8"),
           text: session.draftStep8?.[username] ?? "",
           identityMode

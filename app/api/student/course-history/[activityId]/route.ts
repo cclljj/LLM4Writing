@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/src/lib/auth-server";
 import { getAllActivities, hydrateDomainState } from "@/src/lib/activity-store";
 import { listSessionsByParticipant } from "@/src/lib/store";
 import { resolveStudentCourseLatestWork } from "@/src/lib/student-course-history";
+import { getWorkflowStepOrderIndex } from "@/src/lib/course-workflow";
 
 export async function GET(_: Request, context: { params: Promise<{ activityId: string }> }) {
   const user = await getCurrentUser();
@@ -36,10 +37,12 @@ export async function GET(_: Request, context: { params: Promise<{ activityId: s
   const latestWork = resolveStudentCourseLatestWork({ sessions, username: user.username, latestPersonalStep });
   const ownMessages = latest.messages.filter((message) => message.userId === user.username);
   const totalMessages = sessions.reduce((sum, session) => sum + session.messages.filter((m) => m.userId === user.username).length, 0);
-  const maxStepReached = sessions.reduce(
-    (max, session) => Math.max(max, session.personalSteps?.[user.username] ?? session.currentStep),
-    1
-  );
+  const maxStepReached = sessions.reduce((max, session) => {
+    const candidateStep = session.personalSteps?.[user.username] ?? session.currentStep;
+    return getWorkflowStepOrderIndex(session, candidateStep) > getWorkflowStepOrderIndex(latest, max)
+      ? candidateStep
+      : max;
+  }, latestPersonalStep);
 
   return NextResponse.json({
     viewer: {

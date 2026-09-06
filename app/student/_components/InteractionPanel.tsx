@@ -14,8 +14,10 @@ type InteractiveItem = {
 };
 
 type InteractionPanelProps = {
-  currentStep: number;
   currentMode: string;
+  isPeerOutlineStep: boolean;
+  isDraftStep: boolean;
+  isReflectionStep: boolean;
   interactiveMessages: InteractiveItem[];
   participantDisplayNames?: Record<string, string>;
   text: string;
@@ -70,8 +72,10 @@ function preventTextPaste(e: { preventDefault: () => void }) {
 }
 
 function InteractionPanel({
-  currentStep,
   currentMode,
+  isPeerOutlineStep,
+  isDraftStep,
+  isReflectionStep,
   interactiveMessages,
   participantDisplayNames,
   text,
@@ -100,12 +104,12 @@ function InteractionPanel({
 }: InteractionPanelProps) {
   const step6SuggestionCardIds = useMemo(
     () =>
-      currentStep === 6
+      isDraftStep
         ? interactiveMessages
             .filter((message) => message.kind === "ai" && parseStep6Suggestion(message.text))
             .map((message) => message.id)
         : [],
-    [currentStep, interactiveMessages]
+    [isDraftStep, interactiveMessages]
   );
   const [step6ExpandedById, setStep6ExpandedById] = useState<Record<string, boolean>>({});
   const prevStep6CardIdsRef = useRef<string[]>([]);
@@ -141,7 +145,7 @@ function InteractionPanel({
 
   return (
     <div className="card">
-      <h2>{currentStep === 4 ? "小組討論區" : "互動內容"}</h2>
+      <h2>{isPeerOutlineStep ? "小組討論區" : "互動內容"}</h2>
       {currentMode === "non_interactive" ? (
         <small>本步驟為無互動模式，請閱讀系統/AI 產出內容。</small>
       ) : null}
@@ -150,15 +154,15 @@ function InteractionPanel({
       ) : null}
 
       {interactiveMessages.map((message) =>
-        currentStep === 6 && message.kind === "student" ? null : (
+        isDraftStep && message.kind === "student" ? null : (
           <div key={message.id} style={{ borderTop: "1px solid var(--line-soft)", padding: "8px 0" }}>
-            {currentStep === 4 && message.kind === "student" ? (
+            {isPeerOutlineStep && message.kind === "student" ? (
               <p style={{ margin: 0 }}>
                 <strong>{formatStudentIdentity(message.userId, participantDisplayNames)}：</strong>
                 <span style={{ marginLeft: 4, whiteSpace: "pre-wrap" }}>{message.text}</span>
                 <small style={{ marginLeft: 6 }}>({message.at})</small>
               </p>
-            ) : currentStep === 6 && message.kind === "ai" && parseStep6Suggestion(message.text) ? (
+            ) : isDraftStep && message.kind === "ai" && parseStep6Suggestion(message.text) ? (
               (() => {
                 const parsed = parseStep6Suggestion(message.text)!;
                 const expanded = step6ExpandedById[message.id] ?? false;
@@ -216,7 +220,7 @@ function InteractionPanel({
 
       {interactiveMessages.length === 0 ? <small>目前此步驟尚無互動內容。</small> : null}
 
-      {currentStep === 4 && step4CompletedPeers.length > 0 ? (
+      {isPeerOutlineStep && step4CompletedPeers.length > 0 ? (
         <div style={{ marginTop: 8 }}>
           {step4CompletedPeers.map((user) => (
             <p key={`step4-done-${user}`} style={{ margin: "4px 0" }}>
@@ -228,10 +232,10 @@ function InteractionPanel({
 
       {isSendingMessage ? (
         <p style={{ marginTop: 10 }}>
-          <small>{currentStep === 4 ? "訊息送出中..." : "等待遠端 AI 回答中..."}</small>
+          <small>{isPeerOutlineStep ? "訊息送出中..." : "等待遠端 AI 回答中..."}</small>
         </p>
       ) : null}
-      {!isSendingMessage && currentStep !== 4 && waitingAiForGroup ? (
+      {!isSendingMessage && !isPeerOutlineStep && waitingAiForGroup ? (
         <p style={{ marginTop: 10 }}>
           <small>等待遠端 AI 回答中...</small>
         </p>
@@ -239,13 +243,13 @@ function InteractionPanel({
       {waitingGroupMembers ? (
         <p style={{ marginTop: 10 }}>
           <small>
-            {currentStep === 4
+            {isPeerOutlineStep
               ? "你已確認完成此步驟，等待同組其他同學完成..."
               : "等待同組其他同學完成本題回覆..."}
           </small>
         </p>
       ) : null}
-      {currentStep === 4 && allStep4Completed ? (
+      {isPeerOutlineStep && allStep4Completed ? (
         <p style={{ marginTop: 10 }}>
           <small>全組皆已確認完成此步驟，請等待老師切換至步驟 5。</small>
         </p>
@@ -268,18 +272,18 @@ function InteractionPanel({
 
       {isInputEnabled &&
       canReplyToQuestion &&
-      currentStep !== 9 &&
+      !isReflectionStep &&
       !waitingGroupMembers &&
       !isSendingMessage &&
       !step1CompletedWaitingTeacher &&
       !step2CompletedWaitingTeacher ? (
         <form onSubmit={onSendMessage}>
-          <label>{currentStep === 4 ? "我的發言" : "你的回答"}</label>
+          <label>{isPeerOutlineStep ? "我的發言" : "你的回答"}</label>
           <textarea value={text} onChange={(e) => onTextChange(e.target.value)} onPaste={preventTextPaste} />
           <button type="submit" className="full-width" style={{ marginTop: 10 }}>
             發送訊息
           </button>
-          {currentStep === 4 ? (
+          {isPeerOutlineStep ? (
             <button
               type="button"
               className="secondary"
@@ -292,7 +296,7 @@ function InteractionPanel({
         </form>
       ) : null}
 
-      {currentStep === 9 ? (
+      {isReflectionStep ? (
         <form onSubmit={onSubmitStep9}>
           {([0, 1, 2, 3] as const).map((idx) => (
             <div key={`step9-q-${idx}`} style={{ marginTop: 10 }}>
@@ -312,7 +316,7 @@ function InteractionPanel({
         </form>
       ) : null}
 
-      {currentStep === 6 ? (
+      {isDraftStep ? (
         <div style={{ marginTop: 10 }}>
           <button
             type="button"
@@ -328,7 +332,7 @@ function InteractionPanel({
         </div>
       ) : null}
 
-      {currentStep === 4 && step4CompletedByMe && !allStep4Completed ? (
+      {isPeerOutlineStep && step4CompletedByMe && !allStep4Completed ? (
         <button type="button" className="secondary" style={{ marginTop: 10 }} disabled>
           已確認完成此步驟
         </button>

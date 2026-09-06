@@ -11,6 +11,8 @@ import { shouldTreatAsZipDownload } from "@/src/lib/course-report-download";
 import { resolveStudentReportCompletedAtIso } from "@/src/lib/course-report-completion-time";
 import { stepNameMap } from "@/src/lib/step-names";
 import { COURSE_REPORT_FILE_VERSION } from "@/src/lib/course-report-version";
+import { getSessionWorkflowSteps, getWorkflowStepByCapability, getWorkflowStepName } from "@/src/lib/course-workflow";
+import type { CourseWorkflowStep, WorkflowCapability } from "@/src/lib/types";
 
 type CourseImplementationReportTabProps = {
   loginRole: "teacher" | "admin";
@@ -75,7 +77,6 @@ const PAGE_SIZE = 10;
 
 function formatStepText(step: number): string {
   if (!Number.isFinite(step) || step <= 0) return "尚未加入";
-  if (step > 10) return "Step 10";
   return `Step ${step}`;
 }
 
@@ -101,24 +102,59 @@ function classExportStatusText(format: "pdf" | "json", job: ClassExportJob): str
 
 function getStepsFromMessages(
   messages: PersonalMessage[],
-  options?: { includeStep3?: boolean; includeStep4?: boolean; includeStep8?: boolean }
+  options?: { includeSteps?: number[] }
 ): number[] {
   const set = new Set(messages.map((m) => m.step));
-  if (options?.includeStep3) set.add(3);
-  if (options?.includeStep4) set.add(4);
-  if (options?.includeStep8) set.add(8);
+  (options?.includeSteps ?? []).forEach((step) => set.add(step));
   return Array.from(set).sort((a, b) => a - b);
+}
+
+function getWorkflowOwner(workflowSteps?: CourseWorkflowStep[]): { workflowSteps: CourseWorkflowStep[] } {
+  return { workflowSteps: workflowSteps && workflowSteps.length > 0 ? workflowSteps : [] };
+}
+
+function getCapabilityRuntimeStep(workflowSteps: CourseWorkflowStep[] | undefined, capability: WorkflowCapability, fallbackStep: number): number {
+  return getWorkflowStepByCapability(getWorkflowOwner(workflowSteps), capability)?.step ?? fallbackStep;
+}
+
+function getStepOrderIndex(workflowSteps: CourseWorkflowStep[] | undefined, step: number): number {
+  const steps = getSessionWorkflowSteps(getWorkflowOwner(workflowSteps));
+  const index = steps.findIndex((item) => item.step === step);
+  return index >= 0 ? index : Math.max(0, step - 1);
+}
+
+function addReachedCapabilities(
+  reached: Set<WorkflowCapability>,
+  workflowSteps: CourseWorkflowStep[] | undefined,
+  currentStep: number
+) {
+  const steps = getSessionWorkflowSteps(getWorkflowOwner(workflowSteps));
+  const index = steps.findIndex((item) => item.step === currentStep);
+  if (index >= 0) {
+    steps.slice(0, index + 1).forEach((item) => reached.add(item.capability));
+    return;
+  }
+
+  // Legacy sessions before workflow snapshots still use numeric Step IDs.
+  if (currentStep >= 1) reached.add("topic_discussion");
+  if (currentStep >= 2) reached.add("research_discussion");
+  if (currentStep >= 3) reached.add("outline");
+  if (currentStep >= 4) reached.add("peer_outline");
+  if (currentStep >= 5) reached.add("summary_report");
+  if (currentStep >= 6) reached.add("draft");
+  if (currentStep >= 7) reached.add("feedback_report");
+  if (currentStep >= 8) reached.add("revision");
+  if (currentStep >= 9) reached.add("reflection");
+  if (currentStep >= 10) reached.add("final_report");
 }
 
 function buildStarRationales(metric: StudentReportMetric): string[] {
   const reasons: string[] = [];
   reasons.push(`基礎分：1 星。`);
   if (metric.joined || metric.messageCount > 0) reasons.push(`有加入/互動紀錄（+1）。`);
-  if (metric.maxStep >= 4) reasons.push(`完成到 Step 4（+1）。`);
-  if (metric.maxStep >= 8) reasons.push(`完成到 Step 8（+1）。`);
-  if (metric.maxStep >= 10) reasons.push(`完成到 Step 10（+1）。`);
-  if (metric.step3OutlineChars >= 60) reasons.push(`Step3 結構樹內容充足（>=60 字，+1）。`);
-  if (metric.draftStep6Chars < 80 && metric.maxStep >= 6) reasons.push(`Step6 初稿偏短（<80 字，-1）。`);
+  reasons.push(`進度越接近課程後段，星等越高。`);
+  if (metric.step3OutlineChars >= 60) reasons.push(`結構樹內容充足（>=60 字，+1）。`);
+  if (metric.draftStep6Chars < 80 && metric.maxStep > 0) reasons.push(`初稿偏短時會扣分（<80 字，-1）。`);
   if (metric.rejectedCount >= 3) reasons.push(`回答品質拒答次數偏高（>=3 次，-1）。`);
   reasons.push(`最終星等：${renderStars(metric.stars)}。`);
   return reasons;
@@ -154,6 +190,7 @@ export default function CourseImplementationReportTab({
   const [researchIdentityMode, setResearchIdentityMode] = useState<"anonymous" | "account">("anonymous");
   const [downloadingResearchExport, setDownloadingResearchExport] = useState(false);
   const [personalMessages, setPersonalMessages] = useState<PersonalMessage[]>([]);
+  const [personalWorkflowSteps, setPersonalWorkflowSteps] = useState<CourseWorkflowStep[]>([]);
   const [userOutline, setUserOutline] = useState("");
   const [userStep3SubmittedOutline, setUserStep3SubmittedOutline] = useState("");
   const [userDraftStep8, setUserDraftStep8] = useState("");
@@ -252,10 +289,19 @@ export default function CourseImplementationReportTab({
       let step3OutlineChars = 0;
       let draftStep6Chars = 0;
       let joined = false;
+      let maxStepOrderIndex = -1;
+      let maxStepWorkflowSteps: CourseWorkflowStep[] | undefined = primarySession?.workflowSteps;
+      const reachedCapabilities = new Set<WorkflowCapability>();
 
       for (const session of sessions) {
         const personalStep = session.personalSteps?.[student.username] ?? session.currentStep;
-        if (personalStep > maxStep) maxStep = personalStep;
+        const stepOrderIndex = getStepOrderIndex(session.workflowSteps, personalStep);
+        if (stepOrderIndex > maxStepOrderIndex) {
+          maxStepOrderIndex = stepOrderIndex;
+          maxStep = personalStep;
+          maxStepWorkflowSteps = session.workflowSteps;
+        }
+        addReachedCapabilities(reachedCapabilities, session.workflowSteps, personalStep);
 
         const ownMessageCount = session.studentMessageStats?.[student.username]?.count ?? 0;
         messageCount += ownMessageCount;
@@ -271,11 +317,11 @@ export default function CourseImplementationReportTab({
 
       let stars = 1;
       if (joined || messageCount > 0) stars = 2;
-      if (maxStep >= 4) stars += 1;
-      if (maxStep >= 8) stars += 1;
-      if (maxStep >= 10) stars += 1;
+      if (reachedCapabilities.has("peer_outline")) stars += 1;
+      if (reachedCapabilities.has("revision")) stars += 1;
+      if (reachedCapabilities.has("final_report")) stars += 1;
       if (step3OutlineChars >= 60) stars += 1;
-      if (draftStep6Chars < 80 && maxStep >= 6) stars -= 1;
+      if (draftStep6Chars < 80 && reachedCapabilities.has("draft")) stars -= 1;
       if (rejectedCount >= 3) stars -= 1;
       stars = clamp(stars, 1, 5);
 
@@ -284,7 +330,9 @@ export default function CourseImplementationReportTab({
         username: student.username,
         name: student.name || student.username,
         stars,
-        stepText: formatStepText(maxStep),
+        stepText: maxStep > 0
+          ? `Step ${maxStep}${getWorkflowStepName(getWorkflowOwner(maxStepWorkflowSteps), maxStep) ? ` - ${getWorkflowStepName(getWorkflowOwner(maxStepWorkflowSteps), maxStep)}` : ""}`
+          : formatStepText(maxStep),
         sessionId: primarySession?.sessionId ?? "",
         maxStep,
         messageCount,
@@ -303,6 +351,7 @@ export default function CourseImplementationReportTab({
     setSelectedActivityId(activityId);
     setSelectedStudent("");
     setPersonalMessages([]);
+    setPersonalWorkflowSteps([]);
     setUserOutline("");
     setUserStep3SubmittedOutline("");
     setUserDraftStep8("");
@@ -337,6 +386,7 @@ export default function CourseImplementationReportTab({
     setLoadingStudentLog(true);
     setSelectedStudent(username);
     setPersonalMessages([]);
+    setPersonalWorkflowSteps([]);
     setUserOutline("");
     setUserStep3SubmittedOutline("");
     setUserDraftStep8("");
@@ -355,6 +405,7 @@ export default function CourseImplementationReportTab({
         return;
       }
       setPersonalMessages((data.personalMessages ?? []) as PersonalMessage[]);
+      setPersonalWorkflowSteps((data.workflowSteps ?? []) as CourseWorkflowStep[]);
       setUserOutline(data.userOutline ?? "");
       setUserStep3SubmittedOutline(data.userStep3SubmittedOutline ?? "");
       setUserDraftStep8(data.userDraftStep8 ?? "");
@@ -391,6 +442,8 @@ export default function CourseImplementationReportTab({
     }
 
     const allMessages = (data.personalMessages ?? []) as PersonalMessage[];
+    const workflowSteps = (data.workflowSteps ?? []) as CourseWorkflowStep[];
+    const revisionStep = getCapabilityRuntimeStep(workflowSteps, "revision", 8);
     const scopedMessages = allMessages.filter((message) => {
       if (message.role === "student") return message.userId === username;
       if (message.role === "ai") return !message.userId || message.userId === username;
@@ -409,7 +462,8 @@ export default function CourseImplementationReportTab({
     const timelineMessages = injectStep8DraftTimeline(
       timelineMessagesBase,
       data.userDraftStep8 ?? "",
-      new Date().toISOString()
+      new Date().toISOString(),
+      revisionStep
     );
     const legacyCompletedAtIso = scopedMessages.at(-1)?.at;
     const completedAtIso = resolveStudentReportCompletedAtIso({
@@ -444,6 +498,7 @@ export default function CourseImplementationReportTab({
       starLabel: renderStars(metric.stars),
       starRationales: buildStarRationales(metric),
       timelineMessages,
+      workflowSteps,
       step3SubmittedOutline: data.userStep3SubmittedOutline ?? "",
       step4RevisedOutline: data.userOutline ?? "",
       privacyPeerUsernames,
@@ -681,10 +736,24 @@ export default function CourseImplementationReportTab({
       })
     : personalMessages;
 
+  const selectedStudentMetric = selectedStudent ? metricsByUser.get(selectedStudent) : undefined;
+  const selectedMetricSession = selectedStudentMetric?.sessionId
+    ? reportSessions.find((session) => session.sessionId === selectedStudentMetric.sessionId)
+    : undefined;
+  const selectedWorkflowSteps = personalWorkflowSteps.length > 0
+    ? personalWorkflowSteps
+    : selectedMetricSession?.workflowSteps ?? [];
+  const selectedWorkflowOwner = getWorkflowOwner(selectedWorkflowSteps);
+  const outlineStep = getCapabilityRuntimeStep(selectedWorkflowSteps, "outline", 3);
+  const peerOutlineStep = getCapabilityRuntimeStep(selectedWorkflowSteps, "peer_outline", 4);
+  const revisionStep = getCapabilityRuntimeStep(selectedWorkflowSteps, "revision", 8);
+
   const personalSteps = getStepsFromMessages(scopedPersonalMessages, {
-    includeStep3: Boolean(userStep3SubmittedOutline),
-    includeStep4: Boolean(userOutline),
-    includeStep8: Boolean(userDraftStep8),
+    includeSteps: [
+      userStep3SubmittedOutline ? outlineStep : undefined,
+      userOutline ? peerOutlineStep : undefined,
+      userDraftStep8 ? revisionStep : undefined,
+    ].filter((step): step is number => typeof step === "number"),
   });
   const classPdfExportIsActive = Boolean(classPdfExportJob && !["succeeded", "failed", "canceled"].includes(classPdfExportJob.status));
   const classJsonExportIsActive = Boolean(classJsonExportJob && !["succeeded", "failed", "canceled"].includes(classJsonExportJob.status));
@@ -976,24 +1045,25 @@ export default function CourseImplementationReportTab({
               {personalSteps.map((step) => {
                 const stepMessages = scopedPersonalMessages.filter((message) => message.step === step);
                 const isExpanded = personalStepExpanded[step] ?? false;
+                const stepName = getWorkflowStepName(selectedWorkflowOwner, step) ?? stepNameMap[step] ?? "";
 
-                const step3Block = step === 3 && userStep3SubmittedOutline ? (
+                const step3Block = step === outlineStep && userStep3SubmittedOutline ? (
                   <div style={{ borderTop: "2px solid var(--line)", padding: "12px 0", marginTop: 4 }}>
-                    <strong style={{ fontSize: 13, color: "var(--muted-strong)" }}>步驟三原始輸入架構圖</strong>
-                    <OutlineSvg mermaidText={userStep3SubmittedOutline} label="步驟三原始輸入架構圖" />
+                    <strong style={{ fontSize: 13, color: "var(--muted-strong)" }}>{`Step ${outlineStep} ${getWorkflowStepName(selectedWorkflowOwner, outlineStep) ?? "生成論點"}原始輸入架構圖`}</strong>
+                    <OutlineSvg mermaidText={userStep3SubmittedOutline} label={`Step ${outlineStep} 原始輸入架構圖`} />
                   </div>
                 ) : null;
 
-                const step4Block = step === 4 && userOutline ? (
+                const step4Block = step === peerOutlineStep && userOutline ? (
                   <div style={{ borderTop: "2px solid var(--line)", padding: "12px 0", marginTop: 4 }}>
-                    <strong style={{ fontSize: 13, color: "var(--muted-strong)" }}>步驟四對比修正後結構樹</strong>
-                    <OutlineSvg mermaidText={userOutline} label="步驟四對比修正後" />
+                    <strong style={{ fontSize: 13, color: "var(--muted-strong)" }}>{`Step ${peerOutlineStep} ${getWorkflowStepName(selectedWorkflowOwner, peerOutlineStep) ?? "對比修正"}修正後結構樹`}</strong>
+                    <OutlineSvg mermaidText={userOutline} label={`Step ${peerOutlineStep} 修正後結構樹`} />
                   </div>
                 ) : null;
 
-                const step8Block = step === 8 && userDraftStep8 ? (
+                const step8Block = step === revisionStep && userDraftStep8 ? (
                   <div style={{ borderTop: "2px solid var(--line)", padding: "12px 0", marginTop: 4 }}>
-                    <strong style={{ fontSize: 13, color: "var(--muted-strong)" }}>步驟八潤飾稿</strong>
+                    <strong style={{ fontSize: 13, color: "var(--muted-strong)" }}>{`Step ${revisionStep} ${getWorkflowStepName(selectedWorkflowOwner, revisionStep) ?? "修正文稿"}潤飾稿`}</strong>
                     <div dangerouslySetInnerHTML={{ __html: renderMessageHtml(userDraftStep8) }} />
                   </div>
                 ) : null;
@@ -1002,7 +1072,7 @@ export default function CourseImplementationReportTab({
                   <div key={`personal-step-${step}`} className="card">
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                       <h3 style={{ margin: 0 }}>
-                        Step {step} {stepNameMap[step] ? `- ${stepNameMap[step]}` : ""}
+                        Step {step} {stepName ? `- ${stepName}` : ""}
                       </h3>
                       <button
                         type="button"

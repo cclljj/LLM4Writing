@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { recordLearningEvent, saveSession } from "@/src/lib/store";
 import { isLlmConfigured } from "@/src/lib/llm-client";
 import { normalizeFormalLlmText } from "@/src/lib/llm-response";
-import { requireStudentInSession } from "@/src/lib/api-helpers";
+import { getCapabilityStep, requireStudentInSession } from "@/src/lib/api-helpers";
 import { buildStep10LlmInput, generateStep10ReportChunkedText, recordStep10Report } from "@/src/lib/engine";
 import { recordStreamingCall } from "@/src/lib/llm-stats";
 import { classifyLlmError } from "@/src/lib/llm-observability";
@@ -31,7 +31,8 @@ export async function POST(request: NextRequest) {
   const { user, session } = result;
 
   const userStep = session.personalSteps?.[user.username] ?? session.currentStep;
-  if (userStep !== 10) {
+  const finalStep = getCapabilityStep(session, "final_report");
+  if (!finalStep || userStep !== finalStep) {
     return NextResponse.json({ error: "invalid_step" }, { status: 400 });
   }
 
@@ -65,7 +66,7 @@ export async function POST(request: NextRequest) {
           usedFallback = true;
           appendFallbackDebugTrace(session, {
             at: new Date().toISOString(),
-            step: 10,
+            step: finalStep,
             kind: "fallback",
             originalPrompt,
             originalResponse: "(llm_not_configured)",
@@ -75,7 +76,7 @@ export async function POST(request: NextRequest) {
           void recordLearningEvent({
             sessionId: session.id,
             activityId: session.activityId,
-            step: 10,
+            step: finalStep,
             kind: "fallback",
             fallbackUsed: true,
             errorCategory: "other"
@@ -85,7 +86,7 @@ export async function POST(request: NextRequest) {
             const normalized = await generateStep10ReportChunkedText(messages, fallback, session.promptConfig.step10Report, {
               sessionId: session.id,
               activityId: session.activityId,
-              step: 10,
+              step: finalStep,
               label: "step10_stream"
             });
             collected.push(normalized);
@@ -101,7 +102,7 @@ export async function POST(request: NextRequest) {
               const category = classifyLlmError(error);
               appendFallbackDebugTrace(session, {
                 at: new Date().toISOString(),
-                step: 10,
+                step: finalStep,
                 kind: "fallback",
                 originalPrompt,
                 originalResponse: `(llm_error:${category})`,
@@ -111,7 +112,7 @@ export async function POST(request: NextRequest) {
               void recordLearningEvent({
                 sessionId: session.id,
                 activityId: session.activityId,
-                step: 10,
+                step: finalStep,
                 kind: "fallback",
                 fallbackUsed: true,
                 errorCategory: category
@@ -126,7 +127,7 @@ export async function POST(request: NextRequest) {
         void recordLearningEvent({
           sessionId: session.id,
           activityId: session.activityId,
-          step: 10,
+          step: finalStep,
           kind: "step10_report",
           latencyMs: Date.now() - startedAt,
           fallbackUsed: usedFallback
@@ -141,7 +142,7 @@ export async function POST(request: NextRequest) {
           const category = classifyLlmError(err);
           appendFallbackDebugTrace(session, {
             at: new Date().toISOString(),
-            step: 10,
+            step: finalStep,
             kind: "fallback",
             originalPrompt: truncateTraceText(buildPromptText(messages)),
             originalResponse: `(route_stream_error:${category})`,
@@ -154,7 +155,7 @@ export async function POST(request: NextRequest) {
           void recordLearningEvent({
             sessionId: session.id,
             activityId: session.activityId,
-            step: 10,
+            step: finalStep,
             kind: "fallback",
             fallbackUsed: true,
             errorCategory: category
@@ -162,7 +163,7 @@ export async function POST(request: NextRequest) {
           void recordLearningEvent({
             sessionId: session.id,
             activityId: session.activityId,
-            step: 10,
+            step: finalStep,
             kind: "step10_report",
             latencyMs: Date.now() - startedAt,
             fallbackUsed: true,

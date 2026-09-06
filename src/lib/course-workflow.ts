@@ -69,3 +69,61 @@ export function getNextWorkflowStep(session: WorkflowSnapshotOwner, step: number
   const index = steps.findIndex((item) => item.step === step);
   return index >= 0 ? steps[index + 1] : undefined;
 }
+
+export function getWorkflowStepOrderIndex(session: WorkflowSnapshotOwner, step: number): number {
+  const steps = getSessionWorkflowSteps(session);
+  const index = steps.findIndex((item) => item.step === step);
+  return index >= 0 ? index : Math.max(0, step - 1);
+}
+
+export function isWorkflowStepAtOrAfter(session: WorkflowSnapshotOwner, currentStep: number, targetStep: number): boolean {
+  return getWorkflowStepOrderIndex(session, currentStep) >= getWorkflowStepOrderIndex(session, targetStep);
+}
+
+export function getFirstWorkflowStep(session: WorkflowSnapshotOwner): CourseWorkflowStep | undefined {
+  return getSessionWorkflowSteps(session)[0];
+}
+
+export function getWorkflowCapability(session: WorkflowSnapshotOwner, step: number): WorkflowCapability | undefined {
+  return getWorkflowStep(session, step)?.capability;
+}
+
+export function getWorkflowPromptStepKey(session: WorkflowSnapshotOwner, step: number): string {
+  const capability = getWorkflowCapability(session, step);
+  switch (capability) {
+    case "topic_discussion":
+      return "1";
+    case "research_discussion":
+      return "2";
+    case "outline":
+      return "3";
+    case "peer_outline":
+      return "4";
+    case "summary_report":
+      return "5";
+    case "draft":
+      return "6";
+    case "feedback_report":
+      return "7";
+    case "revision":
+      return "8";
+    case "reflection":
+      return "9";
+    case "final_report":
+      return "10";
+    default:
+      return String(step);
+  }
+}
+
+export function getGuidedDiscussionPromptStep(capability: WorkflowCapability | undefined): 1 | 2 | undefined {
+  if (capability === "topic_discussion") return 1;
+  if (capability === "research_discussion") return 2;
+  return undefined;
+}
+
+export function getStepsBeforeCapability(session: WorkflowSnapshotOwner, capability: WorkflowCapability): number[] {
+  const steps = getSessionWorkflowSteps(session);
+  const index = steps.findIndex((item) => item.capability === capability);
+  return index > 0 ? steps.slice(0, index).map((item) => item.step) : [];
+}

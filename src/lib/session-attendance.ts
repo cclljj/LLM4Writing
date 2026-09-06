@@ -1,4 +1,5 @@
 import type { MakeupOutlineReason, SessionState } from "@/src/lib/types";
+import { getGuidedDiscussionPromptStep, getWorkflowCapability } from "@/src/lib/course-workflow";
 
 export const WAITING_EXCLUSION_LABEL = "本次不列入等待";
 export const MAKEUP_OUTLINE_LABEL = "需補個人結構圖";
@@ -8,13 +9,14 @@ function unique(values: string[]): string[] {
 }
 
 function currentSubstepKey(session: SessionState): string | undefined {
-  if (session.currentStep === 1) {
+  const guidedStep = getGuidedDiscussionPromptStep(getWorkflowCapability(session, session.currentStep));
+  if (guidedStep === 1) {
     const sub = session.stepState?.step1Substep ?? 1;
     if (sub === 3) return `1-3-${session.stepState?.step1Substep3Question ?? 1}`;
     if (sub === 4) return `1-4-${session.stepState?.step1Substep4Question ?? 1}`;
     return `1-${sub}`;
   }
-  if (session.currentStep === 2) {
+  if (guidedStep === 2) {
     const sub = session.stepState?.step2Substep ?? 1;
     if (sub === 1) return `2-1-${session.stepState?.step2Substep1Question ?? 1}`;
     return `2-${sub}`;
@@ -116,11 +118,11 @@ export function setWaitingExclusion(session: SessionState, input: {
     ]
   };
 
-  if (input.excluded && session.currentStep === 3) {
+  if (input.excluded && getWorkflowCapability(session, session.currentStep) === "outline") {
     const hasSubmitted = Boolean(session.step3SubmittedOutlines?.[input.username]?.trim());
     if (!hasSubmitted) requireMakeupOutline(session, input.username, "absent_step3");
   }
-  if (input.excluded && session.currentStep === 4) {
+  if (input.excluded && getWorkflowCapability(session, session.currentStep) === "peer_outline") {
     requireMakeupOutline(session, input.username, "absent_step4");
   }
 }

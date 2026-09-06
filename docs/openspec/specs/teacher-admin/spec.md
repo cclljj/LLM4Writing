@@ -169,11 +169,11 @@ The classroom dashboard SHALL show all sessions for the selected course and prio
 - **WHEN** the dashboard renders
 - **THEN** sessions are ordered ready-to-advance, high-risk, watch, and normal
 
-#### Scenario: Step5 through Step10 distribution
+#### Scenario: Configured personal-step distribution
 
-- **GIVEN** a session has personal step distribution from Step5 onward
+- **GIVEN** a session has personal step distribution from the configured workflow snapshot
 - **WHEN** the dashboard renders current progress
-- **THEN** it shows the minimum personal step and Step5-10 distribution counts
+- **THEN** it shows the minimum personal step and configured personal-step distribution counts
 
 #### Scenario: Detailed substep progress labels in monitor views
 
@@ -396,7 +396,7 @@ The admin console SHALL provide Prompt/LLM diagnostics, KPI trends, and non-sens
 
 - **GIVEN** an admin selects a course from diagnostics ranking
 - **WHEN** the per-step KPI section renders
-- **THEN** it shows only the selected course's Step1~10 KPI rows instead of global cross-course aggregates
+- **THEN** it shows only the selected course's configured workflow step KPI rows instead of global cross-course aggregates
 
 #### Scenario: Diagnostics course labels include academic term
 
@@ -479,14 +479,14 @@ The course implementation report SHALL preserve both the student's original Step
 - **THEN** the JSON schema is `student-portfolio-report-v1.4`
 - **AND** JSON `reportVersion` is `1.4`, matching the PDF cover and the shared report-version source
 - **AND** individual and all-class JSON exports use the same server-side student report assembly flow
-- **AND** it includes the same major source data as the student's PDF report: course ID, academic year, academic term, deliberately deidentified school and class, student account, deliberately deidentified student name, summary metrics, completion time, timeline messages, and Step1/2/3/4/5/6/7/8/10 learning artifacts
+- **AND** it includes the same major source data as the student's PDF report: course ID, academic year, academic term, the stored `workflowSteps` snapshot, deliberately deidentified school and class, student account, deliberately deidentified student name, summary metrics, completion time, timeline messages, and learning artifacts keyed to the configured workflow capabilities
 - **AND** `course.school` and `course.classNumber` are always `*****`
 - **AND** `course.academicYear` and `course.academicYearTerm` identify the course offering
 - **AND** `student.name` is always `***`, while `student.username` remains available as the historical student identifier
-- **AND** Step1 and Step2 are explicitly listed as `contentFormat="conversation"` discussion artifacts, with readable content and structured `processMessages`
-- **AND** Step3 original outline and Step4 revised outline are explicitly listed in `stepArtifacts`, with Mermaid source and Mermaid fenced Markdown; the Step4 entry also includes its discussion process messages
-- **AND** Step5 summary, Step6 draft, Step7 feedback, Step8 revised draft, and Step10 final report are explicitly listed in `stepArtifacts`, even when the content is unavailable
-- **AND** every available Step3/4/5/6/7/8/10 learning artifact is also present in `timelineMessages` as an `entryType="artifact"` event, while original dialogue remains `entryType="message"`; Step1/2 discussion artifacts are not re-projected because their original messages already appear in the timeline
+- **AND** configured guided-discussion capabilities are explicitly listed as `contentFormat="conversation"` discussion artifacts, with readable content and structured `processMessages`
+- **AND** configured outline and peer-outline artifacts are explicitly listed in `stepArtifacts`, with Mermaid source and Mermaid fenced Markdown; the peer-outline entry also includes its discussion process messages
+- **AND** configured summary report, draft, feedback report, revision draft, and final report artifacts are explicitly listed in `stepArtifacts`, even when the content is unavailable
+- **AND** every available non-conversation learning artifact is also present in `timelineMessages` as an `entryType="artifact"` event with the configured runtime step, while original dialogue remains `entryType="message"`; conversation artifacts are not re-projected because their original messages already appear in the timeline
 - **AND** peer account names inside exported text are masked
 
 #### Scenario: All-class portfolio export actions

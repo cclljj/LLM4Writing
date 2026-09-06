@@ -1,4 +1,5 @@
 import { SessionState } from "@/src/lib/types";
+import { getSessionWorkflowSteps } from "@/src/lib/course-workflow";
 
 type BuildStudentContextOptions = {
   maxMessages?: number;
@@ -160,12 +161,21 @@ export function buildStudentCourseContext(
   pruneExpiredStudentContextCache(nowMs);
 
   const participantSet = new Set(session.participants ?? []);
-  const isGroupPhase = currentStep >= 1 && currentStep <= 4;
+  const workflowSteps = getSessionWorkflowSteps(session);
+  const currentIndex = workflowSteps.findIndex((item) => item.step === currentStep);
+  const currentWorkflowStep = workflowSteps[currentIndex];
+  const isGroupPhase = currentWorkflowStep?.mode === "group_interaction";
+  const earlySharedSteps = new Set(
+    (currentIndex >= 0 ? workflowSteps.slice(0, currentIndex) : workflowSteps)
+      .filter((item) => item.mode === "group_interaction")
+      .map((item) => item.step)
+  );
 
   const scoped = session.messages.filter((m) => {
     if (m.step > currentStep) return false;
 
-    // Step 1-4: group phase, include all teammates' answers and AI/system records.
+    // Group-scoped phase: include teammates' answers and AI/system records until
+    // the configured workflow switches to personal-only work.
     if (isGroupPhase) {
       if (m.role === "student") return Boolean(m.userId && participantSet.has(m.userId));
       if (m.role === "ai") return !m.userId || participantSet.has(m.userId);
@@ -173,8 +183,9 @@ export function buildStudentCourseContext(
       return false;
     }
 
-    // Step 5+: keep shared memory from Step1-4, while Step5+ keeps only self history.
-    if (m.step <= 4) {
+    // Personal/reporting steps keep shared memory from earlier group steps,
+    // while later personal work keeps only the current student's own history.
+    if (earlySharedSteps.has(m.step)) {
       if (m.role === "student") return Boolean(m.userId && participantSet.has(m.userId));
       if (m.role === "ai") return !m.userId || participantSet.has(m.userId);
       if (m.role === "system") return resolved.includeSystem && (!m.userId || participantSet.has(m.userId)) && isNecessarySystemMessage(m.text);

@@ -4,7 +4,7 @@ import { recordArtifactUpdateSignal } from "@/src/lib/learning-diagnostics";
 import { resolveStructureTreeTemplate } from "@/src/lib/genre-resolver";
 import { saveSession } from "@/src/lib/store";
 import { validateStep3OutlineCompletion } from "@/src/lib/step3-outline-validation";
-import { requireStudentInSession } from "@/src/lib/api-helpers";
+import { getCapabilityStep, requireStudentInSession } from "@/src/lib/api-helpers";
 
 export async function POST(request: NextRequest) {
   const body = (await request.json()) as { sessionId?: string; outline?: string };
@@ -12,7 +12,8 @@ export async function POST(request: NextRequest) {
   if (result instanceof NextResponse) return result;
   const { user, session } = result;
 
-  if (session.currentStep !== 3) {
+  const outlineStep = getCapabilityStep(session, "outline");
+  if (!outlineStep || session.currentStep !== outlineStep) {
     return NextResponse.json({ error: "invalid_step" }, { status: 400 });
   }
   const outlineText = typeof body.outline === "string" ? body.outline : "";
@@ -26,7 +27,7 @@ export async function POST(request: NextRequest) {
   if (!defaultOutlineTemplate.trim()) {
     return NextResponse.json({ error: "step3_default_outline_unavailable" }, { status: 500 });
   }
-  const outlineValidation = validateStep3OutlineCompletion(defaultOutlineTemplate, outlineText, 3);
+  const outlineValidation = validateStep3OutlineCompletion(defaultOutlineTemplate, outlineText, outlineStep);
   if (!outlineValidation.ok) {
     return NextResponse.json(
       {
@@ -45,11 +46,11 @@ export async function POST(request: NextRequest) {
   if (!session.step3SubmittedOutlines) session.step3SubmittedOutlines = {};
   session.step3SubmittedOutlines[user.username] = outlineText;
 
-  const key = "3-complete";
+  const key = `${outlineStep}-complete`;
   const doneUsers = new Set(session.groupGate[key] ?? []);
   doneUsers.add(user.username);
   session.groupGate[key] = Array.from(doneUsers);
-  const reopenKey = "3-reopen";
+  const reopenKey = `${outlineStep}-reopen`;
   const reopenUsers = new Set(session.groupGate[reopenKey] ?? []);
   if (reopenUsers.has(user.username)) {
     reopenUsers.delete(user.username);

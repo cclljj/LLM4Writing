@@ -700,6 +700,7 @@ export type MonitorSessionSummary = {
   attendanceOverrides?: SessionState["attendanceOverrides"];
   makeupWork?: SessionState["makeupWork"];
   currentStep: number;
+  workflowSteps: SessionState["workflowSteps"];
   personalSteps: Record<string, number>;
   groupGate: Record<string, string[]>;
   stepState: {
@@ -1444,6 +1445,7 @@ export async function listMonitorSessionSummariesByActivityId(
         participants: session.participants,
         joinedUsers: session.joinedUsers ?? [],
         currentStep: session.currentStep,
+        workflowSteps: session.workflowSteps ?? [],
         personalSteps: session.personalSteps ?? {},
         groupGate: session.groupGate ?? {},
         stepState: session.stepState ?? { step1Substep: 1, step2Substep: 1 },
@@ -1463,10 +1465,10 @@ export async function listMonitorSessionSummariesByActivityId(
         },
         stepReadyHints: {
           step1Ready: session.messages.some(
-            (message) => message.step === 1 && message.role === "system" && message.text.includes("步驟 1 子步驟已完成，等待教師切換下一步")
+            (message) => message.role === "system" && message.text.includes("步驟 1 子步驟已完成，等待教師切換下一步")
           ),
           step2Ready: session.messages.some(
-            (message) => message.step === 2 && message.role === "system" && message.text.includes("步驟 2 子步驟已完成，等待教師切換下一步")
+            (message) => message.role === "system" && message.text.includes("步驟 2 子步驟已完成，等待教師切換下一步")
           )
         }
       };
@@ -1561,8 +1563,8 @@ export async function listMonitorSessionSummariesByActivityId(
     const readyAggRows = await sql<MonitorStepReadyAggRow[]>`
       SELECT
         session_id,
-        BOOL_OR(step = 1 AND role = 'system' AND text LIKE '%步驟 1 子步驟已完成，等待教師切換下一步%') AS step1_ready,
-        BOOL_OR(step = 2 AND role = 'system' AND text LIKE '%步驟 2 子步驟已完成，等待教師切換下一步%') AS step2_ready
+        BOOL_OR(role = 'system' AND text LIKE '%步驟 1 子步驟已完成，等待教師切換下一步%') AS step1_ready,
+        BOOL_OR(role = 'system' AND text LIKE '%步驟 2 子步驟已完成，等待教師切換下一步%') AS step2_ready
       FROM llm4writing_session_messages
       WHERE session_id IN ${sql(sessionIds)}
       GROUP BY session_id
@@ -1609,6 +1611,7 @@ export async function listMonitorSessionSummariesByActivityId(
       attendanceOverrides: payload?.attendanceOverrides,
       makeupWork: payload?.makeupWork,
       currentStep: row.current_step ?? payload?.currentStep ?? 1,
+      workflowSteps: payload?.workflowSteps ?? [],
       personalSteps: Object.keys(asNumberRecord(row.personal_steps_json)).length > 0 ? asNumberRecord(row.personal_steps_json) : asNumberRecord(payload?.personalSteps),
       groupGate: Object.keys(asStringArrayRecord(row.group_gate_json)).length > 0 ? asStringArrayRecord(row.group_gate_json) : asStringArrayRecord(payload?.groupGate),
       stepState,

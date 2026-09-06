@@ -8,7 +8,7 @@
 [![Security Policy](https://img.shields.io/badge/Security-Policy-blue)](./SECURITY.md)
 
 **LLM4Writing** 是一個 AI 輔助寫作教學平台，讓 AI 扮演課堂中的寫作引導老師。  
-系統包含學生端 10 步驟學習流程與教師／管理端完整課程管理能力，採 Next.js App Router + Serverless API 架構。
+系統包含學生端學年學期版本化學習流程（目前 114-2／115-1 預設為 10 步驟）與教師／管理端完整課程管理能力，採 Next.js App Router + Serverless API 架構。
 
 `main` 為唯一持續維護分支。系統規格與行為以 [`docs/SPEC.md`](./docs/SPEC.md) 為準。
 
@@ -33,7 +33,7 @@
 
 ## Core Capabilities
 
-- 學生端 Step 1–10 完整寫作學習流程（Step 3/4 結構樹、Step 6/8 草稿、Step 10 總結報告）
+- 學生端依學年學期 `workflowSteps` 執行完整寫作學習流程（目前 114-2／115-1 為 Step 1–10；結構樹、草稿、總結報告等能力可在未來學期重排）
 - Step 1/2 小組 gate 與兩段式 AI 流程（先回饋、再出題，AI 回饋不得提前揭露後續課程步驟）
 - 教師端課程管理、分組、切步驟、學習監控與課堂儀表板
 - 管理端診斷面板（KPI、fallback 率、錯誤分類、趨勢）

@@ -8,7 +8,8 @@ import {
   type LlmChatMessage
 } from "@/src/lib/llm-client";
 import { hasFormalLlmQualityRisk, normalizeFormalLlmText } from "@/src/lib/llm-response";
-import { requireStudentInSession, validateTextInput } from "@/src/lib/api-helpers";
+import { getCapabilityStep, requireStudentInSession, validateTextInput } from "@/src/lib/api-helpers";
+import { getNextWorkflowStep, getWorkflowPromptStepKey } from "@/src/lib/course-workflow";
 import { validateDraftContent } from "@/src/lib/answer-validation";
 import { recordStreamingCall } from "@/src/lib/llm-stats";
 import { classifyLlmError } from "@/src/lib/llm-observability";
@@ -19,14 +20,14 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
-function makeAiStep7Message(text: string, userId?: string) {
+function makeAiFeedbackMessage(step: number, text: string, userId?: string) {
   return {
     id: randomUUID(),
     role: "ai" as const,
     userId,
     text,
     at: nowIso(),
-    step: 7
+    step
   };
 }
 
@@ -91,11 +92,16 @@ export async function POST(request: NextRequest) {
   const { user, session } = result;
 
   const userStep = session.personalSteps?.[user.username] ?? session.currentStep;
-  if (userStep !== 6) {
+  const draftStep = getCapabilityStep(session, "draft");
+  const feedbackStep = getCapabilityStep(session, "feedback_report");
+  if (!draftStep || userStep !== draftStep) {
     return NextResponse.json({ error: "invalid_step" }, { status: 400 });
   }
   if (isMakeupOutlinePending(session, user.username)) {
     return NextResponse.json({ error: "makeup_outline_required" }, { status: 409 });
+  }
+  if (!feedbackStep) {
+    return NextResponse.json({ error: "feedback_capability_not_configured" }, { status: 409 });
   }
 
   const finalDraft = body.draft as string;
@@ -119,7 +125,7 @@ export async function POST(request: NextRequest) {
       let usedFallback = false;
       const collected: string[] = [];
       try {
-        const promptMessages = buildStep7Messages(session.promptConfig?.stepPrompts?.["7"], finalDraft);
+        const promptMessages = buildStep7Messages(session.promptConfig?.stepPrompts?.[getWorkflowPromptStepKey(session, feedbackStep)], finalDraft);
         const originalPrompt = truncateTraceText(buildPromptText(promptMessages));
         if (!isLlmConfigured()) {
           send({ type: "chunk", text: FALLBACK_FEEDBACK });
@@ -127,7 +133,7 @@ export async function POST(request: NextRequest) {
           usedFallback = true;
           appendFallbackDebugTrace(session, {
             at: nowIso(),
-            step: 7,
+            step: feedbackStep,
             kind: "fallback",
             originalPrompt,
             originalResponse: "(llm_not_configured)",
@@ -137,7 +143,7 @@ export async function POST(request: NextRequest) {
           void recordLearningEvent({
             sessionId: session.id,
             activityId: session.activityId,
-            step: 7,
+            step: feedbackStep,
             kind: "fallback",
             fallbackUsed: true,
             errorCategory: "other"
@@ -147,7 +153,7 @@ export async function POST(request: NextRequest) {
             const normalized = await generateStep7FeedbackText(promptMessages, {
               sessionId: session.id,
               activityId: session.activityId,
-              step: 7,
+              step: feedbackStep,
               label: "step7_complete"
             });
             collected.push(normalized);
@@ -163,7 +169,7 @@ export async function POST(request: NextRequest) {
               const category = classifyLlmError(error);
               appendFallbackDebugTrace(session, {
                 at: nowIso(),
-                step: 7,
+                step: feedbackStep,
                 kind: "fallback",
                 originalPrompt,
                 originalResponse: `(llm_error:${category})`,
@@ -173,7 +179,7 @@ export async function POST(request: NextRequest) {
               void recordLearningEvent({
                 sessionId: session.id,
                 activityId: session.activityId,
-                step: 7,
+                step: feedbackStep,
                 kind: "fallback",
                 fallbackUsed: true,
                 errorCategory: category
@@ -184,14 +190,14 @@ export async function POST(request: NextRequest) {
 
         const feedback = normalizeFormalLlmText(collected.join(""), { fallback: FALLBACK_FEEDBACK });
         session.reports.step7[user.username] = feedback;
-        session.messages.push(makeAiStep7Message(feedback, user.username));
+        session.messages.push(makeAiFeedbackMessage(feedbackStep, feedback, user.username));
         session.personalSteps = session.personalSteps ?? {};
-        session.personalSteps[user.username] = 8;
+        session.personalSteps[user.username] = getNextWorkflowStep(session, feedbackStep)?.step ?? feedbackStep;
         await saveSession(session);
         void recordLearningEvent({
           sessionId: session.id,
           activityId: session.activityId,
-          step: 7,
+          step: feedbackStep,
           kind: "step7_feedback",
           latencyMs: Date.now() - startedAt,
           fallbackUsed: usedFallback

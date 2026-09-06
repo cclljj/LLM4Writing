@@ -9,11 +9,12 @@ import {
 } from "@/src/lib/llm-client";
 import { buildStudentCourseContext } from "@/src/lib/llm-context";
 import { hasStep6SuggestionQualityRisk, normalizeStep6SuggestionText } from "@/src/lib/llm-response";
-import { requireStudentInSession, validateTextInput } from "@/src/lib/api-helpers";
+import { getCapabilityStep, requireStudentInSession, validateTextInput } from "@/src/lib/api-helpers";
 import { recordStreamingCall } from "@/src/lib/llm-stats";
 import { classifyLlmError } from "@/src/lib/llm-observability";
 import { appendFallbackDebugTrace, buildPromptText, truncateTraceText } from "@/src/lib/fallback-debug-trace";
 import { isMakeupOutlinePending } from "@/src/lib/session-attendance";
+import { getWorkflowPromptStepKey } from "@/src/lib/course-workflow";
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -125,7 +126,8 @@ export async function POST(request: NextRequest) {
   const { user, session } = result;
 
   const userStep = session.personalSteps?.[user.username] ?? session.currentStep;
-  if (userStep !== 6) {
+  const draftStep = getCapabilityStep(session, "draft");
+  if (!draftStep || userStep !== draftStep) {
     return NextResponse.json({ error: "invalid_step" }, { status: 400 });
   }
   if (isMakeupOutlinePending(session, user.username)) {
@@ -156,7 +158,7 @@ export async function POST(request: NextRequest) {
       const collected: string[] = [];
       try {
         const promptMessages = buildSuggestMessages(
-          session.promptConfig?.stepPrompts?.["6"],
+          session.promptConfig?.stepPrompts?.[getWorkflowPromptStepKey(session, draftStep)],
           draft,
           session.activityTitle ?? "",
           crossStepContext
@@ -168,7 +170,7 @@ export async function POST(request: NextRequest) {
           usedFallback = true;
           appendFallbackDebugTrace(session, {
             at: nowIso(),
-            step: 6,
+            step: draftStep,
             kind: "fallback",
             originalPrompt,
             originalResponse: "(llm_not_configured)",
@@ -178,7 +180,7 @@ export async function POST(request: NextRequest) {
           void recordLearningEvent({
             sessionId: session.id,
             activityId: session.activityId,
-            step: 6,
+            step: draftStep,
             kind: "fallback",
             fallbackUsed: true,
             errorCategory: "other"
@@ -188,7 +190,7 @@ export async function POST(request: NextRequest) {
             const normalized = await generateStep6SuggestionText(promptMessages, {
               sessionId: session.id,
               activityId: session.activityId,
-              step: 6,
+              step: draftStep,
               label: "step6_suggest"
             });
             collected.push(normalized);
@@ -204,7 +206,7 @@ export async function POST(request: NextRequest) {
               const category = classifyLlmError(error);
               appendFallbackDebugTrace(session, {
                 at: nowIso(),
-                step: 6,
+                step: draftStep,
                 kind: "fallback",
                 originalPrompt,
                 originalResponse: `(llm_error:${category})`,
@@ -214,7 +216,7 @@ export async function POST(request: NextRequest) {
               void recordLearningEvent({
                 sessionId: session.id,
                 activityId: session.activityId,
-                step: 6,
+                step: draftStep,
                 kind: "fallback",
                 fallbackUsed: true,
                 errorCategory: category
@@ -240,7 +242,7 @@ export async function POST(request: NextRequest) {
         void recordLearningEvent({
           sessionId: session.id,
           activityId: session.activityId,
-          step: 6,
+          step: draftStep,
           kind: "step6_suggest",
           latencyMs: Date.now() - startedAt,
           fallbackUsed: usedFallback

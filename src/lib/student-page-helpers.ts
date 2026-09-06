@@ -1,6 +1,15 @@
 // Pure helpers extracted from app/student/page.tsx (#457). Keep this module
 // free of React so the logic stays unit-testable in Node.
 
+import type { CourseWorkflowStep, WorkflowCapability } from "@/src/lib/types";
+import {
+  getGuidedDiscussionPromptStep,
+  getSessionWorkflowSteps,
+  getWorkflowCapability,
+  getWorkflowStepByCapability,
+  getWorkflowStepMode
+} from "@/src/lib/course-workflow";
+
 export type InteractionMode = "group_interaction" | "personal_interaction" | "non_interactive" | "personal_reflection";
 
 export const STUDENT_FETCH_TIMEOUT_MS = 8000;
@@ -88,14 +97,28 @@ export function getStudentRetryableMessage(target: "auth" | "overview" | "join")
   return "目前無法載入課程清單，可能是網路或伺服器暫時忙碌。請按重新整理課程清單再試；如果全班都遇到這個畫面，請老師通知管理者。";
 }
 
-export function getMode(step: number): InteractionMode {
+type WorkflowSessionLike = {
+  workflowSteps?: CourseWorkflowStep[];
+};
+
+export function getMode(step: number, session?: WorkflowSessionLike | null): InteractionMode {
+  if (session?.workflowSteps) return getWorkflowStepMode(session, step);
   if ([1, 2, 4].includes(step)) return "group_interaction";
   if ([3, 6, 8].includes(step)) return "personal_interaction";
   if ([5, 7, 10].includes(step)) return "non_interactive";
   return "personal_reflection";
 }
 
+export function getCurrentCapability(session: WorkflowSessionLike | null | undefined, step: number): WorkflowCapability | undefined {
+  return session?.workflowSteps ? getWorkflowCapability(session, step) : undefined;
+}
+
+export function getCapabilityStep(session: WorkflowSessionLike | null | undefined, capability: WorkflowCapability): number | undefined {
+  return session?.workflowSteps ? getWorkflowStepByCapability(session, capability)?.step : undefined;
+}
+
 export type GroupGateSessionLike = {
+  workflowSteps?: CourseWorkflowStep[];
   stepState?: {
     step1Substep?: number;
     step2Substep?: number;
@@ -107,13 +130,14 @@ export type GroupGateSessionLike = {
 
 export function getActiveGroupGateKey(session: GroupGateSessionLike | null, step: number): string | null {
   if (!session) return null;
-  if (step === 1) {
+  const guidedStep = getGuidedDiscussionPromptStep(getCurrentCapability(session, step)) ?? (step === 1 || step === 2 ? step : undefined);
+  if (guidedStep === 1) {
     const sub = session.stepState?.step1Substep ?? 1;
     if (sub === 3) return `1-3-${session.stepState?.step1Substep3Question ?? 1}`;
     if (sub === 4) return `1-4-${session.stepState?.step1Substep4Question ?? 1}`;
     return `1-${sub}`;
   }
-  if (step === 2) {
+  if (guidedStep === 2) {
     const sub = session.stepState?.step2Substep ?? 1;
     if (sub === 1) return `2-1-${session.stepState?.step2Substep1Question ?? 1}`;
     return `2-${sub}`;
@@ -169,24 +193,28 @@ export type DraftHydrationDecision = {
 export function resolveDraftHydration(input: {
   ownStep: number;
   lastOwnStep: number | null;
+  draftStep?: number;
+  revisionStep?: number;
   draftText: string;
   savedDraft8Text: string;
   latestDraft6: string;
   latestDraft8: string | undefined;
 }): DraftHydrationDecision {
-  const justEnteredStep6 = input.lastOwnStep !== 6 && input.ownStep === 6;
-  const justEnteredStep8 = input.lastOwnStep !== 8 && input.ownStep === 8;
+  const draftStep = input.draftStep ?? 6;
+  const revisionStep = input.revisionStep ?? 8;
+  const justEnteredStep6 = input.lastOwnStep !== draftStep && input.ownStep === draftStep;
+  const justEnteredStep8 = input.lastOwnStep !== revisionStep && input.ownStep === revisionStep;
   const decision: DraftHydrationDecision = {
     hydrateStep6: false,
     step6Draft: "",
     hydrateStep8: false,
     step8Draft: ""
   };
-  if (input.ownStep === 6 && (justEnteredStep6 || !input.draftText)) {
+  if (input.ownStep === draftStep && (justEnteredStep6 || !input.draftText)) {
     decision.hydrateStep6 = true;
     decision.step6Draft = input.latestDraft6;
   }
-  if (input.ownStep === 8) {
+  if (input.ownStep === revisionStep) {
     const latestDraft = input.latestDraft8 ?? input.latestDraft6;
     const hasUnsavedLocalStep8Edit = input.draftText !== input.savedDraft8Text;
     decision.hydrateStep8 =
@@ -228,7 +256,8 @@ export function buildInteractiveMessages(input: {
 }): InteractiveItem[] {
   const { session, sortedMessages, loginUser, currentStep } = input;
   if (!session) return [];
-  const currentMode = getMode(currentStep);
+  const currentMode = getMode(currentStep, session);
+  const currentCapability = getCurrentCapability(session, currentStep);
   const activeGateKey = getActiveGroupGateKey(session, currentStep);
   const responders = activeGateKey ? session.groupGate?.[activeGateKey] ?? [] : [];
   const hasSubmittedThisTurn = Boolean(loginUser && responders.includes(loginUser));
@@ -275,21 +304,21 @@ export function buildInteractiveMessages(input: {
   const result: InteractiveItem[] = [];
   stepMessages.forEach((m, idx) => {
     if (m.role === "student") {
-      if (currentStep >= 5 && m.userId && m.userId !== loginUser) return;
-      if (currentStep === 3 && m.userId && m.userId !== loginUser) return;
+      const personalScoped = currentMode !== "group_interaction" || currentCapability === "outline";
+      if (personalScoped && m.userId && m.userId !== loginUser) return;
       const isCurrentTurnMessage = currentTurnStartIndex >= 0 ? idx > currentTurnStartIndex : false;
       if (hidePeerAnswersBeforeOwn && isCurrentTurnMessage && m.userId && m.userId !== loginUser) return;
       result.push({ id: m.id, kind: "student", text: m.text, at: m.at, userId: m.userId });
       return;
     }
     if (m.role === "ai") {
-      if (currentStep >= 5 && m.userId && m.userId !== loginUser) return;
-      if (currentStep === 3 && m.userId !== loginUser) return;
+      const personalScoped = currentMode !== "group_interaction" || currentCapability === "outline";
+      if (personalScoped && m.userId && m.userId !== loginUser) return;
       result.push({ id: m.id, kind: "ai", text: m.text, at: m.at });
       return;
     }
     if (m.role === "system") {
-      if (currentStep >= 5 && m.userId && m.userId !== loginUser) return;
+      if (currentMode !== "group_interaction" && m.userId && m.userId !== loginUser) return;
       const q = toQuestionText(m.text);
       if (q) result.push({ id: m.id, kind: "question", text: q, at: m.at });
     }
@@ -300,16 +329,20 @@ export function buildInteractiveMessages(input: {
 export function buildHistoryReviewSteps(
   stepNames: Record<number, string>,
   input: {
-    session: { personalSteps?: Record<string, number>; currentStep: number } | null;
+    session: ({ personalSteps?: Record<string, number>; currentStep: number } & WorkflowSessionLike) | null;
     sortedMessages: StudentMessageLike[];
     loginUser: string;
   }
 ): StepReview[] {
   const { session, sortedMessages, loginUser } = input;
   const ownStep = session && loginUser ? session.personalSteps?.[loginUser] ?? session.currentStep : 1;
-  if (!session || !loginUser || ownStep <= 1) return [];
+  if (!session || !loginUser) return [];
   const reviews: StepReview[] = [];
-  for (let step = 1; step < ownStep; step += 1) {
+  const workflowSteps = "workflowSteps" in session ? getSessionWorkflowSteps(session as WorkflowSessionLike) : [];
+  const reviewSteps = workflowSteps.length > 0
+    ? workflowSteps.slice(0, Math.max(0, workflowSteps.findIndex((item) => item.step === ownStep))).map((item) => item.step)
+    : Array.from({ length: Math.max(0, ownStep - 1) }, (_, index) => index + 1);
+  for (const step of reviewSteps) {
     const messages = sortedMessages
       .filter((m) => m.step === step)
       .flatMap((m): InteractiveItem[] => {

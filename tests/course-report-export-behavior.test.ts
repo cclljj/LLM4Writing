@@ -323,7 +323,7 @@ test("step8 timeline injection behavior: include/skip by content and duplication
   const injected = injectStep8DraftTimeline(base, "這是 Step8 最終稿", "2026-05-26T10:01:00.000Z");
   assert.equal(injected.length, 2);
   assert.equal(injected[1]?.step, 8);
-  assert.ok(injected[1]?.text.includes("步驟八最終稿"));
+  assert.ok(injected[1]?.text.includes("最終稿"));
 
   const duplicated = injectStep8DraftTimeline(base, "原本內容", "2026-05-26T10:01:00.000Z");
   assert.equal(duplicated.length, 1);
@@ -340,7 +340,7 @@ test("step8 timeline injection behavior: inserts final draft before Step9+ messa
   ];
   const injected = injectStep8DraftTimeline(base, "這是 Step8 最終稿", "2026-05-26T10:03:00.000Z");
   assert.deepEqual(injected.map((message) => message.step), [8, 8, 9, 9]);
-  assert.ok(injected[1]?.text.includes("步驟八最終稿"));
+  assert.ok(injected[1]?.text.includes("最終稿"));
 });
 
 test("course report timeline behavior: groups repeated step messages into one section order", () => {

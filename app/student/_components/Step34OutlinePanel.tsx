@@ -5,7 +5,7 @@ import OutlineSvg from "@/app/_components/OutlineSvg";
 import OutlineEditor from "./OutlineEditor";
 
 function Step34OutlinePanel({
-  currentStep,
+  isOutlineStep,
   loginUser,
   participants,
   teammateUsers,
@@ -19,7 +19,7 @@ function Step34OutlinePanel({
   onSave,
   onCompleteStep3
 }: {
-  currentStep: 3 | 4;
+  isOutlineStep: boolean;
   loginUser: string;
   participants: string[];
   teammateUsers: string[];
@@ -33,7 +33,7 @@ function Step34OutlinePanel({
   onSave: (mermaid: string) => Promise<void>;
   onCompleteStep3: (mermaid: string) => Promise<void>;
 }) {
-  if (currentStep === 3) {
+  if (isOutlineStep) {
     return (
       <div className="card">
         <h2>文章結構樹</h2>

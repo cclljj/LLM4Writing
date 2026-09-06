@@ -1,5 +1,5 @@
 import JSZip from "jszip";
-import { SessionState } from "@/src/lib/types";
+import { CourseWorkflowStep, SessionState, WorkflowCapability } from "@/src/lib/types";
 import { getAllActivities, hydrateDomainState } from "@/src/lib/activity-store";
 import { getSession, listMonitorSessionSummariesByActivityId, listSessionsByParticipant } from "@/src/lib/store";
 import { getUsersVisibleToTeacherStore, listUsersStore } from "@/src/lib/user-store";
@@ -10,6 +10,7 @@ import { resolveStudentReportCompletedAtIso } from "@/src/lib/course-report-comp
 import { injectStep8DraftTimeline } from "@/src/lib/course-report-pdf-timeline";
 import { buildCourseImplementationPortfolioJsonString } from "@/src/lib/courseImplementationPortfolioJson";
 import { COURSE_REPORT_FILE_VERSION } from "@/src/lib/course-report-version";
+import { getSessionWorkflowSteps, getWorkflowStepByCapability, getWorkflowStepName } from "@/src/lib/course-workflow";
 
 export type ExportJobStatus = "queued" | "running" | "retrying" | "packaging" | "succeeded" | "failed" | "canceled";
 export type ExportJobFormat = "pdf" | "json";
@@ -76,7 +77,6 @@ function sanitizeFilename(value: string): string {
 
 function formatStepText(step: number): string {
   if (!Number.isFinite(step) || step <= 0) return "尚未加入";
-  if (step > 10) return "Step 10";
   return `Step ${step}`;
 }
 
@@ -101,14 +101,46 @@ function buildStarRationales(metric: {
   const reasons: string[] = [];
   reasons.push("基礎分：1 星。");
   if (metric.joined || metric.messageCount > 0) reasons.push("有加入/互動紀錄（+1）。");
-  if (metric.maxStep >= 4) reasons.push("完成到 Step 4（+1）。");
-  if (metric.maxStep >= 8) reasons.push("完成到 Step 8（+1）。");
-  if (metric.maxStep >= 10) reasons.push("完成到 Step 10（+1）。");
-  if (metric.step3OutlineChars >= 60) reasons.push("Step3 結構樹內容充足（>=60 字，+1）。");
-  if (metric.draftStep6Chars < 80 && metric.maxStep >= 6) reasons.push("Step6 初稿偏短（<80 字，-1）。");
+  reasons.push("進度越接近課程後段，星等越高。");
+  if (metric.step3OutlineChars >= 60) reasons.push("結構樹內容充足（>=60 字，+1）。");
+  if (metric.draftStep6Chars < 80 && metric.maxStep > 0) reasons.push("初稿偏短時會扣分（<80 字，-1）。");
   if (metric.rejectedCount >= 3) reasons.push("回答品質拒答次數偏高（>=3 次，-1）。");
   reasons.push(`最終星等：${renderStars(metric.stars)}。`);
   return reasons;
+}
+
+function getWorkflowOwner(workflowSteps?: CourseWorkflowStep[]): { workflowSteps: CourseWorkflowStep[] } {
+  return { workflowSteps: workflowSteps && workflowSteps.length > 0 ? workflowSteps : [] };
+}
+
+function getStepOrderIndex(workflowSteps: CourseWorkflowStep[] | undefined, step: number): number {
+  const steps = getSessionWorkflowSteps(getWorkflowOwner(workflowSteps));
+  const index = steps.findIndex((item) => item.step === step);
+  return index >= 0 ? index : Math.max(0, step - 1);
+}
+
+function addReachedCapabilities(
+  reached: Set<WorkflowCapability>,
+  workflowSteps: CourseWorkflowStep[] | undefined,
+  currentStep: number
+) {
+  const steps = getSessionWorkflowSteps(getWorkflowOwner(workflowSteps));
+  const index = steps.findIndex((item) => item.step === currentStep);
+  if (index >= 0) {
+    steps.slice(0, index + 1).forEach((item) => reached.add(item.capability));
+    return;
+  }
+
+  if (currentStep >= 1) reached.add("topic_discussion");
+  if (currentStep >= 2) reached.add("research_discussion");
+  if (currentStep >= 3) reached.add("outline");
+  if (currentStep >= 4) reached.add("peer_outline");
+  if (currentStep >= 5) reached.add("summary_report");
+  if (currentStep >= 6) reached.add("draft");
+  if (currentStep >= 7) reached.add("feedback_report");
+  if (currentStep >= 8) reached.add("revision");
+  if (currentStep >= 9) reached.add("reflection");
+  if (currentStep >= 10) reached.add("final_report");
 }
 
 async function resolveExportInput(
@@ -173,9 +205,18 @@ async function resolveExportInput(
       let step3OutlineChars = 0;
       let draftStep6Chars = 0;
       let joined = false;
+      let maxStepOrderIndex = -1;
+      let maxStepWorkflowSteps: CourseWorkflowStep[] | undefined = primary.workflowSteps;
+      const reachedCapabilities = new Set<WorkflowCapability>();
       for (const session of matched) {
         const personalStep = session.personalSteps?.[student.username] ?? session.currentStep;
-        maxStep = Math.max(maxStep, personalStep);
+        const stepOrderIndex = getStepOrderIndex(session.workflowSteps, personalStep);
+        if (stepOrderIndex > maxStepOrderIndex) {
+          maxStepOrderIndex = stepOrderIndex;
+          maxStep = personalStep;
+          maxStepWorkflowSteps = session.workflowSteps;
+        }
+        addReachedCapabilities(reachedCapabilities, session.workflowSteps, personalStep);
         const ownMessageCount = session.studentMessageStats?.[student.username]?.count ?? 0;
         messageCount += ownMessageCount;
         if ((session.joinedUsers ?? []).includes(student.username) || ownMessageCount > 0) joined = true;
@@ -185,12 +226,13 @@ async function resolveExportInput(
       }
       let stars = 1;
       if (joined || messageCount > 0) stars = 2;
-      if (maxStep >= 4) stars += 1;
-      if (maxStep >= 8) stars += 1;
-      if (maxStep >= 10) stars += 1;
+      if (reachedCapabilities.has("peer_outline")) stars += 1;
+      if (reachedCapabilities.has("revision")) stars += 1;
+      if (reachedCapabilities.has("final_report")) stars += 1;
       if (step3OutlineChars >= 60) stars += 1;
-      if (draftStep6Chars < 80 && maxStep >= 6) stars -= 1;
+      if (draftStep6Chars < 80 && reachedCapabilities.has("draft")) stars -= 1;
       if (rejectedCount >= 3) stars -= 1;
+      const maxStepName = maxStep > 0 ? getWorkflowStepName(getWorkflowOwner(maxStepWorkflowSteps), maxStep) : undefined;
       stars = clamp(stars, 1, 5);
       return {
         username: student.username,
@@ -198,7 +240,7 @@ async function resolveExportInput(
         sessionId: primary.sessionId,
         metric: {
           stars,
-          stepText: formatStepText(maxStep),
+          stepText: maxStepName ? `${formatStepText(maxStep)} - ${maxStepName}` : formatStepText(maxStep),
           maxStep,
           messageCount,
           rejectedCount,
@@ -268,19 +310,24 @@ async function buildStudentReportInput(input: {
     activityId: input.activityId,
     workflow: "spec10",
   });
+  const peerOutlineStep = getWorkflowStepByCapability(session, "peer_outline")?.step ?? 4;
+  const revisionStep = getWorkflowStepByCapability(session, "revision")?.step ?? 8;
   const step3Session = courseSessions.find((candidate) => candidate.step3SubmittedOutlines?.[input.username]?.trim());
   const step4Session = courseSessions.find((candidate) => {
+    const candidatePeerOutlineStep = getWorkflowStepByCapability(candidate, "peer_outline")?.step ?? peerOutlineStep;
     const personalStep = candidate.personalSteps?.[input.username] ?? candidate.currentStep;
-    return personalStep >= 4 && candidate.outlines?.[input.username]?.trim();
+    return getStepOrderIndex(candidate.workflowSteps, personalStep) >= getStepOrderIndex(candidate.workflowSteps, candidatePeerOutlineStep) &&
+      candidate.outlines?.[input.username]?.trim();
   });
   const timelineMessages = injectStep8DraftTimeline(
     toTimelineMessages(session, input.username),
     session.draftStep8?.[input.username] ?? "",
-    nowIso()
+    nowIso(),
+    revisionStep
   );
   const step3SubmittedOutline = step3Session?.step3SubmittedOutlines?.[input.username] ?? "";
   const step4RevisedOutline = step4Session?.outlines?.[input.username] ?? "";
-  const step4ProcessMessages = toTimelineMessages(step4Session ?? session, input.username).filter((message) => message.step === 4);
+  const step4ProcessMessages = toTimelineMessages(step4Session ?? session, input.username).filter((message) => message.step === peerOutlineStep);
   const step5Report = firstCourseArtifact(courseSessions, (candidate) => candidate.reports?.step5?.[input.username]);
   const step6Draft = firstCourseArtifact(courseSessions, (candidate) => candidate.draftStep6?.[input.username]);
   const step7Report = firstCourseArtifact(courseSessions, (candidate) => candidate.reports?.step7?.[input.username]);

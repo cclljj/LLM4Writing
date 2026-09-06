@@ -8,6 +8,7 @@ import { isSessionInActivityGroupScope } from "@/src/lib/monitor-session-scope";
 import { ChatMessage, SessionState } from "@/src/lib/types";
 import type { MonitorSessionSummary } from "@/src/lib/store";
 import { buildMonitorActivityEtag } from "@/src/lib/monitor-etag";
+import { getWorkflowPromptStepKey, getWorkflowStepByCapability } from "@/src/lib/course-workflow";
 
 function normalizeText(text: string): string {
   return text.replace(/\r\n/g, "\n").trim();
@@ -23,14 +24,14 @@ function buildMessagesWithOpenings(session: SessionState): ChatMessage[] {
   const stepOpenings = session.promptConfig?.stepOpenings ?? {};
   const filteredMessages = session.messages.filter((message) => {
     if (message.role !== "system") return true;
-    const stepPrompt = stepPrompts[String(message.step)] ?? "";
+    const stepPrompt = stepPrompts[getWorkflowPromptStepKey(session, message.step)] ?? "";
     if (!stepPrompt.trim()) return true;
     return normalizeText(message.text) !== normalizeText(stepPrompt);
   });
   const withOpenings = [...filteredMessages];
   const stepsInView = Array.from(new Set(filteredMessages.map((message) => message.step)));
   stepsInView.forEach((step) => {
-    const opening = (stepOpenings[String(step)] ?? "").trim();
+    const opening = (stepOpenings[getWorkflowPromptStepKey(session, step)] ?? "").trim();
     if (!opening) return;
     const openingNormalized = normalizeText(opening);
     const alreadyExists = withOpenings.some(
@@ -58,11 +59,13 @@ async function buildMonitorSessionPayload(
 ) {
   const messagesWithOpenings = detail === "full" ? buildMessagesWithOpenings(session) : [];
   const lastMessage = session.messages[session.messages.length - 1];
+  const topicStep = getWorkflowStepByCapability(session, "topic_discussion")?.step ?? 1;
+  const researchStep = getWorkflowStepByCapability(session, "research_discussion")?.step ?? 2;
   const step1Ready = session.messages.some(
-    (message) => message.step === 1 && message.role === "system" && message.text.includes("步驟 1 子步驟已完成，等待教師切換下一步")
+    (message) => message.step === topicStep && message.role === "system" && message.text.includes("步驟 1 子步驟已完成，等待教師切換下一步")
   );
   const step2Ready = session.messages.some(
-    (message) => message.step === 2 && message.role === "system" && message.text.includes("步驟 2 子步驟已完成，等待教師切換下一步")
+    (message) => message.step === researchStep && message.role === "system" && message.text.includes("步驟 2 子步驟已完成，等待教師切換下一步")
   );
   const studentMessageStats = Object.fromEntries(
     session.participants.map((participant) => {
@@ -135,6 +138,7 @@ async function buildMonitorSessionSummaryPayload(
     makeupWork: session.makeupWork,
     onlineUsers,
     currentStep: session.currentStep,
+    workflowSteps: session.workflowSteps ?? [],
     personalSteps: session.personalSteps,
     groupGate: session.groupGate,
     stepState: session.stepState,

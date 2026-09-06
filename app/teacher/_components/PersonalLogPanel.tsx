@@ -5,6 +5,7 @@ import OutlineSvg from "@/app/_components/OutlineSvg";
 import { renderMessageHtml } from "@/app/student/_components/renderMessageHtml";
 import { stepNameMap } from "@/src/lib/step-names";
 import { CourseWorkflowStep } from "@/src/lib/types";
+import { getWorkflowStepByCapability } from "@/src/lib/course-workflow";
 import { getPersonalScopedMessagesForStudentHistory, getStepsFromMessages, MonitorMessage } from "./monitor-log-utils";
 
 function PersonalLogPanel({
@@ -69,19 +70,22 @@ function PersonalLogPanel({
           : personalMessages;
         const personalSteps = getStepsFromMessages(scopedPersonalMessages);
         const stepNames = new Map((workflowSteps ?? []).map((item) => [item.step, item.name]));
+        const workflowOwner = { workflowSteps };
+        const outlineStep = getWorkflowStepByCapability(workflowOwner, "outline")?.step ?? 3;
+        const peerOutlineStep = getWorkflowStepByCapability(workflowOwner, "peer_outline")?.step ?? 4;
         const hasStep4Revised = Boolean(userOutline && userOutline !== userStep3SubmittedOutline);
 
         const step3Block = userStep3SubmittedOutline ? (
           <div style={{ borderTop: "2px solid var(--line)", padding: "12px 0", marginTop: 4 }}>
-            <strong style={{ fontSize: 13, color: "var(--muted-strong)" }}>步驟三完成結構樹</strong>
-            <OutlineSvg mermaidText={userStep3SubmittedOutline} label="步驟三完成結構樹" />
+            <strong style={{ fontSize: 13, color: "var(--muted-strong)" }}>{stepNames.get(outlineStep) ?? "生成論點"}完成結構樹</strong>
+            <OutlineSvg mermaidText={userStep3SubmittedOutline} label={`${stepNames.get(outlineStep) ?? "生成論點"}完成結構樹`} />
           </div>
         ) : null;
 
         const step4Block = hasStep4Revised ? (
           <div style={{ borderTop: "2px solid var(--line)", padding: "12px 0", marginTop: 4 }}>
-            <strong style={{ fontSize: 13, color: "var(--muted-strong)" }}>步驟四對比修正後結構樹</strong>
-            <OutlineSvg mermaidText={userOutline} label="步驟四對比修正後" />
+            <strong style={{ fontSize: 13, color: "var(--muted-strong)" }}>{stepNames.get(peerOutlineStep) ?? "對比修正"}後結構樹</strong>
+            <OutlineSvg mermaidText={userOutline} label={`${stepNames.get(peerOutlineStep) ?? "對比修正"}後`} />
           </div>
         ) : null;
 
@@ -125,8 +129,8 @@ function PersonalLogPanel({
                           <small>{message.at}</small>
                         </div>
                       ))}
-                      {step === 3 && step3Block}
-                      {step === 4 && step4Block}
+                      {step === outlineStep && step3Block}
+                      {step === peerOutlineStep && step4Block}
                     </>
                   ) : null}
                 </div>

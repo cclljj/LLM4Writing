@@ -4,7 +4,7 @@ import { buildOutlinePreview } from "@/src/lib/outline-utils";
 import { maskPeerUsernames, normalizeReportMarkdownText } from "@/src/lib/report-rendering";
 import { formatTaipeiDateTime } from "@/src/lib/time-format";
 import { COURSE_REPORT_VERSION } from "@/src/lib/course-report-version";
-import { getWorkflowStepName } from "@/src/lib/course-workflow";
+import { getWorkflowStepByCapability, getWorkflowStepName } from "@/src/lib/course-workflow";
 import { CourseWorkflowStep } from "@/src/lib/types";
 
 export type PdfStudentMetric = {
@@ -472,11 +472,16 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
     return COLORS.systemBg;
   }
 
-  function drawOutlineGraphFallback(step: 3 | 4, mermaidText: string): void {
+  const outlineStep = getWorkflowStepByCapability(input, "outline")?.step ?? 3;
+  const peerOutlineStep = getWorkflowStepByCapability(input, "peer_outline")?.step ?? 4;
+  const outlineTitle = `${getWorkflowStepName(input, outlineStep)}原始輸入架構圖`;
+  const peerOutlineTitle = `${getWorkflowStepName(input, peerOutlineStep)}修正後架構圖`;
+
+  function drawOutlineGraphFallback(kind: "submitted_outline" | "revised_outline", mermaidText: string): void {
     const preview = buildOutlinePreview(mermaidText, { maxLines: 40 });
     if (!preview) return;
 
-    const title = step === 3 ? "步驟三原始輸入架構圖" : "步驟四修正後架構圖";
+    const title = kind === "submitted_outline" ? outlineTitle : peerOutlineTitle;
     writeSectionHeader(title);
 
     const maxGraphHeight = PAGE.height - PAGE.marginTop - PAGE.marginBottom - 40;
@@ -534,8 +539,8 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
     y += graphH + 18;
   }
 
-  async function drawOutlineGraph(step: 3 | 4, mermaidText: string): Promise<void> {
-    const title = step === 3 ? "步驟三原始輸入架構圖" : "步驟四修正後架構圖";
+  async function drawOutlineGraph(kind: "submitted_outline" | "revised_outline", mermaidText: string): Promise<void> {
+    const title = kind === "submitted_outline" ? outlineTitle : peerOutlineTitle;
     writeSectionHeader(title);
 
     try {
@@ -543,13 +548,13 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
       if (!svg) {
         // Fallback to deterministic local preview graph when Mermaid SVG rendering is unavailable.
         y -= 34;
-        drawOutlineGraphFallback(step, mermaidText);
+        drawOutlineGraphFallback(kind, mermaidText);
         return;
       }
       const png = await svgToPngDataUrl(svg);
       if (!png) {
         y -= 34;
-        drawOutlineGraphFallback(step, mermaidText);
+        drawOutlineGraphFallback(kind, mermaidText);
         return;
       }
 
@@ -569,7 +574,7 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
       y += graphH + 18;
     } catch {
       y -= 34;
-      drawOutlineGraphFallback(step, mermaidText);
+      drawOutlineGraphFallback(kind, mermaidText);
     }
   }
 
@@ -611,6 +616,8 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
       messages,
       hasStep3Outline: Boolean(step3Outline),
       hasStep4Outline,
+      outlineStep,
+      peerOutlineStep,
     });
 
     let insertedStep3 = false;
@@ -633,23 +640,23 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
         setTextColor(COLORS.text);
         y += 30;
 
-        if (step === 3 && step3Outline && !insertedStep3) {
-          await drawOutlineGraph(3, step3Outline);
+        if (step === outlineStep && step3Outline && !insertedStep3) {
+          await drawOutlineGraph("submitted_outline", step3Outline);
           insertedStep3 = true;
         }
-        if (step === 4 && hasStep4Outline && !insertedStep4) {
-          await drawOutlineGraph(4, step4Outline);
+        if (step === peerOutlineStep && hasStep4Outline && !insertedStep4) {
+          await drawOutlineGraph("revised_outline", step4Outline);
           insertedStep4 = true;
         }
       }
 
       if (item.type === "outline") {
-        if (step === 3 && step3Outline && !insertedStep3) {
-          await drawOutlineGraph(3, step3Outline);
+        if (item.outlineKind === "submitted_outline" && step3Outline && !insertedStep3) {
+          await drawOutlineGraph("submitted_outline", step3Outline);
           insertedStep3 = true;
         }
-        if (step === 4 && hasStep4Outline && !insertedStep4) {
-          await drawOutlineGraph(4, step4Outline);
+        if (item.outlineKind === "revised_outline" && hasStep4Outline && !insertedStep4) {
+          await drawOutlineGraph("revised_outline", step4Outline);
           insertedStep4 = true;
         }
         continue;
@@ -662,10 +669,10 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
 
     // Fallback placement in case outlines exist but step messages are absent.
     if (step3Outline && !insertedStep3) {
-      await drawOutlineGraph(3, step3Outline);
+      await drawOutlineGraph("submitted_outline", step3Outline);
     }
     if (hasStep4Outline && !insertedStep4) {
-      await drawOutlineGraph(4, step4Outline);
+      await drawOutlineGraph("revised_outline", step4Outline);
     }
   }
 

@@ -3,7 +3,7 @@
 import { memo, Ref } from "react";
 import OutlineSvg from "@/app/_components/OutlineSvg";
 import { renderMessageHtml } from "@/app/student/_components/renderMessageHtml";
-import { getSessionWorkflowSteps } from "@/src/lib/course-workflow";
+import { getSessionWorkflowSteps, getWorkflowStepByCapability } from "@/src/lib/course-workflow";
 import { getStepsFromMessages } from "./monitor-log-utils";
 import { MonitorSession } from "./types";
 
@@ -59,6 +59,8 @@ function GroupLogPanel({
         const allGroupMsgs = monitorSelected.messages;
         const groupSteps = getStepsFromMessages(allGroupMsgs);
         const stepNames = new Map(getSessionWorkflowSteps(monitorSelected).map((item) => [item.step, item.name]));
+        const outlineStep = getWorkflowStepByCapability(monitorSelected, "outline")?.step ?? 3;
+        const peerOutlineStep = getWorkflowStepByCapability(monitorSelected, "peer_outline")?.step ?? 4;
 
         const hasStep3 = monitorSelected.participants.some((p) => monitorSelected.step3SubmittedOutlines?.[p]);
         const hasStep4Revised = monitorSelected.participants.some((p) => {
@@ -69,14 +71,14 @@ function GroupLogPanel({
 
         const step3Block = hasStep3 ? (
           <div style={{ borderTop: "2px solid var(--line)", padding: "12px 0", marginTop: 4 }}>
-            <strong style={{ fontSize: 13, color: "var(--muted-strong)" }}>步驟三 各組員完成結構樹</strong>
+            <strong style={{ fontSize: 13, color: "var(--muted-strong)" }}>{stepNames.get(outlineStep) ?? "生成論點"} 各組員完成結構樹</strong>
             {monitorSelected.participants.map((p) => {
               const submitted = monitorSelected.step3SubmittedOutlines?.[p];
               if (!submitted) return null;
               return (
                 <div key={p} style={{ marginTop: 8 }}>
                   <small style={{ fontWeight: 600 }}>{p}</small>
-                  <OutlineSvg mermaidText={submitted} label="步驟三完成結構樹" />
+                  <OutlineSvg mermaidText={submitted} label={`${stepNames.get(outlineStep) ?? "生成論點"}完成結構樹`} />
                 </div>
               );
             })}
@@ -85,7 +87,7 @@ function GroupLogPanel({
 
         const step4Block = hasStep4Revised ? (
           <div style={{ borderTop: "2px solid var(--line)", padding: "12px 0", marginTop: 4 }}>
-            <strong style={{ fontSize: 13, color: "var(--muted-strong)" }}>步驟四 各組員修正後結構樹</strong>
+            <strong style={{ fontSize: 13, color: "var(--muted-strong)" }}>{stepNames.get(peerOutlineStep) ?? "對比修正"} 各組員修正後結構樹</strong>
             {monitorSelected.participants.map((p) => {
               const s = monitorSelected.step3SubmittedOutlines?.[p];
               const c = monitorSelected.outlines?.[p];
@@ -93,7 +95,7 @@ function GroupLogPanel({
               return (
                 <div key={p} style={{ marginTop: 8 }}>
                   <small style={{ fontWeight: 600 }}>{p}</small>
-                  <OutlineSvg mermaidText={c} label="步驟四對比修正後" />
+                  <OutlineSvg mermaidText={c} label={`${stepNames.get(peerOutlineStep) ?? "對比修正"}修正後`} />
                 </div>
               );
             })}
@@ -142,8 +144,8 @@ function GroupLogPanel({
                           <small>{message.at}</small>
                         </div>
                       ))}
-                      {step === 2 && step3Block}
-                      {step === 4 && step4Block}
+                      {step === outlineStep && step3Block}
+                      {step === peerOutlineStep && step4Block}
                     </>
                   ) : null}
                 </div>

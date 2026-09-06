@@ -14,7 +14,7 @@ The system SHALL provide separate student, teacher, and admin capabilities for t
 
 - **GIVEN** an authenticated user with role `student`
 - **WHEN** the user enters the student area
-- **THEN** the user can view eligible class courses, join allowed activities, participate in the 10-step workflow, save personal artifacts, and view personal history
+- **THEN** the user can view eligible class courses, join allowed activities, participate in the term-configured workflow, save personal artifacts, and view personal history
 
 #### Scenario: Teacher class management
 

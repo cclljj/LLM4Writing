@@ -7,7 +7,7 @@ import { deferStateUpdate } from "@/src/lib/defer-state-update";
 import { formatTaipeiDateTime } from "@/src/lib/time-format";
 import OutlineSvg from "@/app/_components/OutlineSvg";
 import { renderMessageHtml } from "@/app/student/_components/renderMessageHtml";
-import { getWorkflowStepName } from "@/src/lib/course-workflow";
+import { getWorkflowStepByCapability, getWorkflowStepName } from "@/src/lib/course-workflow";
 import type { CourseWorkflowStep } from "@/src/lib/types";
 
 type HistorySummary = {
@@ -110,17 +110,29 @@ export default function StudentCourseHistoryPage() {
       .finally(() => setLoading(false));
   }, [activityId]);
 
+  const artifactSteps = useMemo(() => {
+    const owner = history?.latestSession;
+    return {
+      outline: owner ? getWorkflowStepByCapability(owner, "outline")?.step ?? 3 : 3,
+      peerOutline: owner ? getWorkflowStepByCapability(owner, "peer_outline")?.step ?? 4 : 4,
+      draft: owner ? getWorkflowStepByCapability(owner, "draft")?.step ?? 6 : 6,
+      feedback: owner ? getWorkflowStepByCapability(owner, "feedback_report")?.step ?? 7 : 7,
+      revision: owner ? getWorkflowStepByCapability(owner, "revision")?.step ?? 8 : 8,
+      finalReport: owner ? getWorkflowStepByCapability(owner, "final_report")?.step ?? 10 : 10,
+    };
+  }, [history?.latestSession]);
+
   const historySteps = useMemo(() => {
     if (!history) return [] as number[];
     const steps = new Set(history.latestSession.messages.map((m) => m.step));
-    if (history.latestWork.step3SubmittedOutline) steps.add(3);
-    if (history.latestWork.step4Outline) steps.add(4);
-    if (history.latestWork.draftStep6) steps.add(6);
-    if (history.latestWork.step7Report) steps.add(7);
-    if (history.latestWork.draftStep8) steps.add(8);
-    if (history.latestWork.step10Report) steps.add(10);
+    if (history.latestWork.step3SubmittedOutline) steps.add(artifactSteps.outline);
+    if (history.latestWork.step4Outline) steps.add(artifactSteps.peerOutline);
+    if (history.latestWork.draftStep6) steps.add(artifactSteps.draft);
+    if (history.latestWork.step7Report) steps.add(artifactSteps.feedback);
+    if (history.latestWork.draftStep8) steps.add(artifactSteps.revision);
+    if (history.latestWork.step10Report) steps.add(artifactSteps.finalReport);
     return Array.from(steps).sort((a, b) => a - b);
-  }, [history]);
+  }, [artifactSteps, history]);
 
   useEffect(() => {
     if (historySteps.length === 0) {
@@ -245,48 +257,48 @@ export default function StudentCourseHistoryPage() {
                             </div>
                           ))
                         )}
-                        {step === 3 && history.latestWork.step3SubmittedOutline ? (
+                        {step === artifactSteps.outline && history.latestWork.step3SubmittedOutline ? (
                           <div style={{ marginTop: 12, borderTop: "1px solid var(--line-soft)", paddingTop: 10 }}>
-                            <strong>步驟三原始輸入架構圖</strong>
-                            <OutlineSvg compact mermaidText={history.latestWork.step3SubmittedOutline} label="步驟三原始輸入架構圖" />
+                            <strong>{getWorkflowStepName(history.latestSession, artifactSteps.outline)}原始輸入架構圖</strong>
+                            <OutlineSvg compact mermaidText={history.latestWork.step3SubmittedOutline} label={`${getWorkflowStepName(history.latestSession, artifactSteps.outline)}原始輸入架構圖`} />
                           </div>
                         ) : null}
-                        {step === 4 && history.latestWork.step4Outline ? (
+                        {step === artifactSteps.peerOutline && history.latestWork.step4Outline ? (
                           <div style={{ marginTop: 12, borderTop: "1px solid var(--line-soft)", paddingTop: 10 }}>
-                            <strong>步驟四修正後結構樹</strong>
+                            <strong>{getWorkflowStepName(history.latestSession, artifactSteps.peerOutline)}修正後結構樹</strong>
                             <OutlineSvg compact mermaidText={history.latestWork.step4Outline} />
                           </div>
                         ) : null}
-                        {step === 6 && history.latestWork.draftStep6 ? (
+                        {step === artifactSteps.draft && history.latestWork.draftStep6 ? (
                           <div style={{ marginTop: 12, borderTop: "1px solid var(--line-soft)", paddingTop: 10 }}>
-                            <strong>步驟六初稿</strong>
+                            <strong>{getWorkflowStepName(history.latestSession, artifactSteps.draft)}初稿</strong>
                             <div
                               style={{ marginTop: 4 }}
                               dangerouslySetInnerHTML={{ __html: renderMessageHtml(history.latestWork.draftStep6) }}
                             />
                           </div>
                         ) : null}
-                        {step === 7 && history.latestWork.step7Report ? (
+                        {step === artifactSteps.feedback && history.latestWork.step7Report ? (
                           <div style={{ marginTop: 12, borderTop: "1px solid var(--line-soft)", paddingTop: 10 }}>
-                            <strong>步驟七分析回饋</strong>
+                            <strong>{getWorkflowStepName(history.latestSession, artifactSteps.feedback)}</strong>
                             <div
                               style={{ marginTop: 4 }}
                               dangerouslySetInnerHTML={{ __html: renderMessageHtml(history.latestWork.step7Report) }}
                             />
                           </div>
                         ) : null}
-                        {step === 8 && history.latestWork.draftStep8 ? (
+                        {step === artifactSteps.revision && history.latestWork.draftStep8 ? (
                           <div style={{ marginTop: 12, borderTop: "1px solid var(--line-soft)", paddingTop: 10 }}>
-                            <strong>步驟八潤飾稿</strong>
+                            <strong>{getWorkflowStepName(history.latestSession, artifactSteps.revision)}稿</strong>
                             <div
                               style={{ marginTop: 4 }}
                               dangerouslySetInnerHTML={{ __html: renderMessageHtml(history.latestWork.draftStep8) }}
                             />
                           </div>
                         ) : null}
-                        {step === 10 && history.latestWork.step10Report ? (
+                        {step === artifactSteps.finalReport && history.latestWork.step10Report ? (
                           <div style={{ marginTop: 12, borderTop: "1px solid var(--line-soft)", paddingTop: 10 }}>
-                            <strong>步驟十總結報告</strong>
+                            <strong>{getWorkflowStepName(history.latestSession, artifactSteps.finalReport)}</strong>
                             <div
                               style={{ marginTop: 4 }}
                               dangerouslySetInnerHTML={{ __html: renderMessageHtml(history.latestWork.step10Report) }}

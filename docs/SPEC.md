@@ -383,7 +383,9 @@ Artifact 類型：
 
 來源：`src/lib/engine.ts`、`src/lib/spec.ts` 與 workflow helper modules。
 
-### 5.1 10 步驟與模式
+### 5.1 Term workflow 步驟與模式
+
+課程流程的步驟順序、顯示名稱、互動模式與能力綁定一律由該學年學期的 `workflowSteps` 決定。下表是目前 `114-2` 與初始 `115-1` 的預設配置；未來學期可以用既有能力新增、刪除或重排步驟，不需改程式中的流程判斷。
 
 | Step | 名稱 | 模式 | 說明 |
 |---|---|---|---|
@@ -405,7 +407,8 @@ Artifact 類型：
 - term config 可以透過 `extends` 繼承前一份課程設定；物件欄位會合併、陣列會完整取代，讓新學期只需記錄改動。
 - `115-1` 目前已完整複製 `114-2`，是可獨立修改的初始快照；調整 `115-1` 不會回寫或影響 `114-2`。
 - 每個 term config 的 `workflowSteps` 為課程流程單一來源；每項包含數字 `step`、顯示 `name`、互動 `mode` 與既有能力 `capability`。設定檔中的順序就是課程順序，因此可新增、刪除或重排步驟。
-- 新建 session 必須保存 `workflowSteps` 完整快照。學生進度、教師監控與歷程、PDF／JSON 匯出必須依此快照呈現步驟名稱與順序；舊 session 缺快照時回退既有十步驟定義。
+- 新建 session 必須保存 `workflowSteps` 完整快照。學生端操作、教師開課/切步驟、教師監控與歷程、個人紀錄、PDF／JSON／研究 Log 匯出必須依此快照解析步驟名稱、順序、互動模式與 capability；舊 session 缺快照時回退既有十步驟定義。
+- Prompt 與開場白仍使用既有 prompt key（例如 `topic_discussion` 對應舊 Step1 prompt、`final_report` 對應舊 Step10 report config），runtime step number 需先透過 capability 映射回 prompt key，避免重排後讀錯 prompt。
 - 找不到 term config 時，系統使用 `course-step-configs.json` 的 `default` 設定，確保課程不中斷。
 - 因此教師可在建立 `115-1` 等新課程前只更新該 term config，不會影響既有 `114-2` 課程與歷史資料。
 
@@ -608,19 +611,19 @@ Step6「完成文章撰寫」額外前後端驗證（#235）：
 
 ### 5.7 非互動與個人步調
 
-非互動步驟：
+非互動步驟由 workflow capability 判定：
 
-- Step5：為每位 participant 生成 `reports.step5[user]`（只使用該學生 Step1~4 個人互動歷程，不混入同組其他學生訊息）。
-- Step4→Step5 切換時，Step5 摘要生成採有限併發批次處理（非逐位串行），以降低班級人數較多時的等待時間；語意與輸出格式不變。
-- Step7：為每位 participant 生成 `reports.step7[user]`。
-- Step10：為每位 participant 生成 `reports.step10[user]`。
+- `summary_report`：為每位 participant 生成 `reports.step5[user]`（相容性儲存欄位；只使用該學生在摘要前已完成的合法歷程，不混入同組其他學生的個人步驟訊息）。
+- 切換到 `summary_report` 時，摘要生成採有限併發批次處理（非逐位串行），以降低班級人數較多時的等待時間；語意與輸出格式不變。
+- `feedback_report`：為每位 participant 生成 `reports.step7[user]`（相容性儲存欄位）。
+- `final_report`：為每位 participant 生成 `reports.step10[user]`（相容性儲存欄位）。
 
-自 Step5 起改為個人步調：
+自 workflow 中第一個非小組同步步驟起改為個人步調：
 
-- 同組成員可各自推進 Step5~10。
+- 同組成員可各自沿著該 session 的 `workflowSteps` 推進後續個人步驟。
 - 學生端渲染與 Step5/6/8/9 API 判定以 `personalSteps[username]` 為準。
 - 學生端 Step5+ 互動內容僅顯示該學生本人、AI 與必要個人系統提示。
-- 教師端需顯示 Step5~10 人數分布，例如 `S5:x / S6:y / ... / S10:z`。
+- 教師端需依 `workflowSteps` 顯示個人步調人數分布，不可固定只列 Step5~10。
 
 ### 5.8 Step9 個人反思
 
@@ -696,10 +699,10 @@ LLM 未設定或串流失敗時需提供可讀 fallback，避免學生停留在�
 | `renderMessageHtml.ts` | Markdown/HTML 渲染工具 |
 | `OutlineEditor.tsx` | SVG 拖拉結構樹編輯器，管理 outline nodes 與 sync guard |
 | `StudentLobby.tsx` | 無 session 時的課程清單與入口 |
-| `HistoryReview.tsx` | 可折疊前序步驟回顧，含 Step3/4 結構樹快照 |
+| `HistoryReview.tsx` | 可折疊前序步驟回顧，含 workflow 中 outline/peer-outline 結構樹快照 |
 | `InteractionPanel.tsx` | 通用互動面板，含訊息列表、送出表單、Step9 批次回答等 |
 | `Step68Panel.tsx` | Step6/8 草稿編輯器，含參考結構樹、儲存、AI 建議、完成按鈕 |
-| `StudentProgressRail.tsx` | Step1~10 進度軌 |
+| `StudentProgressRail.tsx` | 依 `workflowSteps` 呈現進度軌 |
 | `GroupWaitingStatus.tsx` | 小組等待狀態 |
 | `Step3ToolHint.tsx` | Step3 工具提示 |
 | `StudentTopHeader.tsx` | 學生端共用頂部名片 |
@@ -722,7 +725,7 @@ LLM 未設定或串流失敗時需提供可讀 fallback，避免學生停留在�
 | 模組 | 責任 |
 |---|---|
 | `src/lib/student-page-helpers.ts` | 學生端純邏輯：fetch 重試/timeout、互動模式、group gate key、互動訊息與歷程回顧組裝、輪詢回滾防護（`shouldAcceptIncomingSession`）、草稿 hydration 規則（`resolveDraftHydration`） |
-| `src/lib/step-names.ts` | Step1~10 顯示名稱單一來源（學生端、教師端、報告共用） |
+| `src/lib/course-workflow.ts` | 依 session `workflowSteps` 解析步驟名稱、互動模式、capability、下一步與 prompt key；`step-names.ts` 僅作 legacy fallback |
 | `src/lib/sse-session-stream.ts` | Step3/6/7/10 session SSE 串流共用讀取器 |
 
 學生端 hooks（#459，`app/student/_hooks/`）：
@@ -1213,7 +1216,7 @@ Loading 規則（#270）：
 - 全班 ZIP 採全成功策略：任一學生最終失敗即 job 失敗，不提供 ZIP，前端需可重新執行。
 - 全班匯出需支援取消，並保留下載成品 TTL 與清理機制（預設 24 小時）。
 - `start/status/download/cancel` 全流程皆需做教師/admin 權限檢查與 audit log。
-- 學生成果 JSON schema `student-portfolio-report-v1.4` 與 `reportVersion: "1.4"` 必須對應同一個共同 PDF/JSON 報告版本，並對應 PDF 的主要資料來源，至少包含課程 ID、蓄意去識別化的學校與班級欄位、學生帳號、蓄意去識別化的學生姓名欄位、摘要評分、產出時間、完成時間與完整互動歷程。`course.school` 與 `course.classNumber` 必須固定輸出為 `*****`，不得包含實際學校或班級；`student.name` 必須固定輸出為 `***`，不得包含實際學生姓名；`student.username` 則保留作為歷史辨識。個別「JSON」下載與全班 JSON 匯出必須使用同一個伺服器端學生報告資料組裝流程，不得由前端以個人進度摘要自行產製。`stepArtifacts` 必須列出 Step1/2 討論紀錄、Step3 原始架構圖、Step4 討論過程與修正版架構圖、Step5 摘要報告、Step6 初稿、Step7 分析回饋、Step8 潤飾稿、Step10 總結報告；即使某一步沒有內容也需列出並標示 `available=false`。Step1/2 的 `contentFormat="conversation"` 內容是可讀討論紀錄，逐筆訊息位於 `processMessages`；其原始訊息已存在於 `timelineMessages`，不另投影重複成果事件。其他每一個可用的 `stepArtifacts` 成果必須同步投影到 `timelineMessages`，以 `entryType="artifact"`、`artifactType` 與 `contentFormat` 標示；原始對話為 `entryType="message"`，不得遺失。Step3/Step4 架構圖提供 Mermaid 原始碼與 Mermaid fenced Markdown，讓架構圖可完整重建。`artifacts` 已自 v1.2 移除，避免與 `stepArtifacts` 重複。Step9 的互動內容由 `timelineMessages` 完整保留。輸出內容保留原始文字/Mermaid/Markdown，不轉 HTML；若文字含其他同組成員帳號，需以「有一位組員」遮蔽。
+- 學生成果 JSON schema `student-portfolio-report-v1.4` 與 `reportVersion: "1.4"` 必須對應同一個共同 PDF/JSON 報告版本，並對應 PDF 的主要資料來源，至少包含課程 ID、蓄意去識別化的學校與班級欄位、學生帳號、蓄意去識別化的學生姓名欄位、摘要評分、產出時間、完成時間、`workflowSteps` 快照與完整互動歷程。`course.school` 與 `course.classNumber` 必須固定輸出為 `*****`，不得包含實際學校或班級；`student.name` 必須固定輸出為 `***`，不得包含實際學生姓名；`student.username` 則保留作為歷史辨識。個別「JSON」下載與全班 JSON 匯出必須使用同一個伺服器端學生報告資料組裝流程，不得由前端以個人進度摘要自行產製。`stepArtifacts` 必須依 `workflowSteps` 的 capability 列出對應成果：Step1/2 guided discussion、outline 原始架構圖、peer_outline 討論過程與修正版架構圖、summary_report 摘要報告、draft 初稿、feedback_report 分析回饋、revision 潤飾稿、final_report 總結報告；即使某一個 configured step 沒有內容也需列出並標示 `available=false`。可用 artifact 必須同步投影到 `timelineMessages`，以 `entryType="artifact"`、`artifactType`、runtime `step` 與 `contentFormat` 標示；原始對話為 `entryType="message"`，不得遺失。outline/peer_outline 架構圖提供 Mermaid 原始碼與 Mermaid fenced Markdown，讓架構圖可完整重建。`artifacts` 已自 v1.2 移除，避免與 `stepArtifacts` 重複。reflection 的互動內容由 `timelineMessages` 完整保留。輸出內容保留原始文字/Mermaid/Markdown，不轉 HTML；若文字含其他同組成員帳號，需以「有一位組員」遮蔽。
 - PDF v1.4 至少需含：
   - 封面版本標示為 `Version: 1.4`（不顯示 `Student Portfolio PDF v1`）
   - 學生摘要（帳號、姓名、班級、校名、課程 ID）

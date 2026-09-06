@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { ChatMessage, SessionState, StartSessionPayload, Step12FallbackDebugTrace, Step12RoundLog } from "@/src/lib/types";
+import { ChatMessage, SessionState, StartSessionPayload, Step12FallbackDebugTrace, Step12RoundLog, WorkflowCapability } from "@/src/lib/types";
 import { isLlmConfigured, llmChatCompletionText, LlmChatMessage } from "@/src/lib/llm-client";
 import { buildStudentCourseContext } from "@/src/lib/llm-context";
 import { findActivity } from "@/src/lib/activity-store";
@@ -33,7 +33,18 @@ import { buildStep1Question, buildStep2Question, buildStep9BatchPrompt, getCurre
 import { advanceStep1Or2SubstepAfterAi, getNextSubstepKeyAfterCompletion, handleStep1Or2Group } from "@/src/lib/workflow-step1-2";
 import { excludeWaitingMembers } from "@/src/lib/session-attendance";
 import { parseStep9ReflectionAnswers } from "@/src/lib/step9-reflection-parser";
-import { getWorkflowStepMode, getWorkflowStepName, getWorkflowStep, normalizeCourseWorkflowSteps } from "@/src/lib/course-workflow";
+import {
+  getGuidedDiscussionPromptStep,
+  getNextWorkflowStep,
+  getStepsBeforeCapability,
+  getWorkflowCapability,
+  getWorkflowPromptStepKey,
+  getWorkflowStepByCapability,
+  getWorkflowStepMode,
+  getWorkflowStepName,
+  getWorkflowStep,
+  normalizeCourseWorkflowSteps
+} from "@/src/lib/course-workflow";
 
 function now(): string {
   return new Date().toISOString();
@@ -57,7 +68,8 @@ function makeMessage(input: Omit<ChatMessage, "id" | "at">): ChatMessage {
 }
 
 function initializeStepQuestion(session: SessionState, step: number): void {
-  if (step === 1) {
+  const guidedPromptStep = getGuidedDiscussionPromptStep(getWorkflowCapability(session, step));
+  if (guidedPromptStep === 1) {
     session.stepState.step1Substep = 1;
     session.stepState.step1Substep3Question = 1;
     session.stepState.step1Substep4Question = 1;
@@ -71,7 +83,7 @@ function initializeStepQuestion(session: SessionState, step: number): void {
     );
   }
 
-  if (step === 2) {
+  if (guidedPromptStep === 2) {
     session.stepState.step2Substep = 1;
     session.stepState.step2Substep1Question = 1;
     const q = buildStep2Question(session);
@@ -88,14 +100,16 @@ function initializeStepQuestion(session: SessionState, step: number): void {
 export function createSession(payload: StartSessionPayload): SessionState {
   const sessionId = randomUUID();
   const workflow = payload.workflow ?? "spec10";
-  const phaseMax = payload.phaseMax ?? (workflow === "legacy_phase" ? 5 : 10);
+  const workflowSteps = normalizeCourseWorkflowSteps(payload.workflowSteps);
+  const initialStep = workflow === "legacy_phase" ? 1 : workflowSteps[0]!.step;
+  const phaseMax = payload.phaseMax ?? (workflow === "legacy_phase" ? 5 : workflowSteps.length);
   const participants = payload.participants;
 
   const session: SessionState = {
     id: sessionId,
     createdAt: now(),
-    currentStep: 1,
-    personalSteps: Object.fromEntries(participants.map((id) => [id, 1])),
+    currentStep: initialStep,
+    personalSteps: Object.fromEntries(participants.map((id) => [id, initialStep])),
     participants,
     messages: [],
     qualitySignals: { rejectedAnswerCounts: {}, rejectedAnswerLastAt: {} },
@@ -124,7 +138,7 @@ export function createSession(payload: StartSessionPayload): SessionState {
         step9Questions: {},
         stepOpenings: {}
       },
-    workflowSteps: normalizeCourseWorkflowSteps(payload.workflowSteps),
+    workflowSteps,
     stepState: { step1Substep: 1, step2Substep: 1, step1Substep3Question: 1, step1Substep4Question: 1, step2Substep1Question: 1 },
     outlines: {},
     step3SubmittedOutlines: {},
@@ -142,7 +156,7 @@ export function createSession(payload: StartSessionPayload): SessionState {
       })
     );
   } else {
-    initializeStepQuestion(session, 1);
+    initializeStepQuestion(session, initialStep);
   }
 
   return session;
@@ -412,11 +426,12 @@ function buildStep12StepContext(session: SessionState, step: 1 | 2, userId: stri
   crossStepContext: string;
   step11GenreCheckHint: string;
 } {
+  const actualStep = getWorkflowStepByCapability(session, step === 1 ? "topic_discussion" : "research_discussion")?.step ?? step;
   const currentSubstepKey = getCurrentSubstepKey(session, step) ?? `${step}-unknown`;
-  const currentQuestion = extractCurrentSystemQuestion(session, step, userId) || "(尚無題目)";
+  const currentQuestion = extractCurrentSystemQuestion(session, actualStep, userId) || "(尚無題目)";
   const essayTitle = session.activityTitle?.trim() || "未命名題目";
   const sameStepRecent = session.messages
-    .filter((m) => m.step === step)
+    .filter((m) => m.step === actualStep)
     .slice(-10)
     .map((m) => {
       if (m.role === "student") return `學生${m.userId ? `(${m.userId})` : ""}：${m.text}`;
@@ -424,12 +439,12 @@ function buildStep12StepContext(session: SessionState, step: 1 | 2, userId: stri
       return `系統：${m.text}`;
     })
     .join("\n");
-  const crossStepContext = buildStudentCourseContext(session, userId, step, {
+  const crossStepContext = buildStudentCourseContext(session, userId, actualStep, {
     maxMessages: 48,
     maxChars: 13000,
     includeSystem: true
   });
-  const step11GenreCheckHint = buildStep11GenreCheckHint(session, currentSubstepKey);
+  const step11GenreCheckHint = buildStep11GenreCheckHint(session, currentSubstepKey, actualStep);
   return { essayTitle, currentSubstepKey, currentQuestion, sameStepRecent, crossStepContext, step11GenreCheckHint };
 }
 
@@ -450,14 +465,14 @@ function resolveGenreLabel(text: string): string | null {
   return null;
 }
 
-function buildStep11GenreCheckHint(session: SessionState, currentSubstepKey: string): string {
-  if (session.currentStep !== 1 || currentSubstepKey !== "1-1") return "";
+function buildStep11GenreCheckHint(session: SessionState, currentSubstepKey: string, actualStep: number): string {
+  if (getWorkflowCapability(session, actualStep) !== "topic_discussion" || currentSubstepKey !== "1-1") return "";
   const expectedGenreRaw = session.activityId ? findActivity(session.activityId)?.genre ?? "" : "";
   const expectedGenre = resolveGenreLabel(expectedGenreRaw);
   if (!expectedGenre) return "";
 
   const gateResponses = session.messages
-    .filter((message) => message.step === 1 && message.role === "student")
+    .filter((message) => message.step === actualStep && message.role === "student")
     .slice(-Math.max(session.participants.length, 1));
   if (gateResponses.length === 0) return `文體檢核：本題正確文體是「${expectedGenre}」。請在回饋中提醒學生判準。`;
 
@@ -491,16 +506,16 @@ function sanitizeStep12Feedback(raw: string, fallbackText: string): string {
     .trim();
 }
 
-function buildStep12FallbackFeedback(session: SessionState, step: 1 | 2, substepKey: string): string {
+function buildStep12FallbackFeedback(session: SessionState, step: 1 | 2, actualStep: number, substepKey: string): string {
   if (step === 1 && substepKey === "1-1") {
-    const hint = buildStep11GenreCheckHint(session, substepKey);
+    const hint = buildStep11GenreCheckHint(session, substepKey, actualStep);
     const expected = (hint.match(/本題正確文體是「([^」]+)」/) ?? [])[1];
     if (expected) {
       return `你們有開始判斷文體，方向不錯。先校正一下：這一題的文體應是「${expected}」。請下一輪用「${expected}」的判準（寫作目的與表達方式）重新確認一次，再進入後續關鍵字討論。`;
     }
   }
   const recentStudentTexts = session.messages
-    .filter((message) => message.step === step && message.role === "student")
+    .filter((message) => message.step === actualStep && message.role === "student")
     .slice(-4)
     .map((message) => message.text.trim())
     .filter((text) => text.length > 0);
@@ -609,6 +624,7 @@ function buildStep12FeedbackBoundaryPrompt(step: 1 | 2, currentSubstepKey: strin
 async function generateStep12Feedback(
   session: SessionState,
   step: 1 | 2,
+  actualStep: number,
   userId: string,
   nextSubstepKey: string | null
 ): Promise<{
@@ -620,7 +636,7 @@ async function generateStep12Feedback(
   fallbackDebugTrace?: Step12FallbackDebugTrace;
 }> {
   const context = buildStep12StepContext(session, step, userId);
-  const fallback = buildStep12FallbackFeedback(session, step, context.currentSubstepKey);
+  const fallback = buildStep12FallbackFeedback(session, step, actualStep, context.currentSubstepKey);
   const stepPrompt = session.promptConfig.stepPrompts[String(step)] ?? "";
   const feedbackPrompt = getStep12FeedbackPrompt(session, step);
   const feedbackFocusPrompt = getStep12FeedbackFocusPrompt(session, context.currentSubstepKey);
@@ -680,7 +696,7 @@ async function generateStep12Feedback(
         attempts: 1,
         timeoutMs: 25_000,
         continuationMaxRounds: 2,
-        telemetry: { sessionId: session.id, activityId: session.activityId, step, label: "step12_feedback" }
+        telemetry: { sessionId: session.id, activityId: session.activityId, step: actualStep, label: "step12_feedback" }
       });
       const normalized = sanitizeStep12Feedback(raw, fallback);
       const rejectionReasons = getStep12FeedbackRiskReasons(normalized, step, context.currentSubstepKey);
@@ -741,6 +757,7 @@ async function generateStep12Feedback(
 async function generateStep12NextQuestion(
   session: SessionState,
   step: 1 | 2,
+  actualStep: number,
   userId: string,
   nextSubstepKey: string,
   feedbackText: string
@@ -833,7 +850,7 @@ async function generateStep12NextQuestion(
         attempts: 1,
         timeoutMs: 20_000,
         continuationMaxRounds: 1,
-        telemetry: { sessionId: session.id, activityId: session.activityId, step, label: "step12_next_question" }
+        telemetry: { sessionId: session.id, activityId: session.activityId, step: actualStep, label: "step12_next_question" }
       });
       const parsed = parseStructuredStepAiResponse(raw) ?? splitAiFeedbackAndQuestion(raw);
       const nextQuestion = compactWhitespace(parsed.nextQuestion ?? "");
@@ -916,15 +933,18 @@ async function generateAiTextForStep(
   retryOptions?: { attempts?: number; timeoutMs?: number; continueOnTruncation?: boolean; continuationMaxRounds?: number }
 ): Promise<string> {
   const stepName = getWorkflowStepName(session, step);
+  const capability = getWorkflowCapability(session, step);
+  const promptStepKey = getWorkflowPromptStepKey(session, step);
+  const guidedPromptStep = getGuidedDiscussionPromptStep(capability);
   const fallback =
-    step === 3
+    capability === "outline"
       ? "AI（生成論點）回覆：已收到你的提問。請先整理一個清楚主張，並列出 2-3 個支持重點，把它們放進結構樹節點。"
       : `AI（${stepName}）回覆：已收到本輪回覆。請依目前步驟目標繼續討論。`;
   if (!isLlmConfigured()) {
     return fallback;
   }
 
-  const substepKey = getCurrentSubstepKey(session, step);
+  const substepKey = guidedPromptStep ? getCurrentSubstepKey(session, guidedPromptStep) : null;
   // Cached system prompt assembly (#243): the assembled system message is fully
   // determined by promptConfig (immutable per session) + step + substepKey, so we
   // memoize on session.systemPromptCache to avoid rebuilding on every LLM call.
@@ -934,7 +954,7 @@ async function generateAiTextForStep(
   if (!systemMessageContent) {
     const systemParts: string[] = [];
     if (session.promptConfig.systemPrompt) systemParts.push(session.promptConfig.systemPrompt);
-    const stepPrompt = session.promptConfig.stepPrompts[String(step)];
+    const stepPrompt = session.promptConfig.stepPrompts[promptStepKey];
     if (stepPrompt) systemParts.push(stepPrompt);
     if (substepKey) {
       const substepPrompt = session.promptConfig.subStepPrompts[substepKey];
@@ -948,7 +968,7 @@ async function generateAiTextForStep(
       }
     }
     systemParts.push(`目前步驟：${step}（${stepName}）。請嚴格遵守步驟與輸出格式要求。`);
-    if (step === 1 || step === 2) {
+    if (guidedPromptStep) {
       systemParts.push(
         `Step1/2 請只輸出 JSON，不要加 Markdown code fence 或額外說明。格式：{"feedback":"給全組的簡短回饋","nextQuestion":"下一題要問學生的一句完整問題"}。feedback 與 nextQuestion 都必須是繁體中文；nextQuestion 不可空白、不可照抄 prompt、不可寫「請依上一則 AI 提問作答」。`
       );
@@ -956,8 +976,16 @@ async function generateAiTextForStep(
     systemMessageContent = systemParts.join("\n\n");
     session.systemPromptCache[cacheKey] = systemMessageContent;
   }
-  const scopedSteps = new Set([1, 2, 3, 4, 6, 8, 9]);
-  const scopedUserId = userId && scopedSteps.has(step) ? userId : undefined;
+  const scopedCapabilities = new Set<WorkflowCapability>([
+    "topic_discussion",
+    "research_discussion",
+    "outline",
+    "peer_outline",
+    "draft",
+    "revision",
+    "reflection"
+  ]);
+  const scopedUserId = userId && capability && scopedCapabilities.has(capability) ? userId : undefined;
   const crossStepContext = scopedUserId
     ? buildStudentCourseContext(session, scopedUserId, step, { maxMessages: 48, maxChars: 13000, includeSystem: true })
     : "";
@@ -982,9 +1010,9 @@ async function generateAiTextForStep(
           ? `以下是該學生從 Step1 到目前步驟的歷史互動（僅本人 student/ai/必要 system，已做長度限制）：\n${crossStepContext || "(無)"}\n\n`
           : "") +
         `目前事件：${contextText}\n\n` +
-        (step === 3
+        (capability === "outline"
           ? "請依據 stepPrompts[3] 的角色、目標與輸出格式，僅針對學生提問給出回覆與建議。禁止主動提問、禁止要求學生再回答新問題。請用自然、擬人化、像老師與學生對話的語氣回覆，不要使用生硬標題或固定模板標籤（例如「指出問題」「提示說明」）。"
-          : step === 1 || step === 2
+          : guidedPromptStep
             ? "請根據最新一輪組員回覆，產出 JSON 格式的回饋與下一題。只輸出 JSON 物件，不要輸出其他文字。"
             : "請根據最新一輪組員回覆，產出本步驟應給學生的下一則引導回覆。")
     }
@@ -994,17 +1022,17 @@ async function generateAiTextForStep(
     // Token budgets by step (#239): tighter limits for short conversational steps,
     // generous budget only for long-form content (article suggestions, analyses).
     const maxTokensByStep =
-      step === 1 || step === 2
+      guidedPromptStep
         ? scaleTokens(700) // group dialog feedback JSON (allow enough room for complete feedback + question)
-        : step === 3
+        : capability === "outline"
           ? scaleTokens(600) // tutor reply (typically short)
-          : step === 4
+          : capability === "peer_outline"
             ? scaleTokens(800) // group discussion guidance
             : scaleTokens(1200); // long-form steps (6/7/8/9/10)
     // Step 4 keeps single-round response for latency; Step 1/2 use extra continuation
     // to avoid truncated feedback at substep boundaries (e.g., 2-3 -> 2-4).
-    const shortStep = step === 4;
-    const continuationMaxRounds = step === 1 || step === 2 ? 3 : shortStep ? 0 : 1;
+    const shortStep = capability === "peer_outline";
+    const continuationMaxRounds = guidedPromptStep ? 3 : shortStep ? 0 : 1;
     return await generateAiTextWithRetry(messages, 0.6, maxTokensByStep, {
       continueOnTruncation: !shortStep,
       continuationMaxRounds,
@@ -1043,8 +1071,10 @@ async function generateLegacyAiText(session: SessionState, step: number, context
 }
 
 function buildStep5FallbackSummary(session: SessionState, userId: string): string {
+  const summaryStep = getWorkflowStepByCapability(session, "summary_report")?.step;
+  const sourceSteps = new Set(summaryStep ? getStepsBeforeCapability(session, "summary_report") : [1, 2, 3, 4]);
   const relevant = session.messages
-    .filter((m) => m.step >= 1 && m.step <= 4 && (m.role === "system" || m.role === "ai" || (m.role === "student" && m.userId === userId)))
+    .filter((m) => sourceSteps.has(m.step) && (m.role === "system" || m.role === "ai" || (m.role === "student" && m.userId === userId)))
     .slice(-24);
   const brief = relevant
     .map((m) => {
@@ -1053,17 +1083,19 @@ function buildStep5FallbackSummary(session: SessionState, userId: string): strin
       return `系統：${m.text}`;
     })
     .join("\n");
-  return `### **讚美與鼓勵**\n你在前四個步驟有持續投入，已建立自己的寫作方向。\n\n### **我們討論了什麼**\n${brief || "目前尚無足夠資料。"}\n\n### **我們學到了什麼**\n接下來可把以上重點整理成段落主張與例子，進入初稿撰寫。`;
+  return `### **讚美與鼓勵**\n你在前面步驟有持續投入，已建立自己的寫作方向。\n\n### **我們討論了什麼**\n${brief || "目前尚無足夠資料。"}\n\n### **我們學到了什麼**\n接下來可把以上重點整理成段落主張與例子，進入初稿撰寫。`;
 }
 
 function buildStep7Report(session: SessionState, userId: string): string {
   const essay = session.draftStep6[userId] ?? "(尚未撰寫初稿)";
-  return `步驟 7 分析回饋（${userId}）\n初稿：${essay}\n建議：請加強論點與例證的連結。`;
+  const stepName = getWorkflowStepByCapability(session, "feedback_report")?.name ?? "分析回饋";
+  return `${stepName}（${userId}）\n初稿：${essay}\n建議：請加強論點與例證的連結。`;
 }
 
 function buildStep10Report(session: SessionState, userId: string): string {
   const essay = session.draftStep8[userId] ?? session.draftStep6[userId] ?? "(尚未提交作文)";
-  return `步驟 10 總結報告（${userId}）\n最終稿：${essay}\n總評：結構已改善，建議再精煉結語。`;
+  const stepName = getWorkflowStepByCapability(session, "final_report")?.name ?? "總結報告";
+  return `${stepName}（${userId}）\n最終稿：${essay}\n總評：結構已改善，建議再精煉結語。`;
 }
 
 function buildFullCourseContextForUser(session: SessionState, userId: string): string {
@@ -1087,9 +1119,11 @@ function buildFullCourseContextForUser(session: SessionState, userId: string): s
 }
 
 function buildStep1To4PersonalContextForUser(session: SessionState, userId: string): string {
+  const summaryStep = getWorkflowStepByCapability(session, "summary_report")?.step;
+  const sourceSteps = new Set(summaryStep ? getStepsBeforeCapability(session, "summary_report") : [1, 2, 3, 4]);
   const relevant = session.messages
     .filter((m) => {
-      if (m.step < 1 || m.step > 4) return false;
+      if (!sourceSteps.has(m.step)) return false;
       if (m.role === "teacher") return false;
       if (m.role === "student") return m.userId === userId;
       if (m.role === "system" || m.role === "ai") return true;
@@ -1113,9 +1147,9 @@ function buildStep5LlmInput(
   const fallback = buildStep5FallbackSummary(session, userId);
   const systemParts: string[] = [];
   if (session.promptConfig.systemPrompt) systemParts.push(session.promptConfig.systemPrompt);
-  const step5Prompt = session.promptConfig.stepPrompts["5"];
+  const step5Prompt = session.promptConfig.stepPrompts[getWorkflowPromptStepKey(session, getWorkflowStepByCapability(session, "summary_report")?.step ?? 5)];
   if (step5Prompt) systemParts.push(step5Prompt);
-  systemParts.push("請只輸出步驟五摘要報告，不要輸出 JSON。");
+  systemParts.push("請只輸出摘要報告，不要輸出 JSON。");
 
   const personalContext = buildStep1To4PersonalContextForUser(session, userId);
   const messages: LlmChatMessage[] = [
@@ -1127,9 +1161,9 @@ function buildStep5LlmInput(
         `作文題目：${session.activityTitle?.trim() || "未命名題目"}\n` +
         `題目說明：${session.activityEssayDescription?.trim() || "(無)"}\n` +
         `補充資料：${session.activitySupplemental?.trim() || "(無)"}\n\n` +
-        `以下是這位學生在本課程 Step1-4 的個人互動歷程（含系統引導、互動題目、AI 回饋與該學生回應；不含同組其他同學發言）：\n` +
+        `以下是這位學生在本課程摘要步驟之前的個人互動歷程（含系統引導、互動題目、AI 回饋與該學生回應；不含同組其他同學發言）：\n` +
         `${personalContext || "(無)"}\n\n` +
-        "請依照步驟五格式輸出摘要報告。"
+        "請依照摘要報告格式輸出。"
     }
   ];
 
@@ -1138,11 +1172,12 @@ function buildStep5LlmInput(
 
 async function generateStep5SummaryForUser(session: SessionState, userId: string): Promise<string> {
   const { messages, fallback } = buildStep5LlmInput(session, userId);
+  const summaryStep = getWorkflowStepByCapability(session, "summary_report")?.step ?? 5;
   if (!isLlmConfigured()) return fallback;
   try {
     const raw = await generateAiTextWithRetry(messages, 0.6, scaleTokens(1200), {
       continuationMaxRounds: 4,
-      telemetry: { sessionId: session.id, activityId: session.activityId, step: 5, label: "step5_summary" }
+      telemetry: { sessionId: session.id, activityId: session.activityId, step: summaryStep, label: "summary_report" }
     });
     const first = normalizeStep5Summary(normalizeFormalLlmText(raw, { fallback }));
     if (!hasFormalLlmQualityRisk(first)) return first;
@@ -1158,7 +1193,7 @@ async function generateStep5SummaryForUser(session: SessionState, userId: string
       ],
       0.5,
       scaleTokens(1400),
-      { continuationMaxRounds: 6, telemetry: { sessionId: session.id, activityId: session.activityId, step: 5, label: "step5_summary_retry" } }
+      { continuationMaxRounds: 6, telemetry: { sessionId: session.id, activityId: session.activityId, step: summaryStep, label: "summary_report_retry" } }
     );
     return normalizeStep5Summary(normalizeFormalLlmText(retryRaw, { fallback }));
   } catch {
@@ -1180,7 +1215,7 @@ export function buildStep10LlmInput(
   if (session.promptConfig.systemPrompt) systemParts.push(session.promptConfig.systemPrompt);
   systemParts.push(reportConfig.baseInstruction);
   systemParts.push(
-    "Step10 的章節標題由系統程式統一加入。LLM 回覆時不得自行輸出標題、Markdown 標題、粗體符號或完整報告格式。"
+    "總結報告的章節標題由系統程式統一加入。LLM 回覆時不得自行輸出標題、Markdown 標題、粗體符號或完整報告格式。"
   );
 
   const fullContext = buildFullCourseContextForUser(session, userId);
@@ -1193,7 +1228,7 @@ export function buildStep10LlmInput(
         `學生帳號：${userId}\n` +
         `最終作文內容：\n${finalEssay}\n\n` +
         `學生完整歷程紀錄（含前序步驟）：\n${fullContext || "(無)"}\n\n` +
-        "請輸出步驟 10 的總結報告。"
+        "請輸出本課程的總結報告。"
     }
   ];
   return { messages, fallback };
@@ -1201,14 +1236,15 @@ export function buildStep10LlmInput(
 
 async function generateStep10Report(session: SessionState, userId: string): Promise<string> {
   const { messages, fallback } = buildStep10LlmInput(session, userId);
+  const finalStep = getWorkflowStepByCapability(session, "final_report")?.step ?? 10;
   if (!isLlmConfigured()) {
     return fallback;
   }
   return generateStep10ReportChunkedText(messages, fallback, session.promptConfig.step10Report, {
     sessionId: session.id,
     activityId: session.activityId,
-    step: 10,
-    label: "step10_report"
+    step: finalStep,
+    label: "final_report"
   });
 }
 
@@ -1277,8 +1313,9 @@ export async function generateStep10ReportChunkedText(
  * collecting all SSE chunks.
  */
 export function recordStep10Report(session: SessionState, userId: string, report: string): void {
+  const finalStep = getWorkflowStepByCapability(session, "final_report")?.step ?? 10;
   session.reports.step10[userId] = report;
-  session.messages.push(makeMessage({ role: "ai", userId, step: 10, text: report }));
+  session.messages.push(makeMessage({ role: "ai", userId, step: finalStep, text: report }));
 }
 
 /**
@@ -1296,31 +1333,34 @@ async function finalizeStep9ForUser(
   options: { generateReport?: boolean } = {}
 ): Promise<void> {
   session.personalSteps = session.personalSteps ?? {};
-  session.personalSteps[userId] = 10;
+  const finalStep = getWorkflowStepByCapability(session, "final_report")?.step ?? getNextWorkflowStep(session, session.personalSteps[userId] ?? session.currentStep)?.step ?? session.currentStep;
+  session.personalSteps[userId] = finalStep;
   const generateReport = options.generateReport ?? true;
   if (!generateReport) return;
   const step10Report = sanitizeStudentFacingText(await generateStep10Report(session, userId));
   session.reports.step10[userId] = step10Report;
-  session.messages.push(makeMessage({ role: "ai", userId, step: 10, text: step10Report }));
+  session.messages.push(makeMessage({ role: "ai", userId, step: finalStep, text: step10Report }));
 }
 
 export async function reconcileCompletedStep9Users(session: SessionState): Promise<boolean> {
   normalizeSessionRuntimeShape(session);
   const step9Questions = getStep9Questions(session);
+  const reflectionStep = getWorkflowStepByCapability(session, "reflection")?.step ?? 9;
+  const finalStep = getWorkflowStepByCapability(session, "final_report")?.step ?? getNextWorkflowStep(session, reflectionStep)?.step ?? reflectionStep;
   const STEP10_RECONCILE_CONCURRENCY = 3;
   let changed = false;
   const needsReportUsers: string[] = [];
   for (const participant of session.participants) {
     const userStep = session.personalSteps?.[participant] ?? session.currentStep;
     const answeredCount = session.reflectionIndex?.[participant] ?? 0;
-    if (userStep !== 9 || answeredCount < step9Questions.length) continue;
+    if (userStep !== reflectionStep || answeredCount < step9Questions.length) continue;
 
     const hasStep10Report = Boolean(session.reports.step10?.[participant]?.trim());
     if (!hasStep10Report) {
-      session.personalSteps![participant] = 10;
+      session.personalSteps![participant] = finalStep;
       needsReportUsers.push(participant);
     } else {
-      session.personalSteps![participant] = 10;
+      session.personalSteps![participant] = finalStep;
     }
     changed = true;
   }
@@ -1334,7 +1374,7 @@ export async function reconcileCompletedStep9Users(session: SessionState): Promi
     needsReportUsers.forEach((userId, index) => {
       const step10Report = reports[index]!;
       session.reports.step10[userId] = step10Report;
-      session.messages.push(makeMessage({ role: "ai", userId, step: 10, text: step10Report }));
+      session.messages.push(makeMessage({ role: "ai", userId, step: finalStep, text: step10Report }));
     });
   }
   return changed;
@@ -1374,8 +1414,9 @@ export async function switchStep(session: SessionState, step: number): Promise<S
   initializeStepQuestion(session, step);
 
   const mode = getWorkflowStepMode(session, step);
+  const capability = getWorkflowCapability(session, step);
   if (mode === "non_interactive") {
-    if (step === 5) {
+    if (capability === "summary_report") {
       const STEP5_CONCURRENCY = 4;
       const summaries = await mapWithConcurrency(
         session.participants,
@@ -1389,22 +1430,22 @@ export async function switchStep(session: SessionState, step: number): Promise<S
       });
     }
 
-    if (step === 7) {
+    if (capability === "feedback_report") {
       session.participants.forEach((participant) => {
         session.reports.step7[participant] = buildStep7Report(session, participant);
       });
-      session.messages.push(makeMessage({ role: "ai", step, text: "步驟 7 分析回饋已生成。" }));
+      session.messages.push(makeMessage({ role: "ai", step, text: "分析回饋已生成。" }));
     }
 
-    if (step === 10) {
+    if (capability === "final_report") {
       session.participants.forEach((participant) => {
         session.reports.step10[participant] = buildStep10Report(session, participant);
       });
-      session.messages.push(makeMessage({ role: "ai", step, text: "步驟 10 總結報告已生成。" }));
+      session.messages.push(makeMessage({ role: "ai", step, text: "總結報告已生成。" }));
     }
   }
 
-  if (mode === "personal_reflection") {
+  if (capability === "reflection") {
     const step9Questions = getStep9Questions(session);
     session.messages.push(
       makeMessage({ role: "system", step, text: buildStep9BatchPrompt(step9Questions) })
@@ -1459,12 +1500,15 @@ export async function sendStudentMessage(
     throw new Error("step_non_interactive");
   }
 
+  const capability = getWorkflowCapability(session, step);
+  const guidedPromptStep = getGuidedDiscussionPromptStep(capability);
+  const isGuidedDiscussion = Boolean(guidedPromptStep);
   const validationError =
-    step === 1 || step === 2
+    isGuidedDiscussion
       ? validateStudentAnswerSimple(session, userId, step, text)
       : validateStudentAnswer(session, userId, step, text);
   if (validationError) {
-    const rejectionScope = step === 1 || step === 2 ? getCurrentGroupGateKey(session, step as 1 | 2) : `step-${step}`;
+    const rejectionScope = guidedPromptStep ? getCurrentGroupGateKey(session, guidedPromptStep) : `step-${step}`;
     const rejectedAt = now();
     recordRejectedAnswerSignal(session, userId, rejectionScope, rejectedAt);
     void recordLearningEvent({
@@ -1478,10 +1522,10 @@ export async function sendStudentMessage(
     throw new Error(validationError);
   }
 
-  if (step === 1 || step === 2) {
-    const result = handleStep1Or2Group(session, userId, text, makeMessage);
+  if (guidedPromptStep) {
+    const result = handleStep1Or2Group(session, userId, text, guidedPromptStep, step, makeMessage);
     if (result.allResponded) {
-      const completedGateKey = getCurrentGroupGateKey(result.session, step as 1 | 2);
+      const completedGateKey = getCurrentGroupGateKey(result.session, guidedPromptStep);
       const roundKey = `${step}:${completedGateKey}`;
       result.session.step12RoundState = result.session.step12RoundState ?? { completedGateKeys: [] };
       result.session.step12RoundState.completedGateKeys = result.session.step12RoundState.completedGateKeys ?? [];
@@ -1506,8 +1550,8 @@ export async function sendStudentMessage(
           await hooks.onBeforeGroupAi(result.session);
         }
 
-        const nextSubStepKey = getNextSubstepKeyAfterCompletion(result.session, step as 1 | 2, result.substep);
-        const feedbackResult = await generateStep12Feedback(result.session, step as 1 | 2, userId, nextSubStepKey);
+        const nextSubStepKey = getNextSubstepKeyAfterCompletion(result.session, guidedPromptStep, result.substep);
+        const feedbackResult = await generateStep12Feedback(result.session, guidedPromptStep, step, userId, nextSubStepKey);
         result.session.messages.push(
           makeMessage({
             role: "ai",
@@ -1526,7 +1570,8 @@ export async function sendStudentMessage(
         if (nextSubStepKey) {
           const questionResult = await generateStep12NextQuestion(
             result.session,
-            step as 1 | 2,
+            guidedPromptStep,
+            step,
             userId,
             nextSubStepKey,
             feedbackResult.feedbackText
@@ -1540,7 +1585,7 @@ export async function sendStudentMessage(
         }
 
         result.session.groupGate[completedGateKey] = [];
-        advanceStep1Or2SubstepAfterAi(result.session, step as 1 | 2, result.substep, nextQuestion, makeMessage);
+        advanceStep1Or2SubstepAfterAi(result.session, guidedPromptStep, step, result.substep, nextQuestion, makeMessage);
 
         result.session.step12RoundState.completedGateKeys.push(roundKey);
         if (result.session.step12RoundState.completedGateKeys.length > 120) {
@@ -1615,8 +1660,8 @@ export async function sendStudentMessage(
     return result.session;
   }
 
-  if (step === 4) {
-    const completedUsers = new Set(session.groupGate["4-complete"] ?? []);
+  if (capability === "peer_outline") {
+    const completedUsers = new Set(session.groupGate[`${step}-complete`] ?? []);
     if (completedUsers.has(userId)) {
       throw new Error("step4_already_completed");
     }

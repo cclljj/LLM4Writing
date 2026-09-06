@@ -1,5 +1,5 @@
 type GroupWaitingStatusProps = {
-  currentStep: number;
+  isPeerOutlineStep: boolean;
   activeGateKey: string | null;
   groupLabel: string;
   memberNames: string[];
@@ -11,7 +11,7 @@ type GroupWaitingStatusProps = {
 };
 
 export default function GroupWaitingStatus({
-  currentStep,
+  isPeerOutlineStep,
   activeGateKey,
   groupLabel,
   memberNames,
@@ -29,7 +29,7 @@ export default function GroupWaitingStatus({
         組別：{groupLabel} / 組員：{memberNames.length > 0 ? memberNames.join("、") : "—"}
       </p>
       <p style={{ margin: "6px 0 0" }}>
-        {currentStep === 4 ? "完成確認" : activeGateKey ? `目前題目：${activeGateKey}` : "目前題目：—"} / 已完成 {submittedCount} / {totalCount}
+        {isPeerOutlineStep ? "完成確認" : activeGateKey ? `目前題目：${activeGateKey}` : "目前題目：—"} / 已完成 {submittedCount} / {totalCount}
       </p>
       {pendingMembers.length > 0 ? (
         <small style={{ display: "block", marginTop: 6 }}>尚未完成：{pendingMembers.join("、")}</small>

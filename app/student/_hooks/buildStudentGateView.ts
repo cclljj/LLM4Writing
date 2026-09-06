@@ -3,7 +3,8 @@
 // polled session. Extracted from app/student/page.tsx unchanged; wrap in a
 // single useMemo so child memo() components keep stable prop identities.
 
-import { getActiveGroupGateKey, getMode, InteractionMode } from "@/src/lib/student-page-helpers";
+import { getActiveGroupGateKey, getCapabilityStep, getCurrentCapability, getMode, InteractionMode } from "@/src/lib/student-page-helpers";
+import { getWorkflowPromptStepKey } from "@/src/lib/course-workflow";
 import { getStep9QuestionsFromConfig } from "@/src/lib/spec";
 import { SessionState } from "./student-session-types";
 
@@ -19,10 +20,33 @@ export function buildStudentGateView(input: {
   const { session, loginUser, currentStep, activityStatusMap, lastInteractiveKind } = input;
 
   const ownStep = session && loginUser ? session.personalSteps?.[loginUser] ?? session.currentStep : 1;
+  const outlineStep = getCapabilityStep(session, "outline") ?? 3;
+  const peerOutlineStep = getCapabilityStep(session, "peer_outline") ?? 4;
+  const summaryStep = getCapabilityStep(session, "summary_report") ?? 5;
+  const draftStep = getCapabilityStep(session, "draft") ?? 6;
+  const feedbackReportStep = getCapabilityStep(session, "feedback_report") ?? 7;
+  const revisionStep = getCapabilityStep(session, "revision") ?? 8;
+  const reflectionStep = getCapabilityStep(session, "reflection") ?? 9;
+  const finalReportStep = getCapabilityStep(session, "final_report") ?? 10;
+  const currentCapability = getCurrentCapability(session, currentStep);
+  const isTopicDiscussionStep = currentCapability === "topic_discussion";
+  const isResearchDiscussionStep = currentCapability === "research_discussion";
+  const isOutlineStep = currentCapability === "outline";
+  const isPeerOutlineStep = currentCapability === "peer_outline";
+  const isDraftStep = currentCapability === "draft";
+  const isRevisionStep = currentCapability === "revision";
+  const isReflectionStep = currentCapability === "reflection";
+  const isFinalReportStep = currentCapability === "final_report";
+  const ownStepIndex = (session?.workflowSteps ?? []).findIndex((step) => step.step === ownStep);
+  const hasReachedCapability = (stepNumber: number) => {
+    const targetIndex = (session?.workflowSteps ?? []).findIndex((step) => step.step === stepNumber);
+    if (targetIndex >= 0 && ownStepIndex >= 0) return ownStepIndex >= targetIndex;
+    return ownStep >= stepNumber;
+  };
   const step3SubmittedOutlineMermaid =
-    !session || !loginUser || ownStep < 4 ? "" : session.step3SubmittedOutlines?.[loginUser]?.trim() ?? "";
+    !session || !loginUser || !hasReachedCapability(peerOutlineStep) ? "" : session.step3SubmittedOutlines?.[loginUser]?.trim() ?? "";
   const step4OutlineMermaid =
-    !session || !loginUser || ownStep < 5 ? "" : session.outlines?.[loginUser]?.trim() ?? "";
+    !session || !loginUser || !hasReachedCapability(summaryStep) ? "" : session.outlines?.[loginUser]?.trim() ?? "";
 
   const teammateUsers = session ? session.participants.filter((user) => user !== loginUser) : [];
   const waitingExcludedUsers = new Set(session?.attendanceOverrides?.waitingExcludedUsernames ?? []);
@@ -43,7 +67,7 @@ export function buildStudentGateView(input: {
         : currentActivityStatus === "not_started"
           ? "課程尚未開始，請等待老師開始上課。"
           : "";
-  const currentMode: InteractionMode = getMode(currentStep);
+  const currentMode: InteractionMode = getMode(currentStep, session);
   const currentModeLabel =
     currentMode === "group_interaction"
       ? "小組互動"
@@ -55,7 +79,7 @@ export function buildStudentGateView(input: {
   const isInputEnabled = currentMode !== "non_interactive" && (!currentActivityStatus || currentActivityStatus === "in_progress");
 
   const stepSubstepText =
-    currentStep === 1
+    isTopicDiscussionStep
       ? `目前子步驟：${
           (session?.stepState.step1Substep ?? 1) === 3
             ? `1-3-${session?.stepState.step1Substep3Question ?? 1}`
@@ -63,7 +87,7 @@ export function buildStudentGateView(input: {
               ? `1-4-${session?.stepState.step1Substep4Question ?? 1}`
               : `1-${session?.stepState.step1Substep ?? 1}`
         }`
-      : currentStep === 2
+      : isResearchDiscussionStep
         ? `目前子步驟：${
             (session?.stepState.step2Substep ?? 1) === 1
               ? `2-1-${session?.stepState.step2Substep1Question ?? 1}`
@@ -76,15 +100,15 @@ export function buildStudentGateView(input: {
   const usernameToName = session?.participantDisplayNames ?? {};
   const toDisplayName = (username: string) => usernameToName[username] || username;
   const responders = activeGateKey ? session?.groupGate?.[activeGateKey] ?? [] : [];
-  const step3CompletedUsers = session?.groupGate?.["3-complete"] ?? [];
-  const step4CompletedUsers = session?.groupGate?.["4-complete"] ?? [];
+  const step3CompletedUsers = session?.groupGate?.[`${outlineStep}-complete`] ?? [];
+  const step4CompletedUsers = session?.groupGate?.[`${peerOutlineStep}-complete`] ?? [];
   const step3CompletedByMe = Boolean(loginUser && step3CompletedUsers.includes(loginUser));
   const step4CompletedByMe = Boolean(loginUser && step4CompletedUsers.includes(loginUser));
   const step4CompletedPeers = (session?.participants ?? []).filter(
     (p) => p !== loginUser && step4CompletedUsers.includes(p)
   );
   const allStep4Completed =
-    currentStep === 4 &&
+    isPeerOutlineStep &&
     effectiveParticipants.length > 0 &&
     effectiveParticipants.every((p) => step4CompletedUsers.includes(p));
   const hasSubmittedThisTurn = Boolean(loginUser && responders.includes(loginUser));
@@ -93,15 +117,15 @@ export function buildStudentGateView(input: {
     effectiveParticipants.length > 0 &&
     effectiveParticipants.every((p) => responders.includes(p));
   const canReplyToQuestion =
-    currentStep === 4
+    isPeerOutlineStep
       ? !step4CompletedByMe
       : currentMode === "group_interaction"
         ? !hasSubmittedThisTurn && !allRespondedThisTurn
-        : currentStep === 3
+        : isOutlineStep
           ? !step3CompletedByMe
           : Boolean(lastIsQuestion);
   const waitingGroupMembers =
-    currentStep === 4
+    isPeerOutlineStep
       ? !!session && step4CompletedByMe && !allStep4Completed
       : currentMode === "group_interaction" &&
         !!session &&
@@ -110,7 +134,7 @@ export function buildStudentGateView(input: {
         !effectiveParticipants.every((p) => responders.includes(p));
   const latestStepMessage = session?.messages.filter((m) => m.step === currentStep).at(-1) ?? null;
   const waitingAiForGroup =
-    currentStep === 4
+    isPeerOutlineStep
       ? false
       : currentMode === "group_interaction" &&
         !!session &&
@@ -118,19 +142,19 @@ export function buildStudentGateView(input: {
         effectiveParticipants.every((p) => responders.includes(p)) &&
         latestStepMessage?.role !== "ai";
   const step1CompletedWaitingTeacher =
-    currentStep === 1 &&
+    isTopicDiscussionStep &&
     latestStepMessage?.role === "system" &&
     latestStepMessage.text.includes("步驟 1 子步驟已完成，等待教師切換下一步");
   const step2CompletedWaitingTeacher =
-    currentStep === 2 &&
+    isResearchDiscussionStep &&
     latestStepMessage?.role === "system" &&
     latestStepMessage.text.includes("步驟 2 子步驟已完成，等待教師切換下一步");
   const waitingStep3Members =
-    currentStep === 3 &&
+    isOutlineStep &&
     !!session &&
     step3CompletedByMe &&
     !effectiveParticipants.every((p) => step3CompletedUsers.includes(p));
-  const groupStatusResponders = currentStep === 4 ? step4CompletedUsers : responders;
+  const groupStatusResponders = isPeerOutlineStep ? step4CompletedUsers : responders;
   const effectiveGroupStatusResponders = groupStatusResponders.filter((username) =>
     effectiveParticipants.includes(username)
   );
@@ -141,11 +165,11 @@ export function buildStudentGateView(input: {
   const groupLabel = session?.groupName ? `第 ${session.groupName} 組` : "—";
   const groupSubmittedCount = Math.min(effectiveGroupStatusResponders.length, effectiveParticipants.length);
   const groupTotalCount = effectiveParticipants.length;
-  const groupStatusAllDone = currentStep === 4 ? allStep4Completed : allRespondedThisTurn;
-  const groupStatusSubmittedByMe = currentStep === 4 ? step4CompletedByMe : hasSubmittedThisTurn;
-  const showGroupStatusCard = Boolean(session && currentMode === "group_interaction" && [1, 2, 4].includes(currentStep));
+  const groupStatusAllDone = isPeerOutlineStep ? allStep4Completed : allRespondedThisTurn;
+  const groupStatusSubmittedByMe = isPeerOutlineStep ? step4CompletedByMe : hasSubmittedThisTurn;
+  const showGroupStatusCard = Boolean(session && currentMode === "group_interaction");
   const groupStatusTitle = groupStatusAllDone
-    ? currentStep === 4
+    ? isPeerOutlineStep
       ? "全組已確認完成，等待老師切換下一步"
       : "全組已完成本題，AI 正在整理下一步"
     : groupStatusSubmittedByMe
@@ -155,11 +179,11 @@ export function buildStudentGateView(input: {
   const ownStep7Report = session && loginUser ? session.reports.step7[loginUser] : undefined;
   const ownStep10Report = session && loginUser ? session.reports.step10[loginUser] : undefined;
   const isStep10ReportReady = Boolean(ownStep10Report && ownStep10Report.trim());
-  const stepOpeningText = session?.promptConfig?.stepOpenings?.[String(currentStep)]?.trim() ?? "";
+  const stepOpeningText = session?.promptConfig?.stepOpenings?.[session ? getWorkflowPromptStepKey(session, currentStep) : String(currentStep)]?.trim() ?? "";
   const step9QuestionTexts = (() => {
-    if (currentStep !== 9) return [] as string[];
+    if (!isReflectionStep) return [] as string[];
     const latestSystem = [...(session?.messages ?? [])]
-      .filter((m) => m.step === 9 && m.role === "system")
+      .filter((m) => m.step === reflectionStep && m.role === "system")
       .at(-1)?.text;
     const fromSystem = latestSystem
       ? Array.from(latestSystem.matchAll(/\n?[1-4]\.\s*(.+)/g)).map((m) => (m[1] ?? "").trim()).slice(0, 4)
@@ -171,6 +195,21 @@ export function buildStudentGateView(input: {
   return {
     step3SubmittedOutlineMermaid,
     step4OutlineMermaid,
+    outlineStep,
+    peerOutlineStep,
+    summaryStep,
+    draftStep,
+    feedbackReportStep,
+    revisionStep,
+    reflectionStep,
+    finalReportStep,
+    currentCapability,
+    isOutlineStep,
+    isPeerOutlineStep,
+    isDraftStep,
+    isRevisionStep,
+    isReflectionStep,
+    isFinalReportStep,
     teammateUsers,
     effectiveParticipants,
     makeupOutlinePending,

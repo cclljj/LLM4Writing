@@ -136,7 +136,16 @@ export default function StudentPage() {
     ownStep10Report,
     isStep10ReportReady,
     stepOpeningText,
-    step9QuestionTexts
+    step9QuestionTexts,
+    currentCapability,
+    outlineStep,
+    peerOutlineStep,
+    isOutlineStep,
+    isPeerOutlineStep,
+    isDraftStep,
+    isRevisionStep,
+    isReflectionStep,
+    isFinalReportStep
   } = gate;
 
   const {
@@ -217,6 +226,7 @@ export default function StudentPage() {
 
   const nextAction = buildStudentNextAction({
     currentStep,
+    currentCapability,
     currentMode,
     canReplyToQuestion,
     isSendingMessage,
@@ -337,6 +347,8 @@ export default function StudentPage() {
 
           <HistoryReview
             steps={historyReviewSteps}
+            outlineStep={outlineStep}
+            peerOutlineStep={peerOutlineStep}
             step3SubmittedOutlineMermaid={step3SubmittedOutlineMermaid}
             step4OutlineMermaid={step4OutlineMermaid}
           />
@@ -346,23 +358,23 @@ export default function StudentPage() {
             <div style={{ marginTop: 8 }}>
               <span className="badge">{stepModeLine}</span>
             </div>
-            {[1, 2, 3, 4, 6, 8, 9].includes(currentStep) && stepOpeningText ? (
+            {currentMode !== "non_interactive" && stepOpeningText ? (
               <p>
                 <small>
                   <span dangerouslySetInnerHTML={{ __html: renderMessageHtml(stepOpeningText) }} />
                 </small>
               </p>
             ) : null}
-            {currentStep !== 10 ? (
+            {!isFinalReportStep ? (
               <p>
                 <small>
-                  {currentStep >= 5
-                    ? "此階段為個人步調，系統會依你的完成狀態自動推進步驟（例如步驟 9 完成後自動進入步驟 10）。"
+                  {currentMode !== "group_interaction"
+                    ? "此階段為個人步調，系統會依你的完成狀態自動推進步驟。"
                     : "步驟切換由教師端控制，你的頁面會自動同步。"}
                 </small>
               </p>
             ) : null}
-            {currentStep === 10 ? (
+            {isFinalReportStep ? (
               <>
                 <hr style={{ border: 0, borderTop: "1px solid var(--line-soft)", margin: "10px 0" }} />
                 <h3 style={{ margin: "0 0 8px" }}>總結報告</h3>
@@ -396,7 +408,7 @@ export default function StudentPage() {
 
           {showGroupStatusCard ? (
             <GroupWaitingStatus
-              currentStep={currentStep}
+              isPeerOutlineStep={isPeerOutlineStep}
               activeGateKey={activeGateKey}
               groupLabel={groupLabel}
               memberNames={groupMemberNames}
@@ -408,7 +420,7 @@ export default function StudentPage() {
             />
           ) : null}
 
-          {currentStep === 3 ? (
+          {isOutlineStep ? (
             <Step3InteractionCard
               interactiveMessages={interactiveMessages}
               step3StreamingText={step3StreamingText}
@@ -424,9 +436,9 @@ export default function StudentPage() {
             />
           ) : null}
 
-          {(currentStep === 3 || currentStep === 4) && loginUser ? (
+          {(isOutlineStep || isPeerOutlineStep) && loginUser ? (
             <Step34OutlinePanel
-              currentStep={currentStep as 3 | 4}
+              isOutlineStep={isOutlineStep}
               loginUser={loginUser}
               participants={session.participants}
               teammateUsers={teammateUsers}
@@ -442,7 +454,7 @@ export default function StudentPage() {
             />
           ) : null}
 
-          {currentStep === 6 && loginUser && makeupOutlinePending ? (
+          {isDraftStep && loginUser && makeupOutlinePending ? (
             <MakeupOutlineCard
               serverMermaid={session.outlines[loginUser] ?? ""}
               completeHint={makeupOutlineHint}
@@ -451,48 +463,51 @@ export default function StudentPage() {
             />
           ) : null}
 
-          {(currentStep === 6 || currentStep === 8) && loginUser && !(currentStep === 6 && makeupOutlinePending) ? (
+          {(isDraftStep || isRevisionStep) && loginUser && !(isDraftStep && makeupOutlinePending) ? (
             <Step68Panel
-              currentStep={currentStep as 6 | 8}
+              currentStep={currentStep}
+              isDraftStep={isDraftStep}
               participants={session.participants}
               outlines={session.outlines}
               draftText={draftText}
               onDraftChange={setDraftText}
-              onSaveDraft={() => saveArtifact(currentStep === 6 ? "draft6" : "draft8", draftText)}
+              onSaveDraft={() => saveArtifact(isDraftStep ? "draft6" : "draft8", draftText)}
               onSuggest={requestStep6Suggestion}
               onCompleteStep8={completeStep8ToStep9}
               isSuggestingStep6={isSuggestingStep6}
               isCompletingStep6={isCompletingStep6}
               isCompletingStep8={isCompletingStep8}
-              unsavedChars={currentStep === 6 ? unsavedDraft6Chars : unsavedDraft8Chars}
+              unsavedChars={isDraftStep ? unsavedDraft6Chars : unsavedDraft8Chars}
               saveStatus={draftSaveStatus}
               step6RefUser={step6RefUser || loginUser}
               onStep6RefUserChange={setStep6RefUser}
-              step6StreamingText={currentStep === 6 ? step6StreamingText : undefined}
-              step7StreamingText={currentStep === 6 ? step7StreamingText : undefined}
+              step6StreamingText={isDraftStep ? step6StreamingText : undefined}
+              step7StreamingText={isDraftStep ? step7StreamingText : undefined}
             />
           ) : null}
 
-          {currentStep === 5 || currentStep === 7 ? (
+          {currentMode === "non_interactive" && !isFinalReportStep ? (
             <Step5ReportCard
-              currentStep={currentStep as 5 | 7}
+              reportKind={currentCapability === "summary_report" ? "summary_report" : "feedback_report"}
               step5Report={loginUser ? session.reports?.step5?.[loginUser] : undefined}
               draftStep6={loginUser ? session.draftStep6[loginUser] : undefined}
               step7Report={ownStep7Report ?? undefined}
             />
           ) : null}
 
-          {currentStep === 10 && isStep10ReportReady ? (
+          {isFinalReportStep && isStep10ReportReady ? (
             <div className="card card-info">
               <h2>課程已完成</h2>
               <small>整個課程已經結束，請等待老師指示進行後續課程。</small>
             </div>
           ) : null}
 
-          {currentMode !== "non_interactive" && currentStep !== 3 && currentStep !== 5 && currentStep !== 8 && currentStep !== 10 ? (
+          {currentMode !== "non_interactive" && !isOutlineStep && !isRevisionStep && !isFinalReportStep ? (
             <InteractionPanel
-              currentStep={currentStep}
               currentMode={currentMode}
+              isPeerOutlineStep={isPeerOutlineStep}
+              isDraftStep={isDraftStep}
+              isReflectionStep={isReflectionStep}
               interactiveMessages={interactiveMessages}
               participantDisplayNames={usernameToName}
               text={text}

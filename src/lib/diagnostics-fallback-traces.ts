@@ -1,5 +1,6 @@
 import type { PersistedEventRow } from "@/src/lib/store";
 import type { SessionState } from "@/src/lib/types";
+import { getWorkflowPromptStepKey } from "@/src/lib/course-workflow";
 
 export type FallbackTraceErrorSource = "learning_event" | "matched_llm_event" | "none";
 export type FallbackTraceReconstructionSource = "session_messages_and_prompt_config" | "event_only";
@@ -74,7 +75,7 @@ function findCurrentQuestion(messages: SessionState["messages"], step: number): 
 function buildSystemPrompt(session: SessionState, step: number, substepKey: string | null): string {
   const chunks: string[] = [];
   if (session.promptConfig.systemPrompt?.trim()) chunks.push(session.promptConfig.systemPrompt.trim());
-  const stepPrompt = session.promptConfig.stepPrompts?.[String(step)]?.trim();
+  const stepPrompt = session.promptConfig.stepPrompts?.[getWorkflowPromptStepKey(session, step)]?.trim();
   if (stepPrompt) chunks.push(stepPrompt);
   if (substepKey) {
     chunks.push(`目前子步驟：${substepKey}`);

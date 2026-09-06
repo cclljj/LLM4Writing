@@ -1,4 +1,5 @@
 import { SessionState } from "./types";
+import { getGuidedDiscussionPromptStep, getWorkflowCapability } from "./course-workflow";
 
 export function normalizeForCompare(text: string): string {
   return text.replace(/[\s，。、「」；：？！,.!?;:'"()（）\[\]{}]/g, "").toLowerCase();
@@ -188,7 +189,7 @@ export function validateStep4DiscussionMessage(text: string): string | null {
 }
 
 function isStep1Substep(session: SessionState, substep: 1 | 2): boolean {
-  return session.currentStep === 1 && (session.stepState?.step1Substep ?? 1) === substep;
+  return getGuidedDiscussionPromptStep(getWorkflowCapability(session, session.currentStep)) === 1 && (session.stepState?.step1Substep ?? 1) === substep;
 }
 
 function validateStep11Or12ByRequirement(session: SessionState, question: string, answer: string): string | null {

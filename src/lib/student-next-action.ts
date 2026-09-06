@@ -1,5 +1,6 @@
 export type StudentNextActionInput = {
   currentStep: number;
+  currentCapability?: string;
   currentMode: "group_interaction" | "personal_interaction" | "non_interactive" | "personal_reflection";
   canReplyToQuestion: boolean;
   isSendingMessage: boolean;
@@ -30,7 +31,22 @@ function waitingNames(names: string[]): string {
 }
 
 export function buildStudentNextAction(input: StudentNextActionInput): StudentNextAction {
-  const hasAiWaitInThisStep = input.currentStep !== 4;
+  const currentCapability =
+    input.currentCapability ??
+    (input.currentStep === 3
+      ? "outline"
+      : input.currentStep === 4
+        ? "peer_outline"
+        : input.currentStep === 6
+          ? "draft"
+          : input.currentStep === 8
+            ? "revision"
+            : input.currentStep === 9
+              ? "reflection"
+              : input.currentStep === 10
+                ? "final_report"
+                : undefined);
+  const hasAiWaitInThisStep = currentCapability !== "peer_outline";
   if (input.isSendingMessage || (hasAiWaitInThisStep && input.waitingAiForGroup)) {
     return {
       tone: "waiting",
@@ -45,7 +61,7 @@ export function buildStudentNextAction(input: StudentNextActionInput): StudentNe
     return {
       tone: "success",
       title: "等待老師切換",
-      body: "Step 1 已完成，請等待老師切換到 Step 2。",
+      body: "本步驟已完成，請等待老師切換下一步。",
       primaryAction: "等待下一步",
       statusLabel: "已完成"
     };
@@ -55,7 +71,7 @@ export function buildStudentNextAction(input: StudentNextActionInput): StudentNe
     return {
       tone: "success",
       title: "等待老師切換",
-      body: "Step 2 已完成，請等待老師切換到 Step 3。",
+      body: "本步驟已完成，請等待老師切換下一步。",
       primaryAction: "等待下一步",
       statusLabel: "已完成"
     };
@@ -71,7 +87,7 @@ export function buildStudentNextAction(input: StudentNextActionInput): StudentNe
     };
   }
 
-  if (input.currentStep === 3) {
+  if (currentCapability === "outline") {
     if (input.step3CompletedByMe) {
       return {
         tone: input.waitingStep3Members ? "waiting" : "success",
@@ -90,12 +106,12 @@ export function buildStudentNextAction(input: StudentNextActionInput): StudentNe
     };
   }
 
-  if (input.currentStep === 4) {
+  if (currentCapability === "peer_outline") {
     if (input.allStep4Completed) {
       return {
         tone: "success",
         title: "等待老師切換",
-        body: "全組已確認完成 Step 4，請等待老師切換到 Step 5。",
+        body: "全組已確認完成此步驟，請等待老師切換下一步。",
         primaryAction: "等待下一步",
         statusLabel: "已完成"
       };
@@ -104,7 +120,7 @@ export function buildStudentNextAction(input: StudentNextActionInput): StudentNe
       return {
         tone: "waiting",
         title: "等待組員",
-        body: "你已確認完成 Step 4，正在等待同組同學確認。",
+        body: "你已確認完成此步驟，正在等待同組同學確認。",
         primaryAction: "等待組員確認",
         statusLabel: "等待中"
       };
@@ -118,7 +134,7 @@ export function buildStudentNextAction(input: StudentNextActionInput): StudentNe
     };
   }
 
-  if (input.currentStep === 6) {
+  if (currentCapability === "draft") {
     if (input.draftTextLength < 80) {
       return {
         tone: "focus",
@@ -137,7 +153,7 @@ export function buildStudentNextAction(input: StudentNextActionInput): StudentNe
     };
   }
 
-  if (input.currentStep === 8) {
+  if (currentCapability === "revision") {
     return {
       tone: input.unsavedDraftChars > 0 ? "focus" : "success",
       title: input.unsavedDraftChars > 0 ? "儲存潤飾稿" : "送出最終稿",
@@ -147,7 +163,7 @@ export function buildStudentNextAction(input: StudentNextActionInput): StudentNe
     };
   }
 
-  if (input.currentStep === 9) {
+  if (currentCapability === "reflection") {
     return {
       tone: input.step9AnsweredCount >= 4 ? "success" : "focus",
       title: input.step9AnsweredCount >= 4 ? "送出反思" : "回答反思題",
@@ -157,7 +173,7 @@ export function buildStudentNextAction(input: StudentNextActionInput): StudentNe
     };
   }
 
-  if (input.currentStep === 10) {
+  if (currentCapability === "final_report") {
     return {
       tone: "success",
       title: "閱讀總結報告",

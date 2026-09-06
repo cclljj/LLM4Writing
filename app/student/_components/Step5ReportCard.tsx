@@ -3,17 +3,17 @@
 import { memo } from "react";
 
 function Step5ReportCard({
-  currentStep,
+  reportKind,
   step5Report,
   draftStep6,
   step7Report
 }: {
-  currentStep: 5 | 7;
+  reportKind: "summary_report" | "feedback_report";
   step5Report?: string;
   draftStep6?: string;
   step7Report?: string;
 }) {
-  if (currentStep === 5) {
+  if (reportKind === "summary_report") {
     return (
       <div className="card">
         <h2>摘要報告</h2>

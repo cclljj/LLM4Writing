@@ -1,3 +1,6 @@
+import type { CourseWorkflowStep } from "@/src/lib/types";
+import { getWorkflowCapability } from "@/src/lib/course-workflow";
+
 export const TEACHER_MONITOR_FAST_POLL_MS = 1000;
 export const TEACHER_MONITOR_MIN_POLL_MS = 3000;
 export const TEACHER_MONITOR_MAX_POLL_MS = 30000;
@@ -5,6 +8,7 @@ export const TEACHER_MONITOR_MAX_POLL_MS = 30000;
 type MonitorPollingSession = {
   sessionId: string;
   currentStep: number;
+  workflowSteps?: CourseWorkflowStep[];
   messages?: unknown[];
   messageCount?: number;
   lastMessageAt?: string | null;
@@ -61,7 +65,10 @@ export function computeTeacherMonitorPayloadHash(sessions: MonitorPollingSession
 }
 
 export function hasLowLatencyStepAdvanceGate(sessions: MonitorPollingSession[]): boolean {
-  return sessions.some((session) => session.currentStep === 3 || session.currentStep === 4);
+  return sessions.some((session) => {
+    const capability = getWorkflowCapability(session, session.currentStep);
+    return capability === "outline" || capability === "peer_outline";
+  });
 }
 
 export function resolveTeacherMonitorNextPollDelay(input: {

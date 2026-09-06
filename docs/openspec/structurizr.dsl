@@ -1,7 +1,7 @@
 workspace "LLM4Writing C4 Model" "C4 model diagrams generated from docs/openspec + docs/SPEC.md" {
 
   model {
-    student = person "Student" "Joins writing tasks, completes the 10-step learning workflow, and reviews personal history."
+    student = person "Student" "Joins writing tasks, completes the term-configured learning workflow, and reviews personal history."
     teacher = person "Teacher" "Manages owned students/classes, controls course steps, and monitors learning progress."
     admin = person "Admin" "Performs global account/task management, diagnostics, and audit review."
 
@@ -15,7 +15,7 @@ workspace "LLM4Writing C4 Model" "C4 model diagrams generated from docs/openspec
         llmOrchestrator = component "LLM Orchestrator" "Coordinates LLM prompts, retries, continuation, and fallback response generation." "Engine + llm-client"
         contextCompressor = component "LLM Context Compressor" "Builds layered historical summaries, removes duplicate/noisy lines, and preserves recent raw context." "llm-context"
         tokenBudgetGuard = component "LLM Token Budget Guard" "Applies centralized max_tokens floor (>= 50000) for chat and stream requests." "llm-client"
-        step10Chunker = component "Step10 Configured Report Generator" "Generates Step10 from configured sections, server-owned headings, section body prompts, and optional final polish." "engine"
+        step10Chunker = component "Final Report Configured Generator" "Generates the final-report capability from configured sections, server-owned headings, section body prompts, and optional final polish." "engine"
 
         ui -> authz "Authenticates and authorizes"
         ui -> workflowApi "Calls student/session APIs"

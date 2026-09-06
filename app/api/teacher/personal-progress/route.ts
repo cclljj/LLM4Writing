@@ -5,6 +5,7 @@ import { getSession, listSessionsByParticipant } from "@/src/lib/store";
 import { getUsersVisibleToTeacherStore, listUsersStore } from "@/src/lib/user-store";
 import { isSessionInActivityGroupScope } from "@/src/lib/monitor-session-scope";
 import { resolveStudentCourseLatestWork } from "@/src/lib/student-course-history";
+import { getWorkflowPromptStepKey, getSessionWorkflowSteps, getWorkflowStepOrderIndex } from "@/src/lib/course-workflow";
 
 function normalizeText(text: string): string {
   return text.replace(/\r\n/g, "\n").trim();
@@ -52,17 +53,24 @@ export async function GET(request: NextRequest) {
   const courseSessions = username && session.activityId
     ? await listSessionsByParticipant(username, { activityId: session.activityId, workflow: "spec10" })
     : [session];
-  const latestPersonalStep = Math.max(
-    ...courseSessions.map((item) => item.personalSteps?.[username] ?? item.currentStep),
-    session.personalSteps?.[username] ?? session.currentStep
-  );
+  const latestPersonalStep = courseSessions.reduce((latestStep, item) => {
+    const candidateStep = item.personalSteps?.[username] ?? item.currentStep;
+    return getWorkflowStepOrderIndex(item, candidateStep) > getWorkflowStepOrderIndex(session, latestStep)
+      ? candidateStep
+      : latestStep;
+  }, session.personalSteps?.[username] ?? session.currentStep);
   const latestWork = username
     ? resolveStudentCourseLatestWork({ sessions: courseSessions, username, latestPersonalStep })
     : undefined;
 
   const progress = session.participants.map((participant) => {
     const ownMessages = session.messages.filter((message) => message.userId === participant);
-    const ownInteractiveMessages = ownMessages.filter((message) => [3, 6, 8].includes(message.step));
+    const personalInteractiveSteps = new Set(
+      getSessionWorkflowSteps(session)
+        .filter((step) => step.mode === "personal_interaction")
+        .map((step) => step.step)
+    );
+    const ownInteractiveMessages = ownMessages.filter((message) => personalInteractiveSteps.has(message.step));
     const last = ownMessages[ownMessages.length - 1];
     return {
       username: participant,
@@ -82,7 +90,7 @@ export async function GET(request: NextRequest) {
 
         const filtered = base.filter((message) => {
           if (message.role !== "system") return true;
-          const stepPrompt = stepPrompts[String(message.step)] ?? "";
+          const stepPrompt = stepPrompts[getWorkflowPromptStepKey(session, message.step)] ?? "";
           if (!stepPrompt.trim()) return true;
           return normalizeText(message.text) !== normalizeText(stepPrompt);
         });
@@ -90,7 +98,7 @@ export async function GET(request: NextRequest) {
         const withOpenings = [...filtered];
         const stepsInView = Array.from(new Set(filtered.map((message) => message.step)));
         stepsInView.forEach((step) => {
-          const opening = (stepOpenings[String(step)] ?? "").trim();
+          const opening = (stepOpenings[getWorkflowPromptStepKey(session, step)] ?? "").trim();
           if (!opening) return;
           const openingNormalized = normalizeText(opening);
           const alreadyExists = withOpenings.some(
@@ -116,6 +124,7 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     sessionId: session.id,
     activityTitle: session.activityTitle,
+    workflowSteps: session.workflowSteps ?? [],
     progress,
     personalMessages,
     userOutline: username ? (latestWork?.step4Outline ?? "") : undefined,

@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { deferStateUpdate } from "@/src/lib/defer-state-update";
 import { appendErrorHint, formatUserError } from "@/src/lib/error-messages";
 import { validateDraftContent } from "@/src/lib/answer-validation";
-import { appendTeacherHelpHint } from "@/src/lib/student-page-helpers";
+import { appendTeacherHelpHint, getCapabilityStep, getCurrentCapability } from "@/src/lib/student-page-helpers";
 import { readSseSessionStream } from "@/src/lib/sse-session-stream";
 import { SessionState, StudentSessionPayload } from "./student-session-types";
 
@@ -21,7 +21,7 @@ export function useStudentStepActions(input: {
   setError: (message: string | ((prev: string) => string)) => void;
   draftText: string;
   saveArtifact: (type: "outline" | "draft6" | "draft8", content: string) => Promise<boolean>;
-  markDraftSaved: (step: 6 | 8) => void;
+  markDraftSaved: (slot: "draft" | "revision") => void;
   setIsCompletingStep6: (value: boolean) => void;
   setIsCompletingStep8: (value: boolean) => void;
   setStep3StreamingText: (value: string) => void;
@@ -54,22 +54,27 @@ export function useStudentStepActions(input: {
   const [isAutoAdvancingStep5, setIsAutoAdvancingStep5] = useState(false);
   const [isSuggestingStep6, setIsSuggestingStep6] = useState(false);
   const outlineMermaidRef = useRef<string>("");
+  const currentCapability = getCurrentCapability(session, currentStep);
+  const summaryStep = getCapabilityStep(session, "summary_report") ?? 5;
+  const draftStep = getCapabilityStep(session, "draft") ?? 6;
+  const revisionStep = getCapabilityStep(session, "revision") ?? 8;
+  const reflectionStep = getCapabilityStep(session, "reflection") ?? 9;
 
   useEffect(() => {
-    if (currentStep !== 9) return;
+    if (currentStep !== reflectionStep) return;
     deferStateUpdate(() => setStep9Answers(["", "", "", ""]));
-  }, [currentStep, session?.id]);
+  }, [currentStep, reflectionStep, session?.id]);
 
   useEffect(() => {
-    if (currentStep !== 3) {
+    if (currentCapability !== "outline") {
       deferStateUpdate(() => setStep3CompleteHint(""));
     }
-  }, [currentStep, session?.id]);
+  }, [currentCapability, session?.id]);
 
   // Auto-advance from step5 once the summary report is visible.
   useEffect(() => {
     const ownStep = session && loginUser ? session.personalSteps?.[loginUser] ?? session.currentStep : 1;
-    if (!session || ownStep !== 5 || !session.reports?.step5 || isAutoAdvancingStep5) return;
+    if (!session || ownStep !== summaryStep || !session.reports?.step5 || isAutoAdvancingStep5) return;
     const timer = window.setTimeout(async () => {
       setIsAutoAdvancingStep5(true);
       try {
@@ -89,7 +94,7 @@ export function useStudentStepActions(input: {
       }
     }, 1200);
     return () => window.clearTimeout(timer);
-  }, [applySessionSafely, isAutoAdvancingStep5, loginUser, session, setError]);
+  }, [applySessionSafely, isAutoAdvancingStep5, loginUser, session, setError, summaryStep]);
 
   function courseStatusGuardMessage(kind: "submit" | "operate"): string | null {
     if (!session) return null;
@@ -110,7 +115,7 @@ export function useStudentStepActions(input: {
     setError("");
     setIsSendingMessage(true);
     try {
-      if (currentStep === 3) {
+      if (currentCapability === "outline") {
         setStep3StreamingText("");
         const textToSend = text;
         const response = await fetch("/api/session/step3/stream", {
@@ -162,7 +167,7 @@ export function useStudentStepActions(input: {
 
   async function submitStep9Batch(e: FormEvent) {
     e.preventDefault();
-    if (!session || currentStep !== 9 || !isInputEnabled) return;
+    if (!session || currentCapability !== "reflection" || !isInputEnabled) return;
     const payload = `Q1: ${step9Answers[0]}\nQ2: ${step9Answers[1]}\nQ3: ${step9Answers[2]}\nQ4: ${step9Answers[3]}`;
     setError("");
     setIsSendingMessage(true);
@@ -271,7 +276,7 @@ export function useStudentStepActions(input: {
   }
 
   async function requestStep6Suggestion() {
-    if (!session || currentStep !== 6) return;
+    if (!session || currentStep !== draftStep) return;
     const blocked = courseStatusGuardMessage("operate");
     if (blocked) { setError(blocked); return; }
     setError("");
@@ -316,7 +321,7 @@ export function useStudentStepActions(input: {
   }
 
   async function completeStep6ToStep8() {
-    if (!session || currentStep !== 6) return;
+    if (!session || currentStep !== draftStep) return;
     const draftError = validateDraftContent(draftText);
     if (draftError) { setError(draftError); return; }
     setError("");
@@ -344,7 +349,7 @@ export function useStudentStepActions(input: {
       if (streamError) {
         setError(formatUserError(streamError));
       } else if (finalSession) {
-        markDraftSaved(6);
+        markDraftSaved("draft");
         applySessionSafely(finalSession);
       }
     } catch {
@@ -356,7 +361,7 @@ export function useStudentStepActions(input: {
   }
 
   async function completeStep8ToStep9() {
-    if (!session || currentStep !== 8) return;
+    if (!session || currentStep !== revisionStep) return;
     setError("");
     setIsCompletingStep8(true);
     try {
@@ -370,7 +375,7 @@ export function useStudentStepActions(input: {
         setError(appendErrorHint(data.error ?? "step8_complete_failed", typeof data.hint === "string" ? data.hint : undefined));
         return;
       }
-      markDraftSaved(8);
+      markDraftSaved("revision");
       applySessionSafely(data);
     } finally {
       setIsCompletingStep8(false);

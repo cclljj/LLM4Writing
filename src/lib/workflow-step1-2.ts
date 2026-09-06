@@ -2,6 +2,7 @@ import { ChatMessage, SessionState } from "./types";
 import { isUsableNextQuestion } from "./llm-response";
 import { buildStep1Question, buildStep2Question, getCurrentGroupGateKey, pickQuestionFromSubStepFallback } from "./workflow-questions";
 import { resolveStep12GateMembers } from "./session-attendance";
+import { getGuidedDiscussionPromptStep, getWorkflowCapability } from "./course-workflow";
 
 export type MessageFactory = (input: Omit<ChatMessage, "id" | "at">) => ChatMessage;
 
@@ -9,13 +10,14 @@ export function handleStep1Or2Group(
   session: SessionState,
   userId: string,
   text: string,
+  promptStep: 1 | 2,
+  actualStep: number,
   makeMessage: MessageFactory
 ): { session: SessionState; allResponded: boolean; substep: number } {
-  const step = session.currentStep;
-  const substep = step === 1 ? session.stepState.step1Substep : session.stepState.step2Substep;
-  const gateKey = getCurrentGroupGateKey(session, step as 1 | 2);
+  const substep = promptStep === 1 ? session.stepState.step1Substep : session.stepState.step2Substep;
+  const gateKey = getCurrentGroupGateKey(session, promptStep);
 
-  session.messages.push(makeMessage({ role: "student", userId, step, text }));
+  session.messages.push(makeMessage({ role: "student", userId, step: actualStep, text }));
 
   const responders = new Set(session.groupGate[gateKey] ?? []);
   responders.add(userId);
@@ -84,6 +86,7 @@ export function getNextSubstepKeyAfterCompletion(
 export function advanceStep1Or2SubstepAfterAi(
   session: SessionState,
   step: 1 | 2,
+  actualStep: number,
   completedSubstep: number,
   nextQuestionFromAi: string | undefined,
   makeMessage: MessageFactory
@@ -101,7 +104,7 @@ export function advanceStep1Or2SubstepAfterAi(
           `1-3-${qIdx}`,
           "請用自己的話補充說明：你認為題目中的關鍵詞範圍包含什麼、不包含什麼？"
         );
-      session.messages.push(makeMessage({ role: "system", step, text: `子步驟 1-3-${qIdx}：${q}` }));
+      session.messages.push(makeMessage({ role: "system", step: actualStep, text: `子步驟 1-3-${qIdx}：${q}` }));
       return;
     }
     if (completedSubstep === 4 && (session.stepState.step1Substep4Question ?? 1) < 3) {
@@ -116,7 +119,7 @@ export function advanceStep1Or2SubstepAfterAi(
             ? "請從你們剛剛釐清的範圍出發：這篇文章最核心、最想傳達的一句話觀點是什麼？"
             : "請再收斂一次：用一句話寫出你們的核心主張（最想讓讀者記住的觀點）。"
         );
-      session.messages.push(makeMessage({ role: "system", step, text: `子步驟 1-4-${qIdx}：${q}` }));
+      session.messages.push(makeMessage({ role: "system", step: actualStep, text: `子步驟 1-4-${qIdx}：${q}` }));
       return;
     }
 
@@ -142,15 +145,15 @@ export function advanceStep1Or2SubstepAfterAi(
               )
             : buildStep1Question(session));
       if (nextSub === 3) {
-        session.messages.push(makeMessage({ role: "system", step, text: `子步驟 1-3-1：${q}` }));
+        session.messages.push(makeMessage({ role: "system", step: actualStep, text: `子步驟 1-3-1：${q}` }));
       } else if (nextSub === 4) {
-        session.messages.push(makeMessage({ role: "system", step, text: `子步驟 1-4-1：${q}` }));
+        session.messages.push(makeMessage({ role: "system", step: actualStep, text: `子步驟 1-4-1：${q}` }));
       } else {
-        session.messages.push(makeMessage({ role: "system", step, text: `子步驟 1-${nextSub}：${q}` }));
+        session.messages.push(makeMessage({ role: "system", step: actualStep, text: `子步驟 1-${nextSub}：${q}` }));
       }
       return;
     }
-    session.messages.push(makeMessage({ role: "system", step, text: "步驟 1 子步驟已完成，等待教師切換下一步。" }));
+    session.messages.push(makeMessage({ role: "system", step: actualStep, text: "步驟 1 子步驟已完成，等待教師切換下一步。" }));
     return;
   }
 
@@ -166,7 +169,7 @@ export function advanceStep1Or2SubstepAfterAi(
           ? "請挑一個你覺得最好用的具體例子（可以是生活經驗/新聞/歷史），並用 1-2 句話說明這個例子是什麼。"
           : "請說明：你選的這個例子，哪一個部分最能支持你的觀點？為什麼？"
       );
-    session.messages.push(makeMessage({ role: "system", step, text: `子步驟 2-1-${qIdx}：${q}` }));
+    session.messages.push(makeMessage({ role: "system", step: actualStep, text: `子步驟 2-1-${qIdx}：${q}` }));
     return;
   }
 
@@ -185,13 +188,13 @@ export function advanceStep1Or2SubstepAfterAi(
             : "請再往前一步：根據你剛才的例子，推論造成這個現象的深層原因是什麼？請至少說出一個因果鏈。"
         ));
     if (nextSub === 1) {
-      session.messages.push(makeMessage({ role: "system", step, text: `子步驟 2-1-1：${q}` }));
+      session.messages.push(makeMessage({ role: "system", step: actualStep, text: `子步驟 2-1-1：${q}` }));
     } else {
-      session.messages.push(makeMessage({ role: "system", step, text: `子步驟 2-${nextSub}：${q}` }));
+      session.messages.push(makeMessage({ role: "system", step: actualStep, text: `子步驟 2-${nextSub}：${q}` }));
     }
     return;
   }
-  session.messages.push(makeMessage({ role: "system", step, text: "步驟 2 子步驟已完成，等待教師切換下一步。" }));
+  session.messages.push(makeMessage({ role: "system", step: actualStep, text: "步驟 2 子步驟已完成，等待教師切換下一步。" }));
 }
 
 export function recoverStalledStep1Or2AiWait(
@@ -199,8 +202,9 @@ export function recoverStalledStep1Or2AiWait(
   makeMessage: MessageFactory,
   options: { idleMs?: number; nowMs?: number } = {}
 ): boolean {
-  if (session.currentStep !== 1 && session.currentStep !== 2) return false;
-  const step = session.currentStep as 1 | 2;
+  const step = getGuidedDiscussionPromptStep(getWorkflowCapability(session, session.currentStep));
+  if (!step) return false;
+  const actualStep = session.currentStep;
   const completedSubstep = step === 1 ? session.stepState.step1Substep : session.stepState.step2Substep;
   const gateKey = getCurrentGroupGateKey(session, step);
   const responders = session.groupGate[gateKey] ?? [];
@@ -209,14 +213,14 @@ export function recoverStalledStep1Or2AiWait(
   if (!allResponded) return false;
 
   const gateResponderMessages = session.messages
-    .filter((message) => message.step === step && message.role === "student" && message.userId && responders.includes(message.userId))
+    .filter((message) => message.step === actualStep && message.role === "student" && message.userId && responders.includes(message.userId))
     .slice()
     .sort((a, b) => b.at.localeCompare(a.at));
   const latestGateResponse = gateResponderMessages[0];
   if (!latestGateResponse) return false;
 
   const latestStepActivity = session.messages
-    .filter((message) => message.step === step)
+    .filter((message) => message.step === actualStep)
     .slice()
     .sort((a, b) => b.at.localeCompare(a.at))[0];
 
@@ -227,6 +231,6 @@ export function recoverStalledStep1Or2AiWait(
   if (nowMs - latestMs < idleMs) return false;
 
   session.groupGate[gateKey] = [];
-  advanceStep1Or2SubstepAfterAi(session, step, completedSubstep, undefined, makeMessage);
+  advanceStep1Or2SubstepAfterAi(session, step, actualStep, completedSubstep, undefined, makeMessage);
   return true;
 }

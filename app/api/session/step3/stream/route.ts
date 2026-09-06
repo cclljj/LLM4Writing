@@ -14,6 +14,7 @@ import { validateStudentAnswer } from "@/src/lib/answer-validation";
 import { recordStreamingCall } from "@/src/lib/llm-stats";
 import { classifyLlmError } from "@/src/lib/llm-observability";
 import { appendFallbackDebugTrace, buildPromptText, truncateTraceText } from "@/src/lib/fallback-debug-trace";
+import { getWorkflowPromptStepKey, getWorkflowStepByCapability } from "@/src/lib/course-workflow";
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -45,8 +46,8 @@ function buildStep3Messages(
         [
           systemPrompt,
           stepPrompt,
-          "目前步驟：3（生成論點）。請嚴格遵守步驟與輸出格式要求。",
-          "請依據 Step 3 的角色、目標與輸出格式，僅針對學生提問給出回覆與建議。禁止主動提問、禁止要求學生再回答新問題。請用自然、擬人化、像老師與學生對話的語氣回覆，不要使用生硬標題或固定模板標籤。"
+          "目前步驟：生成論點。請嚴格遵守步驟與輸出格式要求。",
+          "請依據生成論點步驟的角色、目標與輸出格式，僅針對學生提問給出回覆與建議。禁止主動提問、禁止要求學生再回答新問題。請用自然、擬人化、像老師與學生對話的語氣回覆，不要使用生硬標題或固定模板標籤。"
         ]
           .filter(Boolean)
           .join("\n\n")
@@ -56,7 +57,7 @@ function buildStep3Messages(
       content:
         `作文題目：${activityTitle || "未命名題目"}\n\n` +
         `以下是本步驟最近對話內容：\n${sameStepRecent || "(無)"}\n\n` +
-        `以下是該學生從 Step1 到目前步驟的歷史互動（僅本人 student/ai/必要 system，已做長度限制）：\n${crossStepContext || "(無)"}\n\n` +
+        `以下是該學生到目前步驟的歷史互動（僅本人 student/ai/必要 system，已做長度限制）：\n${crossStepContext || "(無)"}\n\n` +
         `學生最新提問或想法：${studentText}`
     }
   ];
@@ -88,7 +89,7 @@ async function generateStep3ReplyText(
       {
         role: "user",
         content:
-          "你的上一則回覆可能不完整。請重新輸出完整、自然且連貫的 Step 3 回覆：不要重複段落、不要提到截斷或續寫過程，每句話要完整收尾。"
+          "你的上一則回覆可能不完整。請重新輸出完整、自然且連貫的生成論點回覆：不要重複段落、不要提到截斷或續寫過程，每句話要完整收尾。"
       }
     ],
     temperature: 0.5,
@@ -112,18 +113,19 @@ export async function POST(request: NextRequest) {
   const { user, session } = result;
 
   const userStep = session.personalSteps?.[user.username] ?? session.currentStep;
-  if (userStep !== 3) {
+  const outlineStep = getWorkflowStepByCapability(session, "outline")?.step;
+  if (!outlineStep || userStep !== outlineStep) {
     return NextResponse.json({ error: "invalid_step" }, { status: 400 });
   }
 
-  const validationError = validateStudentAnswer(session, user.username, 3, studentText);
+  const validationError = validateStudentAnswer(session, user.username, outlineStep, studentText);
   if (validationError) {
     const rejectedAt = nowIso();
-    recordRejectedAnswerSignal(session, user.username, "step-3", rejectedAt);
+    recordRejectedAnswerSignal(session, user.username, `step-${outlineStep}`, rejectedAt);
     void recordLearningEvent({
       sessionId: session.id,
       activityId: session.activityId,
-      step: 3,
+      step: outlineStep,
       kind: "student_rejection",
       createdAt: rejectedAt
     }).catch(() => undefined);
@@ -131,10 +133,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: validationError }, { status: 400 });
   }
 
-  session.messages.push(makeMessage("student", 3, studentText, user.username));
+  session.messages.push(makeMessage("student", outlineStep, studentText, user.username));
 
   const sameStepRecent = session.messages
-    .filter((m) => m.step === 3)
+    .filter((m) => m.step === outlineStep)
     .slice(-10)
     .map((m) => {
       if (m.role === "student") return `學生${m.userId ? `(${m.userId})` : ""}：${m.text}`;
@@ -142,7 +144,7 @@ export async function POST(request: NextRequest) {
       return `系統：${m.text}`;
     })
     .join("\n");
-  const crossStepContext = buildStudentCourseContext(session, user.username, 3, {
+  const crossStepContext = buildStudentCourseContext(session, user.username, outlineStep, {
     maxMessages: 48,
     maxChars: 13000,
     includeSystem: true
@@ -162,7 +164,7 @@ export async function POST(request: NextRequest) {
       try {
         const promptMessages = buildStep3Messages(
           session.promptConfig?.systemPrompt,
-          session.promptConfig?.stepPrompts?.["3"],
+          session.promptConfig?.stepPrompts?.[getWorkflowPromptStepKey(session, outlineStep)],
           session.activityTitle ?? "",
           sameStepRecent,
           crossStepContext,
@@ -175,7 +177,7 @@ export async function POST(request: NextRequest) {
           usedFallback = true;
           appendFallbackDebugTrace(session, {
             at: nowIso(),
-            step: 3,
+            step: outlineStep,
             kind: "fallback",
             originalPrompt,
             originalResponse: "(llm_not_configured)",
@@ -185,7 +187,7 @@ export async function POST(request: NextRequest) {
           void recordLearningEvent({
             sessionId: session.id,
             activityId: session.activityId,
-            step: 3,
+            step: outlineStep,
             kind: "fallback",
             fallbackUsed: true,
             errorCategory: "other"
@@ -195,7 +197,7 @@ export async function POST(request: NextRequest) {
             const normalized = await generateStep3ReplyText(promptMessages, FALLBACK_STEP3, {
               sessionId: session.id,
               activityId: session.activityId,
-              step: 3,
+              step: outlineStep,
               label: "step3_stream"
             });
             if (normalized.trim()) {
@@ -213,7 +215,7 @@ export async function POST(request: NextRequest) {
               const category = classifyLlmError(error);
               appendFallbackDebugTrace(session, {
                 at: nowIso(),
-                step: 3,
+                step: outlineStep,
                 kind: "fallback",
                 originalPrompt,
                 originalResponse: `(llm_error:${category})`,
@@ -223,7 +225,7 @@ export async function POST(request: NextRequest) {
               void recordLearningEvent({
                 sessionId: session.id,
                 activityId: session.activityId,
-                step: 3,
+                step: outlineStep,
                 kind: "fallback",
                 fallbackUsed: true,
                 errorCategory: category
@@ -235,12 +237,12 @@ export async function POST(request: NextRequest) {
         const aiText = sanitizeStudentFacingText(
           normalizeFormalLlmText(collected.join(""), { fallback: FALLBACK_STEP3 })
         );
-        session.messages.push(makeMessage("ai", 3, aiText, user.username));
+        session.messages.push(makeMessage("ai", outlineStep, aiText, user.username));
         await saveSession(session);
         void recordLearningEvent({
           sessionId: session.id,
           activityId: session.activityId,
-          step: 3,
+          step: outlineStep,
           kind: "step3_response",
           latencyMs: Date.now() - startedAt,
           fallbackUsed: usedFallback

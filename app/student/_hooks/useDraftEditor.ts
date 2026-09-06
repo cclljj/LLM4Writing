@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { deferStateUpdate } from "@/src/lib/defer-state-update";
 import { formatUserError } from "@/src/lib/error-messages";
 import { formatTaipeiTime } from "@/src/lib/time-format";
-import { resolveDraftHydration } from "@/src/lib/student-page-helpers";
+import { getCapabilityStep, resolveDraftHydration } from "@/src/lib/student-page-helpers";
 import { SessionState, StudentSessionPayload } from "./student-session-types";
 
 // Draft state for Step6/8 (#459). The hydration rules live in
@@ -30,6 +30,8 @@ export function useDraftEditor(input: {
   const [step6RefUser, setStep6RefUser] = useState("");
   const [refUser, setRefUser] = useState("");
   const lastOwnStepRef = useRef<number | null>(null);
+  const draftStep = getCapabilityStep(session, "draft") ?? 6;
+  const revisionStep = getCapabilityStep(session, "revision") ?? 8;
 
   useEffect(() => {
     if (!session || !loginUser) return;
@@ -37,6 +39,8 @@ export function useDraftEditor(input: {
     const decision = resolveDraftHydration({
       ownStep,
       lastOwnStep: lastOwnStepRef.current,
+      draftStep,
+      revisionStep,
       draftText,
       savedDraft8Text,
       latestDraft6: session.draftStep6[loginUser] ?? "",
@@ -65,15 +69,15 @@ export function useDraftEditor(input: {
       );
     }
     lastOwnStepRef.current = ownStep;
-  }, [draftText, loginUser, refUser, savedDraft8Text, session]);
+  }, [draftStep, draftText, loginUser, refUser, revisionStep, savedDraft8Text, session]);
 
   useEffect(() => {
     const ownStep = session && loginUser ? session.personalSteps?.[loginUser] ?? session.currentStep : 1;
-    if (!session || !loginUser || ownStep !== 6) return;
+    if (!session || !loginUser || ownStep !== draftStep) return;
     if (!step6RefUser || !session.participants.includes(step6RefUser)) {
       deferStateUpdate(() => setStep6RefUser(loginUser));
     }
-  }, [loginUser, session, step6RefUser]);
+  }, [draftStep, loginUser, session, step6RefUser]);
 
   async function saveArtifact(type: "outline" | "draft6" | "draft8", content: string): Promise<boolean> {
     if (!session) return false;
@@ -105,15 +109,15 @@ export function useDraftEditor(input: {
     }
   }
 
-  const markDraftSaved = (step: 6 | 8) => {
-    if (step === 6) setSavedDraft6Text(draftText);
+  const markDraftSaved = (slot: "draft" | "revision") => {
+    if (slot === "draft") setSavedDraft6Text(draftText);
     else setSavedDraft8Text(draftText);
     setLastDraftSavedAt(new Date().toISOString());
   };
 
-  const unsavedDraft6Chars = currentStep === 6 && draftText !== savedDraft6Text ? draftText.length : 0;
-  const unsavedDraft8Chars = currentStep === 8 && draftText !== savedDraft8Text ? draftText.length : 0;
-  const currentUnsavedDraftChars = currentStep === 8 ? unsavedDraft8Chars : unsavedDraft6Chars;
+  const unsavedDraft6Chars = currentStep === draftStep && draftText !== savedDraft6Text ? draftText.length : 0;
+  const unsavedDraft8Chars = currentStep === revisionStep && draftText !== savedDraft8Text ? draftText.length : 0;
+  const currentUnsavedDraftChars = currentStep === revisionStep ? unsavedDraft8Chars : unsavedDraft6Chars;
   const draftSaveStatus = useMemo(() => {
     if (isSavingDraft) return { state: "saving" as const, text: "正在儲存..." };
     if (draftSaveError) return { state: "error" as const, text: draftSaveError };

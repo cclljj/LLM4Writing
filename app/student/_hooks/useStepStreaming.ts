@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { deferStateUpdate } from "@/src/lib/defer-state-update";
 import { formatUserError } from "@/src/lib/error-messages";
+import { getCapabilityStep } from "@/src/lib/student-page-helpers";
 import { readSseSessionStream } from "@/src/lib/sse-session-stream";
 import { SessionState, StudentSessionPayload } from "./student-session-types";
 
@@ -23,9 +24,10 @@ export function useStepStreaming(input: {
   const [step10StreamingText, setStep10StreamingText] = useState("");
   const [step10LoadingDots, setStep10LoadingDots] = useState<"..." | "......">("...");
   const step10StreamRequestedRef = useRef<string>("");
+  const finalReportStep = getCapabilityStep(session, "final_report") ?? 10;
 
   useEffect(() => {
-    const isStep10Waiting = currentStep === 10 && !ownStep10Report?.trim();
+    const isStep10Waiting = currentStep === finalReportStep && !ownStep10Report?.trim();
     if (!isStep10Waiting) {
       deferStateUpdate(() => setStep10LoadingDots("..."));
       return;
@@ -34,7 +36,7 @@ export function useStepStreaming(input: {
       setStep10LoadingDots((prev) => (prev === "..." ? "......" : "..."));
     }, 600);
     return () => window.clearInterval(timer);
-  }, [currentStep, ownStep10Report]);
+  }, [currentStep, finalReportStep, ownStep10Report]);
 
   async function streamStep10Report(sessionId: string): Promise<boolean> {
     setStep10StreamingText("");
@@ -73,7 +75,7 @@ export function useStepStreaming(input: {
   // without a stored report yet (#241).
   useEffect(() => {
     if (!session || !loginUser) return;
-    if (currentStep !== 10) return;
+    if (currentStep !== finalReportStep) return;
     if (ownStep10Report && ownStep10Report.trim()) return;
     if (step10StreamRequestedRef.current === session.id) return;
     step10StreamRequestedRef.current = session.id;
@@ -88,7 +90,7 @@ export function useStepStreaming(input: {
       });
     // streamStep10Report intentionally closes over the latest session helpers.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.id, currentStep, ownStep10Report, loginUser]);
+  }, [session?.id, currentStep, finalReportStep, ownStep10Report, loginUser]);
 
   return {
     step3StreamingText,

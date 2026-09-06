@@ -446,13 +446,31 @@ test("question-bank steps are sourced from questionBanks and instruction-like pr
 test("Step1/2 group gate waits for all participants before advancing", () => {
   const session = baseSession();
 
-  const first = handleStep1Or2Group(session, "s1", "我先回答完整想法", makeMessage);
+  const first = handleStep1Or2Group(session, "s1", "我先回答完整想法", 1, 1, makeMessage);
   assert.equal(first.allResponded, false);
   assert.deepEqual(session.groupGate["1-1"], ["s1"]);
 
-  const second = handleStep1Or2Group(session, "s2", "我也回答完整想法", makeMessage);
+  const second = handleStep1Or2Group(session, "s2", "我也回答完整想法", 1, 1, makeMessage);
   assert.equal(second.allResponded, true);
   assert.deepEqual(new Set(session.groupGate["1-1"]), new Set(["s1", "s2"]));
+});
+
+test("Step1/2 group gate records messages on configured runtime step ids", () => {
+  const session = baseSession({
+    currentStep: 21,
+    workflowSteps: [
+      { step: 21, name: "重排後的審視題目", mode: "group_interaction", capability: "topic_discussion" }
+    ],
+    personalSteps: { s1: 21, s2: 21 }
+  });
+
+  const first = handleStep1Or2Group(session, "s1", "我先回答完整想法", 1, 21, makeMessage);
+  assert.equal(first.allResponded, false);
+  assert.equal(session.messages.at(-1)?.step, 21);
+
+  advanceStep1Or2SubstepAfterAi(session, 1, 21, 1, "請補充你們小組目前的立場。", makeMessage);
+  assert.equal(session.messages.at(-1)?.step, 21);
+  assert.match(session.messages.at(-1)?.text ?? "", /子步驟 1-2/);
 });
 
 test("Step1/2 group gate prioritizes joined users and does not block on absent members", () => {
@@ -461,10 +479,10 @@ test("Step1/2 group gate prioritizes joined users and does not block on absent m
     joinedUsers: ["s1", "s2"]
   });
 
-  const first = handleStep1Or2Group(session, "s1", "我先回答完整想法", makeMessage);
+  const first = handleStep1Or2Group(session, "s1", "我先回答完整想法", 1, 1, makeMessage);
   assert.equal(first.allResponded, false);
 
-  const second = handleStep1Or2Group(session, "s2", "我也回答完整想法", makeMessage);
+  const second = handleStep1Or2Group(session, "s2", "我也回答完整想法", 1, 1, makeMessage);
   assert.equal(second.allResponded, true);
 });
 
@@ -474,7 +492,7 @@ test("Step1/2 group gate does not auto-complete when one joined member has not a
     joinedUsers: ["s1", "s2"]
   });
 
-  const first = handleStep1Or2Group(session, "s2", "我先回答完整想法", makeMessage);
+  const first = handleStep1Or2Group(session, "s2", "我先回答完整想法", 1, 1, makeMessage);
   assert.equal(first.allResponded, false);
   assert.deepEqual(new Set(session.groupGate["1-1"]), new Set(["s2"]));
 });
@@ -485,13 +503,13 @@ test("Step1/2 group gate falls back to participants when joinedUsers is unavaila
     joinedUsers: []
   });
 
-  const first = handleStep1Or2Group(session, "s1", "我先回答完整想法", makeMessage);
+  const first = handleStep1Or2Group(session, "s1", "我先回答完整想法", 1, 1, makeMessage);
   assert.equal(first.allResponded, false);
 
-  const second = handleStep1Or2Group(session, "s2", "我也回答完整想法", makeMessage);
+  const second = handleStep1Or2Group(session, "s2", "我也回答完整想法", 1, 1, makeMessage);
   assert.equal(second.allResponded, false);
 
-  const third = handleStep1Or2Group(session, "s3", "我最後回答完整想法", makeMessage);
+  const third = handleStep1Or2Group(session, "s3", "我最後回答完整想法", 1, 1, makeMessage);
   assert.equal(third.allResponded, true);
 });
 
@@ -507,7 +525,7 @@ test("Step1/2 advancement accepts resolved next question and still falls back wh
     }
   });
 
-  advanceStep1Or2SubstepAfterAi(session, 1, 1, "resolved：請補充你們小組目前的立場。", makeMessage);
+  advanceStep1Or2SubstepAfterAi(session, 1, 1, 1, "resolved：請補充你們小組目前的立場。", makeMessage);
   assert.equal(session.stepState.step1Substep, 2);
   assert.match(session.messages.at(-1)?.text ?? "", /resolved：請補充你們小組目前的立場/);
 
@@ -523,7 +541,7 @@ test("Step1/2 advancement accepts resolved next question and still falls back wh
     },
     stepState: { step1Substep: 1, step2Substep: 1, step1Substep3Question: 1, step1Substep4Question: 1, step2Substep1Question: 1 }
   });
-  advanceStep1Or2SubstepAfterAi(step2Session, 2, 1, undefined, makeMessage);
+  advanceStep1Or2SubstepAfterAi(step2Session, 2, 2, 1, undefined, makeMessage);
   assert.equal(step2Session.stepState.step2Substep1Question, 2);
   assert.match(step2Session.messages.at(-1)?.text ?? "", /fallback：請挑一個具體例子/);
 });
@@ -669,7 +687,7 @@ test("Step1/2 advancement accepts resolved next question for Step2 branches", ()
       stepOpenings: {}
     }
   });
-  advanceStep1Or2SubstepAfterAi(session, 2, 2, "resolved：請說明這個例子的因果鏈？", makeMessage);
+  advanceStep1Or2SubstepAfterAi(session, 2, 2, 2, "resolved：請說明這個例子的因果鏈？", makeMessage);
   assert.equal(session.stepState.step2Substep, 3);
   assert.match(session.messages.at(-1)?.text ?? "", /子步驟 2-3：resolved/);
 });
@@ -708,7 +726,7 @@ test("advanced stuck risk combines rejection, idle, Step3, and Step6 signals", (
   assert.equal(risk.level, "stuck");
   assert.deepEqual(risk.pendingMembers, ["s1"]);
   assert.match(risk.reasons.join("\n"), /多次送出未通過回答品質檢查/);
-  assert.match(risk.reasons.join("\n"), /Step3 結構樹/);
+  assert.match(risk.reasons.join("\n"), /結構樹/);
   assert.match(risk.reasons.join("\n"), /一段時間未更新/);
   assert.ok(risk.suggestions.some((suggestion) => suggestion.includes("完成結構樹")));
 
@@ -723,7 +741,7 @@ test("advanced stuck risk combines rejection, idle, Step3, and Step6 signals", (
     },
     new Date("2026-05-06T00:15:00.000Z").getTime()
   );
-  assert.match(step6Risk.reasons.join("\n"), /Step6 初稿字數偏低/);
+  assert.match(step6Risk.reasons.join("\n"), /初稿字數偏低/);
 });
 
 test("student next-action card gives concrete action instead of generic status", () => {
@@ -1050,9 +1068,21 @@ test("waiting exclusion never creates a zero-member auto-complete gate", () => {
   assert.deepEqual(resolveStep12GateMembers(session), []);
 });
 
-test("teacher monitor keeps Step3/4 advance gates on fast polling", () => {
+test("teacher monitor keeps outline advance gates on fast polling", () => {
   assert.equal(hasLowLatencyStepAdvanceGate([{ sessionId: "s1", currentStep: 3 }]), true);
   assert.equal(hasLowLatencyStepAdvanceGate([{ sessionId: "s1", currentStep: 4 }]), true);
+  assert.equal(
+    hasLowLatencyStepAdvanceGate([
+      {
+        sessionId: "s2",
+        currentStep: 23,
+        workflowSteps: [
+          { step: 23, name: "重排後生成論點", mode: "personal_interaction", capability: "outline" }
+        ]
+      }
+    ]),
+    true
+  );
   assert.equal(hasLowLatencyStepAdvanceGate([{ sessionId: "s1", currentStep: 5 }]), false);
   assert.equal(
     resolveTeacherMonitorNextPollDelay({ currentDelayMs: 12000, unchanged: true, hasLowLatencyGate: true }),
