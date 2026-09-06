@@ -468,7 +468,7 @@ export default function LearningMonitorTab({
       membersText: (session.participants ?? []).join("、") || "—",
       currentStep: getGroupCurrentStep(session),
       currentStepLabel: getDetailedStepCode(session, getGroupCurrentStep(session)),
-      stepDurationsText: formatStepDurationsText(computeSessionStepDurations(session)),
+      stepDurationsText: formatStepDurationsText(computeSessionStepDurations(session), session),
       totalSpeechCount: session.messages.filter((m) => m.role === "student").length
     }));
   }, [filteredMonitorSessions]);
@@ -497,7 +497,7 @@ export default function LearningMonitorTab({
           groupName,
           currentStep: session.personalSteps?.[username] ?? session.currentStep,
           currentStepLabel: getDetailedStepCode(session, session.personalSteps?.[username] ?? session.currentStep),
-          stepDurationsText: formatStepDurationsText(computeUserStepDurations(session, username)),
+          stepDurationsText: formatStepDurationsText(computeUserStepDurations(session, username), session),
           totalSpeechCount: ownMessages.length
         });
       }

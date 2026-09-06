@@ -10,7 +10,12 @@ import { resolveStudentReportCompletedAtIso } from "@/src/lib/course-report-comp
 import { injectStep8DraftTimeline } from "@/src/lib/course-report-pdf-timeline";
 import { buildCourseImplementationPortfolioJsonString } from "@/src/lib/courseImplementationPortfolioJson";
 import { COURSE_REPORT_FILE_VERSION } from "@/src/lib/course-report-version";
-import { getSessionWorkflowSteps, getWorkflowStepByCapability, getWorkflowStepName } from "@/src/lib/course-workflow";
+import {
+  getReachedWorkflowCapabilities,
+  getWorkflowStepByCapability,
+  getWorkflowStepName,
+  getWorkflowStepOrderIndex
+} from "@/src/lib/course-workflow";
 
 export type ExportJobStatus = "queued" | "running" | "retrying" | "packaging" | "succeeded" | "failed" | "canceled";
 export type ExportJobFormat = "pdf" | "json";
@@ -114,9 +119,7 @@ function getWorkflowOwner(workflowSteps?: CourseWorkflowStep[]): { workflowSteps
 }
 
 function getStepOrderIndex(workflowSteps: CourseWorkflowStep[] | undefined, step: number): number {
-  const steps = getSessionWorkflowSteps(getWorkflowOwner(workflowSteps));
-  const index = steps.findIndex((item) => item.step === step);
-  return index >= 0 ? index : Math.max(0, step - 1);
+  return getWorkflowStepOrderIndex(getWorkflowOwner(workflowSteps), step);
 }
 
 function addReachedCapabilities(
@@ -124,23 +127,7 @@ function addReachedCapabilities(
   workflowSteps: CourseWorkflowStep[] | undefined,
   currentStep: number
 ) {
-  const steps = getSessionWorkflowSteps(getWorkflowOwner(workflowSteps));
-  const index = steps.findIndex((item) => item.step === currentStep);
-  if (index >= 0) {
-    steps.slice(0, index + 1).forEach((item) => reached.add(item.capability));
-    return;
-  }
-
-  if (currentStep >= 1) reached.add("topic_discussion");
-  if (currentStep >= 2) reached.add("research_discussion");
-  if (currentStep >= 3) reached.add("outline");
-  if (currentStep >= 4) reached.add("peer_outline");
-  if (currentStep >= 5) reached.add("summary_report");
-  if (currentStep >= 6) reached.add("draft");
-  if (currentStep >= 7) reached.add("feedback_report");
-  if (currentStep >= 8) reached.add("revision");
-  if (currentStep >= 9) reached.add("reflection");
-  if (currentStep >= 10) reached.add("final_report");
+  getReachedWorkflowCapabilities(getWorkflowOwner(workflowSteps), currentStep).forEach((capability) => reached.add(capability));
 }
 
 async function resolveExportInput(
@@ -310,24 +297,31 @@ async function buildStudentReportInput(input: {
     activityId: input.activityId,
     workflow: "spec10",
   });
-  const peerOutlineStep = getWorkflowStepByCapability(session, "peer_outline")?.step ?? 4;
-  const revisionStep = getWorkflowStepByCapability(session, "revision")?.step ?? 8;
+  const peerOutlineStep = getWorkflowStepByCapability(session, "peer_outline")?.step;
+  const revisionStep = getWorkflowStepByCapability(session, "revision")?.step;
   const step3Session = courseSessions.find((candidate) => candidate.step3SubmittedOutlines?.[input.username]?.trim());
   const step4Session = courseSessions.find((candidate) => {
-    const candidatePeerOutlineStep = getWorkflowStepByCapability(candidate, "peer_outline")?.step ?? peerOutlineStep;
+    const candidatePeerOutlineStep = getWorkflowStepByCapability(candidate, "peer_outline")?.step;
+    if (candidatePeerOutlineStep === undefined) return false;
     const personalStep = candidate.personalSteps?.[input.username] ?? candidate.currentStep;
     return getStepOrderIndex(candidate.workflowSteps, personalStep) >= getStepOrderIndex(candidate.workflowSteps, candidatePeerOutlineStep) &&
       candidate.outlines?.[input.username]?.trim();
   });
-  const timelineMessages = injectStep8DraftTimeline(
-    toTimelineMessages(session, input.username),
-    session.draftStep8?.[input.username] ?? "",
-    nowIso(),
-    revisionStep
-  );
+  const baseTimelineMessages = toTimelineMessages(session, input.username);
+  const timelineMessages = revisionStep !== undefined
+    ? injectStep8DraftTimeline(
+        baseTimelineMessages,
+        session.draftStep8?.[input.username] ?? "",
+        nowIso(),
+        revisionStep,
+        session.workflowSteps
+      )
+    : baseTimelineMessages;
   const step3SubmittedOutline = step3Session?.step3SubmittedOutlines?.[input.username] ?? "";
   const step4RevisedOutline = step4Session?.outlines?.[input.username] ?? "";
-  const step4ProcessMessages = toTimelineMessages(step4Session ?? session, input.username).filter((message) => message.step === peerOutlineStep);
+  const step4ProcessMessages = peerOutlineStep !== undefined
+    ? toTimelineMessages(step4Session ?? session, input.username).filter((message) => message.step === peerOutlineStep)
+    : [];
   const step5Report = firstCourseArtifact(courseSessions, (candidate) => candidate.reports?.step5?.[input.username]);
   const step6Draft = firstCourseArtifact(courseSessions, (candidate) => candidate.draftStep6?.[input.username]);
   const step7Report = firstCourseArtifact(courseSessions, (candidate) => candidate.reports?.step7?.[input.username]);

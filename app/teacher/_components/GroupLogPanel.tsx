@@ -57,10 +57,9 @@ function GroupLogPanel({
       ) : null}
       {expanded && monitorSelected ? (() => {
         const allGroupMsgs = monitorSelected.messages;
-        const groupSteps = getStepsFromMessages(allGroupMsgs);
         const stepNames = new Map(getSessionWorkflowSteps(monitorSelected).map((item) => [item.step, item.name]));
-        const outlineStep = getWorkflowStepByCapability(monitorSelected, "outline")?.step ?? 3;
-        const peerOutlineStep = getWorkflowStepByCapability(monitorSelected, "peer_outline")?.step ?? 4;
+        const outlineStep = getWorkflowStepByCapability(monitorSelected, "outline")?.step;
+        const peerOutlineStep = getWorkflowStepByCapability(monitorSelected, "peer_outline")?.step;
 
         const hasStep3 = monitorSelected.participants.some((p) => monitorSelected.step3SubmittedOutlines?.[p]);
         const hasStep4Revised = monitorSelected.participants.some((p) => {
@@ -68,10 +67,17 @@ function GroupLogPanel({
           const c = monitorSelected.outlines?.[p];
           return c && c !== s;
         });
+        const groupSteps = getStepsFromMessages(allGroupMsgs, {
+          workflowSteps: monitorSelected.workflowSteps,
+          includeSteps: [
+            hasStep3 ? outlineStep : undefined,
+            hasStep4Revised ? peerOutlineStep : undefined,
+          ].filter((step): step is number => typeof step === "number"),
+        });
 
-        const step3Block = hasStep3 ? (
+        const step3Block = hasStep3 && outlineStep !== undefined ? (
           <div style={{ borderTop: "2px solid var(--line)", padding: "12px 0", marginTop: 4 }}>
-            <strong style={{ fontSize: 13, color: "var(--muted-strong)" }}>{stepNames.get(outlineStep) ?? "生成論點"} 各組員完成結構樹</strong>
+            <strong style={{ fontSize: 13, color: "var(--muted-strong)" }}>{stepNames.get(outlineStep) ?? "結構樹"} 各組員完成結構樹</strong>
             {monitorSelected.participants.map((p) => {
               const submitted = monitorSelected.step3SubmittedOutlines?.[p];
               if (!submitted) return null;
@@ -85,9 +91,9 @@ function GroupLogPanel({
           </div>
         ) : null;
 
-        const step4Block = hasStep4Revised ? (
+        const step4Block = hasStep4Revised && peerOutlineStep !== undefined ? (
           <div style={{ borderTop: "2px solid var(--line)", padding: "12px 0", marginTop: 4 }}>
-            <strong style={{ fontSize: 13, color: "var(--muted-strong)" }}>{stepNames.get(peerOutlineStep) ?? "對比修正"} 各組員修正後結構樹</strong>
+            <strong style={{ fontSize: 13, color: "var(--muted-strong)" }}>{stepNames.get(peerOutlineStep) ?? "修正"} 各組員修正後結構樹</strong>
             {monitorSelected.participants.map((p) => {
               const s = monitorSelected.step3SubmittedOutlines?.[p];
               const c = monitorSelected.outlines?.[p];
@@ -104,7 +110,7 @@ function GroupLogPanel({
 
         const anyMsgs = allGroupMsgs.length > 0;
         return (
-          <>
+                  <>
             {groupSteps.map((step) => {
               const stepMsgs = allGroupMsgs.filter((m) => m.step === step);
               if (stepMsgs.length === 0) return null;
@@ -144,8 +150,8 @@ function GroupLogPanel({
                           <small>{message.at}</small>
                         </div>
                       ))}
-                      {step === outlineStep && step3Block}
-                      {step === peerOutlineStep && step4Block}
+                      {outlineStep !== undefined && step === outlineStep && step3Block}
+                      {peerOutlineStep !== undefined && step === peerOutlineStep && step4Block}
                     </>
                   ) : null}
                 </div>

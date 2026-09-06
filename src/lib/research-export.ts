@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { maskPeerUsernames } from "@/src/lib/report-rendering";
 import type { Activity, SessionState } from "@/src/lib/types";
-import { getWorkflowStepByCapability } from "@/src/lib/course-workflow";
+import { getWorkflowStepByCapability, isWorkflowStepAtOrAfter } from "@/src/lib/course-workflow";
 
 export type ResearchExportIdentityMode = "anonymous" | "account";
 
@@ -136,22 +136,24 @@ export function buildResearchStudentInputExport(input: {
       .filter((record): record is ResearchStudentInputRecord => Boolean(record));
     const artifactRecords = session.participants.flatMap((username) => {
       const personalStep = session.personalSteps?.[username] ?? session.currentStep;
-      const outlineStep = getWorkflowStepByCapability(session, "outline")?.step ?? 3;
-      const peerOutlineStep = getWorkflowStepByCapability(session, "peer_outline")?.step ?? 4;
-      const draftStep = getWorkflowStepByCapability(session, "draft")?.step ?? 6;
-      const revisionStep = getWorkflowStepByCapability(session, "revision")?.step ?? 8;
+      const outlineStep = getWorkflowStepByCapability(session, "outline")?.step;
+      const peerOutlineStep = getWorkflowStepByCapability(session, "peer_outline")?.step;
+      const draftStep = getWorkflowStepByCapability(session, "draft")?.step;
+      const revisionStep = getWorkflowStepByCapability(session, "revision")?.step;
       const records: Array<ResearchStudentInputRecord | null> = [
-        buildRecord({
-          activityId: input.activity.id,
-          session,
-          type: "step3_submitted_outline",
-          username,
-          step: outlineStep,
-          at: artifactTimestamp(session, username, "outline"),
-          text: session.step3SubmittedOutlines?.[username] ?? "",
-          identityMode
-        }),
-        personalStep >= peerOutlineStep
+        outlineStep !== undefined
+          ? buildRecord({
+              activityId: input.activity.id,
+              session,
+              type: "step3_submitted_outline",
+              username,
+              step: outlineStep,
+              at: artifactTimestamp(session, username, "outline"),
+              text: session.step3SubmittedOutlines?.[username] ?? "",
+              identityMode
+            })
+          : null,
+        peerOutlineStep !== undefined && isWorkflowStepAtOrAfter(session, personalStep, peerOutlineStep)
           ? buildRecord({
               activityId: input.activity.id,
               session,
@@ -163,26 +165,30 @@ export function buildResearchStudentInputExport(input: {
               identityMode
             })
           : null,
-        buildRecord({
-          activityId: input.activity.id,
-          session,
-          type: "draft_step6",
-          username,
-          step: draftStep,
-          at: artifactTimestamp(session, username, "draftStep6"),
-          text: session.draftStep6?.[username] ?? "",
-          identityMode
-        }),
-        buildRecord({
-          activityId: input.activity.id,
-          session,
-          type: "draft_step8",
-          username,
-          step: revisionStep,
-          at: artifactTimestamp(session, username, "draftStep8"),
-          text: session.draftStep8?.[username] ?? "",
-          identityMode
-        })
+        draftStep !== undefined
+          ? buildRecord({
+              activityId: input.activity.id,
+              session,
+              type: "draft_step6",
+              username,
+              step: draftStep,
+              at: artifactTimestamp(session, username, "draftStep6"),
+              text: session.draftStep6?.[username] ?? "",
+              identityMode
+            })
+          : null,
+        revisionStep !== undefined
+          ? buildRecord({
+              activityId: input.activity.id,
+              session,
+              type: "draft_step8",
+              username,
+              step: revisionStep,
+              at: artifactTimestamp(session, username, "draftStep8"),
+              text: session.draftStep8?.[username] ?? "",
+              identityMode
+            })
+          : null
       ];
       return records.filter((record): record is ResearchStudentInputRecord => Boolean(record));
     });

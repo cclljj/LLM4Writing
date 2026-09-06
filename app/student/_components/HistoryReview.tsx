@@ -21,8 +21,8 @@ type StepReview = {
 
 type HistoryReviewProps = {
   steps: StepReview[];
-  outlineStep: number;
-  peerOutlineStep: number;
+  outlineStep?: number;
+  peerOutlineStep?: number;
   step3SubmittedOutlineMermaid?: string;
   step4OutlineMermaid?: string;
 };
@@ -108,13 +108,13 @@ function HistoryReview({
                 ) : (
                   <small>此步驟目前沒有可顯示的個人互動紀錄。</small>
                 )}
-                {review.step === outlineStep && step3SubmittedOutlineMermaid ? (
+                {outlineStep !== undefined && review.step === outlineStep && step3SubmittedOutlineMermaid ? (
                   <div style={{ marginTop: 14, borderTop: "1px solid var(--line-soft)", paddingTop: 10 }}>
                     <strong>完成時繳交的結構樹</strong>
                     <OutlineSvg compact mermaidText={step3SubmittedOutlineMermaid} />
                   </div>
                 ) : null}
-                {review.step === peerOutlineStep && step4OutlineMermaid ? (
+                {peerOutlineStep !== undefined && review.step === peerOutlineStep && step4OutlineMermaid ? (
                   <div style={{ marginTop: 14, borderTop: "1px solid var(--line-soft)", paddingTop: 10 }}>
                     <strong>修正後結構樹</strong>
                     <OutlineSvg compact mermaidText={step4OutlineMermaid} />

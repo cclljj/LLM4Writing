@@ -1147,7 +1147,8 @@ function buildStep5LlmInput(
   const fallback = buildStep5FallbackSummary(session, userId);
   const systemParts: string[] = [];
   if (session.promptConfig.systemPrompt) systemParts.push(session.promptConfig.systemPrompt);
-  const step5Prompt = session.promptConfig.stepPrompts[getWorkflowPromptStepKey(session, getWorkflowStepByCapability(session, "summary_report")?.step ?? 5)];
+  const summaryStep = getWorkflowStepByCapability(session, "summary_report")?.step;
+  const step5Prompt = summaryStep !== undefined ? session.promptConfig.stepPrompts[getWorkflowPromptStepKey(session, summaryStep)] : undefined;
   if (step5Prompt) systemParts.push(step5Prompt);
   systemParts.push("請只輸出摘要報告，不要輸出 JSON。");
 
@@ -1172,7 +1173,7 @@ function buildStep5LlmInput(
 
 async function generateStep5SummaryForUser(session: SessionState, userId: string): Promise<string> {
   const { messages, fallback } = buildStep5LlmInput(session, userId);
-  const summaryStep = getWorkflowStepByCapability(session, "summary_report")?.step ?? 5;
+  const summaryStep = getWorkflowStepByCapability(session, "summary_report")?.step;
   if (!isLlmConfigured()) return fallback;
   try {
     const raw = await generateAiTextWithRetry(messages, 0.6, scaleTokens(1200), {
@@ -1236,7 +1237,7 @@ export function buildStep10LlmInput(
 
 async function generateStep10Report(session: SessionState, userId: string): Promise<string> {
   const { messages, fallback } = buildStep10LlmInput(session, userId);
-  const finalStep = getWorkflowStepByCapability(session, "final_report")?.step ?? 10;
+  const finalStep = getWorkflowStepByCapability(session, "final_report")?.step;
   if (!isLlmConfigured()) {
     return fallback;
   }
@@ -1313,7 +1314,7 @@ export async function generateStep10ReportChunkedText(
  * collecting all SSE chunks.
  */
 export function recordStep10Report(session: SessionState, userId: string, report: string): void {
-  const finalStep = getWorkflowStepByCapability(session, "final_report")?.step ?? 10;
+  const finalStep = getWorkflowStepByCapability(session, "final_report")?.step ?? session.currentStep;
   session.reports.step10[userId] = report;
   session.messages.push(makeMessage({ role: "ai", userId, step: finalStep, text: report }));
 }
@@ -1333,7 +1334,8 @@ async function finalizeStep9ForUser(
   options: { generateReport?: boolean } = {}
 ): Promise<void> {
   session.personalSteps = session.personalSteps ?? {};
-  const finalStep = getWorkflowStepByCapability(session, "final_report")?.step ?? getNextWorkflowStep(session, session.personalSteps[userId] ?? session.currentStep)?.step ?? session.currentStep;
+  const currentStep = session.personalSteps[userId] ?? session.currentStep;
+  const finalStep = getWorkflowStepByCapability(session, "final_report")?.step ?? getNextWorkflowStep(session, currentStep)?.step ?? currentStep;
   session.personalSteps[userId] = finalStep;
   const generateReport = options.generateReport ?? true;
   if (!generateReport) return;
@@ -1345,7 +1347,8 @@ async function finalizeStep9ForUser(
 export async function reconcileCompletedStep9Users(session: SessionState): Promise<boolean> {
   normalizeSessionRuntimeShape(session);
   const step9Questions = getStep9Questions(session);
-  const reflectionStep = getWorkflowStepByCapability(session, "reflection")?.step ?? 9;
+  const reflectionStep = getWorkflowStepByCapability(session, "reflection")?.step;
+  if (reflectionStep === undefined) return false;
   const finalStep = getWorkflowStepByCapability(session, "final_report")?.step ?? getNextWorkflowStep(session, reflectionStep)?.step ?? reflectionStep;
   const STEP10_RECONCILE_CONCURRENCY = 3;
   let changed = false;

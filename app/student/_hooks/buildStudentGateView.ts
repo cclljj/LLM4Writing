@@ -20,14 +20,14 @@ export function buildStudentGateView(input: {
   const { session, loginUser, currentStep, activityStatusMap, lastInteractiveKind } = input;
 
   const ownStep = session && loginUser ? session.personalSteps?.[loginUser] ?? session.currentStep : 1;
-  const outlineStep = getCapabilityStep(session, "outline") ?? 3;
-  const peerOutlineStep = getCapabilityStep(session, "peer_outline") ?? 4;
-  const summaryStep = getCapabilityStep(session, "summary_report") ?? 5;
-  const draftStep = getCapabilityStep(session, "draft") ?? 6;
-  const feedbackReportStep = getCapabilityStep(session, "feedback_report") ?? 7;
-  const revisionStep = getCapabilityStep(session, "revision") ?? 8;
-  const reflectionStep = getCapabilityStep(session, "reflection") ?? 9;
-  const finalReportStep = getCapabilityStep(session, "final_report") ?? 10;
+  const outlineStep = getCapabilityStep(session, "outline");
+  const peerOutlineStep = getCapabilityStep(session, "peer_outline");
+  const summaryStep = getCapabilityStep(session, "summary_report");
+  const draftStep = getCapabilityStep(session, "draft");
+  const feedbackReportStep = getCapabilityStep(session, "feedback_report");
+  const revisionStep = getCapabilityStep(session, "revision");
+  const reflectionStep = getCapabilityStep(session, "reflection");
+  const finalReportStep = getCapabilityStep(session, "final_report");
   const currentCapability = getCurrentCapability(session, currentStep);
   const isTopicDiscussionStep = currentCapability === "topic_discussion";
   const isResearchDiscussionStep = currentCapability === "research_discussion";
@@ -38,7 +38,8 @@ export function buildStudentGateView(input: {
   const isReflectionStep = currentCapability === "reflection";
   const isFinalReportStep = currentCapability === "final_report";
   const ownStepIndex = (session?.workflowSteps ?? []).findIndex((step) => step.step === ownStep);
-  const hasReachedCapability = (stepNumber: number) => {
+  const hasReachedCapability = (stepNumber: number | undefined) => {
+    if (stepNumber === undefined) return false;
     const targetIndex = (session?.workflowSteps ?? []).findIndex((step) => step.step === stepNumber);
     if (targetIndex >= 0 && ownStepIndex >= 0) return ownStepIndex >= targetIndex;
     return ownStep >= stepNumber;
@@ -100,8 +101,8 @@ export function buildStudentGateView(input: {
   const usernameToName = session?.participantDisplayNames ?? {};
   const toDisplayName = (username: string) => usernameToName[username] || username;
   const responders = activeGateKey ? session?.groupGate?.[activeGateKey] ?? [] : [];
-  const step3CompletedUsers = session?.groupGate?.[`${outlineStep}-complete`] ?? [];
-  const step4CompletedUsers = session?.groupGate?.[`${peerOutlineStep}-complete`] ?? [];
+  const step3CompletedUsers = outlineStep !== undefined ? session?.groupGate?.[`${outlineStep}-complete`] ?? [] : [];
+  const step4CompletedUsers = peerOutlineStep !== undefined ? session?.groupGate?.[`${peerOutlineStep}-complete`] ?? [] : [];
   const step3CompletedByMe = Boolean(loginUser && step3CompletedUsers.includes(loginUser));
   const step4CompletedByMe = Boolean(loginUser && step4CompletedUsers.includes(loginUser));
   const step4CompletedPeers = (session?.participants ?? []).filter(
@@ -183,7 +184,7 @@ export function buildStudentGateView(input: {
   const step9QuestionTexts = (() => {
     if (!isReflectionStep) return [] as string[];
     const latestSystem = [...(session?.messages ?? [])]
-      .filter((m) => m.step === reflectionStep && m.role === "system")
+      .filter((m) => reflectionStep !== undefined && m.step === reflectionStep && m.role === "system")
       .at(-1)?.text;
     const fromSystem = latestSystem
       ? Array.from(latestSystem.matchAll(/\n?[1-4]\.\s*(.+)/g)).map((m) => (m[1] ?? "").trim()).slice(0, 4)

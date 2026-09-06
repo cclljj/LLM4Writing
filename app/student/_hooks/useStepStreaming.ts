@@ -24,10 +24,10 @@ export function useStepStreaming(input: {
   const [step10StreamingText, setStep10StreamingText] = useState("");
   const [step10LoadingDots, setStep10LoadingDots] = useState<"..." | "......">("...");
   const step10StreamRequestedRef = useRef<string>("");
-  const finalReportStep = getCapabilityStep(session, "final_report") ?? 10;
+  const finalReportStep = getCapabilityStep(session, "final_report");
 
   useEffect(() => {
-    const isStep10Waiting = currentStep === finalReportStep && !ownStep10Report?.trim();
+    const isStep10Waiting = finalReportStep !== undefined && currentStep === finalReportStep && !ownStep10Report?.trim();
     if (!isStep10Waiting) {
       deferStateUpdate(() => setStep10LoadingDots("..."));
       return;
@@ -75,6 +75,7 @@ export function useStepStreaming(input: {
   // without a stored report yet (#241).
   useEffect(() => {
     if (!session || !loginUser) return;
+    if (finalReportStep === undefined) return;
     if (currentStep !== finalReportStep) return;
     if (ownStep10Report && ownStep10Report.trim()) return;
     if (step10StreamRequestedRef.current === session.id) return;

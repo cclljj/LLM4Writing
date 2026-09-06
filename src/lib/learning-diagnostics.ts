@@ -223,14 +223,16 @@ export function buildAdvancedStuckRisk(session: DiagnosticSession, nowMs = Date.
   }
 
   const draftChars = session.artifactDiagnostics?.draftStep6Chars ?? {};
-  const draftStep = getWorkflowStepByCapability(session, "draft")?.step ?? 6;
-  const step6Users = session.participants.filter((participant) => (session.personalSteps?.[participant] ?? session.currentStep) === draftStep);
-  const lowDraftUsers = step6Users.filter((participant) => (draftChars[participant] ?? 0) < DRAFT6_MIN_CHARS);
-  if (lowDraftUsers.length > 0) {
-    lowDraftUsers.forEach((user) => addUnique(affectedUsers, user));
-    addUnique(reasons, `${lowDraftUsers.join("、")} 的初稿字數偏低。`);
-    addUnique(suggestions, "建議學生先寫出開頭與一個完整理由段，再使用 AI 修改建議或進入下一步。");
-    level = escalate(level, minutesSinceLastEvent !== null && minutesSinceLastEvent >= IDLE_STUCK_MINUTES ? "stuck" : "watch");
+  const draftStep = getWorkflowStepByCapability(session, "draft")?.step;
+  if (draftStep !== undefined) {
+    const step6Users = session.participants.filter((participant) => (session.personalSteps?.[participant] ?? session.currentStep) === draftStep);
+    const lowDraftUsers = step6Users.filter((participant) => (draftChars[participant] ?? 0) < DRAFT6_MIN_CHARS);
+    if (lowDraftUsers.length > 0) {
+      lowDraftUsers.forEach((user) => addUnique(affectedUsers, user));
+      addUnique(reasons, `${lowDraftUsers.join("、")} 的初稿字數偏低。`);
+      addUnique(suggestions, "建議學生先寫出開頭與一個完整理由段，再使用 AI 修改建議或進入下一步。");
+      level = escalate(level, minutesSinceLastEvent !== null && minutesSinceLastEvent >= IDLE_STUCK_MINUTES ? "stuck" : "watch");
+    }
   }
 
   return {

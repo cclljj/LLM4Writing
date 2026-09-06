@@ -1,6 +1,7 @@
 import type { PersistedEventRow } from "@/src/lib/store";
 import { getTaipeiDateKey } from "@/src/lib/time-format";
-import type { SessionState } from "@/src/lib/types";
+import type { CourseWorkflowStep, SessionState } from "@/src/lib/types";
+import { getWorkflowStepOrderIndex, pickLaterWorkflowStep } from "@/src/lib/course-workflow";
 
 const FALLBACK_MARKERS = [
   "AI（生成論點）回覆：已收到你的提問",
@@ -67,6 +68,7 @@ type RunBucket = {
   startedAt: string;
   endedAt: string | null;
   participantUsernames: Set<string>;
+  workflowSteps?: CourseWorkflowStep[];
   latestStep: number;
   acceptedAnswers: number;
   totalAi: number;
@@ -155,7 +157,7 @@ function computeStepDurationSamples(session: SessionState): StepDurationSample[]
   }
 
   return Array.from(byDate.entries()).flatMap(([date, stepMap]) => {
-    const steps = Array.from(stepMap.keys()).sort((a, b) => a - b);
+    const steps = Array.from(stepMap.keys()).sort((a, b) => getWorkflowStepOrderIndex(session, a) - getWorkflowStepOrderIndex(session, b));
     return steps.flatMap((step, index) => {
       const current = stepMap.get(step);
       const nextStep = steps[index + 1];
@@ -175,6 +177,10 @@ function topSteps(record: Record<number, number>, limit = 3): number[] {
     .sort((a, b) => b.count - a.count || a.step - b.step)
     .slice(0, limit)
     .map((item) => item.step);
+}
+
+function runStepOrderIndex(run: Pick<RunBucket, "workflowSteps">, step: number): number {
+  return getWorkflowStepOrderIndex({ workflowSteps: run.workflowSteps }, step);
 }
 
 function getSessionGroupKey(session: SessionState): string {
@@ -198,6 +204,7 @@ function ensureRun(runs: Map<string, RunBucket>, session: SessionState, date: st
     startedAt: occurredAt || getSessionStartedAt(session),
     endedAt: null,
     participantUsernames: new Set<string>(),
+    workflowSteps: session.workflowSteps,
     latestStep: 0,
     acceptedAnswers: 0,
     totalAi: 0,
@@ -209,6 +216,7 @@ function ensureRun(runs: Map<string, RunBucket>, session: SessionState, date: st
   };
 
   run.sessionIds.add(session.id);
+  if (!run.workflowSteps || run.workflowSteps.length === 0) run.workflowSteps = session.workflowSteps;
   session.participants.forEach((participant) => run.participantUsernames.add(participant));
   if (occurredAt && (!run.startedAt || occurredAt.localeCompare(run.startedAt) < 0)) run.startedAt = occurredAt;
   if (occurredAt && (!run.endedAt || occurredAt.localeCompare(run.endedAt) > 0)) run.endedAt = occurredAt;
@@ -218,7 +226,7 @@ function ensureRun(runs: Map<string, RunBucket>, session: SessionState, date: st
 
 function addRunStep(run: RunBucket, step: number): void {
   if (Number.isFinite(step) && step > 0) {
-    run.latestStep = Math.max(run.latestStep, Math.round(step));
+    run.latestStep = pickLaterWorkflowStep({ workflowSteps: run.workflowSteps }, run.latestStep, Math.round(step));
   }
 }
 
@@ -310,7 +318,7 @@ function serializeDiagnosticsRuns(runs: RunBucket[]): CourseDiagnosticsSession[]
           averageMs: average(durations),
           sampleCount: durations.length
         }))
-        .sort((a, b) => a.step - b.step);
+        .sort((a, b) => runStepOrderIndex(run, a.step) - runStepOrderIndex(run, b.step));
       const riskiestSteps = Array.from(new Set([...topSteps(run.fallbackByStep, 2), ...topSteps(run.rejectedByStep, 2)])).slice(0, 3);
       return {
         runId: run.runId,
@@ -373,6 +381,7 @@ export function buildCourseDiagnostics(
   const totalRejections = diagnosticsSessions.reduce((sum, item) => sum + item.rejectionCount, 0);
   const totalAi = diagnosticsSessions.reduce((sum, item) => sum + item.totalAi, 0);
   const acceptedAnswers = diagnosticsSessions.reduce((sum, item) => sum + item.acceptedAnswers, 0);
+  const summaryWorkflowSteps = runBuckets.find((run) => run.workflowSteps && run.workflowSteps.length > 0)?.workflowSteps;
 
   const averageStepDurations = Object.entries(allStepDurations)
     .map(([step, durations]) => ({
@@ -380,7 +389,7 @@ export function buildCourseDiagnostics(
       averageMs: average(durations),
       sampleCount: durations.length
     }))
-    .sort((a, b) => a.step - b.step);
+    .sort((a, b) => getWorkflowStepOrderIndex({ workflowSteps: summaryWorkflowSteps }, a.step) - getWorkflowStepOrderIndex({ workflowSteps: summaryWorkflowSteps }, b.step));
 
   return {
     activityId,

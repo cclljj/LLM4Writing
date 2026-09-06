@@ -6,8 +6,10 @@ import { excludeWaitingMembers } from "@/src/lib/session-attendance";
 import {
   getGuidedDiscussionPromptStep,
   getNextWorkflowStep,
+  pickEarlierWorkflowStep,
   getSessionWorkflowSteps,
-  getWorkflowCapability
+  getWorkflowCapability,
+  getWorkflowStepOrderIndex
 } from "@/src/lib/course-workflow";
 import { MonitorSession } from "./types";
 
@@ -20,16 +22,16 @@ export function getGroupCurrentStep(session: MonitorSession): number {
   for (const p of participants) {
     const step = session.personalSteps[p];
     if (typeof step === "number") {
-      minStep = minStep === null ? step : Math.min(minStep, step);
+      minStep = minStep === null ? step : pickEarlierWorkflowStep(session, minStep, step);
     }
   }
   return minStep ?? session.currentStep;
 }
 
-export function formatStepDurationsText(entries: Array<{ step: number; minutes: number }>): string {
+export function formatStepDurationsText(entries: Array<{ step: number; minutes: number }>, session?: MonitorSession): string {
   if (entries.length === 0) return "—";
   return entries
-    .sort((a, b) => a.step - b.step)
+    .sort((a, b) => getWorkflowStepOrderIndex(session ?? {}, a.step) - getWorkflowStepOrderIndex(session ?? {}, b.step))
     .map((entry) => `S${entry.step}:${entry.minutes}分`)
     .join(" / ");
 }
@@ -155,7 +157,8 @@ export function hasStep3CompletionEvidence(
   completedUsers?: ReadonlySet<string>
 ): boolean {
   if (completedUsers?.has(participant)) return true;
-  const outlineStep = getSessionWorkflowSteps(session).find((step) => step.capability === "outline")?.step ?? 3;
+  const outlineStep = getSessionWorkflowSteps(session).find((step) => step.capability === "outline")?.step;
+  if (outlineStep === undefined) return false;
   const reopenedUsers = new Set(session.groupGate?.[`${outlineStep}-reopen`] ?? []);
   if (reopenedUsers.has(participant)) return false;
   const submitted = session.step3SubmittedOutlines?.[participant]?.trim() ?? "";

@@ -77,6 +77,26 @@ test("course diagnostics prefers persisted learning events when available", () =
   assert.equal(diagnostics.summary.highestRejectionStep, 3);
 });
 
+test("course diagnostics uses workflow order when resolving latest progress", () => {
+  const diagnostics = buildCourseDiagnostics("oc-1", [
+    makeSession({
+      workflowSteps: [
+        { step: 30, name: "先討論", mode: "group_interaction", capability: "topic_discussion" },
+        { step: 10, name: "後修正", mode: "group_interaction", capability: "peer_outline" },
+        { step: 20, name: "最後報告", mode: "non_interactive", capability: "final_report" }
+      ],
+      messages: [
+        { id: "r1", role: "student", userId: "stu1", step: 30, text: "先做", at: "2026-06-01T01:00:00.000Z" },
+        { id: "r2", role: "student", userId: "stu2", step: 10, text: "再做", at: "2026-06-01T01:05:00.000Z" }
+      ],
+      qualitySignals: { rejectedAnswerCounts: {}, rejectedAnswerLastAt: {} }
+    })
+  ]);
+
+  assert.equal(diagnostics.sessions[0]?.latestStep, 10);
+  assert.equal(diagnostics.sessions[0]?.stepDurations.find((item) => item.step === 30)?.averageMs, 300_000);
+});
+
 test("course diagnostics groups same-day sessions by group and splits different days", () => {
   const sameDayA = makeSession({
     id: "s-a",

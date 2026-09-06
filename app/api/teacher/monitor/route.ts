@@ -59,13 +59,13 @@ async function buildMonitorSessionPayload(
 ) {
   const messagesWithOpenings = detail === "full" ? buildMessagesWithOpenings(session) : [];
   const lastMessage = session.messages[session.messages.length - 1];
-  const topicStep = getWorkflowStepByCapability(session, "topic_discussion")?.step ?? 1;
-  const researchStep = getWorkflowStepByCapability(session, "research_discussion")?.step ?? 2;
+  const topicStep = getWorkflowStepByCapability(session, "topic_discussion")?.step;
+  const researchStep = getWorkflowStepByCapability(session, "research_discussion")?.step;
   const step1Ready = session.messages.some(
-    (message) => message.step === topicStep && message.role === "system" && message.text.includes("步驟 1 子步驟已完成，等待教師切換下一步")
+    (message) => topicStep !== undefined && message.step === topicStep && message.role === "system" && message.text.includes("步驟 1 子步驟已完成，等待教師切換下一步")
   );
   const step2Ready = session.messages.some(
-    (message) => message.step === researchStep && message.role === "system" && message.text.includes("步驟 2 子步驟已完成，等待教師切換下一步")
+    (message) => researchStep !== undefined && message.step === researchStep && message.role === "system" && message.text.includes("步驟 2 子步驟已完成，等待教師切換下一步")
   );
   const studentMessageStats = Object.fromEntries(
     session.participants.map((participant) => {

@@ -199,6 +199,16 @@ test("source-guard: store keeps optimistic-lock error type", async () => {
   assert.ok(src.includes("SessionVersionConflictError"));
 });
 
+test("source-guard: store merges currentStep by workflow order instead of numeric max", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { resolve, dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const thisDir = dirname(fileURLToPath(import.meta.url));
+  const src = readFileSync(resolve(thisDir, "../src/lib/store.ts"), "utf8");
+  assert.ok(src.includes("pickLaterWorkflowStep"), "store should use workflow order for conflict-merged currentStep");
+  assert.equal(src.includes("Math.max(latest.currentStep, incoming.currentStep)"), false);
+});
+
 test("source-guard: activity-scoped routes avoid unbounded listSessions", async () => {
   const { readFileSync } = await import("node:fs");
   const { resolve, dirname } = await import("node:path");

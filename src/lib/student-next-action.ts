@@ -31,21 +31,7 @@ function waitingNames(names: string[]): string {
 }
 
 export function buildStudentNextAction(input: StudentNextActionInput): StudentNextAction {
-  const currentCapability =
-    input.currentCapability ??
-    (input.currentStep === 3
-      ? "outline"
-      : input.currentStep === 4
-        ? "peer_outline"
-        : input.currentStep === 6
-          ? "draft"
-          : input.currentStep === 8
-            ? "revision"
-            : input.currentStep === 9
-              ? "reflection"
-              : input.currentStep === 10
-                ? "final_report"
-                : undefined);
+  const currentCapability = input.currentCapability;
   const hasAiWaitInThisStep = currentCapability !== "peer_outline";
   if (input.isSendingMessage || (hasAiWaitInThisStep && input.waitingAiForGroup)) {
     return {

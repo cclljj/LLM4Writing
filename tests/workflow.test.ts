@@ -38,6 +38,7 @@ import {
   TEACHER_MONITOR_MIN_POLL_MS
 } from "../src/lib/teacher-monitor-polling";
 import { renderMessageHtml } from "../app/student/_components/renderMessageHtml";
+import { getGroupCurrentStep } from "../app/teacher/_components/monitor-utils";
 
 function makeMessage(input: Omit<ChatMessage, "id" | "at">): ChatMessage {
   return { id: `m-${Math.random()}`, at: "2026-05-06T00:00:00.000Z", ...input };
@@ -748,6 +749,7 @@ test("student next-action card gives concrete action instead of generic status",
   assert.match(
     buildStudentNextAction({
       currentStep: 1,
+      currentCapability: "topic_discussion",
       currentMode: "group_interaction",
       canReplyToQuestion: true,
       isSendingMessage: false,
@@ -770,6 +772,7 @@ test("student next-action card gives concrete action instead of generic status",
   assert.match(
     buildStudentNextAction({
       currentStep: 3,
+      currentCapability: "outline",
       currentMode: "personal_interaction",
       canReplyToQuestion: true,
       isSendingMessage: false,
@@ -792,6 +795,7 @@ test("student next-action card gives concrete action instead of generic status",
   assert.match(
     buildStudentNextAction({
       currentStep: 6,
+      currentCapability: "draft",
       currentMode: "personal_interaction",
       canReplyToQuestion: false,
       isSendingMessage: false,
@@ -813,6 +817,7 @@ test("student next-action card gives concrete action instead of generic status",
 
   const step4Action = buildStudentNextAction({
     currentStep: 4,
+    currentCapability: "peer_outline",
     currentMode: "group_interaction",
     canReplyToQuestion: true,
     isSendingMessage: false,
@@ -830,6 +835,39 @@ test("student next-action card gives concrete action instead of generic status",
     step9AnsweredCount: 0
   });
   assert.equal(step4Action.title, "確認修正完成");
+});
+
+test("workflow order drives monitor progress and next-action capability for reordered step ids", () => {
+  const session = baseSession({
+    currentStep: 30,
+    workflowSteps: [
+      { step: 30, name: "先做同儕修正", mode: "group_interaction", capability: "peer_outline" },
+      { step: 20, name: "再寫初稿", mode: "personal_interaction", capability: "draft" }
+    ],
+    personalSteps: { s1: 20, s2: 30 }
+  });
+  assert.equal(getGroupCurrentStep({ ...session, sessionId: session.id }), 30);
+
+  const action = buildStudentNextAction({
+    currentStep: 99,
+    currentCapability: "outline",
+    currentMode: "personal_interaction",
+    canReplyToQuestion: true,
+    isSendingMessage: false,
+    waitingAiForGroup: false,
+    waitingGroupMembers: false,
+    waitingGroupMemberNames: [],
+    step1CompletedWaitingTeacher: false,
+    step2CompletedWaitingTeacher: false,
+    step3CompletedByMe: false,
+    waitingStep3Members: false,
+    step4CompletedByMe: false,
+    allStep4Completed: false,
+    draftTextLength: 0,
+    unsavedDraftChars: 0,
+    step9AnsweredCount: 0
+  });
+  assert.equal(action.primaryAction, "完成結構樹");
 });
 
 test("step6 draft validation rejects insufficient content and accepts a real essay draft", () => {

@@ -35,6 +35,7 @@ test("polling guard rejects stale sessions that would roll back personal step", 
 test("step6 hydrates on entry and when local draft is empty, not while editing", () => {
   // Just entered step6 -> hydrate even over local text.
   const entering = resolveDraftHydration({
+    draftStep: 6, revisionStep: 8,
     ownStep: 6, lastOwnStep: 5, draftText: "local edit", savedDraft8Text: "",
     latestDraft6: "server draft", latestDraft8: undefined
   });
@@ -43,6 +44,7 @@ test("step6 hydrates on entry and when local draft is empty, not while editing",
 
   // Already in step6 with local text -> never overwrite.
   const editing = resolveDraftHydration({
+    draftStep: 6, revisionStep: 8,
     ownStep: 6, lastOwnStep: 6, draftText: "typing...", savedDraft8Text: "",
     latestDraft6: "server draft", latestDraft8: undefined
   });
@@ -50,6 +52,7 @@ test("step6 hydrates on entry and when local draft is empty, not while editing",
 
   // Already in step6 but local draft empty -> rehydrate from server.
   const emptied = resolveDraftHydration({
+    draftStep: 6, revisionStep: 8,
     ownStep: 6, lastOwnStep: 6, draftText: "", savedDraft8Text: "",
     latestDraft6: "server draft", latestDraft8: undefined
   });
@@ -59,6 +62,7 @@ test("step6 hydrates on entry and when local draft is empty, not while editing",
 test("step8 never overwrites unsaved local edits during polling", () => {
   // The critical race: student typing in step8 while a poll lands.
   const editing = resolveDraftHydration({
+    draftStep: 6, revisionStep: 8,
     ownStep: 8, lastOwnStep: 8, draftText: "unsaved local edit", savedDraft8Text: "old saved",
     latestDraft6: "draft6", latestDraft8: "server draft8"
   });
@@ -66,6 +70,7 @@ test("step8 never overwrites unsaved local edits during polling", () => {
 
   // Saved state matches local -> server change may hydrate.
   const synced = resolveDraftHydration({
+    draftStep: 6, revisionStep: 8,
     ownStep: 8, lastOwnStep: 8, draftText: "same", savedDraft8Text: "same",
     latestDraft6: "draft6", latestDraft8: "newer server draft8"
   });
@@ -75,6 +80,7 @@ test("step8 never overwrites unsaved local edits during polling", () => {
   // Local matches server and nothing unsaved -> no-op hydration is allowed
   // (same content), entering step8 always hydrates.
   const entering = resolveDraftHydration({
+    draftStep: 6, revisionStep: 8,
     ownStep: 8, lastOwnStep: 6, draftText: "whatever", savedDraft8Text: "whatever",
     latestDraft6: "draft6", latestDraft8: undefined
   });
@@ -83,8 +89,23 @@ test("step8 never overwrites unsaved local edits during polling", () => {
   // not when it is an empty string.
   assert.equal(entering.step8Draft, "draft6");
   const emptyDraft8 = resolveDraftHydration({
+    draftStep: 6, revisionStep: 8,
     ownStep: 8, lastOwnStep: 6, draftText: "", savedDraft8Text: "",
     latestDraft6: "draft6", latestDraft8: ""
   });
   assert.equal(emptyDraft8.step8Draft, "");
+});
+
+test("draft hydration does not fall back to legacy step numbers without configured capability steps", () => {
+  const decision = resolveDraftHydration({
+    ownStep: 6,
+    lastOwnStep: 5,
+    draftText: "",
+    savedDraft8Text: "",
+    latestDraft6: "server draft",
+    latestDraft8: "server revision"
+  });
+
+  assert.equal(decision.hydrateStep6, false);
+  assert.equal(decision.hydrateStep8, false);
 });

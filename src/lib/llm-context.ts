@@ -1,5 +1,5 @@
 import { SessionState } from "@/src/lib/types";
-import { getSessionWorkflowSteps } from "@/src/lib/course-workflow";
+import { getSessionWorkflowSteps, isWorkflowStepAtOrAfter } from "@/src/lib/course-workflow";
 
 type BuildStudentContextOptions = {
   maxMessages?: number;
@@ -172,7 +172,7 @@ export function buildStudentCourseContext(
   );
 
   const scoped = session.messages.filter((m) => {
-    if (m.step > currentStep) return false;
+    if (!isWorkflowStepAtOrAfter(session, currentStep, m.step)) return false;
 
     // Group-scoped phase: include teammates' answers and AI/system records until
     // the configured workflow switches to personal-only work.

@@ -74,6 +74,25 @@ test("llm context behavior: layered summary + recent snippet output", () => {
   assert.equal(context.includes("收到"), false);
 });
 
+test("llm context behavior: workflow order excludes future messages when step ids are reordered", () => {
+  const session = makeSession({
+    currentStep: 10,
+    workflowSteps: [
+      { step: 10, name: "先討論", mode: "group_interaction", capability: "topic_discussion" },
+      { step: 30, name: "後面個人", mode: "personal_interaction", capability: "outline" },
+      { step: 5, name: "最後報告", mode: "non_interactive", capability: "final_report" }
+    ],
+    messages: [
+      { id: "m1", role: "student", userId: "s1", step: 10, text: "現在步驟內容", at: "2026-05-21T10:00:00.000Z" },
+      { id: "m2", role: "student", userId: "s1", step: 5, text: "未來步驟不應出現", at: "2026-05-21T10:01:00.000Z" }
+    ]
+  });
+
+  const context = buildStudentCourseContext(session, "s1", 10, { maxMessages: 20, maxChars: 2000 });
+  assert.match(context, /現在步驟內容/);
+  assert.equal(context.includes("未來步驟不應出現"), false);
+});
+
 // single source-guard for this topic file
 
 test("source-guard: diagnostics route still exposes fallbackMetricsSource field", async () => {

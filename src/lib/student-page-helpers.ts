@@ -200,8 +200,8 @@ export function resolveDraftHydration(input: {
   latestDraft6: string;
   latestDraft8: string | undefined;
 }): DraftHydrationDecision {
-  const draftStep = input.draftStep ?? 6;
-  const revisionStep = input.revisionStep ?? 8;
+  const draftStep = input.draftStep;
+  const revisionStep = input.revisionStep;
   const justEnteredStep6 = input.lastOwnStep !== draftStep && input.ownStep === draftStep;
   const justEnteredStep8 = input.lastOwnStep !== revisionStep && input.ownStep === revisionStep;
   const decision: DraftHydrationDecision = {

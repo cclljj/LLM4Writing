@@ -180,6 +180,28 @@ test("research export: account mode includes raw student account", () => {
   ]);
 });
 
+test("research export: peer outline visibility follows workflow order, not numeric step order", () => {
+  const session: SessionState = {
+    ...makeSession(),
+    workflowSteps: [
+      { step: 10, name: "原始架構", mode: "personal_interaction", capability: "outline" },
+      { step: 30, name: "同儕修正", mode: "group_interaction", capability: "peer_outline" },
+      { step: 20, name: "初稿", mode: "personal_interaction", capability: "draft" }
+    ],
+    personalSteps: { alice: 20, bob: 10 },
+    messages: []
+  };
+  const payload = buildResearchStudentInputExport({
+    activity,
+    sessions: [session],
+    identityMode: "account"
+  });
+
+  const peerOutlineRecords = payload.records.filter((record) => record.type === "step4_revised_outline");
+  assert.deepEqual(peerOutlineRecords.map((record) => record.studentAccount), ["alice"]);
+  assert.equal(peerOutlineRecords[0]?.step, 30);
+});
+
 test("research export: production requires configured hash salt", () => {
   withEnv({ nodeEnv: "production", researchExportHashSalt: undefined }, () => {
     assert.throws(

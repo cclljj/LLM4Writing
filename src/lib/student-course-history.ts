@@ -26,10 +26,11 @@ export function resolveStudentCourseLatestWork(input: {
 }): StudentCourseLatestWork {
   const { sessions, username, latestPersonalStep } = input;
   const workflowOwner = sessions[0] ?? {};
-  const peerOutlineStep = getWorkflowStepByCapability(workflowOwner, "peer_outline")?.step ?? 4;
-  const canShowPeerOutline = isWorkflowStepAtOrAfter(workflowOwner, latestPersonalStep, peerOutlineStep) && sessions.some((session) => {
+  const peerOutlineStep = getWorkflowStepByCapability(workflowOwner, "peer_outline")?.step;
+  const canShowPeerOutline = peerOutlineStep !== undefined && isWorkflowStepAtOrAfter(workflowOwner, latestPersonalStep, peerOutlineStep) && sessions.some((session) => {
     const personalStep = session.personalSteps?.[username] ?? session.currentStep;
-    const targetStep = getWorkflowStepByCapability(session, "peer_outline")?.step ?? peerOutlineStep;
+    const targetStep = getWorkflowStepByCapability(session, "peer_outline")?.step;
+    if (targetStep === undefined) return false;
     return isWorkflowStepAtOrAfter(session, personalStep, targetStep);
   });
   return {

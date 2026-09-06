@@ -2,6 +2,7 @@ import { cache } from "react";
 import postgres, { Sql, TransactionSql } from "postgres";
 import { ChatMessage, SessionState, Step12FallbackDebugTrace, Step12RoundLog } from "@/src/lib/types";
 import { getDatabaseUrl, getPostgresClientOptions, isDatabaseEnabled } from "@/src/lib/db-config";
+import { pickLaterWorkflowStep } from "@/src/lib/course-workflow";
 
 type MemoryStore = Map<string, SessionState>;
 type SessionCorePayload = Omit<SessionState, "messages" | "outlines" | "step3SubmittedOutlines" | "draftStep6" | "draftStep8" | "reports" | "step12RoundLogs" | "step12FallbackDebugTraces">;
@@ -354,10 +355,11 @@ function mergeMakeupWork(base: SessionState["makeupWork"], incoming: SessionStat
 }
 
 function mergeSessionStates(latest: SessionState, incoming: SessionState): SessionState {
+  const workflowOwner = { workflowSteps: incoming.workflowSteps ?? latest.workflowSteps };
   return {
     ...latest,
     ...incoming,
-    currentStep: Math.max(latest.currentStep, incoming.currentStep),
+    currentStep: pickLaterWorkflowStep(workflowOwner, latest.currentStep, incoming.currentStep),
     participants: Array.from(new Set([...(latest.participants ?? []), ...(incoming.participants ?? [])])),
     personalSteps: { ...(latest.personalSteps ?? {}), ...(incoming.personalSteps ?? {}) },
     joinedUsers: Array.from(new Set([...(latest.joinedUsers ?? []), ...(incoming.joinedUsers ?? [])])),

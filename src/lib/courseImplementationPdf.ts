@@ -472,10 +472,10 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
     return COLORS.systemBg;
   }
 
-  const outlineStep = getWorkflowStepByCapability(input, "outline")?.step ?? 3;
-  const peerOutlineStep = getWorkflowStepByCapability(input, "peer_outline")?.step ?? 4;
-  const outlineTitle = `${getWorkflowStepName(input, outlineStep)}原始輸入架構圖`;
-  const peerOutlineTitle = `${getWorkflowStepName(input, peerOutlineStep)}修正後架構圖`;
+  const outlineStep = getWorkflowStepByCapability(input, "outline")?.step;
+  const peerOutlineStep = getWorkflowStepByCapability(input, "peer_outline")?.step;
+  const outlineTitle = outlineStep !== undefined ? `${getWorkflowStepName(input, outlineStep)}原始輸入架構圖` : "原始輸入架構圖";
+  const peerOutlineTitle = peerOutlineStep !== undefined ? `${getWorkflowStepName(input, peerOutlineStep)}修正後架構圖` : "修正後架構圖";
 
   function drawOutlineGraphFallback(kind: "submitted_outline" | "revised_outline", mermaidText: string): void {
     const preview = buildOutlinePreview(mermaidText, { maxLines: 40 });
@@ -614,10 +614,11 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
 
     const timelineItems = buildCourseReportTimelineItems({
       messages,
-      hasStep3Outline: Boolean(step3Outline),
-      hasStep4Outline,
+      hasStep3Outline: Boolean(step3Outline) && outlineStep !== undefined,
+      hasStep4Outline: hasStep4Outline && peerOutlineStep !== undefined,
       outlineStep,
       peerOutlineStep,
+      workflowSteps: input.workflowSteps,
     });
 
     let insertedStep3 = false;
@@ -640,11 +641,11 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
         setTextColor(COLORS.text);
         y += 30;
 
-        if (step === outlineStep && step3Outline && !insertedStep3) {
+        if (outlineStep !== undefined && step === outlineStep && step3Outline && !insertedStep3) {
           await drawOutlineGraph("submitted_outline", step3Outline);
           insertedStep3 = true;
         }
-        if (step === peerOutlineStep && hasStep4Outline && !insertedStep4) {
+        if (peerOutlineStep !== undefined && step === peerOutlineStep && hasStep4Outline && !insertedStep4) {
           await drawOutlineGraph("revised_outline", step4Outline);
           insertedStep4 = true;
         }
@@ -668,10 +669,10 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
     }
 
     // Fallback placement in case outlines exist but step messages are absent.
-    if (step3Outline && !insertedStep3) {
+    if (outlineStep !== undefined && step3Outline && !insertedStep3) {
       await drawOutlineGraph("submitted_outline", step3Outline);
     }
-    if (hasStep4Outline && !insertedStep4) {
+    if (peerOutlineStep !== undefined && hasStep4Outline && !insertedStep4) {
       await drawOutlineGraph("revised_outline", step4Outline);
     }
   }

@@ -80,6 +80,28 @@ export function isWorkflowStepAtOrAfter(session: WorkflowSnapshotOwner, currentS
   return getWorkflowStepOrderIndex(session, currentStep) >= getWorkflowStepOrderIndex(session, targetStep);
 }
 
+export function getReachedWorkflowCapabilities(session: WorkflowSnapshotOwner, currentStep: number): Set<WorkflowCapability> {
+  const reached = new Set<WorkflowCapability>();
+  if (!Number.isFinite(currentStep) || currentStep <= 0) return reached;
+  const steps = getSessionWorkflowSteps(session);
+  const index = steps.findIndex((item) => item.step === currentStep);
+  if (index < 0) return reached;
+  steps.slice(0, index + 1).forEach((item) => reached.add(item.capability));
+  return reached;
+}
+
+export function pickLaterWorkflowStep(session: WorkflowSnapshotOwner, a: number, b: number): number {
+  if (!Number.isFinite(a) || a <= 0) return b;
+  if (!Number.isFinite(b) || b <= 0) return a;
+  return getWorkflowStepOrderIndex(session, b) > getWorkflowStepOrderIndex(session, a) ? b : a;
+}
+
+export function pickEarlierWorkflowStep(session: WorkflowSnapshotOwner, a: number, b: number): number {
+  if (!Number.isFinite(a) || a <= 0) return b;
+  if (!Number.isFinite(b) || b <= 0) return a;
+  return getWorkflowStepOrderIndex(session, b) < getWorkflowStepOrderIndex(session, a) ? b : a;
+}
+
 export function getFirstWorkflowStep(session: WorkflowSnapshotOwner): CourseWorkflowStep | undefined {
   return getSessionWorkflowSteps(session)[0];
 }

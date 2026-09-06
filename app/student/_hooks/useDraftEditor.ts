@@ -30,8 +30,8 @@ export function useDraftEditor(input: {
   const [step6RefUser, setStep6RefUser] = useState("");
   const [refUser, setRefUser] = useState("");
   const lastOwnStepRef = useRef<number | null>(null);
-  const draftStep = getCapabilityStep(session, "draft") ?? 6;
-  const revisionStep = getCapabilityStep(session, "revision") ?? 8;
+  const draftStep = getCapabilityStep(session, "draft");
+  const revisionStep = getCapabilityStep(session, "revision");
 
   useEffect(() => {
     if (!session || !loginUser) return;

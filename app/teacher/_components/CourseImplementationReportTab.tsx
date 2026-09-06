@@ -11,7 +11,12 @@ import { shouldTreatAsZipDownload } from "@/src/lib/course-report-download";
 import { resolveStudentReportCompletedAtIso } from "@/src/lib/course-report-completion-time";
 import { stepNameMap } from "@/src/lib/step-names";
 import { COURSE_REPORT_FILE_VERSION } from "@/src/lib/course-report-version";
-import { getSessionWorkflowSteps, getWorkflowStepByCapability, getWorkflowStepName } from "@/src/lib/course-workflow";
+import {
+  getReachedWorkflowCapabilities,
+  getWorkflowStepByCapability,
+  getWorkflowStepName,
+  getWorkflowStepOrderIndex
+} from "@/src/lib/course-workflow";
 import type { CourseWorkflowStep, WorkflowCapability } from "@/src/lib/types";
 
 type CourseImplementationReportTabProps = {
@@ -102,25 +107,24 @@ function classExportStatusText(format: "pdf" | "json", job: ClassExportJob): str
 
 function getStepsFromMessages(
   messages: PersonalMessage[],
-  options?: { includeSteps?: number[] }
+  options?: { includeSteps?: number[]; workflowSteps?: CourseWorkflowStep[] }
 ): number[] {
   const set = new Set(messages.map((m) => m.step));
   (options?.includeSteps ?? []).forEach((step) => set.add(step));
-  return Array.from(set).sort((a, b) => a - b);
+  const workflowOwner = getWorkflowOwner(options?.workflowSteps);
+  return Array.from(set).sort((a, b) => getWorkflowStepOrderIndex(workflowOwner, a) - getWorkflowStepOrderIndex(workflowOwner, b));
 }
 
 function getWorkflowOwner(workflowSteps?: CourseWorkflowStep[]): { workflowSteps: CourseWorkflowStep[] } {
   return { workflowSteps: workflowSteps && workflowSteps.length > 0 ? workflowSteps : [] };
 }
 
-function getCapabilityRuntimeStep(workflowSteps: CourseWorkflowStep[] | undefined, capability: WorkflowCapability, fallbackStep: number): number {
-  return getWorkflowStepByCapability(getWorkflowOwner(workflowSteps), capability)?.step ?? fallbackStep;
+function getCapabilityRuntimeStep(workflowSteps: CourseWorkflowStep[] | undefined, capability: WorkflowCapability): number | undefined {
+  return getWorkflowStepByCapability(getWorkflowOwner(workflowSteps), capability)?.step;
 }
 
 function getStepOrderIndex(workflowSteps: CourseWorkflowStep[] | undefined, step: number): number {
-  const steps = getSessionWorkflowSteps(getWorkflowOwner(workflowSteps));
-  const index = steps.findIndex((item) => item.step === step);
-  return index >= 0 ? index : Math.max(0, step - 1);
+  return getWorkflowStepOrderIndex(getWorkflowOwner(workflowSteps), step);
 }
 
 function addReachedCapabilities(
@@ -128,24 +132,7 @@ function addReachedCapabilities(
   workflowSteps: CourseWorkflowStep[] | undefined,
   currentStep: number
 ) {
-  const steps = getSessionWorkflowSteps(getWorkflowOwner(workflowSteps));
-  const index = steps.findIndex((item) => item.step === currentStep);
-  if (index >= 0) {
-    steps.slice(0, index + 1).forEach((item) => reached.add(item.capability));
-    return;
-  }
-
-  // Legacy sessions before workflow snapshots still use numeric Step IDs.
-  if (currentStep >= 1) reached.add("topic_discussion");
-  if (currentStep >= 2) reached.add("research_discussion");
-  if (currentStep >= 3) reached.add("outline");
-  if (currentStep >= 4) reached.add("peer_outline");
-  if (currentStep >= 5) reached.add("summary_report");
-  if (currentStep >= 6) reached.add("draft");
-  if (currentStep >= 7) reached.add("feedback_report");
-  if (currentStep >= 8) reached.add("revision");
-  if (currentStep >= 9) reached.add("reflection");
-  if (currentStep >= 10) reached.add("final_report");
+  getReachedWorkflowCapabilities(getWorkflowOwner(workflowSteps), currentStep).forEach((capability) => reached.add(capability));
 }
 
 function buildStarRationales(metric: StudentReportMetric): string[] {
@@ -443,7 +430,7 @@ export default function CourseImplementationReportTab({
 
     const allMessages = (data.personalMessages ?? []) as PersonalMessage[];
     const workflowSteps = (data.workflowSteps ?? []) as CourseWorkflowStep[];
-    const revisionStep = getCapabilityRuntimeStep(workflowSteps, "revision", 8);
+    const revisionStep = getCapabilityRuntimeStep(workflowSteps, "revision");
     const scopedMessages = allMessages.filter((message) => {
       if (message.role === "student") return message.userId === username;
       if (message.role === "ai") return !message.userId || message.userId === username;
@@ -459,12 +446,15 @@ export default function CourseImplementationReportTab({
         text: message.text,
         at: message.at,
       }));
-    const timelineMessages = injectStep8DraftTimeline(
-      timelineMessagesBase,
-      data.userDraftStep8 ?? "",
-      new Date().toISOString(),
-      revisionStep
-    );
+    const timelineMessages = revisionStep !== undefined
+      ? injectStep8DraftTimeline(
+          timelineMessagesBase,
+          data.userDraftStep8 ?? "",
+          new Date().toISOString(),
+          revisionStep,
+          workflowSteps
+        )
+      : timelineMessagesBase;
     const legacyCompletedAtIso = scopedMessages.at(-1)?.at;
     const completedAtIso = resolveStudentReportCompletedAtIso({
       messages: scopedMessages,
@@ -744,11 +734,12 @@ export default function CourseImplementationReportTab({
     ? personalWorkflowSteps
     : selectedMetricSession?.workflowSteps ?? [];
   const selectedWorkflowOwner = getWorkflowOwner(selectedWorkflowSteps);
-  const outlineStep = getCapabilityRuntimeStep(selectedWorkflowSteps, "outline", 3);
-  const peerOutlineStep = getCapabilityRuntimeStep(selectedWorkflowSteps, "peer_outline", 4);
-  const revisionStep = getCapabilityRuntimeStep(selectedWorkflowSteps, "revision", 8);
+  const outlineStep = getCapabilityRuntimeStep(selectedWorkflowSteps, "outline");
+  const peerOutlineStep = getCapabilityRuntimeStep(selectedWorkflowSteps, "peer_outline");
+  const revisionStep = getCapabilityRuntimeStep(selectedWorkflowSteps, "revision");
 
   const personalSteps = getStepsFromMessages(scopedPersonalMessages, {
+    workflowSteps: selectedWorkflowSteps,
     includeSteps: [
       userStep3SubmittedOutline ? outlineStep : undefined,
       userOutline ? peerOutlineStep : undefined,

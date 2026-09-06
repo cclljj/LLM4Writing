@@ -55,10 +55,10 @@ export function useStudentStepActions(input: {
   const [isSuggestingStep6, setIsSuggestingStep6] = useState(false);
   const outlineMermaidRef = useRef<string>("");
   const currentCapability = getCurrentCapability(session, currentStep);
-  const summaryStep = getCapabilityStep(session, "summary_report") ?? 5;
-  const draftStep = getCapabilityStep(session, "draft") ?? 6;
-  const revisionStep = getCapabilityStep(session, "revision") ?? 8;
-  const reflectionStep = getCapabilityStep(session, "reflection") ?? 9;
+  const summaryStep = getCapabilityStep(session, "summary_report");
+  const draftStep = getCapabilityStep(session, "draft");
+  const revisionStep = getCapabilityStep(session, "revision");
+  const reflectionStep = getCapabilityStep(session, "reflection");
 
   useEffect(() => {
     if (currentStep !== reflectionStep) return;

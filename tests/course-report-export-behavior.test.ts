@@ -377,6 +377,71 @@ test("course report timeline behavior: normalizes runtime step strings before or
   );
 });
 
+test("course report timeline behavior: configured workflow order overrides numeric step order", () => {
+  const workflowSteps = [
+    { step: 30, name: "先反思", mode: "personal_reflection" as const, capability: "reflection" as const },
+    { step: 10, name: "再修正", mode: "personal_interaction" as const, capability: "revision" as const },
+    { step: 20, name: "最後報告", mode: "non_interactive" as const, capability: "final_report" as const },
+  ];
+  const items = buildCourseReportTimelineItems({
+    messages: [
+      { role: "ai", step: 20, text: "報告", at: "2026-05-26T10:02:00.000Z" },
+      { role: "system", step: 30, text: "反思", at: "2026-05-26T10:00:00.000Z" },
+      { role: "student", step: 10, text: "修正稿", at: "2026-05-26T10:01:00.000Z" },
+    ],
+    hasStep3Outline: false,
+    hasStep4Outline: false,
+    workflowSteps,
+  });
+
+  assert.deepEqual(
+    items.map((item) => item.type === "message" ? item.msg.step : item.step),
+    [30, 10, 20]
+  );
+});
+
+test("student portfolio JSON follows configured workflow order and omits deleted capabilities", () => {
+  const payload = buildCourseImplementationPortfolioJson({
+    activityId: "oc-001",
+    school: "DemoSchool",
+    classNumber: "701",
+    title: "作文題目",
+    username: "alice",
+    name: "Alice",
+    metric: {
+      stars: 4,
+      stepText: "Step 20",
+      maxStep: 20,
+      messageCount: 3,
+      rejectedCount: 0,
+      step3OutlineChars: 0,
+      draftStep6Chars: 120,
+      joined: true,
+    },
+    starLabel: "★★★★☆",
+    starRationales: ["測試"],
+    timelineMessages: [
+      { role: "ai", step: 20, text: "報告", at: "2026-05-26T10:02:00.000Z" },
+      { role: "system", step: 30, text: "反思", at: "2026-05-26T10:00:00.000Z" },
+      { role: "student", step: 10, text: "修正稿", at: "2026-05-26T10:01:00.000Z" },
+    ],
+    step3SubmittedOutline: "graph TD\nA[已刪除能力，不應輸出]",
+    step4RevisedOutline: "",
+    step8Draft: "修正版全文",
+    step10Report: "總結內容",
+    workflowSteps: [
+      { step: 30, name: "先反思", mode: "personal_reflection", capability: "reflection" },
+      { step: 10, name: "再修正", mode: "personal_interaction", capability: "revision" },
+      { step: 20, name: "最後報告", mode: "non_interactive", capability: "final_report" },
+    ],
+    generatedAtIso: "2026-05-26T11:00:00.000Z",
+  });
+
+  assert.deepEqual(payload.stepArtifacts.map((artifact) => artifact.artifactType), ["step8_revised_draft", "step10_final_report"]);
+  assert.deepEqual(payload.stepArtifacts.map((artifact) => artifact.step), [10, 20]);
+  assert.deepEqual(payload.timelineMessages.map((message) => message.step), [30, 10, 10, 20, 20]);
+});
+
 test("step8 timeline injection behavior: runtime step strings still insert before Step9+", () => {
   const injected = injectStep8DraftTimeline(
     [

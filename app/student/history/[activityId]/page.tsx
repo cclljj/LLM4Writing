@@ -7,7 +7,7 @@ import { deferStateUpdate } from "@/src/lib/defer-state-update";
 import { formatTaipeiDateTime } from "@/src/lib/time-format";
 import OutlineSvg from "@/app/_components/OutlineSvg";
 import { renderMessageHtml } from "@/app/student/_components/renderMessageHtml";
-import { getWorkflowStepByCapability, getWorkflowStepName } from "@/src/lib/course-workflow";
+import { getWorkflowStepByCapability, getWorkflowStepName, getWorkflowStepOrderIndex } from "@/src/lib/course-workflow";
 import type { CourseWorkflowStep } from "@/src/lib/types";
 
 type HistorySummary = {
@@ -113,25 +113,30 @@ export default function StudentCourseHistoryPage() {
   const artifactSteps = useMemo(() => {
     const owner = history?.latestSession;
     return {
-      outline: owner ? getWorkflowStepByCapability(owner, "outline")?.step ?? 3 : 3,
-      peerOutline: owner ? getWorkflowStepByCapability(owner, "peer_outline")?.step ?? 4 : 4,
-      draft: owner ? getWorkflowStepByCapability(owner, "draft")?.step ?? 6 : 6,
-      feedback: owner ? getWorkflowStepByCapability(owner, "feedback_report")?.step ?? 7 : 7,
-      revision: owner ? getWorkflowStepByCapability(owner, "revision")?.step ?? 8 : 8,
-      finalReport: owner ? getWorkflowStepByCapability(owner, "final_report")?.step ?? 10 : 10,
+      outline: owner ? getWorkflowStepByCapability(owner, "outline")?.step : undefined,
+      peerOutline: owner ? getWorkflowStepByCapability(owner, "peer_outline")?.step : undefined,
+      draft: owner ? getWorkflowStepByCapability(owner, "draft")?.step : undefined,
+      feedback: owner ? getWorkflowStepByCapability(owner, "feedback_report")?.step : undefined,
+      revision: owner ? getWorkflowStepByCapability(owner, "revision")?.step : undefined,
+      finalReport: owner ? getWorkflowStepByCapability(owner, "final_report")?.step : undefined,
     };
   }, [history?.latestSession]);
 
   const historySteps = useMemo(() => {
     if (!history) return [] as number[];
     const steps = new Set(history.latestSession.messages.map((m) => m.step));
-    if (history.latestWork.step3SubmittedOutline) steps.add(artifactSteps.outline);
-    if (history.latestWork.step4Outline) steps.add(artifactSteps.peerOutline);
-    if (history.latestWork.draftStep6) steps.add(artifactSteps.draft);
-    if (history.latestWork.step7Report) steps.add(artifactSteps.feedback);
-    if (history.latestWork.draftStep8) steps.add(artifactSteps.revision);
-    if (history.latestWork.step10Report) steps.add(artifactSteps.finalReport);
-    return Array.from(steps).sort((a, b) => a - b);
+    const addArtifactStep = (step: number | undefined, content: string) => {
+      if (step !== undefined && content.trim()) steps.add(step);
+    };
+    addArtifactStep(artifactSteps.outline, history.latestWork.step3SubmittedOutline);
+    addArtifactStep(artifactSteps.peerOutline, history.latestWork.step4Outline);
+    addArtifactStep(artifactSteps.draft, history.latestWork.draftStep6);
+    addArtifactStep(artifactSteps.feedback, history.latestWork.step7Report);
+    addArtifactStep(artifactSteps.revision, history.latestWork.draftStep8);
+    addArtifactStep(artifactSteps.finalReport, history.latestWork.step10Report);
+    return Array.from(steps).sort(
+      (a, b) => getWorkflowStepOrderIndex(history.latestSession, a) - getWorkflowStepOrderIndex(history.latestSession, b)
+    );
   }, [artifactSteps, history]);
 
   useEffect(() => {
@@ -257,19 +262,19 @@ export default function StudentCourseHistoryPage() {
                             </div>
                           ))
                         )}
-                        {step === artifactSteps.outline && history.latestWork.step3SubmittedOutline ? (
+                        {artifactSteps.outline !== undefined && step === artifactSteps.outline && history.latestWork.step3SubmittedOutline ? (
                           <div style={{ marginTop: 12, borderTop: "1px solid var(--line-soft)", paddingTop: 10 }}>
                             <strong>{getWorkflowStepName(history.latestSession, artifactSteps.outline)}原始輸入架構圖</strong>
                             <OutlineSvg compact mermaidText={history.latestWork.step3SubmittedOutline} label={`${getWorkflowStepName(history.latestSession, artifactSteps.outline)}原始輸入架構圖`} />
                           </div>
                         ) : null}
-                        {step === artifactSteps.peerOutline && history.latestWork.step4Outline ? (
+                        {artifactSteps.peerOutline !== undefined && step === artifactSteps.peerOutline && history.latestWork.step4Outline ? (
                           <div style={{ marginTop: 12, borderTop: "1px solid var(--line-soft)", paddingTop: 10 }}>
                             <strong>{getWorkflowStepName(history.latestSession, artifactSteps.peerOutline)}修正後結構樹</strong>
                             <OutlineSvg compact mermaidText={history.latestWork.step4Outline} />
                           </div>
                         ) : null}
-                        {step === artifactSteps.draft && history.latestWork.draftStep6 ? (
+                        {artifactSteps.draft !== undefined && step === artifactSteps.draft && history.latestWork.draftStep6 ? (
                           <div style={{ marginTop: 12, borderTop: "1px solid var(--line-soft)", paddingTop: 10 }}>
                             <strong>{getWorkflowStepName(history.latestSession, artifactSteps.draft)}初稿</strong>
                             <div
@@ -278,7 +283,7 @@ export default function StudentCourseHistoryPage() {
                             />
                           </div>
                         ) : null}
-                        {step === artifactSteps.feedback && history.latestWork.step7Report ? (
+                        {artifactSteps.feedback !== undefined && step === artifactSteps.feedback && history.latestWork.step7Report ? (
                           <div style={{ marginTop: 12, borderTop: "1px solid var(--line-soft)", paddingTop: 10 }}>
                             <strong>{getWorkflowStepName(history.latestSession, artifactSteps.feedback)}</strong>
                             <div
@@ -287,7 +292,7 @@ export default function StudentCourseHistoryPage() {
                             />
                           </div>
                         ) : null}
-                        {step === artifactSteps.revision && history.latestWork.draftStep8 ? (
+                        {artifactSteps.revision !== undefined && step === artifactSteps.revision && history.latestWork.draftStep8 ? (
                           <div style={{ marginTop: 12, borderTop: "1px solid var(--line-soft)", paddingTop: 10 }}>
                             <strong>{getWorkflowStepName(history.latestSession, artifactSteps.revision)}稿</strong>
                             <div
@@ -296,7 +301,7 @@ export default function StudentCourseHistoryPage() {
                             />
                           </div>
                         ) : null}
-                        {step === artifactSteps.finalReport && history.latestWork.step10Report ? (
+                        {artifactSteps.finalReport !== undefined && step === artifactSteps.finalReport && history.latestWork.step10Report ? (
                           <div style={{ marginTop: 12, borderTop: "1px solid var(--line-soft)", paddingTop: 10 }}>
                             <strong>{getWorkflowStepName(history.latestSession, artifactSteps.finalReport)}</strong>
                             <div

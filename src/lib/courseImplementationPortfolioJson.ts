@@ -1,6 +1,6 @@
 import type { CourseImplementationPdfInput, PdfMessage } from "@/src/lib/courseImplementationPdf";
 import { maskPeerUsernames, normalizeReportMarkdownText } from "@/src/lib/report-rendering";
-import { getWorkflowStepByCapability, getWorkflowStepName } from "@/src/lib/course-workflow";
+import { getSessionWorkflowSteps, getWorkflowStepByCapability, getWorkflowStepName, getWorkflowStepOrderIndex } from "@/src/lib/course-workflow";
 import { COURSE_REPORT_VERSION, STUDENT_PORTFOLIO_JSON_SCHEMA_VERSION } from "@/src/lib/course-report-version";
 
 type PortfolioArtifactType =
@@ -90,6 +90,11 @@ function discussionTranscript(messages: Array<PdfMessage & { stepName: string }>
   return messages.map((message) => `### ${message.role} · ${message.at}\n${message.text}`).join("\n\n");
 }
 
+function configuredStepTitle(input: CourseImplementationPdfInput, step: number, suffix: string): string {
+  const name = getWorkflowStepName(input, step);
+  return `${name}：${suffix}`;
+}
+
 export function buildCourseImplementationPortfolioJson(input: CourseImplementationPdfInput): CourseImplementationPortfolioJson {
   const peerUsernames = input.privacyPeerUsernames ?? [];
   const step3SubmittedOutline = maskText(input.step3SubmittedOutline, peerUsernames);
@@ -105,16 +110,18 @@ export function buildCourseImplementationPortfolioJson(input: CourseImplementati
     stepName: getWorkflowStepName(input, message.step),
     entryType: "message",
   }));
-  const topicStep = getWorkflowStepByCapability(input, "topic_discussion")?.step ?? 1;
-  const researchStep = getWorkflowStepByCapability(input, "research_discussion")?.step ?? 2;
-  const outlineStep = getWorkflowStepByCapability(input, "outline")?.step ?? 3;
-  const peerOutlineStep = getWorkflowStepByCapability(input, "peer_outline")?.step ?? 4;
-  const summaryStep = getWorkflowStepByCapability(input, "summary_report")?.step ?? 5;
-  const draftStep = getWorkflowStepByCapability(input, "draft")?.step ?? 6;
-  const feedbackStep = getWorkflowStepByCapability(input, "feedback_report")?.step ?? 7;
-  const revisionStep = getWorkflowStepByCapability(input, "revision")?.step ?? 8;
-  const finalStep = getWorkflowStepByCapability(input, "final_report")?.step ?? 10;
-  const step4ProcessMessages = (input.step4ProcessMessages ?? input.timelineMessages.filter((message) => message.step === peerOutlineStep)).map((message) => ({
+  const workflowSteps = getSessionWorkflowSteps(input);
+  const topicStep = getWorkflowStepByCapability(input, "topic_discussion");
+  const researchStep = getWorkflowStepByCapability(input, "research_discussion");
+  const outlineStep = getWorkflowStepByCapability(input, "outline");
+  const peerOutlineStep = getWorkflowStepByCapability(input, "peer_outline");
+  const summaryStep = getWorkflowStepByCapability(input, "summary_report");
+  const draftStep = getWorkflowStepByCapability(input, "draft");
+  const feedbackStep = getWorkflowStepByCapability(input, "feedback_report");
+  const revisionStep = getWorkflowStepByCapability(input, "revision");
+  const finalStep = getWorkflowStepByCapability(input, "final_report");
+  const peerOutlineRuntimeStep = peerOutlineStep?.step;
+  const step4ProcessMessages = (input.step4ProcessMessages ?? input.timelineMessages.filter((message) => message.step === peerOutlineRuntimeStep)).map((message) => ({
     ...message,
     text: maskText(message.text, peerUsernames),
     stepName: getWorkflowStepName(input, message.step),
@@ -128,107 +135,126 @@ export function buildCourseImplementationPortfolioJson(input: CourseImplementati
     timelineMessageKeys.add(key);
   }
   const processMessagesForStep = (step: number) =>
-    step === peerOutlineStep ? step4ProcessMessages : timelineMessages.filter((message) => message.step === step);
+    step === peerOutlineRuntimeStep ? step4ProcessMessages : timelineMessages.filter((message) => message.step === step);
   const stepArtifacts: PortfolioStepArtifact[] = [
-    {
-      step: topicStep,
-      stepName: getWorkflowStepName(input, topicStep),
+    topicStep
+      ? {
+      step: topicStep.step,
+      stepName: getWorkflowStepName(input, topicStep.step),
       artifactType: "step1_discussion",
-      title: "步驟一討論紀錄",
+      title: configuredStepTitle(input, topicStep.step, "討論紀錄"),
       contentFormat: "conversation",
-      available: processMessagesForStep(topicStep).length > 0,
-      content: discussionTranscript(processMessagesForStep(topicStep)),
-      processMessages: processMessagesForStep(topicStep),
-    },
-    {
-      step: researchStep,
-      stepName: getWorkflowStepName(input, researchStep),
+      available: processMessagesForStep(topicStep.step).length > 0,
+      content: discussionTranscript(processMessagesForStep(topicStep.step)),
+      processMessages: processMessagesForStep(topicStep.step),
+    }
+      : null,
+    researchStep
+      ? {
+      step: researchStep.step,
+      stepName: getWorkflowStepName(input, researchStep.step),
       artifactType: "step2_discussion",
-      title: "步驟二討論紀錄",
+      title: configuredStepTitle(input, researchStep.step, "討論紀錄"),
       contentFormat: "conversation",
-      available: processMessagesForStep(researchStep).length > 0,
-      content: discussionTranscript(processMessagesForStep(researchStep)),
-      processMessages: processMessagesForStep(researchStep),
-    },
-    {
-      step: outlineStep,
-      stepName: getWorkflowStepName(input, outlineStep),
+      available: processMessagesForStep(researchStep.step).length > 0,
+      content: discussionTranscript(processMessagesForStep(researchStep.step)),
+      processMessages: processMessagesForStep(researchStep.step),
+    }
+      : null,
+    outlineStep
+      ? {
+      step: outlineStep.step,
+      stepName: getWorkflowStepName(input, outlineStep.step),
       artifactType: "step3_submitted_outline",
-      title: "步驟三原始輸入架構圖",
+      title: configuredStepTitle(input, outlineStep.step, "原始輸入架構圖"),
       contentFormat: "mermaid",
       available: Boolean(step3SubmittedOutline.trim()),
       content: step3SubmittedOutline,
-      processMessages: processMessagesForStep(outlineStep),
+      processMessages: processMessagesForStep(outlineStep.step),
       mermaid: {
         source: step3SubmittedOutline,
         fencedMarkdown: mermaidFencedMarkdown(step3SubmittedOutline),
       },
-    },
-    {
-      step: peerOutlineStep,
-      stepName: getWorkflowStepName(input, peerOutlineStep),
+    }
+      : null,
+    peerOutlineStep
+      ? {
+      step: peerOutlineStep.step,
+      stepName: getWorkflowStepName(input, peerOutlineStep.step),
       artifactType: "step4_revised_outline",
-      title: "步驟四討論後修正版架構圖",
+      title: configuredStepTitle(input, peerOutlineStep.step, "討論後修正版架構圖"),
       contentFormat: "mermaid",
       available: Boolean(step4RevisedOutline.trim()),
       content: step4RevisedOutline,
-      processMessages: processMessagesForStep(peerOutlineStep),
+      processMessages: processMessagesForStep(peerOutlineStep.step),
       mermaid: {
         source: step4RevisedOutline,
         fencedMarkdown: mermaidFencedMarkdown(step4RevisedOutline),
       },
-    },
-    {
-      step: summaryStep,
-      stepName: getWorkflowStepName(input, summaryStep),
+    }
+      : null,
+    summaryStep
+      ? {
+      step: summaryStep.step,
+      stepName: getWorkflowStepName(input, summaryStep.step),
       artifactType: "step5_summary_report",
-      title: "步驟五摘要報告",
+      title: configuredStepTitle(input, summaryStep.step, "摘要報告"),
       contentFormat: "markdown",
       available: Boolean(step5Report.trim()),
       content: step5Report,
-      processMessages: processMessagesForStep(summaryStep),
-    },
-    {
-      step: draftStep,
-      stepName: getWorkflowStepName(input, draftStep),
+      processMessages: processMessagesForStep(summaryStep.step),
+    }
+      : null,
+    draftStep
+      ? {
+      step: draftStep.step,
+      stepName: getWorkflowStepName(input, draftStep.step),
       artifactType: "step6_draft",
-      title: "步驟六初稿",
+      title: configuredStepTitle(input, draftStep.step, "初稿"),
       contentFormat: "markdown",
       available: Boolean(step6Draft.trim()),
       content: step6Draft,
-      processMessages: processMessagesForStep(draftStep),
-    },
-    {
-      step: feedbackStep,
-      stepName: getWorkflowStepName(input, feedbackStep),
+      processMessages: processMessagesForStep(draftStep.step),
+    }
+      : null,
+    feedbackStep
+      ? {
+      step: feedbackStep.step,
+      stepName: getWorkflowStepName(input, feedbackStep.step),
       artifactType: "step7_feedback_report",
-      title: "步驟七分析回饋",
+      title: configuredStepTitle(input, feedbackStep.step, "分析回饋"),
       contentFormat: "markdown",
       available: Boolean(step7Report.trim()),
       content: step7Report,
-      processMessages: processMessagesForStep(feedbackStep),
-    },
-    {
-      step: revisionStep,
-      stepName: getWorkflowStepName(input, revisionStep),
+      processMessages: processMessagesForStep(feedbackStep.step),
+    }
+      : null,
+    revisionStep
+      ? {
+      step: revisionStep.step,
+      stepName: getWorkflowStepName(input, revisionStep.step),
       artifactType: "step8_revised_draft",
-      title: "步驟八潤飾稿",
+      title: configuredStepTitle(input, revisionStep.step, "潤飾稿"),
       contentFormat: "markdown",
       available: Boolean(step8Draft.trim()),
       content: step8Draft,
-      processMessages: processMessagesForStep(revisionStep),
-    },
-    {
-      step: finalStep,
-      stepName: getWorkflowStepName(input, finalStep),
+      processMessages: processMessagesForStep(revisionStep.step),
+    }
+      : null,
+    finalStep
+      ? {
+      step: finalStep.step,
+      stepName: getWorkflowStepName(input, finalStep.step),
       artifactType: "step10_final_report",
-      title: "步驟十總結報告",
+      title: configuredStepTitle(input, finalStep.step, "總結報告"),
       contentFormat: "markdown",
       available: Boolean(step10Report.trim()),
       content: step10Report,
-      processMessages: processMessagesForStep(finalStep),
-    },
-  ];
+      processMessages: processMessagesForStep(finalStep.step),
+    }
+      : null,
+  ].filter((artifact): artifact is PortfolioStepArtifact => Boolean(artifact))
+    .sort((a, b) => getWorkflowStepOrderIndex({ workflowSteps }, a.step) - getWorkflowStepOrderIndex({ workflowSteps }, b.step));
 
   for (const artifact of stepArtifacts) {
     if (!artifact.available || artifact.contentFormat === "conversation") continue;
@@ -249,7 +275,8 @@ export function buildCourseImplementationPortfolioJson(input: CourseImplementati
     });
   }
   timelineMessages.sort((a, b) => {
-    if (a.step !== b.step) return a.step - b.step;
+    const byWorkflowOrder = getWorkflowStepOrderIndex({ workflowSteps }, a.step) - getWorkflowStepOrderIndex({ workflowSteps }, b.step);
+    if (byWorkflowOrder !== 0) return byWorkflowOrder;
     const byTime = a.at.localeCompare(b.at);
     if (byTime !== 0) return byTime;
     return a.entryType === b.entryType ? 0 : a.entryType === "message" ? -1 : 1;

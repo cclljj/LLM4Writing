@@ -241,6 +241,7 @@ The classroom dashboard SHALL show all sessions for the selected course and prio
 - **AND** multiple sessions for the same group on the same implementation date are aggregated into one row with a `sessionIds` list
 - **AND** each grouped row includes fallback count/rate, rejection count/rate, average step dwell time, and riskiest steps
 - **AND** the summary includes cross-session average dwell time by step
+- **AND** latest progress for a grouped row is resolved by the course workflow snapshot order rather than by the largest numeric step ID
 - **AND** the UI identifies whether fallback/rejection metrics come from persisted `learning_events` or session-message estimation
 - **AND** the grouped-row table is paginated with at most 10 rows per page
 
@@ -324,7 +325,7 @@ The course management area SHALL provide ended-course reports and student-level 
 
 - **GIVEN** a student's persisted interaction history contains non-contiguous messages for the same step
 - **WHEN** the student PDF report timeline is generated
-- **THEN** each step appears as a single section in ascending step order
+- **THEN** each step appears as a single section in configured workflow order
 - **AND** messages inside the same step section keep their original relative order
 
 #### Scenario: PDF report long messages flow across pages

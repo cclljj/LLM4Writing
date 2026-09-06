@@ -68,24 +68,30 @@ function PersonalLogPanel({
         const scopedPersonalMessages = selectedProgressUser
           ? getPersonalScopedMessagesForStudentHistory(personalMessages, selectedProgressUser)
           : personalMessages;
-        const personalSteps = getStepsFromMessages(scopedPersonalMessages);
         const stepNames = new Map((workflowSteps ?? []).map((item) => [item.step, item.name]));
         const workflowOwner = { workflowSteps };
-        const outlineStep = getWorkflowStepByCapability(workflowOwner, "outline")?.step ?? 3;
-        const peerOutlineStep = getWorkflowStepByCapability(workflowOwner, "peer_outline")?.step ?? 4;
+        const outlineStep = getWorkflowStepByCapability(workflowOwner, "outline")?.step;
+        const peerOutlineStep = getWorkflowStepByCapability(workflowOwner, "peer_outline")?.step;
         const hasStep4Revised = Boolean(userOutline && userOutline !== userStep3SubmittedOutline);
+        const personalSteps = getStepsFromMessages(scopedPersonalMessages, {
+          workflowSteps,
+          includeSteps: [
+            userStep3SubmittedOutline ? outlineStep : undefined,
+            hasStep4Revised ? peerOutlineStep : undefined,
+          ].filter((step): step is number => typeof step === "number"),
+        });
 
-        const step3Block = userStep3SubmittedOutline ? (
+        const step3Block = userStep3SubmittedOutline && outlineStep !== undefined ? (
           <div style={{ borderTop: "2px solid var(--line)", padding: "12px 0", marginTop: 4 }}>
-            <strong style={{ fontSize: 13, color: "var(--muted-strong)" }}>{stepNames.get(outlineStep) ?? "生成論點"}完成結構樹</strong>
-            <OutlineSvg mermaidText={userStep3SubmittedOutline} label={`${stepNames.get(outlineStep) ?? "生成論點"}完成結構樹`} />
+            <strong style={{ fontSize: 13, color: "var(--muted-strong)" }}>{stepNames.get(outlineStep) ?? "結構樹"}完成結構樹</strong>
+            <OutlineSvg mermaidText={userStep3SubmittedOutline} label={`${stepNames.get(outlineStep) ?? "結構樹"}完成結構樹`} />
           </div>
         ) : null;
 
-        const step4Block = hasStep4Revised ? (
+        const step4Block = hasStep4Revised && peerOutlineStep !== undefined ? (
           <div style={{ borderTop: "2px solid var(--line)", padding: "12px 0", marginTop: 4 }}>
-            <strong style={{ fontSize: 13, color: "var(--muted-strong)" }}>{stepNames.get(peerOutlineStep) ?? "對比修正"}後結構樹</strong>
-            <OutlineSvg mermaidText={userOutline} label={`${stepNames.get(peerOutlineStep) ?? "對比修正"}後`} />
+            <strong style={{ fontSize: 13, color: "var(--muted-strong)" }}>{stepNames.get(peerOutlineStep) ?? "修正"}後結構樹</strong>
+            <OutlineSvg mermaidText={userOutline} label={`${stepNames.get(peerOutlineStep) ?? "修正"}後`} />
           </div>
         ) : null;
 
@@ -129,8 +135,8 @@ function PersonalLogPanel({
                           <small>{message.at}</small>
                         </div>
                       ))}
-                      {step === outlineStep && step3Block}
-                      {step === peerOutlineStep && step4Block}
+                      {outlineStep !== undefined && step === outlineStep && step3Block}
+                      {peerOutlineStep !== undefined && step === peerOutlineStep && step4Block}
                     </>
                   ) : null}
                 </div>

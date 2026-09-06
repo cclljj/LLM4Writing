@@ -34,9 +34,26 @@ test("source-guard: course implementation report renders artifact-only Step8 wor
   const src = await read("../app/teacher/_components/CourseImplementationReportTab.tsx");
   assert.ok(src.includes("userDraftStep8"), "course report should track the Step8 polished draft artifact");
   assert.ok(src.includes("setUserDraftStep8"), "course report should update Step8 artifact state from personal progress");
-  assert.ok(src.includes('getCapabilityRuntimeStep(selectedWorkflowSteps, "revision", 8)'), "course report should resolve the revision artifact step from workflow config");
+  assert.ok(src.includes('getCapabilityRuntimeStep(selectedWorkflowSteps, "revision")'), "course report should resolve the revision artifact step from workflow config");
+  assert.equal(src.includes('getCapabilityRuntimeStep(selectedWorkflowSteps, "revision", 8)'), false, "course report should not fall back to a hard-coded revision step");
   assert.ok(src.includes("userDraftStep8 ? revisionStep : undefined"), "course report should include artifact-only revision sections");
   assert.ok(src.includes("潤飾稿"), "course report should label the polished draft block without hard-coding Step8");
+});
+
+test("source-guard: course reports derive reached capabilities from workflow config", async () => {
+  const tabSrc = await read("../app/teacher/_components/CourseImplementationReportTab.tsx");
+  const exportSrc = await read("../src/lib/course-report-export.ts");
+  const sharedSrc = await read("../src/lib/course-workflow.ts");
+  assert.ok(sharedSrc.includes("getReachedWorkflowCapabilities"), "shared workflow helper should expose reached-capability derivation");
+  assert.ok(tabSrc.includes("getReachedWorkflowCapabilities"), "report UI should use workflow-derived capability reachability");
+  assert.ok(exportSrc.includes("getReachedWorkflowCapabilities"), "class export service should use workflow-derived capability reachability");
+  for (const src of [tabSrc, exportSrc]) {
+    assert.equal(src.includes('currentStep >= 3) reached.add("outline")'), false);
+    assert.equal(src.includes('currentStep >= 4) reached.add("peer_outline")'), false);
+    assert.equal(src.includes('currentStep >= 6) reached.add("draft")'), false);
+    assert.equal(src.includes('currentStep >= 8) reached.add("revision")'), false);
+    assert.equal(src.includes('currentStep >= 10) reached.add("final_report")'), false);
+  }
 });
 
 test("source-guard: course implementation PDF does not pre-page-break long message cards", async () => {

@@ -408,6 +408,7 @@ Artifact 類型：
 - `115-1` 目前已完整複製 `114-2`，是可獨立修改的初始快照；調整 `115-1` 不會回寫或影響 `114-2`。
 - 每個 term config 的 `workflowSteps` 為課程流程單一來源；每項包含數字 `step`、顯示 `name`、互動 `mode` 與既有能力 `capability`。設定檔中的順序就是課程順序，因此可新增、刪除或重排步驟。
 - 新建 session 必須保存 `workflowSteps` 完整快照。學生端操作、教師開課/切步驟、教師監控與歷程、個人紀錄、PDF／JSON／研究 Log 匯出必須依此快照解析步驟名稱、順序、互動模式與 capability；舊 session 缺快照時回退既有十步驟定義。
+- 流程判斷不得以 runtime step number 大小推論先後（例如 `currentStep >= 6`、`Math.max(currentStep)`）；是否已到達某能力、最高/最低進度、歷史上下文可見範圍、研究資料可見範圍、監看彙整與輸出排序，皆必須使用 `workflowSteps` 陣列順序。
 - Prompt 與開場白仍使用既有 prompt key（例如 `topic_discussion` 對應舊 Step1 prompt、`final_report` 對應舊 Step10 report config），runtime step number 需先透過 capability 映射回 prompt key，避免重排後讀錯 prompt。
 - 找不到 term config 時，系統使用 `course-step-configs.json` 的 `default` 設定，確保課程不中斷。
 - 因此教師可在建立 `115-1` 等新課程前只更新該 term config，不會影響既有 `114-2` 課程與歷史資料。
@@ -1055,8 +1056,8 @@ classnumber,username,name,school,role,password,ownerTeacherUsername
 
 - 顯示目前選定課程的所有 sessions，不只卡關或可推進小組。
 - 排序：可推進 -> 高風險 -> 留意 -> 正常。
-- 欄位：狀態、小組、成員、目前進度、Step5~10 分布、提醒/步驟切換、動作。
-- 目前進度顯示 `min(personalSteps[member])`，避免 Step5 後停在 `session.currentStep`。
+- 欄位：狀態、小組、成員、目前進度、個人步調分布、提醒/步驟切換、動作。
+- 目前進度顯示同組成員在 `workflowSteps` 順序中最前面的 `personalSteps[member] ?? session.currentStep`，避免個人步調開始後停在 `session.currentStep` 或受 step number 大小影響。
 - 若目前步驟為 Step1/2，進度標籤需顯示細部子步驟（例如 `1-1`、`1-3-2`、`2-1-3`），不得只顯示粗層級 `Step 1`/`Step 2`。
 - 一鍵推進 Step N 呼叫既有步驟切換流程。
 - 同一小組在 `hint.ready=true` 時僅保留一個推進按鈕，不重複顯示功能等價的切換按鈕。
