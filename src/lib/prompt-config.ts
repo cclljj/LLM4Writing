@@ -1,7 +1,4 @@
 import { Activity, PromptConfig, Step10ReportConfig } from "@/src/lib/types";
-import { existsSync, readFileSync } from "node:fs";
-import path from "node:path";
-import systemPromptConfig from "@/src/config/system-prompt-config.json";
 import courseStepConfigs from "@/src/config/course-step-configs.json";
 import { findActivity } from "@/src/lib/activity-store";
 
@@ -29,29 +26,7 @@ type CourseStepConfigRegistry = {
   terms?: Record<string, CourseStepConfig>;
 };
 
-function loadStepOpeningTexts(): Record<string, string> {
-  const steps = ["1", "2", "3", "4", "6", "8", "9"];
-  const baseDir = path.join(process.cwd(), "src", "config", "step-opening");
-  const result: Record<string, string> = {};
-  steps.forEach((step) => {
-    const filePath = path.join(baseDir, `${step}.md`);
-    if (!existsSync(filePath)) return;
-    try {
-      result[step] = readFileSync(filePath, "utf8");
-    } catch {
-      // Ignore per-file read errors to avoid breaking prompt config generation.
-    }
-  });
-  return result;
-}
-
-const stepOpeningTexts = loadStepOpeningTexts();
-
 const courseStepConfigRegistry = courseStepConfigs as CourseStepConfigRegistry;
-const legacyCourseStepConfig: CourseStepConfig = {
-  promptConfig: systemPromptConfig as RawSystemPromptConfig,
-  stepOpenings: stepOpeningTexts
-};
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -74,7 +49,7 @@ export function getCourseStepConfigKey(academicYear: string, academicYearTerm: s
 }
 
 /**
- * Resolves a term config without mutating the legacy 114-2 baseline. Unknown terms
+ * Resolves a term config without mutating its source. Unknown terms
  * deliberately fall back to the registry default so a newly created course remains usable.
  */
 export function resolveCourseStepConfig(academicYear: string, academicYearTerm: string): CourseStepConfig {
@@ -84,11 +59,10 @@ export function resolveCourseStepConfig(academicYear: string, academicYearTerm: 
   const resolving = new Set<string>();
 
   const resolve = (key: string): CourseStepConfig => {
-    if (key === "114-2") return legacyCourseStepConfig;
     const entry = terms[key];
-    if (!entry || resolving.has(key)) return legacyCourseStepConfig;
+    if (!entry || resolving.has(key)) return {};
     resolving.add(key);
-    const parent = entry.extends ? resolve(entry.extends) : legacyCourseStepConfig;
+    const parent = entry.extends ? resolve(entry.extends) : {};
     resolving.delete(key);
     return mergeConfig(parent, entry);
   };
@@ -113,7 +87,7 @@ export function resolvePromptConfigForActivity(activityId: string): PromptConfig
   }
 
   const courseConfig = resolveCourseStepConfig(activity.academicYear, activity.academicYearTerm);
-  const raw = courseConfig.promptConfig ?? legacyCourseStepConfig.promptConfig ?? {};
+  const raw = courseConfig.promptConfig ?? {};
   const systemPrompt = typeof raw.systemPrompt === "string" ? raw.systemPrompt : undefined;
   const stepPrompts = { ...(raw.stepPrompts ?? {}) };
   const step12FeedbackPrompts = { ...(raw.step12FeedbackPrompts ?? {}) };
@@ -157,7 +131,7 @@ export function resolvePromptConfigForActivity(activityId: string): PromptConfig
     questionBanks: { ...baseQuestionBanks, ...scopedQuestionBanks },
     step9Questions,
     step10Report,
-    stepOpenings: courseConfig.stepOpenings ?? stepOpeningTexts
+    stepOpenings: courseConfig.stepOpenings ?? {}
   };
 }
 

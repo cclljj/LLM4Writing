@@ -93,13 +93,19 @@ test("activity store behavior: owner teacher username is preserved on activity p
 
 // single source-guard for this topic file
 
-test("source-guard: system prompt config retains step12FeedbackPrompts key", async () => {
+test("source-guard: 114-2 course config is an exact snapshot of the original prompts and openings", async () => {
   const { readFileSync } = await import("node:fs");
   const { resolve, dirname } = await import("node:path");
   const { fileURLToPath } = await import("node:url");
   const thisDir = dirname(fileURLToPath(import.meta.url));
-  const src = readFileSync(resolve(thisDir, "../src/config/system-prompt-config.json"), "utf8");
-  assert.ok(src.includes("\"step12FeedbackPrompts\""));
+  const config = JSON.parse(readFileSync(resolve(thisDir, "../src/config/course-step-configs.json"), "utf8"));
+  const originalPrompts = JSON.parse(readFileSync(resolve(thisDir, "../src/config/system-prompt-config.json"), "utf8"));
+  const snapshot = config.terms?.["114-2"];
+
+  assert.deepEqual(snapshot?.promptConfig, originalPrompts);
+  for (const step of ["1", "2", "3", "4", "6", "8", "9"]) {
+    assert.equal(snapshot?.stepOpenings?.[step], readFileSync(resolve(thisDir, `../src/config/step-opening/${step}.md`), "utf8"));
+  }
 });
 
 test("course step config: terms resolve independently and unknown terms safely use the default", () => {
