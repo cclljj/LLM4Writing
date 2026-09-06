@@ -125,6 +125,13 @@ export async function GET(request: Request, context: { params: Promise<{ session
   if (session.activityId) {
     const loaded = loadActivityWithConfig(session.activityId);
     const resolvedConfig = loaded?.promptConfig;
+    if ((!session.workflowSteps || session.workflowSteps.length === 0) && loaded) {
+      // Backfill the immutable term snapshot for sessions created before
+      // workflowSteps existed.  Future edits to the term config then leave the
+      // historical session, its monitor view, and exports unchanged.
+      session.workflowSteps = loaded.workflowSteps;
+      changed = true;
+    }
     const nextStepOpenings = {
       ...(resolvedConfig?.stepOpenings ?? {}),
       ...(session.promptConfig?.stepOpenings ?? {})

@@ -14,6 +14,30 @@ export interface StepDefinition {
   mode: InteractionMode;
 }
 
+/** Existing learning capabilities that a term may compose into its workflow. */
+export type WorkflowCapability =
+  | "topic_discussion"
+  | "research_discussion"
+  | "outline"
+  | "peer_outline"
+  | "summary_report"
+  | "draft"
+  | "feedback_report"
+  | "revision"
+  | "reflection"
+  | "final_report"
+  | "group_interaction"
+  | "personal_interaction";
+
+/** A term-owned workflow step. `step` remains numeric for historical session compatibility. */
+export interface CourseWorkflowStep {
+  step: number;
+  name: string;
+  mode: InteractionMode;
+  capability: WorkflowCapability;
+  exportTitle?: string;
+}
+
 export interface PromptConfig {
   /**
    * Optional global system prompt for the remote LLM (provider-agnostic).
@@ -159,6 +183,8 @@ export interface SessionState {
   groupId?: string;
   groupName?: string;
   promptConfig: PromptConfig;
+  /** Immutable workflow snapshot selected from the activity's academic year and term. */
+  workflowSteps?: CourseWorkflowStep[];
   /**
    * Cache of assembled system prompt strings, keyed by `${step}` or `${step}:${substepKey}` (#243).
    * Safe to persist because `promptConfig` is fixed for a session's lifetime — if a session is
@@ -194,6 +220,7 @@ export interface StartSessionPayload {
   groupId?: string;
   groupName?: string;
   promptConfig?: PromptConfig;
+  workflowSteps?: CourseWorkflowStep[];
 }
 
 export interface SendMessagePayload {

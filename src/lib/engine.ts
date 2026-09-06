@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import { ChatMessage, SessionState, StartSessionPayload, Step12FallbackDebugTrace, Step12RoundLog } from "@/src/lib/types";
-import { STEP_DEFINITIONS, getModeByStep, getStepName } from "@/src/lib/spec";
 import { isLlmConfigured, llmChatCompletionText, LlmChatMessage } from "@/src/lib/llm-client";
 import { buildStudentCourseContext } from "@/src/lib/llm-context";
 import { findActivity } from "@/src/lib/activity-store";
@@ -34,6 +33,7 @@ import { buildStep1Question, buildStep2Question, buildStep9BatchPrompt, getCurre
 import { advanceStep1Or2SubstepAfterAi, getNextSubstepKeyAfterCompletion, handleStep1Or2Group } from "@/src/lib/workflow-step1-2";
 import { excludeWaitingMembers } from "@/src/lib/session-attendance";
 import { parseStep9ReflectionAnswers } from "@/src/lib/step9-reflection-parser";
+import { getWorkflowStepMode, getWorkflowStepName, getWorkflowStep, normalizeCourseWorkflowSteps } from "@/src/lib/course-workflow";
 
 function now(): string {
   return new Date().toISOString();
@@ -124,6 +124,7 @@ export function createSession(payload: StartSessionPayload): SessionState {
         step9Questions: {},
         stepOpenings: {}
       },
+    workflowSteps: normalizeCourseWorkflowSteps(payload.workflowSteps),
     stepState: { step1Substep: 1, step2Substep: 1, step1Substep3Question: 1, step1Substep4Question: 1, step2Substep1Question: 1 },
     outlines: {},
     step3SubmittedOutlines: {},
@@ -152,6 +153,9 @@ function isLegacy(session: SessionState): boolean {
 }
 
 function normalizeSessionRuntimeShape(session: SessionState): void {
+  if (!Array.isArray(session.workflowSteps) || session.workflowSteps.length === 0) {
+    session.workflowSteps = normalizeCourseWorkflowSteps(undefined);
+  }
   if (!Array.isArray(session.messages)) {
     session.messages = [];
   }
@@ -911,7 +915,7 @@ async function generateAiTextForStep(
   userId?: string,
   retryOptions?: { attempts?: number; timeoutMs?: number; continueOnTruncation?: boolean; continuationMaxRounds?: number }
 ): Promise<string> {
-  const stepName = getStepName(step);
+  const stepName = getWorkflowStepName(session, step);
   const fallback =
     step === 3
       ? "AI（生成論點）回覆：已收到你的提問。請先整理一個清楚主張，並列出 2-3 個支持重點，把它們放進結構樹節點。"
@@ -1340,7 +1344,7 @@ export async function reconcileCompletedStep9Users(session: SessionState): Promi
 
 export async function switchStep(session: SessionState, step: number): Promise<SessionState> {
   normalizeSessionRuntimeShape(session);
-  if (!STEP_DEFINITIONS.find((s) => s.step === step)) {
+  if (!getWorkflowStep(session, step)) {
     throw new Error(`invalid_step:${step}`);
   }
 
@@ -1352,7 +1356,7 @@ export async function switchStep(session: SessionState, step: number): Promise<S
     makeMessage({
       role: "teacher",
       step,
-      text: `Teacher switched class to step ${step} ${getStepName(step)}.`
+      text: `Teacher switched class to step ${step} ${getWorkflowStepName(session, step)}.`
     })
   );
 
@@ -1369,7 +1373,7 @@ export async function switchStep(session: SessionState, step: number): Promise<S
 
   initializeStepQuestion(session, step);
 
-  const mode = getModeByStep(step);
+  const mode = getWorkflowStepMode(session, step);
   if (mode === "non_interactive") {
     if (step === 5) {
       const STEP5_CONCURRENCY = 4;
@@ -1450,7 +1454,7 @@ export async function sendStudentMessage(
     return session;
   }
 
-  const mode = getModeByStep(step);
+  const mode = getWorkflowStepMode(session, step);
   if (mode === "non_interactive") {
     throw new Error("step_non_interactive");
   }

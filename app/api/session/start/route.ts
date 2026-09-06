@@ -4,6 +4,8 @@ import { saveSession } from "@/src/lib/store";
 import { StartSessionPayload } from "@/src/lib/types";
 import { getCurrentUser } from "@/src/lib/auth-server";
 import { getUsersVisibleToTeacherStore, listUsersStore } from "@/src/lib/user-store";
+import { hydrateDomainState } from "@/src/lib/activity-store";
+import { loadActivityWithConfig } from "@/src/lib/prompt-config";
 
 export async function POST(request: NextRequest) {
   // #383: Require teacher or admin role — prevents unauthenticated session creation
@@ -41,7 +43,27 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const session = createSession({ ...payload, participants });
+  // Session creation is also used by teacher tooling.  When it targets an
+  // activity, resolve both prompts and workflow from that activity's term
+  // config instead of accepting caller-provided workflow content.
+  await hydrateDomainState();
+  const loaded = payload.activityId ? loadActivityWithConfig(payload.activityId) : undefined;
+  if (payload.activityId && !loaded) {
+    return NextResponse.json({ error: "activity_not_found" }, { status: 404 });
+  }
+  const session = createSession({
+    ...payload,
+    participants,
+    ...(loaded
+      ? {
+          promptConfig: loaded.promptConfig,
+          workflowSteps: loaded.workflowSteps,
+          activityTitle: payload.activityTitle ?? loaded.activity.title,
+          activityEssayDescription: payload.activityEssayDescription ?? loaded.activity.essayDescription ?? "",
+          activitySupplemental: payload.activitySupplemental ?? loaded.activity.supplemental ?? ""
+        }
+      : {})
+  });
   await saveSession(session);
 
   return NextResponse.json(session, { status: 201 });

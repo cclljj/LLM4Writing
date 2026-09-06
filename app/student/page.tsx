@@ -7,7 +7,7 @@ import {
   buildHistoryReviewSteps,
   buildInteractiveMessages
 } from "@/src/lib/student-page-helpers";
-import { stepNameMap } from "@/src/lib/step-names";
+import { getSessionWorkflowSteps } from "@/src/lib/course-workflow";
 import { useStudentAuth } from "./_hooks/useStudentAuth";
 import { useStudentOverview } from "./_hooks/useStudentOverview";
 import { rememberLastActivity, syncActivityQuery, useStudentSession } from "./_hooks/useStudentSession";
@@ -84,9 +84,11 @@ export default function StudentPage() {
   );
 
   const historyReviewSteps = useMemo(
-    () => buildHistoryReviewSteps(stepNameMap, { session, sortedMessages, loginUser }),
+    () => buildHistoryReviewSteps(Object.fromEntries((session ? getSessionWorkflowSteps(session) : []).map((item) => [item.step, item.name])), { session, sortedMessages, loginUser }),
     [loginUser, session, sortedMessages]
   );
+  const workflowSteps = useMemo(() => session ? getSessionWorkflowSteps(session) : [], [session]);
+  const currentWorkflowStep = workflowSteps.find((item) => item.step === currentStep);
 
   // One memo around the pure gate-view builder keeps prop identities stable
   // for memoized children across polling re-renders (#459).
@@ -330,7 +332,7 @@ export default function StudentPage() {
             }}
           />
 
-          <StudentProgressRail currentStep={currentStep} />
+          <StudentProgressRail currentStep={currentStep} workflowSteps={workflowSteps} />
           <NextActionCard action={nextAction} />
 
           <HistoryReview
@@ -340,7 +342,7 @@ export default function StudentPage() {
           />
 
           <div className="card">
-            <h2>Step {currentStep} - {stepNameMap[currentStep] ?? "未知步驟"}</h2>
+            <h2>Step {currentStep} - {currentWorkflowStep?.name ?? "未知步驟"}</h2>
             <div style={{ marginTop: 8 }}>
               <span className="badge">{stepModeLine}</span>
             </div>
@@ -487,7 +489,7 @@ export default function StudentPage() {
             </div>
           ) : null}
 
-          {currentStep !== 3 && currentStep !== 5 && currentStep !== 8 && currentStep !== 10 ? (
+          {currentMode !== "non_interactive" && currentStep !== 3 && currentStep !== 5 && currentStep !== 8 && currentStep !== 10 ? (
             <InteractionPanel
               currentStep={currentStep}
               currentMode={currentMode}

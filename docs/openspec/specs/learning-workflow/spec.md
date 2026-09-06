@@ -113,6 +113,8 @@ The system SHALL choose Step1/2 next questions from the configured prompt or que
 
 The system SHALL resolve course-step prompts, question banks, reports, and step openings from the activity's academic year and term key (for example, `114-2` or `115-1`).
 
+The term configuration SHALL also define an ordered `workflowSteps` list. Each step SHALL use an existing interaction capability and declare its numeric step ID, display name, and interaction mode. A session SHALL persist this resolved list as an immutable workflow snapshot.
+
 #### Scenario: New term changes do not alter historical courses
 
 - **GIVEN** a `114-2` course and a `115-1` course exist
@@ -126,6 +128,13 @@ The system SHALL resolve course-step prompts, question banks, reports, and step 
 - **WHEN** its prompt configuration is resolved
 - **THEN** the system uses the configured default term configuration
 - **AND** the learning workflow remains available
+
+#### Scenario: A term reorders or adds an existing-capability step
+
+- **GIVEN** a term's `workflowSteps` places a valid existing-capability step before another step, or adds an additional personal/group interaction step
+- **WHEN** a new session is created for that term
+- **THEN** the session stores the configured order and names
+- **AND** session-derived progress, monitoring, history, PDF, and JSON use that stored workflow snapshot
 
 #### Scenario: Prompt-backed next question
 

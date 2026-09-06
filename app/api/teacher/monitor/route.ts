@@ -94,6 +94,7 @@ async function buildMonitorSessionPayload(
     makeupWork: session.makeupWork,
     onlineUsers,
     currentStep: session.currentStep,
+    workflowSteps: session.workflowSteps ?? [],
     personalSteps: session.personalSteps ?? {},
     messages: messagesWithOpenings,
     messageCount: session.messages.length,

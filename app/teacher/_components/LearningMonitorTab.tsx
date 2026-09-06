@@ -773,6 +773,7 @@ export default function LearningMonitorTab({
               personalMessages={personalMessages}
               userOutline={userOutline}
               userStep3SubmittedOutline={userStep3SubmittedOutline}
+              workflowSteps={monitorSelected?.workflowSteps}
               stepExpanded={personalLogStepExpanded}
               onToggleStep={(step) => setPersonalLogStepExpanded((prev) => ({ ...prev, [step]: !(prev[step] ?? false) }))}
             />

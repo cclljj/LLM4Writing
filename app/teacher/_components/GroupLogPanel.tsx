@@ -3,7 +3,7 @@
 import { memo, Ref } from "react";
 import OutlineSvg from "@/app/_components/OutlineSvg";
 import { renderMessageHtml } from "@/app/student/_components/renderMessageHtml";
-import { stepNameMap } from "@/src/lib/step-names";
+import { getSessionWorkflowSteps } from "@/src/lib/course-workflow";
 import { getStepsFromMessages } from "./monitor-log-utils";
 import { MonitorSession } from "./types";
 
@@ -58,6 +58,7 @@ function GroupLogPanel({
       {expanded && monitorSelected ? (() => {
         const allGroupMsgs = monitorSelected.messages;
         const groupSteps = getStepsFromMessages(allGroupMsgs);
+        const stepNames = new Map(getSessionWorkflowSteps(monitorSelected).map((item) => [item.step, item.name]));
 
         const hasStep3 = monitorSelected.participants.some((p) => monitorSelected.step3SubmittedOutlines?.[p]);
         const hasStep4Revised = monitorSelected.participants.some((p) => {
@@ -111,7 +112,7 @@ function GroupLogPanel({
                 <div key={step} className="card">
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                     <h3 style={{ margin: 0 }}>
-                      Step {step} {stepNameMap[step] ? `- ${stepNameMap[step]}` : ""}
+                      Step {step} {stepNames.get(step) ? `- ${stepNames.get(step)}` : ""}
                     </h3>
                     <button
                       type="button"

@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
-import { getDefaultStep9Questions, STEP_DEFINITIONS } from "@/src/lib/spec";
+import { getDefaultStep9Questions } from "@/src/lib/spec";
+import { resolveDefaultCourseWorkflowSteps } from "@/src/lib/prompt-config";
 
 export async function GET() {
   return NextResponse.json({
-    steps: STEP_DEFINITIONS,
+    steps: resolveDefaultCourseWorkflowSteps(),
     reflectionQuestions: getDefaultStep9Questions()
   });
 }

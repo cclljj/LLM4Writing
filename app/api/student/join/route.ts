@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
     if (!loaded) {
       return NextResponse.json({ error: "activity_not_found" }, { status: 404 });
     }
-    const { activity, promptConfig: resolvedConfig } = loaded;
+    const { activity, promptConfig: resolvedConfig, workflowSteps } = loaded;
 
     if (activity.courseStatus === "not_started") {
       return NextResponse.json({ error: "course_not_started" }, { status: 400 });
@@ -103,12 +103,18 @@ export async function POST(request: NextRequest) {
         !existing.promptConfig?.stepOpenings ||
         Object.keys(existing.promptConfig.stepOpenings).length === 0 ||
         Object.keys(nextStepOpenings).length !== Object.keys(existing.promptConfig.stepOpenings).length;
+      const workflowPatched = !existing.workflowSteps || existing.workflowSteps.length === 0;
       if (promptConfigPatched) {
         existing.promptConfig = {
           ...resolvedConfig,
           ...existing.promptConfig,
           stepOpenings: nextStepOpenings
         };
+      }
+      if (workflowPatched) {
+        // Legacy sessions did not persist the term workflow.  Backfill it once
+        // from their activity so later term edits cannot change this session.
+        existing.workflowSteps = workflowSteps;
       }
       const outlinePatched = Boolean(
         structureTreeTemplate &&
@@ -134,7 +140,7 @@ export async function POST(request: NextRequest) {
         nextJoinedUsers.length !== prevJoinedUsers.length ||
         nextJoinedUsers.some((name) => !prevJoinedUsers.includes(name));
       await markUserOnline(existing.id, user.username);
-      if (joinedChanged || promptConfigPatched || outlinePatched) {
+      if (joinedChanged || promptConfigPatched || workflowPatched || outlinePatched) {
         existing.joinedUsers = nextJoinedUsers;
         await saveSession(existing);
       } else {
@@ -153,7 +159,8 @@ export async function POST(request: NextRequest) {
       activitySupplemental: activity.supplemental ?? "",
       groupId: group?.groupId ?? "g-auto",
       groupName: group?.groupName ?? "未分組",
-      promptConfig: resolvedConfig
+      promptConfig: resolvedConfig,
+      workflowSteps
     });
     const structureTreeTemplate = resolveStructureTreeTemplate(activity.genre, activity.title);
     if (structureTreeTemplate) {

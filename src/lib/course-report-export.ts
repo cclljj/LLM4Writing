@@ -319,6 +319,7 @@ async function buildStudentReportInput(input: {
     privacyPeerUsernames: session.participants.filter((participant) => participant !== input.username),
     generatedAtIso: nowIso(),
     completedAtIso,
+    workflowSteps: session.workflowSteps,
   };
 }
 

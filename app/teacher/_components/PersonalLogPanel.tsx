@@ -4,6 +4,7 @@ import { memo, Ref } from "react";
 import OutlineSvg from "@/app/_components/OutlineSvg";
 import { renderMessageHtml } from "@/app/student/_components/renderMessageHtml";
 import { stepNameMap } from "@/src/lib/step-names";
+import { CourseWorkflowStep } from "@/src/lib/types";
 import { getPersonalScopedMessagesForStudentHistory, getStepsFromMessages, MonitorMessage } from "./monitor-log-utils";
 
 function PersonalLogPanel({
@@ -17,6 +18,7 @@ function PersonalLogPanel({
   personalMessages,
   userOutline,
   userStep3SubmittedOutline,
+  workflowSteps,
   stepExpanded,
   onToggleStep
 }: {
@@ -30,6 +32,7 @@ function PersonalLogPanel({
   personalMessages: MonitorMessage[];
   userOutline: string;
   userStep3SubmittedOutline: string;
+  workflowSteps?: CourseWorkflowStep[];
   stepExpanded: Record<number, boolean>;
   onToggleStep: (step: number) => void;
 }) {
@@ -65,6 +68,7 @@ function PersonalLogPanel({
           ? getPersonalScopedMessagesForStudentHistory(personalMessages, selectedProgressUser)
           : personalMessages;
         const personalSteps = getStepsFromMessages(scopedPersonalMessages);
+        const stepNames = new Map((workflowSteps ?? []).map((item) => [item.step, item.name]));
         const hasStep4Revised = Boolean(userOutline && userOutline !== userStep3SubmittedOutline);
 
         const step3Block = userStep3SubmittedOutline ? (
@@ -91,7 +95,7 @@ function PersonalLogPanel({
                 <div key={step} className="card">
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                     <h3 style={{ margin: 0 }}>
-                      Step {step} {stepNameMap[step] ? `- ${stepNameMap[step]}` : ""}
+                      Step {step} {(stepNames.get(step) ?? stepNameMap[step]) ? `- ${stepNames.get(step) ?? stepNameMap[step]}` : ""}
                     </h3>
                     <button
                       type="button"

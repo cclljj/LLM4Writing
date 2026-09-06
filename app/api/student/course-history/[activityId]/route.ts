@@ -67,6 +67,7 @@ export async function GET(_: Request, context: { params: Promise<{ activityId: s
       personalStep: latestPersonalStep,
       groupName: latest.groupName ?? "",
       participants: latest.participants,
+      workflowSteps: latest.workflowSteps ?? [],
       messages: latest.messages
     },
     latestWork,
@@ -74,6 +75,7 @@ export async function GET(_: Request, context: { params: Promise<{ activityId: s
       sessionId: session.id,
       createdAt: session.createdAt,
       currentStep: session.personalSteps?.[user.username] ?? session.currentStep,
+      workflowSteps: session.workflowSteps ?? [],
       ownMessageCount: session.messages.filter((message) => message.userId === user.username).length
     }))
   });

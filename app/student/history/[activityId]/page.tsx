@@ -7,7 +7,8 @@ import { deferStateUpdate } from "@/src/lib/defer-state-update";
 import { formatTaipeiDateTime } from "@/src/lib/time-format";
 import OutlineSvg from "@/app/_components/OutlineSvg";
 import { renderMessageHtml } from "@/app/student/_components/renderMessageHtml";
-import { stepNameMap } from "@/src/lib/step-names";
+import { getWorkflowStepName } from "@/src/lib/course-workflow";
+import type { CourseWorkflowStep } from "@/src/lib/types";
 
 type HistorySummary = {
   sessionCount: number;
@@ -33,6 +34,7 @@ type LatestSession = {
   personalStep: number;
   groupName: string;
   participants: string[];
+  workflowSteps?: CourseWorkflowStep[];
   messages: ChatMessage[];
 };
 
@@ -50,6 +52,7 @@ type SessionItem = {
   sessionId: string;
   createdAt: string;
   currentStep: number;
+  workflowSteps?: CourseWorkflowStep[];
   ownMessageCount: number;
 };
 
@@ -205,7 +208,7 @@ export default function StudentCourseHistoryPage() {
                   <div key={`history-step-${step}`} className="card">
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                       <h3 style={{ margin: 0 }}>
-                        Step {step} {stepNameMap[step] ? `- ${stepNameMap[step]}` : ""}
+                        Step {step} - {getWorkflowStepName(history.latestSession, step)}
                       </h3>
                       <button
                         type="button"
@@ -314,7 +317,7 @@ export default function StudentCourseHistoryPage() {
                 <div key={item.sessionId} style={{ borderTop: "1px solid var(--line-soft)", padding: "8px 0" }}>
                   <small>
                     {formatTaipeiDateTime(item.createdAt)} / 最後進度 Step {item.currentStep}
-                    {stepNameMap[item.currentStep] ? `（${stepNameMap[item.currentStep]}）` : ""} / 個人發言 {item.ownMessageCount} 則
+                    {`（${getWorkflowStepName(item, item.currentStep)}）`} / 個人發言 {item.ownMessageCount} 則
                   </small>
                 </div>
               ))}

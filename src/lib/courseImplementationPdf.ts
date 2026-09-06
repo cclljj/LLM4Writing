@@ -4,6 +4,8 @@ import { buildOutlinePreview } from "@/src/lib/outline-utils";
 import { maskPeerUsernames, normalizeReportMarkdownText } from "@/src/lib/report-rendering";
 import { formatTaipeiDateTime } from "@/src/lib/time-format";
 import { COURSE_REPORT_VERSION } from "@/src/lib/course-report-version";
+import { getWorkflowStepName } from "@/src/lib/course-workflow";
+import { CourseWorkflowStep } from "@/src/lib/types";
 
 export type PdfStudentMetric = {
   stars: number;
@@ -48,6 +50,7 @@ export type CourseImplementationPdfInput = {
   generatedAtIso: string;
   /** ISO timestamp of the student's Step10 completion; falls back to course-ended or legacy activity time. */
   completedAtIso?: string;
+  workflowSteps?: CourseWorkflowStep[];
 };
 
 const FONT_FILE_NAME = "NotoSansTC[wght].ttf";
@@ -152,22 +155,6 @@ function formatRole(role: string): string {
   if (role === "ai") return "AI";
   if (role === "system") return "系統";
   return role || "未知";
-}
-
-function stepName(step: number): string {
-  const names: Record<number, string> = {
-    1: "審視題目",
-    2: "蒐集資料",
-    3: "生成論點",
-    4: "對比修正",
-    5: "摘要報告",
-    6: "撰寫初稿",
-    7: "分析回饋",
-    8: "修改潤飾",
-    9: "個人反思",
-    10: "總結報告",
-  };
-  return names[step] ?? "";
 }
 
 let mermaidInitDone = false;
@@ -641,7 +628,8 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
         doc.roundedRect(PAGE.marginX, y - 4, contentWidth, 24, 5, 5, "F");
         doc.setFontSize(11);
         setTextColor(COLORS.title);
-        doc.text(`Step ${step}${stepName(step) ? ` - ${stepName(step)}` : ""}`, PAGE.marginX + 8, y + 12);
+        const name = getWorkflowStepName(input, step);
+        doc.text(`Step ${step}${name ? ` - ${name}` : ""}`, PAGE.marginX + 8, y + 12);
         setTextColor(COLORS.text);
         y += 30;
 

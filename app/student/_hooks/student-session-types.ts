@@ -1,4 +1,5 @@
 // Shared UI-level session types for the student page and its hooks (#459).
+import type { CourseWorkflowStep } from "@/src/lib/types";
 
 export type Course = {
   id: string;
@@ -67,6 +68,7 @@ export type SessionState = {
     stepOpenings?: Record<string, string>;
     step9Questions?: Record<string, string>;
   };
+  workflowSteps?: CourseWorkflowStep[];
   messages: Array<{
     id: string;
     role: string;

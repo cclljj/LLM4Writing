@@ -1,6 +1,6 @@
 import type { CourseImplementationPdfInput, PdfMessage } from "@/src/lib/courseImplementationPdf";
 import { maskPeerUsernames, normalizeReportMarkdownText } from "@/src/lib/report-rendering";
-import { stepNameMap } from "@/src/lib/step-names";
+import { getWorkflowStepName } from "@/src/lib/course-workflow";
 import { COURSE_REPORT_VERSION, STUDENT_PORTFOLIO_JSON_SCHEMA_VERSION } from "@/src/lib/course-report-version";
 
 type PortfolioArtifactType =
@@ -102,13 +102,13 @@ export function buildCourseImplementationPortfolioJson(input: CourseImplementati
   const originalTimelineMessages: PortfolioTimelineMessage[] = input.timelineMessages.map((message) => ({
     ...message,
     text: maskText(message.text, peerUsernames),
-    stepName: stepNameMap[message.step] ?? "",
+    stepName: getWorkflowStepName(input, message.step),
     entryType: "message",
   }));
   const step4ProcessMessages = (input.step4ProcessMessages ?? input.timelineMessages.filter((message) => message.step === 4)).map((message) => ({
     ...message,
     text: maskText(message.text, peerUsernames),
-    stepName: stepNameMap[message.step] ?? "",
+    stepName: getWorkflowStepName(input, message.step),
   }));
   const timelineMessages: PortfolioTimelineMessage[] = [...originalTimelineMessages];
   const timelineMessageKeys = new Set(timelineMessages.map(timelineMessageKey));
@@ -123,7 +123,7 @@ export function buildCourseImplementationPortfolioJson(input: CourseImplementati
   const stepArtifacts: PortfolioStepArtifact[] = [
     {
       step: 1,
-      stepName: stepNameMap[1] ?? "",
+      stepName: getWorkflowStepName(input, 1),
       artifactType: "step1_discussion",
       title: "步驟一討論紀錄",
       contentFormat: "conversation",
@@ -133,7 +133,7 @@ export function buildCourseImplementationPortfolioJson(input: CourseImplementati
     },
     {
       step: 2,
-      stepName: stepNameMap[2] ?? "",
+      stepName: getWorkflowStepName(input, 2),
       artifactType: "step2_discussion",
       title: "步驟二討論紀錄",
       contentFormat: "conversation",
@@ -143,7 +143,7 @@ export function buildCourseImplementationPortfolioJson(input: CourseImplementati
     },
     {
       step: 3,
-      stepName: stepNameMap[3] ?? "",
+      stepName: getWorkflowStepName(input, 3),
       artifactType: "step3_submitted_outline",
       title: "步驟三原始輸入架構圖",
       contentFormat: "mermaid",
@@ -157,7 +157,7 @@ export function buildCourseImplementationPortfolioJson(input: CourseImplementati
     },
     {
       step: 4,
-      stepName: stepNameMap[4] ?? "",
+      stepName: getWorkflowStepName(input, 4),
       artifactType: "step4_revised_outline",
       title: "步驟四討論後修正版架構圖",
       contentFormat: "mermaid",
@@ -171,7 +171,7 @@ export function buildCourseImplementationPortfolioJson(input: CourseImplementati
     },
     {
       step: 5,
-      stepName: stepNameMap[5] ?? "",
+      stepName: getWorkflowStepName(input, 5),
       artifactType: "step5_summary_report",
       title: "步驟五摘要報告",
       contentFormat: "markdown",
@@ -181,7 +181,7 @@ export function buildCourseImplementationPortfolioJson(input: CourseImplementati
     },
     {
       step: 6,
-      stepName: stepNameMap[6] ?? "",
+      stepName: getWorkflowStepName(input, 6),
       artifactType: "step6_draft",
       title: "步驟六初稿",
       contentFormat: "markdown",
@@ -191,7 +191,7 @@ export function buildCourseImplementationPortfolioJson(input: CourseImplementati
     },
     {
       step: 7,
-      stepName: stepNameMap[7] ?? "",
+      stepName: getWorkflowStepName(input, 7),
       artifactType: "step7_feedback_report",
       title: "步驟七分析回饋",
       contentFormat: "markdown",
@@ -201,7 +201,7 @@ export function buildCourseImplementationPortfolioJson(input: CourseImplementati
     },
     {
       step: 8,
-      stepName: stepNameMap[8] ?? "",
+      stepName: getWorkflowStepName(input, 8),
       artifactType: "step8_revised_draft",
       title: "步驟八潤飾稿",
       contentFormat: "markdown",
@@ -211,7 +211,7 @@ export function buildCourseImplementationPortfolioJson(input: CourseImplementati
     },
     {
       step: 10,
-      stepName: stepNameMap[10] ?? "",
+      stepName: getWorkflowStepName(input, 10),
       artifactType: "step10_final_report",
       title: "步驟十總結報告",
       contentFormat: "markdown",

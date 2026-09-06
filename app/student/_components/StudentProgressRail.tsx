@@ -1,4 +1,4 @@
-import { stepNameMap } from "@/src/lib/step-names";
+import { CourseWorkflowStep } from "@/src/lib/types";
 
 type ProgressStatus = "completed" | "current" | "upcoming";
 
@@ -8,12 +8,14 @@ function getStatusLabel(status: ProgressStatus): string {
   return "待開始";
 }
 
-export default function StudentProgressRail({ currentStep }: { currentStep: number }) {
-  const progressItems = Array.from({ length: 10 }, (_, idx) => {
-    const step = idx + 1;
-    const status: ProgressStatus = step < currentStep ? "completed" : step === currentStep ? "current" : "upcoming";
-    return { step, name: stepNameMap[step] ?? `Step ${step}`, status };
-  });
+export default function StudentProgressRail({ currentStep, workflowSteps }: { currentStep: number; workflowSteps: CourseWorkflowStep[] }) {
+  const currentIndex = workflowSteps.findIndex((item) => item.step === currentStep);
+  const progressItems: Array<{ step: number; name: string; status: ProgressStatus }> = workflowSteps.map((item, index) => ({
+    step: item.step,
+    name: item.name,
+    status: index < currentIndex ? "completed" : item.step === currentStep ? "current" : "upcoming"
+  }));
+  const current = workflowSteps.find((item) => item.step === currentStep);
 
   return (
     <div className="card">
@@ -31,7 +33,7 @@ export default function StudentProgressRail({ currentStep }: { currentStep: numb
         ))}
       </div>
       <small style={{ display: "block", marginTop: 8 }}>
-        目前你在 Step {currentStep}「{stepNameMap[currentStep] ?? "未知步驟"}」。Step5 之後會依個人完成狀態自動推進。
+        目前你在 Step {currentStep}「{current?.name ?? "未知步驟"}」。
       </small>
     </div>
   );
