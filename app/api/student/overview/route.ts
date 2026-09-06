@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/src/lib/auth-server";
 import { getAllActivities, hydrateDomainState } from "@/src/lib/activity-store";
 import { listSessionsByParticipant } from "@/src/lib/store";
 import { getUserStore } from "@/src/lib/user-store";
+import { DEFAULT_ACADEMIC_YEAR, DEFAULT_ACADEMIC_YEAR_TERM } from "@/src/lib/academic-term-defaults";
 
 export async function GET() {
   const user = await getCurrentUser();
@@ -74,8 +75,8 @@ export async function GET() {
         activityId,
         title: activity?.title ?? activityId,
         classNumber: activity?.classNumber ?? "—",
-        academicYear: activity?.academicYear ?? "114",
-        academicYearTerm: activity?.academicYearTerm ?? "2",
+        academicYear: activity?.academicYear ?? DEFAULT_ACADEMIC_YEAR,
+        academicYearTerm: activity?.academicYearTerm ?? DEFAULT_ACADEMIC_YEAR_TERM,
         lastSessionId: value.lastSessionId,
         lastStep: value.lastStep,
         lastParticipatedAt: value.lastAt,

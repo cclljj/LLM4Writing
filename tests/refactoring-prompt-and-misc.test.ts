@@ -38,8 +38,8 @@ test("activity store behavior: course state transitions are valid", () => {
   if (!created.ok) return;
   const activityId = created.saved.id;
 
-  assert.equal(findActivity(activityId)?.academicYear, "114");
-  assert.equal(findActivity(activityId)?.academicYearTerm, "2");
+  assert.equal(findActivity(activityId)?.academicYear, "115");
+  assert.equal(findActivity(activityId)?.academicYearTerm, "1");
 
   assert.equal(getCourseStatus(activityId), "not_started");
 
@@ -101,6 +101,8 @@ test("source-guard: 114-2 and initial 115-1 configs are exact snapshots of the o
   const config = JSON.parse(readFileSync(resolve(thisDir, "../src/config/course-step-configs.json"), "utf8"));
   const workflowConfig = JSON.parse(readFileSync(resolve(thisDir, "../src/config/course-workflow-configs.json"), "utf8"));
   const originalPrompts = JSON.parse(readFileSync(resolve(thisDir, "../src/config/system-prompt-config.json"), "utf8"));
+  assert.equal(config.default, "115-1");
+  assert.equal(workflowConfig.default, "115-1");
   for (const term of ["114-2", "115-1"]) {
     const snapshot = config.terms?.[term];
     assert.equal(snapshot?.extends, undefined);

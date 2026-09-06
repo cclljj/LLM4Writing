@@ -1,5 +1,6 @@
 import { CourseWorkflowStep, InteractionMode, WorkflowCapability } from "@/src/lib/types";
 import courseWorkflowConfigs from "@/src/config/course-workflow-configs.json";
+import { DEFAULT_ACADEMIC_TERM_CONFIG_KEY } from "@/src/lib/academic-term-defaults";
 
 type CourseWorkflowConfigRegistry = {
   default?: string;
@@ -49,13 +50,13 @@ function resolveConfigWorkflowSteps(key: string | undefined, resolving = new Set
 }
 
 export function resolveDefaultCourseWorkflowStepsFromConfig(): CourseWorkflowStep[] {
-  return resolveConfigWorkflowSteps(courseWorkflowConfigRegistry.default).map((step) => ({ ...step }));
+  return resolveConfigWorkflowSteps(courseWorkflowConfigRegistry.default ?? DEFAULT_ACADEMIC_TERM_CONFIG_KEY).map((step) => ({ ...step }));
 }
 
 export function resolveCourseWorkflowStepsFromConfig(academicYear: string, academicYearTerm: string): CourseWorkflowStep[] {
   const requestedKey = `${academicYear.trim()}-${academicYearTerm.trim()}`;
   const terms = courseWorkflowConfigRegistry.terms ?? {};
-  const steps = resolveConfigWorkflowSteps(terms[requestedKey] ? requestedKey : courseWorkflowConfigRegistry.default);
+  const steps = resolveConfigWorkflowSteps(terms[requestedKey] ? requestedKey : courseWorkflowConfigRegistry.default ?? DEFAULT_ACADEMIC_TERM_CONFIG_KEY);
   return steps.length > 0 ? steps.map((step) => ({ ...step })) : resolveDefaultCourseWorkflowStepsFromConfig();
 }
 

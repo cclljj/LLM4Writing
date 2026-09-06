@@ -9,6 +9,7 @@ import {
 import { getUserStore, getUsersVisibleToTeacherStore, listUsersStore } from "@/src/lib/user-store";
 import { listActivityIdsWithStudentMessages } from "@/src/lib/store";
 import { recordAuditLog } from "@/src/lib/audit-log-store";
+import { DEFAULT_ACADEMIC_YEAR, DEFAULT_ACADEMIC_YEAR_TERM } from "@/src/lib/academic-term-defaults";
 
 /**
  * Returns a Set of activityIds that already have at least one student message (#254).
@@ -75,8 +76,8 @@ export async function POST(request: NextRequest) {
   }
 
   const classNumber = body.classNumber.trim();
-  const academicYear = body.academicYear?.trim() || "114";
-  const academicYearTerm = body.academicYearTerm?.trim() || "2";
+  const academicYear = body.academicYear?.trim() || DEFAULT_ACADEMIC_YEAR;
+  const academicYearTerm = body.academicYearTerm?.trim() || DEFAULT_ACADEMIC_YEAR_TERM;
   if (!classNumber) {
     return NextResponse.json({ error: "missing_class_number" }, { status: 400 });
   }

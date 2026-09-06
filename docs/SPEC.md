@@ -407,6 +407,7 @@ Artifact 類型：
 - `114-2` 與 `115-1` 的流程步驟設計已寫入 `course-workflow-configs.json`。此檔只含 workflow metadata，不含 prompt 內容，因此可供 client-safe workflow helper 使用。
 - term config 可以透過 `extends` 繼承前一份課程設定；物件欄位會合併、陣列會完整取代，讓新學期只需記錄改動。
 - `115-1` 目前已完整複製 `114-2`，是可獨立修改的初始快照；調整 `115-1` 不會回寫或影響 `114-2`。
+- 寫作任務設定與後端建立課程的缺省學年學期目前為 `115-1`；`114-2` 保留為既有課程的歷史設定。
 - 每個 workflow term config 的 `workflowSteps` 為課程流程單一來源；每項包含數字 `step`、顯示 `name`、互動 `mode` 與既有能力 `capability`。設定檔中的順序就是課程順序，因此可新增、刪除或重排步驟。
 - 新建 session 必須保存 `workflowSteps` 完整快照。學生端操作、教師開課/切步驟、教師監控與歷程、個人紀錄、PDF／JSON／研究 Log 匯出必須依此快照解析步驟名稱、順序、互動模式與 capability；舊 session 缺快照時只能回退 `course-workflow-configs.json` 的 `default` term workflow，不得使用程式內建十步驟清單。
 - 流程判斷不得以 runtime step number 大小推論先後（例如 `currentStep >= 6`、`Math.max(currentStep)`）；是否已到達某能力、最高/最低進度、歷史上下文可見範圍、研究資料可見範圍、監看彙整與輸出排序，皆必須使用 `workflowSteps` 陣列順序。

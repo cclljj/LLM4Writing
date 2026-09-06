@@ -88,8 +88,8 @@ test("student portfolio JSON mirrors report input and masks peer accounts", () =
   assert.equal(payload.student.name, "***");
   assert.equal(JSON.stringify(payload).includes("Alice"), false);
   assert.equal(payload.course.activityId, "oc-001");
-  assert.equal(payload.course.academicYear, "114");
-  assert.equal(payload.course.academicYearTerm, "2");
+  assert.equal(payload.course.academicYear, "115");
+  assert.equal(payload.course.academicYearTerm, "1");
   assert.equal(payload.course.school, "*****");
   assert.equal(payload.course.classNumber, "*****");
   assert.equal(JSON.stringify(payload).includes("DemoSchool"), false);

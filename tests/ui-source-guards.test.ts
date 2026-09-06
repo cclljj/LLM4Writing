@@ -64,6 +64,19 @@ test("source-guard: workflow fallback is config-backed, not a hard-coded legacy 
   assert.ok(workflowSrc.includes("resolveDefaultCourseWorkflowStepsFromConfig"), "workflow fallback should be explicitly config-backed");
 });
 
+test("source-guard: writing task setup defaults to the centralized academic term", async () => {
+  const defaultsSrc = await read("../src/lib/academic-term-defaults.ts");
+  const taskUiSrc = await read("../app/teacher/_components/CourseManagementTab.tsx");
+  const openClassesRouteSrc = await read("../app/api/admin/openclasses/route.ts");
+  const activityStoreSrc = await read("../src/lib/activity-store.ts");
+  assert.ok(defaultsSrc.includes('DEFAULT_ACADEMIC_YEAR = "115"'));
+  assert.ok(defaultsSrc.includes('DEFAULT_ACADEMIC_YEAR_TERM = "1"'));
+  for (const src of [taskUiSrc, openClassesRouteSrc, activityStoreSrc]) {
+    assert.ok(src.includes("DEFAULT_ACADEMIC_YEAR"), "new writing task defaults should use the shared academic year constant");
+    assert.ok(src.includes("DEFAULT_ACADEMIC_YEAR_TERM"), "new writing task defaults should use the shared academic term constant");
+  }
+});
+
 test("source-guard: course implementation PDF does not pre-page-break long message cards", async () => {
   const src = await read("../src/lib/courseImplementationPdf.ts");
   const drawMessageCardStart = src.indexOf("function drawMessageCard");

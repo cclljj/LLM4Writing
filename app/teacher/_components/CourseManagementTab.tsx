@@ -2,6 +2,7 @@
 
 import { DragEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { deferStateUpdate } from "@/src/lib/defer-state-update";
+import { DEFAULT_ACADEMIC_YEAR, DEFAULT_ACADEMIC_YEAR_TERM } from "@/src/lib/academic-term-defaults";
 import { ActivityGroup, ActivityRow, EssayRow, OpenClassRow, UserRow, genreOptions } from "./types";
 import CourseImplementationReportTab from "./CourseImplementationReportTab";
 import ConfirmDialog from "./ConfirmDialog";
@@ -64,8 +65,8 @@ export default function CourseManagementTab({
     id: "",
     school: "", // admin 才會用到；teacher 會自動填入自己的學校
     classNumber: "",
-    academicYear: "114",
-    academicYearTerm: "2",
+    academicYear: DEFAULT_ACADEMIC_YEAR,
+    academicYearTerm: DEFAULT_ACADEMIC_YEAR_TERM,
     essayId: "",
     durationMinutes: 40,
     supplemental: ""
@@ -269,8 +270,8 @@ export default function CourseManagementTab({
       id: "",
       school: "",
       classNumber: "",
-      academicYear: "114",
-      academicYearTerm: "2",
+      academicYear: DEFAULT_ACADEMIC_YEAR,
+      academicYearTerm: DEFAULT_ACADEMIC_YEAR_TERM,
       essayId: "",
       durationMinutes: 40,
       supplemental: ""

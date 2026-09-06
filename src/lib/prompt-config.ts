@@ -3,6 +3,7 @@ import {
   resolveCourseWorkflowStepsFromConfig,
   resolveDefaultCourseWorkflowStepsFromConfig
 } from "@/src/lib/course-workflow";
+import { DEFAULT_ACADEMIC_TERM_CONFIG_KEY } from "@/src/lib/academic-term-defaults";
 import courseStepConfigs from "@/src/config/course-step-configs.json";
 import { findActivity } from "@/src/lib/activity-store";
 
@@ -59,7 +60,7 @@ export function getCourseStepConfigKey(academicYear: string, academicYearTerm: s
 export function resolveCourseStepConfig(academicYear: string, academicYearTerm: string): CourseStepConfig {
   const requestedKey = getCourseStepConfigKey(academicYear, academicYearTerm);
   const terms = courseStepConfigRegistry.terms ?? {};
-  const defaultKey = courseStepConfigRegistry.default ?? "114-2";
+  const defaultKey = courseStepConfigRegistry.default ?? DEFAULT_ACADEMIC_TERM_CONFIG_KEY;
   const resolving = new Set<string>();
 
   const resolve = (key: string): CourseStepConfig => {

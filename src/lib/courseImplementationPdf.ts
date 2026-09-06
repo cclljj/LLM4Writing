@@ -5,6 +5,7 @@ import { maskPeerUsernames, normalizeReportMarkdownText } from "@/src/lib/report
 import { formatTaipeiDateTime } from "@/src/lib/time-format";
 import { COURSE_REPORT_VERSION } from "@/src/lib/course-report-version";
 import { getWorkflowStepByCapability, getWorkflowStepName } from "@/src/lib/course-workflow";
+import { DEFAULT_ACADEMIC_YEAR, DEFAULT_ACADEMIC_YEAR_TERM } from "@/src/lib/academic-term-defaults";
 import { CourseWorkflowStep } from "@/src/lib/types";
 
 export type PdfStudentMetric = {
@@ -693,8 +694,8 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
   setTextColor(COLORS.text);
   doc.setFontSize(11);
   doc.text(`產出時間：${formatTaipeiDateTime(input.generatedAtIso)}`, PAGE.marginX + 18, y + 62);
-  const academicYear = input.academicYear || "114";
-  const academicYearTerm = input.academicYearTerm || "2";
+  const academicYear = input.academicYear || DEFAULT_ACADEMIC_YEAR;
+  const academicYearTerm = input.academicYearTerm || DEFAULT_ACADEMIC_YEAR_TERM;
   doc.text(`${input.school} / ${input.classNumber} / ${academicYear} 學年第 ${academicYearTerm} 學期 / ${input.title}`, PAGE.marginX + 18, y + 80);
   y += 108;
 

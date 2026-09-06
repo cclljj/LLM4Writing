@@ -3,6 +3,7 @@ import postgres, { Sql } from "postgres";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { getDatabaseUrl, getPostgresClientOptions, isDatabaseEnabled } from "@/src/lib/db-config";
+import { DEFAULT_ACADEMIC_YEAR, DEFAULT_ACADEMIC_YEAR_TERM } from "@/src/lib/academic-term-defaults";
 
 export type Essay = {
   id: string;
@@ -168,8 +169,8 @@ function normalizeDomainState(input: unknown): DomainState {
         .filter((openClass): openClass is OpenClassTask => Boolean(openClass && typeof openClass.id === "string"))
         .map((openClass) => ({
           ...openClass,
-          academicYear: typeof openClass.academicYear === "string" && openClass.academicYear.trim() ? openClass.academicYear.trim() : "114",
-          academicYearTerm: typeof openClass.academicYearTerm === "string" && openClass.academicYearTerm.trim() ? openClass.academicYearTerm.trim() : "2"
+          academicYear: typeof openClass.academicYear === "string" && openClass.academicYear.trim() ? openClass.academicYear.trim() : DEFAULT_ACADEMIC_YEAR,
+          academicYearTerm: typeof openClass.academicYearTerm === "string" && openClass.academicYearTerm.trim() ? openClass.academicYearTerm.trim() : DEFAULT_ACADEMIC_YEAR_TERM
         }))
     : [];
   const mergedOpenClasses = [...base.openClasses];
@@ -706,8 +707,8 @@ export function upsertOpenClass(input: {
   supplemental: string;
   ownerTeacherUsername?: string;
 }) {
-  const academicYear = input.academicYear?.trim() || "114";
-  const academicYearTerm = input.academicYearTerm?.trim() || "2";
+  const academicYear = input.academicYear?.trim() || DEFAULT_ACADEMIC_YEAR;
+  const academicYearTerm = input.academicYearTerm?.trim() || DEFAULT_ACADEMIC_YEAR_TERM;
   const essay = findEssay(input.essayId);
   if (!essay) {
     return { ok: false as const, error: "essay_not_found" };

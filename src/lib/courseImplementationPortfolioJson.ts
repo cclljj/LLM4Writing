@@ -2,6 +2,7 @@ import type { CourseImplementationPdfInput, PdfMessage } from "@/src/lib/courseI
 import { maskPeerUsernames, normalizeReportMarkdownText } from "@/src/lib/report-rendering";
 import { getSessionWorkflowSteps, getWorkflowStepByCapability, getWorkflowStepName, getWorkflowStepOrderIndex } from "@/src/lib/course-workflow";
 import { COURSE_REPORT_VERSION, STUDENT_PORTFOLIO_JSON_SCHEMA_VERSION } from "@/src/lib/course-report-version";
+import { DEFAULT_ACADEMIC_YEAR, DEFAULT_ACADEMIC_YEAR_TERM } from "@/src/lib/academic-term-defaults";
 
 type PortfolioArtifactType =
   | "step1_discussion"
@@ -290,8 +291,8 @@ export function buildCourseImplementationPortfolioJson(input: CourseImplementati
       activityId: input.activityId,
       school: DEIDENTIFIED_COURSE_SCHOOL,
       classNumber: DEIDENTIFIED_COURSE_CLASS_NUMBER,
-      academicYear: input.academicYear || "114",
-      academicYearTerm: input.academicYearTerm || "2",
+      academicYear: input.academicYear || DEFAULT_ACADEMIC_YEAR,
+      academicYearTerm: input.academicYearTerm || DEFAULT_ACADEMIC_YEAR_TERM,
       title: input.title,
     },
     student: {

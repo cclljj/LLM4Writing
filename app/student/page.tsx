@@ -8,6 +8,7 @@ import {
   buildInteractiveMessages
 } from "@/src/lib/student-page-helpers";
 import { getSessionWorkflowSteps } from "@/src/lib/course-workflow";
+import { DEFAULT_ACADEMIC_YEAR, DEFAULT_ACADEMIC_YEAR_TERM } from "@/src/lib/academic-term-defaults";
 import { useStudentAuth } from "./_hooks/useStudentAuth";
 import { useStudentOverview } from "./_hooks/useStudentOverview";
 import { rememberLastActivity, syncActivityQuery, useStudentSession } from "./_hooks/useStudentSession";
@@ -327,8 +328,8 @@ export default function StudentPage() {
             genre={currentActivity?.genre ?? "—"}
             durationMinutes={currentActivity?.durationMinutes ?? "—"}
             classNumber={currentActivity?.classNumber ?? "—"}
-            academicYear={currentActivity?.academicYear ?? "114"}
-            academicYearTerm={currentActivity?.academicYearTerm ?? "2"}
+            academicYear={currentActivity?.academicYear ?? DEFAULT_ACADEMIC_YEAR}
+            academicYearTerm={currentActivity?.academicYearTerm ?? DEFAULT_ACADEMIC_YEAR_TERM}
             groupName={session.groupName ?? "—"}
             groupMemberNames={groupMemberNames}
             essayDescription={currentActivity?.essayDescription || "—"}
