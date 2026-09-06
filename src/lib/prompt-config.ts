@@ -2,6 +2,7 @@ import { Activity, PromptConfig, Step10ReportConfig } from "@/src/lib/types";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import systemPromptConfig from "@/src/config/system-prompt-config.json";
+import courseStepConfigs from "@/src/config/course-step-configs.json";
 import { findActivity } from "@/src/lib/activity-store";
 
 type RawSystemPromptConfig = {
@@ -15,6 +16,17 @@ type RawSystemPromptConfig = {
   step9Questions?: Record<string, string>;
   step10Report?: Step10ReportConfig;
   writingTasks?: Record<string, { questionBanks?: Record<string, string[]> }>;
+};
+
+type CourseStepConfig = {
+  extends?: string;
+  promptConfig?: RawSystemPromptConfig;
+  stepOpenings?: Record<string, string>;
+};
+
+type CourseStepConfigRegistry = {
+  default?: string;
+  terms?: Record<string, CourseStepConfig>;
 };
 
 function loadStepOpeningTexts(): Record<string, string> {
@@ -35,6 +47,55 @@ function loadStepOpeningTexts(): Record<string, string> {
 
 const stepOpeningTexts = loadStepOpeningTexts();
 
+const courseStepConfigRegistry = courseStepConfigs as CourseStepConfigRegistry;
+const legacyCourseStepConfig: CourseStepConfig = {
+  promptConfig: systemPromptConfig as RawSystemPromptConfig,
+  stepOpenings: stepOpeningTexts
+};
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+/** Arrays replace their parent value; records merge so a term only needs to list its changes. */
+function mergeConfig<T>(base: T, override: T): T {
+  if (!isPlainObject(base) || !isPlainObject(override)) return override ?? base;
+  const merged: Record<string, unknown> = { ...base };
+  for (const [key, value] of Object.entries(override)) {
+    merged[key] = isPlainObject(value) && isPlainObject(merged[key])
+      ? mergeConfig(merged[key], value)
+      : value;
+  }
+  return merged as T;
+}
+
+export function getCourseStepConfigKey(academicYear: string, academicYearTerm: string): string {
+  return `${academicYear.trim()}-${academicYearTerm.trim()}`;
+}
+
+/**
+ * Resolves a term config without mutating the legacy 114-2 baseline. Unknown terms
+ * deliberately fall back to the registry default so a newly created course remains usable.
+ */
+export function resolveCourseStepConfig(academicYear: string, academicYearTerm: string): CourseStepConfig {
+  const requestedKey = getCourseStepConfigKey(academicYear, academicYearTerm);
+  const terms = courseStepConfigRegistry.terms ?? {};
+  const defaultKey = courseStepConfigRegistry.default ?? "114-2";
+  const resolving = new Set<string>();
+
+  const resolve = (key: string): CourseStepConfig => {
+    if (key === "114-2") return legacyCourseStepConfig;
+    const entry = terms[key];
+    if (!entry || resolving.has(key)) return legacyCourseStepConfig;
+    resolving.add(key);
+    const parent = entry.extends ? resolve(entry.extends) : legacyCourseStepConfig;
+    resolving.delete(key);
+    return mergeConfig(parent, entry);
+  };
+
+  return resolve(terms[requestedKey] ? requestedKey : defaultKey);
+}
+
 export function resolvePromptConfigForActivity(activityId: string): PromptConfig {
   const activity = findActivity(activityId);
   if (!activity) {
@@ -51,7 +112,8 @@ export function resolvePromptConfigForActivity(activityId: string): PromptConfig
     };
   }
 
-  const raw = systemPromptConfig as RawSystemPromptConfig;
+  const courseConfig = resolveCourseStepConfig(activity.academicYear, activity.academicYearTerm);
+  const raw = courseConfig.promptConfig ?? legacyCourseStepConfig.promptConfig ?? {};
   const systemPrompt = typeof raw.systemPrompt === "string" ? raw.systemPrompt : undefined;
   const stepPrompts = { ...(raw.stepPrompts ?? {}) };
   const step12FeedbackPrompts = { ...(raw.step12FeedbackPrompts ?? {}) };
@@ -95,7 +157,7 @@ export function resolvePromptConfigForActivity(activityId: string): PromptConfig
     questionBanks: { ...baseQuestionBanks, ...scopedQuestionBanks },
     step9Questions,
     step10Report,
-    stepOpenings: stepOpeningTexts
+    stepOpenings: courseConfig.stepOpenings ?? stepOpeningTexts
   };
 }
 

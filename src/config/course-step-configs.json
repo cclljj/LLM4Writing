@@ -1,0 +1,14 @@
+{
+  "default": "114-2",
+  "terms": {
+    "114-2": {
+      "description": "既有 114 學年度第 2 學期課程；基準內容維持於 system-prompt-config.json 與 step-opening/。"
+    },
+    "115-1": {
+      "extends": "114-2",
+      "description": "115 學年度第 1 學期課程。請把調整內容寫在 promptConfig 或 stepOpenings，避免修改 114-2 基準。",
+      "promptConfig": {},
+      "stepOpenings": {}
+    }
+  }
+}

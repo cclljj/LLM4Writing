@@ -109,6 +109,24 @@ Students marked as `本次不列入等待` for the current session SHALL be excl
 
 The system SHALL choose Step1/2 next questions from the configured prompt or question bank hierarchy and SHALL never show internal prompt text as the student question.
 
+### Requirement: Term-Versioned Course Step Configuration
+
+The system SHALL resolve course-step prompts, question banks, reports, and step openings from the activity's academic year and term key (for example, `114-2` or `115-1`).
+
+#### Scenario: New term changes do not alter historical courses
+
+- **GIVEN** a `114-2` course and a `115-1` course exist
+- **WHEN** the `115-1` term configuration overrides a prompt or opening text
+- **THEN** the `115-1` course uses the override
+- **AND** the `114-2` course continues to use its own baseline configuration
+
+#### Scenario: Term config has not been added yet
+
+- **GIVEN** an activity's academic year and term have no configured entry
+- **WHEN** its prompt configuration is resolved
+- **THEN** the system uses the configured default term configuration
+- **AND** the learning workflow remains available
+
 #### Scenario: Prompt-backed next question
 
 - **GIVEN** `subStepPrompts[nextSubstepKey]` exists

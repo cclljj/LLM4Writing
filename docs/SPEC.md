@@ -63,7 +63,7 @@ LLM4Writing 是 AI 輔助寫作教學平台，支援教師建立寫作任務、�
 | Audit Log | `src/lib/audit-log-store.ts` | `llm4writing_audit_logs` / `globalThis` memory array |
 | User | `src/lib/user-store.ts` | `llm4writing_users` / `globalThis` memory map |
 | Domain data | `src/lib/activity-store.ts` | `llm4writing_domain` singleton / `.data/domain-state.json` + memory |
-| Prompt config | `src/lib/prompt-config.ts` | 檔案系統 `src/config/system-prompt-config.json` |
+| Prompt config | `src/lib/prompt-config.ts` | `src/config/system-prompt-config.json`（114-2 基準）+ `src/config/course-step-configs.json`（學年學期覆寫） |
 
 ### 2.3 Session Store
 
@@ -397,6 +397,25 @@ Artifact 類型：
 | 8 | 修改潤飾 | `personal_interaction` | 個人修改最終稿 |
 | 9 | 個人反思 | `personal_reflection` | 一次送出四題反思 |
 | 10 | 總結報告 | `non_interactive` | AI 產生個人總結報告 |
+
+### 5.1.1 學年學期課程步驟設定
+
+- 課程步驟設定以活動的 `academicYear` 與 `academicYearTerm` 組成 key（例如 `114-2`、`115-1`）後解析。
+- `114-2` 使用既有 `system-prompt-config.json` 與 `step-opening/` 作為不可回溯變更的基準；新學年學期的調整寫在 `course-step-configs.json` 對應 term 的 `promptConfig`、`stepOpenings` 覆寫區。
+- term config 可以透過 `extends` 繼承前一份課程設定；物件欄位會合併、陣列會完整取代，讓新學期只需記錄改動。
+- 找不到 term config 時，系統使用 `course-step-configs.json` 的 `default` 設定，確保課程不中斷。
+- 因此教師可在建立 `115-1` 等新課程前只更新該 term config，不會影響既有 `114-2` 課程與歷史資料。
+
+例如，若 115-1 的 Step1 開場與 `1-2` 子題引導需要更新，僅需在 `115-1` 的覆寫區加入：
+
+```json
+{
+  "stepOpenings": { "1": "新的 Step1 開場說明" },
+  "promptConfig": {
+    "subStepPrompts": { "1-2": "新的 1-2 題目生成引導" }
+  }
+}
+```
 
 ### 5.2 Step1/2 子步驟與題目來源
 

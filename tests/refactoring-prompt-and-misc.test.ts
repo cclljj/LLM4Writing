@@ -11,6 +11,7 @@ import {
   upsertEssay,
   upsertOpenClass
 } from "../src/lib/activity-store";
+import { getCourseStepConfigKey, resolveCourseStepConfig } from "../src/lib/prompt-config";
 
 test("activity store behavior: open class id generation uses max existing sequence", () => {
   assert.equal(computeNextOpenClassId(["oc-001", "oc-009", "oc-010"]), "oc-011");
@@ -99,4 +100,16 @@ test("source-guard: system prompt config retains step12FeedbackPrompts key", asy
   const thisDir = dirname(fileURLToPath(import.meta.url));
   const src = readFileSync(resolve(thisDir, "../src/config/system-prompt-config.json"), "utf8");
   assert.ok(src.includes("\"step12FeedbackPrompts\""));
+});
+
+test("course step config: terms resolve independently and unknown terms safely use the default", () => {
+  assert.equal(getCourseStepConfigKey("115", "1"), "115-1");
+
+  const legacy = resolveCourseStepConfig("114", "2");
+  const current = resolveCourseStepConfig("115", "1");
+  const unknown = resolveCourseStepConfig("116", "1");
+
+  assert.equal(current.promptConfig?.systemPrompt, legacy.promptConfig?.systemPrompt);
+  assert.notEqual(current, legacy);
+  assert.equal(unknown.promptConfig?.systemPrompt, legacy.promptConfig?.systemPrompt);
 });
