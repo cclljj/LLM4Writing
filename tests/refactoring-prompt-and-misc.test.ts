@@ -99,11 +99,25 @@ test("source-guard: 114-2 and initial 115-1 configs are exact snapshots of the o
   const { fileURLToPath } = await import("node:url");
   const thisDir = dirname(fileURLToPath(import.meta.url));
   const config = JSON.parse(readFileSync(resolve(thisDir, "../src/config/course-step-configs.json"), "utf8"));
+  const workflowConfig = JSON.parse(readFileSync(resolve(thisDir, "../src/config/course-workflow-configs.json"), "utf8"));
   const originalPrompts = JSON.parse(readFileSync(resolve(thisDir, "../src/config/system-prompt-config.json"), "utf8"));
   for (const term of ["114-2", "115-1"]) {
     const snapshot = config.terms?.[term];
     assert.equal(snapshot?.extends, undefined);
+    assert.equal(snapshot?.workflowSteps, undefined);
     assert.deepEqual(snapshot?.promptConfig, originalPrompts);
+    assert.deepEqual(workflowConfig.terms?.[term]?.workflowSteps?.map((step: { step: number; capability: string }) => `${step.step}:${step.capability}`), [
+      "1:topic_discussion",
+      "2:research_discussion",
+      "3:outline",
+      "4:peer_outline",
+      "5:summary_report",
+      "6:draft",
+      "7:feedback_report",
+      "8:revision",
+      "9:reflection",
+      "10:final_report"
+    ]);
     for (const step of ["1", "2", "3", "4", "6", "8", "9"]) {
       assert.equal(snapshot?.stepOpenings?.[step], readFileSync(resolve(thisDir, `../src/config/step-opening/${step}.md`), "utf8"));
     }

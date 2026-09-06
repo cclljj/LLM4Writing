@@ -10,8 +10,21 @@ import {
   getWorkflowStepByCapability,
   getWorkflowStepMode,
   getWorkflowStepName,
-  normalizeCourseWorkflowSteps
+  normalizeCourseWorkflowSteps,
+  resolveDefaultCourseWorkflowStepsFromConfig
 } from "../src/lib/course-workflow";
+
+test("workflow fallback is sourced from the configured default term", () => {
+  const defaultSteps = resolveDefaultCourseWorkflowStepsFromConfig();
+  const normalizedMissing = normalizeCourseWorkflowSteps(undefined);
+  const normalizedInvalid = normalizeCourseWorkflowSteps([
+    { step: 0, name: "", mode: "missing", capability: "missing" }
+  ]);
+
+  assert.ok(defaultSteps.length > 0);
+  assert.deepEqual(normalizedMissing, defaultSteps);
+  assert.deepEqual(normalizedInvalid, defaultSteps);
+});
 
 test("term workflow supports reordered and additional existing-capability steps", () => {
   const workflowSteps = normalizeCourseWorkflowSteps([

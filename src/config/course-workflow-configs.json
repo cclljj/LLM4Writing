@@ -1,0 +1,133 @@
+{
+  "default": "114-2",
+  "terms": {
+    "114-2": {
+      "workflowSteps": [
+        {
+          "step": 1,
+          "name": "審視題目",
+          "mode": "group_interaction",
+          "capability": "topic_discussion"
+        },
+        {
+          "step": 2,
+          "name": "蒐集資料",
+          "mode": "group_interaction",
+          "capability": "research_discussion"
+        },
+        {
+          "step": 3,
+          "name": "生成論點",
+          "mode": "personal_interaction",
+          "capability": "outline"
+        },
+        {
+          "step": 4,
+          "name": "對比修正",
+          "mode": "group_interaction",
+          "capability": "peer_outline"
+        },
+        {
+          "step": 5,
+          "name": "摘要報告",
+          "mode": "non_interactive",
+          "capability": "summary_report"
+        },
+        {
+          "step": 6,
+          "name": "撰寫初稿",
+          "mode": "personal_interaction",
+          "capability": "draft"
+        },
+        {
+          "step": 7,
+          "name": "分析回饋",
+          "mode": "non_interactive",
+          "capability": "feedback_report"
+        },
+        {
+          "step": 8,
+          "name": "修改潤飾",
+          "mode": "personal_interaction",
+          "capability": "revision"
+        },
+        {
+          "step": 9,
+          "name": "個人反思",
+          "mode": "personal_reflection",
+          "capability": "reflection"
+        },
+        {
+          "step": 10,
+          "name": "總結報告",
+          "mode": "non_interactive",
+          "capability": "final_report"
+        }
+      ]
+    },
+    "115-1": {
+      "workflowSteps": [
+        {
+          "step": 1,
+          "name": "審視題目",
+          "mode": "group_interaction",
+          "capability": "topic_discussion"
+        },
+        {
+          "step": 2,
+          "name": "蒐集資料",
+          "mode": "group_interaction",
+          "capability": "research_discussion"
+        },
+        {
+          "step": 3,
+          "name": "生成論點",
+          "mode": "personal_interaction",
+          "capability": "outline"
+        },
+        {
+          "step": 4,
+          "name": "對比修正",
+          "mode": "group_interaction",
+          "capability": "peer_outline"
+        },
+        {
+          "step": 5,
+          "name": "摘要報告",
+          "mode": "non_interactive",
+          "capability": "summary_report"
+        },
+        {
+          "step": 6,
+          "name": "撰寫初稿",
+          "mode": "personal_interaction",
+          "capability": "draft"
+        },
+        {
+          "step": 7,
+          "name": "分析回饋",
+          "mode": "non_interactive",
+          "capability": "feedback_report"
+        },
+        {
+          "step": 8,
+          "name": "修改潤飾",
+          "mode": "personal_interaction",
+          "capability": "revision"
+        },
+        {
+          "step": 9,
+          "name": "個人反思",
+          "mode": "personal_reflection",
+          "capability": "reflection"
+        },
+        {
+          "step": 10,
+          "name": "總結報告",
+          "mode": "non_interactive",
+          "capability": "final_report"
+        }
+      ]
+    }
+  }
+}

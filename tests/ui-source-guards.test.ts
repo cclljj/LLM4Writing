@@ -56,6 +56,14 @@ test("source-guard: course reports derive reached capabilities from workflow con
   }
 });
 
+test("source-guard: workflow fallback is config-backed, not a hard-coded legacy step list", async () => {
+  const workflowSrc = await read("../src/lib/course-workflow.ts");
+  assert.equal(workflowSrc.includes("LEGACY_COURSE_WORKFLOW_STEPS"), false);
+  assert.equal(workflowSrc.includes("course-step-configs.json"), false, "client-safe workflow helpers should not bundle prompt config");
+  assert.ok(workflowSrc.includes("course-workflow-configs.json"), "workflow fallback should read the external workflow-only term config registry");
+  assert.ok(workflowSrc.includes("resolveDefaultCourseWorkflowStepsFromConfig"), "workflow fallback should be explicitly config-backed");
+});
+
 test("source-guard: course implementation PDF does not pre-page-break long message cards", async () => {
   const src = await read("../src/lib/courseImplementationPdf.ts");
   const drawMessageCardStart = src.indexOf("function drawMessageCard");

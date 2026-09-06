@@ -101,6 +101,9 @@ export function createSession(payload: StartSessionPayload): SessionState {
   const sessionId = randomUUID();
   const workflow = payload.workflow ?? "spec10";
   const workflowSteps = normalizeCourseWorkflowSteps(payload.workflowSteps);
+  if (workflow !== "legacy_phase" && workflowSteps.length === 0) {
+    throw new Error("workflow_steps_config_required");
+  }
   const initialStep = workflow === "legacy_phase" ? 1 : workflowSteps[0]!.step;
   const phaseMax = payload.phaseMax ?? (workflow === "legacy_phase" ? 5 : workflowSteps.length);
   const participants = payload.participants;

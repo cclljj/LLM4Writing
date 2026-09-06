@@ -1,5 +1,8 @@
 import { Activity, CourseWorkflowStep, PromptConfig, Step10ReportConfig } from "@/src/lib/types";
-import { normalizeCourseWorkflowSteps } from "@/src/lib/course-workflow";
+import {
+  resolveCourseWorkflowStepsFromConfig,
+  resolveDefaultCourseWorkflowStepsFromConfig
+} from "@/src/lib/course-workflow";
 import courseStepConfigs from "@/src/config/course-step-configs.json";
 import { findActivity } from "@/src/lib/activity-store";
 
@@ -20,7 +23,6 @@ type CourseStepConfig = {
   extends?: string;
   promptConfig?: RawSystemPromptConfig;
   stepOpenings?: Record<string, string>;
-  workflowSteps?: CourseWorkflowStep[];
 };
 
 type CourseStepConfigRegistry = {
@@ -139,13 +141,13 @@ export function resolvePromptConfigForActivity(activityId: string): PromptConfig
 
 export function resolveCourseWorkflowForActivity(activityId: string): CourseWorkflowStep[] {
   const activity = findActivity(activityId);
-  if (!activity) return normalizeCourseWorkflowSteps(undefined);
-  return normalizeCourseWorkflowSteps(resolveCourseStepConfig(activity.academicYear, activity.academicYearTerm).workflowSteps);
+  if (!activity) return resolveDefaultCourseWorkflowStepsFromConfig();
+  return resolveCourseWorkflowStepsFromConfig(activity.academicYear, activity.academicYearTerm);
 }
 
 /** Registry default for diagnostics that are not tied to a particular course activity. */
 export function resolveDefaultCourseWorkflowSteps(): CourseWorkflowStep[] {
-  return normalizeCourseWorkflowSteps(resolveCourseStepConfig("", "").workflowSteps);
+  return resolveDefaultCourseWorkflowStepsFromConfig();
 }
 
 /** Fetches activity and its prompt config in one call — avoids the caller having

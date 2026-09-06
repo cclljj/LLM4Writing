@@ -385,7 +385,7 @@ Artifact 類型：
 
 ### 5.1 Term workflow 步驟與模式
 
-課程流程的步驟順序、顯示名稱、互動模式與能力綁定一律由該學年學期的 `workflowSteps` 決定。下表是目前 `114-2` 與初始 `115-1` 的預設配置；未來學期可以用既有能力新增、刪除或重排步驟，不需改程式中的流程判斷。
+課程流程的步驟順序、顯示名稱、互動模式與能力綁定一律由該學年學期在 `course-workflow-configs.json` 的 `workflowSteps` 決定。下表是目前 `114-2` 與初始 `115-1` 的預設配置；未來學期可以用既有能力新增、刪除或重排步驟，不需改程式中的流程判斷。
 
 | Step | 名稱 | 模式 | 說明 |
 |---|---|---|---|
@@ -403,14 +403,15 @@ Artifact 類型：
 ### 5.1.1 學年學期課程步驟設定
 
 - 課程步驟設定以活動的 `academicYear` 與 `academicYearTerm` 組成 key（例如 `114-2`、`115-1`）後解析。
-- `114-2` 的既有 `system-prompt-config.json` 與 `step-opening/` 內容已完整寫入 `course-step-configs.json`，作為不可回溯變更的基準快照；新學年學期的調整寫在對應 term 的 `promptConfig`、`stepOpenings` 覆寫區。
+- `114-2` 的既有 `system-prompt-config.json` 與 `step-opening/` 內容已完整寫入 `course-step-configs.json`，作為不可回溯變更的基準快照；新學年學期的 prompt/opening 調整寫在對應 term 的 `promptConfig`、`stepOpenings` 覆寫區。
+- `114-2` 與 `115-1` 的流程步驟設計已寫入 `course-workflow-configs.json`。此檔只含 workflow metadata，不含 prompt 內容，因此可供 client-safe workflow helper 使用。
 - term config 可以透過 `extends` 繼承前一份課程設定；物件欄位會合併、陣列會完整取代，讓新學期只需記錄改動。
 - `115-1` 目前已完整複製 `114-2`，是可獨立修改的初始快照；調整 `115-1` 不會回寫或影響 `114-2`。
-- 每個 term config 的 `workflowSteps` 為課程流程單一來源；每項包含數字 `step`、顯示 `name`、互動 `mode` 與既有能力 `capability`。設定檔中的順序就是課程順序，因此可新增、刪除或重排步驟。
-- 新建 session 必須保存 `workflowSteps` 完整快照。學生端操作、教師開課/切步驟、教師監控與歷程、個人紀錄、PDF／JSON／研究 Log 匯出必須依此快照解析步驟名稱、順序、互動模式與 capability；舊 session 缺快照時回退既有十步驟定義。
+- 每個 workflow term config 的 `workflowSteps` 為課程流程單一來源；每項包含數字 `step`、顯示 `name`、互動 `mode` 與既有能力 `capability`。設定檔中的順序就是課程順序，因此可新增、刪除或重排步驟。
+- 新建 session 必須保存 `workflowSteps` 完整快照。學生端操作、教師開課/切步驟、教師監控與歷程、個人紀錄、PDF／JSON／研究 Log 匯出必須依此快照解析步驟名稱、順序、互動模式與 capability；舊 session 缺快照時只能回退 `course-workflow-configs.json` 的 `default` term workflow，不得使用程式內建十步驟清單。
 - 流程判斷不得以 runtime step number 大小推論先後（例如 `currentStep >= 6`、`Math.max(currentStep)`）；是否已到達某能力、最高/最低進度、歷史上下文可見範圍、研究資料可見範圍、監看彙整與輸出排序，皆必須使用 `workflowSteps` 陣列順序。
 - Prompt 與開場白仍使用既有 prompt key（例如 `topic_discussion` 對應舊 Step1 prompt、`final_report` 對應舊 Step10 report config），runtime step number 需先透過 capability 映射回 prompt key，避免重排後讀錯 prompt。
-- 找不到 term config 時，系統使用 `course-step-configs.json` 的 `default` 設定，確保課程不中斷。
+- 找不到 term config 時，系統使用對應 config registry 的 `default` 設定，確保課程不中斷；若 workflow default term 沒有有效 `workflowSteps`，新建 spec10 session 必須失敗並回報設定錯誤，避免靜默產生 hard-coded 流程。
 - 因此教師可在建立 `115-1` 等新課程前只更新該 term config，不會影響既有 `114-2` 課程與歷史資料。
 
 例如，若 115-1 的 Step1 開場與 `1-2` 子題引導需要更新，僅需在 `115-1` 的覆寫區加入：
@@ -726,7 +727,7 @@ LLM 未設定或串流失敗時需提供可讀 fallback，避免學生停留在�
 | 模組 | 責任 |
 |---|---|
 | `src/lib/student-page-helpers.ts` | 學生端純邏輯：fetch 重試/timeout、互動模式、group gate key、互動訊息與歷程回顧組裝、輪詢回滾防護（`shouldAcceptIncomingSession`）、草稿 hydration 規則（`resolveDraftHydration`） |
-| `src/lib/course-workflow.ts` | 依 session `workflowSteps` 解析步驟名稱、互動模式、capability、下一步與 prompt key；`step-names.ts` 僅作 legacy fallback |
+| `src/lib/course-workflow.ts` | 依 session `workflowSteps` 解析步驟名稱、互動模式、capability、下一步與 prompt key；缺少 workflow snapshot 時從 workflow-only term config 的 `default` term 回退，不讀取 prompt config |
 | `src/lib/sse-session-stream.ts` | Step3/6/7/10 session SSE 串流共用讀取器 |
 
 學生端 hooks（#459，`app/student/_hooks/`）：

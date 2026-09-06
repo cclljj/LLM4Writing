@@ -1,17 +1,12 @@
 import { CourseWorkflowStep, InteractionMode, WorkflowCapability } from "@/src/lib/types";
+import courseWorkflowConfigs from "@/src/config/course-workflow-configs.json";
 
-export const LEGACY_COURSE_WORKFLOW_STEPS: CourseWorkflowStep[] = [
-  { step: 1, name: "審視題目", mode: "group_interaction", capability: "topic_discussion" },
-  { step: 2, name: "蒐集資料", mode: "group_interaction", capability: "research_discussion" },
-  { step: 3, name: "生成論點", mode: "personal_interaction", capability: "outline" },
-  { step: 4, name: "對比修正", mode: "group_interaction", capability: "peer_outline" },
-  { step: 5, name: "摘要報告", mode: "non_interactive", capability: "summary_report" },
-  { step: 6, name: "撰寫初稿", mode: "personal_interaction", capability: "draft" },
-  { step: 7, name: "分析回饋", mode: "non_interactive", capability: "feedback_report" },
-  { step: 8, name: "修改潤飾", mode: "personal_interaction", capability: "revision" },
-  { step: 9, name: "個人反思", mode: "personal_reflection", capability: "reflection" },
-  { step: 10, name: "總結報告", mode: "non_interactive", capability: "final_report" }
-];
+type CourseWorkflowConfigRegistry = {
+  default?: string;
+  terms?: Record<string, { extends?: string; workflowSteps?: unknown }>;
+};
+
+const courseWorkflowConfigRegistry = courseWorkflowConfigs as CourseWorkflowConfigRegistry;
 
 const validModes = new Set<InteractionMode>(["group_interaction", "personal_interaction", "non_interactive", "personal_reflection"]);
 const validCapabilities = new Set<WorkflowCapability>([
@@ -29,8 +24,8 @@ const validCapabilities = new Set<WorkflowCapability>([
   "personal_interaction"
 ]);
 
-export function normalizeCourseWorkflowSteps(input: unknown): CourseWorkflowStep[] {
-  if (!Array.isArray(input)) return LEGACY_COURSE_WORKFLOW_STEPS.map((step) => ({ ...step }));
+function normalizeWorkflowStepsOnly(input: unknown): CourseWorkflowStep[] {
+  if (!Array.isArray(input)) return [];
   const seen = new Set<number>();
   const steps = input.flatMap((value) => {
     if (!value || typeof value !== "object") return [];
@@ -39,7 +34,34 @@ export function normalizeCourseWorkflowSteps(input: unknown): CourseWorkflowStep
     seen.add(raw.step);
     return [{ step: raw.step, name: raw.name.trim(), mode: raw.mode, capability: raw.capability, ...(raw.exportTitle?.trim() ? { exportTitle: raw.exportTitle.trim() } : {}) }];
   });
-  return steps.length > 0 ? steps : LEGACY_COURSE_WORKFLOW_STEPS.map((step) => ({ ...step }));
+  return steps;
+}
+
+function resolveConfigWorkflowSteps(key: string | undefined, resolving = new Set<string>()): CourseWorkflowStep[] {
+  if (!key || resolving.has(key)) return [];
+  const entry = courseWorkflowConfigRegistry.terms?.[key];
+  if (!entry) return [];
+  resolving.add(key);
+  const parentSteps = entry.extends ? resolveConfigWorkflowSteps(entry.extends, resolving) : [];
+  resolving.delete(key);
+  const ownSteps = normalizeWorkflowStepsOnly(entry.workflowSteps);
+  return ownSteps.length > 0 ? ownSteps : parentSteps;
+}
+
+export function resolveDefaultCourseWorkflowStepsFromConfig(): CourseWorkflowStep[] {
+  return resolveConfigWorkflowSteps(courseWorkflowConfigRegistry.default).map((step) => ({ ...step }));
+}
+
+export function resolveCourseWorkflowStepsFromConfig(academicYear: string, academicYearTerm: string): CourseWorkflowStep[] {
+  const requestedKey = `${academicYear.trim()}-${academicYearTerm.trim()}`;
+  const terms = courseWorkflowConfigRegistry.terms ?? {};
+  const steps = resolveConfigWorkflowSteps(terms[requestedKey] ? requestedKey : courseWorkflowConfigRegistry.default);
+  return steps.length > 0 ? steps.map((step) => ({ ...step })) : resolveDefaultCourseWorkflowStepsFromConfig();
+}
+
+export function normalizeCourseWorkflowSteps(input: unknown): CourseWorkflowStep[] {
+  const normalized = normalizeWorkflowStepsOnly(input);
+  return normalized.length > 0 ? normalized : resolveDefaultCourseWorkflowStepsFromConfig();
 }
 
 type WorkflowSnapshotOwner = { workflowSteps?: CourseWorkflowStep[] };
