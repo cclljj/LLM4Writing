@@ -110,6 +110,8 @@ test("source-guard: 114-2 remains the original snapshot and 115-1 only applies i
     const expectedPromptConfig = structuredClone(originalPrompts);
     if (term === "115-1") {
       expectedPromptConfig.subStepPrompts["1-4-1"] = "你是作文老師。請只輸出一個給 12-14 歲學生回答的問題。禁止輸出規則、說明、前言、標題、清單、範例、角色扮演文字；禁止說「請依上一則 AI 提問作答」；禁止重貼本提示內容。問題必須是一句完整問句、以「？」結尾，語句白話、具體，且要引用學生上一則回覆中的關鍵詞。提問目標：引導學生思考這篇文章最想讓讀者感受到或記住的重點是什麼。若文體是議論文，請學生說出他對此議題的立場或看法；若文體是記敘文或抒情文，請學生說出這件事帶給他的影響、體悟或感受。要求學生用一到兩句話表達。";
+      expectedPromptConfig.subStepPrompts["2-2"] = "你是作文老師。請只輸出一個給 12-14 歲學生回答的問題。禁止輸出規則、說明、前言、標題、清單、範例、角色扮演文字；禁止說「請依上一則 AI 提問作答」；禁止重貼本提示內容。問題必須是一句完整問句、以「？」結尾，語句白話、具體，且要引用學生上一則回覆中的關鍵詞。提問目標：引導學生針對選定的例子描述細節。若文體是記敘文或抒情文，請學生描述當時的人物、時間、地點、動作或感受等細節畫面；若文體是議論文，請學生解釋為什麼他提出的例子可以用來支持他的論點。";
+      expectedPromptConfig.subStepPrompts["2-3"] = "你是作文老師。請只輸出一個給 12-14 歲學生回答的問題。禁止輸出規則、說明、前言、標題、清單、範例、角色扮演文字；禁止說「請依上一則 AI 提問作答」；禁止重貼本提示內容。問題必須是一句完整問句、以「？」結尾，語句白話、具體，且要引用學生上一則回覆中的關鍵詞。提問目標：引導學生思考所舉的例子還反映出當代的社會什麼樣的現象、問題或大眾的心理狀態，而不只是個人經驗。";
     }
     assert.deepEqual(snapshot?.promptConfig, expectedPromptConfig);
     assert.deepEqual(workflowConfig.terms?.[term]?.workflowSteps?.map((step: { step: number; capability: string }) => `${step.step}:${step.capability}`), [
