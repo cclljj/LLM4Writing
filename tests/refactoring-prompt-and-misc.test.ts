@@ -93,7 +93,7 @@ test("activity store behavior: owner teacher username is preserved on activity p
 
 // single source-guard for this topic file
 
-test("source-guard: 114-2 and initial 115-1 configs are exact snapshots of the original prompts and openings", async () => {
+test("source-guard: 114-2 remains the original snapshot and 115-1 only applies its documented prompt override", async () => {
   const { readFileSync } = await import("node:fs");
   const { resolve, dirname } = await import("node:path");
   const { fileURLToPath } = await import("node:url");
@@ -107,7 +107,11 @@ test("source-guard: 114-2 and initial 115-1 configs are exact snapshots of the o
     const snapshot = config.terms?.[term];
     assert.equal(snapshot?.extends, undefined);
     assert.equal(snapshot?.workflowSteps, undefined);
-    assert.deepEqual(snapshot?.promptConfig, originalPrompts);
+    const expectedPromptConfig = structuredClone(originalPrompts);
+    if (term === "115-1") {
+      expectedPromptConfig.subStepPrompts["1-4-1"] = "你是作文老師。請只輸出一個給 12-14 歲學生回答的問題。禁止輸出規則、說明、前言、標題、清單、範例、角色扮演文字；禁止說「請依上一則 AI 提問作答」；禁止重貼本提示內容。問題必須是一句完整問句、以「？」結尾，語句白話、具體，且要引用學生上一則回覆中的關鍵詞。提問目標：引導學生思考這篇文章最想讓讀者感受到或記住的重點是什麼。若文體是議論文，請學生說出他對此議題的立場或看法；若文體是記敘文或抒情文，請學生說出這件事帶給他的影響、體悟或感受。要求學生用一到兩句話表達。";
+    }
+    assert.deepEqual(snapshot?.promptConfig, expectedPromptConfig);
     assert.deepEqual(workflowConfig.terms?.[term]?.workflowSteps?.map((step: { step: number; capability: string }) => `${step.step}:${step.capability}`), [
       "1:topic_discussion",
       "2:research_discussion",
