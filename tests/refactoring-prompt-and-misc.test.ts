@@ -93,18 +93,20 @@ test("activity store behavior: owner teacher username is preserved on activity p
 
 // single source-guard for this topic file
 
-test("source-guard: 114-2 course config is an exact snapshot of the original prompts and openings", async () => {
+test("source-guard: 114-2 and initial 115-1 configs are exact snapshots of the original prompts and openings", async () => {
   const { readFileSync } = await import("node:fs");
   const { resolve, dirname } = await import("node:path");
   const { fileURLToPath } = await import("node:url");
   const thisDir = dirname(fileURLToPath(import.meta.url));
   const config = JSON.parse(readFileSync(resolve(thisDir, "../src/config/course-step-configs.json"), "utf8"));
   const originalPrompts = JSON.parse(readFileSync(resolve(thisDir, "../src/config/system-prompt-config.json"), "utf8"));
-  const snapshot = config.terms?.["114-2"];
-
-  assert.deepEqual(snapshot?.promptConfig, originalPrompts);
-  for (const step of ["1", "2", "3", "4", "6", "8", "9"]) {
-    assert.equal(snapshot?.stepOpenings?.[step], readFileSync(resolve(thisDir, `../src/config/step-opening/${step}.md`), "utf8"));
+  for (const term of ["114-2", "115-1"]) {
+    const snapshot = config.terms?.[term];
+    assert.equal(snapshot?.extends, undefined);
+    assert.deepEqual(snapshot?.promptConfig, originalPrompts);
+    for (const step of ["1", "2", "3", "4", "6", "8", "9"]) {
+      assert.equal(snapshot?.stepOpenings?.[step], readFileSync(resolve(thisDir, `../src/config/step-opening/${step}.md`), "utf8"));
+    }
   }
 });
 

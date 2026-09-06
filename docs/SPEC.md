@@ -403,6 +403,7 @@ Artifact 類型：
 - 課程步驟設定以活動的 `academicYear` 與 `academicYearTerm` 組成 key（例如 `114-2`、`115-1`）後解析。
 - `114-2` 的既有 `system-prompt-config.json` 與 `step-opening/` 內容已完整寫入 `course-step-configs.json`，作為不可回溯變更的基準快照；新學年學期的調整寫在對應 term 的 `promptConfig`、`stepOpenings` 覆寫區。
 - term config 可以透過 `extends` 繼承前一份課程設定；物件欄位會合併、陣列會完整取代，讓新學期只需記錄改動。
+- `115-1` 目前已完整複製 `114-2`，是可獨立修改的初始快照；調整 `115-1` 不會回寫或影響 `114-2`。
 - 找不到 term config 時，系統使用 `course-step-configs.json` 的 `default` 設定，確保課程不中斷。
 - 因此教師可在建立 `115-1` 等新課程前只更新該 term config，不會影響既有 `114-2` 課程與歷史資料。
 
