@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
     if (!loaded) {
       return NextResponse.json({ error: "activity_not_found" }, { status: 404 });
     }
-    const { activity, promptConfig: resolvedConfig, workflowSteps } = loaded;
+    const { activity, promptConfig: resolvedConfig, workflowSteps, guidedDiscussionSubsteps } = loaded;
 
     if (activity.courseStatus === "not_started") {
       return NextResponse.json({ error: "course_not_started" }, { status: 400 });
@@ -160,7 +160,8 @@ export async function POST(request: NextRequest) {
       groupId: group?.groupId ?? "g-auto",
       groupName: group?.groupName ?? "未分組",
       promptConfig: resolvedConfig,
-      workflowSteps
+      workflowSteps,
+      guidedDiscussionSubsteps
     });
     const structureTreeTemplate = resolveStructureTreeTemplate(activity.genre, activity.title);
     if (structureTreeTemplate) {

@@ -409,7 +409,7 @@ Artifact 類型：
 - `115-1` 目前已完整複製 `114-2`，是可獨立修改的初始快照；調整 `115-1` 不會回寫或影響 `114-2`。
 - 寫作任務設定與後端建立課程的缺省學年學期目前為 `115-1`；`114-2` 保留為既有課程的歷史設定。
 - 每個 workflow term config 的 `workflowSteps` 為課程流程單一來源；每項包含數字 `step`、顯示 `name`、互動 `mode` 與既有能力 `capability`。設定檔中的順序就是課程順序，因此可新增、刪除或重排步驟。
-- 新建 session 必須保存 `workflowSteps` 完整快照。學生端操作、教師開課/切步驟、教師監控與歷程、個人紀錄、PDF／JSON／研究 Log 匯出必須依此快照解析步驟名稱、順序、互動模式與 capability；舊 session 缺快照時只能回退 `course-workflow-configs.json` 的 `default` term workflow，不得使用程式內建十步驟清單。
+- 新建 session 必須保存 `workflowSteps` 與 `guidedDiscussionSubsteps` 完整快照；學生自行加入課程與教師建立 session 均適用。學生端操作、教師開課/切步驟、教師監控與歷程、個人紀錄、PDF／JSON／研究 Log 匯出必須依此快照解析步驟名稱、順序、互動模式、capability 與 Step1/2 子題序列；舊 session 缺少 `workflowSteps` 時只能回退 `course-workflow-configs.json` 的 `default` term workflow，不得使用程式內建十步驟清單；缺少 `guidedDiscussionSubsteps` 的既有 session 保留原始完整子題序列，不能以新學期設定覆寫。
 - 流程判斷不得以 runtime step number 大小推論先後（例如 `currentStep >= 6`、`Math.max(currentStep)`）；是否已到達某能力、最高/最低進度、歷史上下文可見範圍、研究資料可見範圍、監看彙整與輸出排序，皆必須使用 `workflowSteps` 陣列順序。
 - Prompt 與開場白仍使用既有 prompt key（例如 `topic_discussion` 對應舊 Step1 prompt、`final_report` 對應舊 Step10 report config），runtime step number 需先透過 capability 映射回 prompt key，避免重排後讀錯 prompt。
 - 找不到 term config 時，系統使用對應 config registry 的 `default` 設定，確保課程不中斷；若 workflow default term 沒有有效 `workflowSteps`，新建 spec10 session 必須失敗並回報設定錯誤，避免靜默產生 hard-coded 流程。

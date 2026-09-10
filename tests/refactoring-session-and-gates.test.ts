@@ -143,4 +143,14 @@ test("source-guard: student join keeps joinedUsers append-only and does not shri
     !src.includes("messageJoinedUsers.includes(name) || name === user.username"),
     "join route should not drop joined users solely because they have not spoken"
   );
+  assert.match(
+    src,
+    /const \{ activity, promptConfig: resolvedConfig, workflowSteps, guidedDiscussionSubsteps \} = loaded/,
+    "student-created sessions must receive the activity term's guided-discussion snapshot"
+  );
+  assert.match(
+    src,
+    /workflowSteps,\s+guidedDiscussionSubsteps/s,
+    "student-created sessions must persist the guided-discussion snapshot"
+  );
 });
