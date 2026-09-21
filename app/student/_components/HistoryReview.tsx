@@ -23,16 +23,20 @@ type HistoryReviewProps = {
   steps: StepReview[];
   outlineStep?: number;
   peerOutlineStep?: number;
+  revisionStep?: number;
   step3SubmittedOutlineMermaid?: string;
   step4OutlineMermaid?: string;
+  step8FinalDraft?: string;
 };
 
 function HistoryReview({
   steps,
   outlineStep,
   peerOutlineStep,
+  revisionStep,
   step3SubmittedOutlineMermaid,
   step4OutlineMermaid,
+  step8FinalDraft,
 }: HistoryReviewProps) {
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
 
@@ -118,6 +122,15 @@ function HistoryReview({
                   <div style={{ marginTop: 14, borderTop: "1px solid var(--line-soft)", paddingTop: 10 }}>
                     <strong>修正後結構樹</strong>
                     <OutlineSvg compact mermaidText={step4OutlineMermaid} />
+                  </div>
+                ) : null}
+                {revisionStep !== undefined && review.step === revisionStep && step8FinalDraft ? (
+                  <div style={{ marginTop: 14, borderTop: "1px solid var(--line-soft)", paddingTop: 10 }}>
+                    <strong>完成時繳交的潤飾稿</strong>
+                    <div
+                      style={{ marginTop: 4 }}
+                      dangerouslySetInnerHTML={{ __html: renderMessageHtml(step8FinalDraft) }}
+                    />
                   </div>
                 ) : null}
               </>

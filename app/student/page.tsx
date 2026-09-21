@@ -141,6 +141,7 @@ export default function StudentPage() {
     currentCapability,
     outlineStep,
     peerOutlineStep,
+    revisionStep,
     isOutlineStep,
     isPeerOutlineStep,
     isDraftStep,
@@ -350,8 +351,10 @@ export default function StudentPage() {
             steps={historyReviewSteps}
             outlineStep={outlineStep}
             peerOutlineStep={peerOutlineStep}
+            revisionStep={revisionStep}
             step3SubmittedOutlineMermaid={step3SubmittedOutlineMermaid}
             step4OutlineMermaid={step4OutlineMermaid}
+            step8FinalDraft={session?.draftStep8[loginUser]?.trim() ?? ""}
           />
 
           <div className="card">

@@ -17,6 +17,15 @@ test("source-guard: student course-history page includes Step6/7/8/10 latestWork
   assert.ok(src.includes("history.latestWork.step10Report"), "history page should include Step10 report artifact");
 });
 
+test("source-guard: personal history review includes the current student's revision draft", async () => {
+  const pageSrc = await read("../app/student/page.tsx");
+  const historySrc = await read("../app/student/_components/HistoryReview.tsx");
+  assert.ok(pageSrc.includes("step8FinalDraft={session?.draftStep8[loginUser]?.trim() ?? \"\"}"), "personal history should pass only the signed-in student's Step8 draft");
+  assert.ok(pageSrc.includes("revisionStep={revisionStep}"), "personal history should locate the revision step from workflow capabilities");
+  assert.ok(historySrc.includes("review.step === revisionStep && step8FinalDraft"), "personal history should render a saved revision draft in its matching step");
+  assert.ok(historySrc.includes("完成時繳交的潤飾稿"), "personal history should label the rendered revision draft");
+});
+
 test("source-guard: monitor route includes outlines and step3SubmittedOutlines fields", async () => {
   const src = await read("../app/api/teacher/monitor/route.ts");
   assert.ok(src.includes("outlines:"), "monitor route must include outlines field");
