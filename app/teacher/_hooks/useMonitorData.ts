@@ -52,6 +52,7 @@ export function useMonitorData(input: {
   const [personalMessages, setPersonalMessages] = useState<{ id: string; role: string; userId?: string; step: number; text: string; at: string }[]>([]);
   const [userOutline, setUserOutline] = useState("");
   const [userStep3SubmittedOutline, setUserStep3SubmittedOutline] = useState("");
+  const [userDraftStep8, setUserDraftStep8] = useState("");
   const [progressSessionId, setProgressSessionId] = useState("");
   const [pendingLifecycleAction, setPendingLifecycleAction] = useState<{ activityId: string; action: "start" | "pause_resume" | "end"; title: string } | null>(null);
   const [pendingDeleteActivity, setPendingDeleteActivity] = useState<{ activityId: string; title: string } | null>(null);
@@ -528,9 +529,11 @@ export function useMonitorData(input: {
         setSelectedProgressUser(username);
         setUserOutline(data.userOutline ?? "");
         setUserStep3SubmittedOutline(data.userStep3SubmittedOutline ?? "");
+        setUserDraftStep8(data.userDraftStep8 ?? "");
       } else {
         setUserOutline("");
         setUserStep3SubmittedOutline("");
+        setUserDraftStep8("");
       }
     });
   }
@@ -582,6 +585,8 @@ export function useMonitorData(input: {
     setUserOutline,
     userStep3SubmittedOutline,
     setUserStep3SubmittedOutline,
+    userDraftStep8,
+    setUserDraftStep8,
     progressSessionId,
     setProgressSessionId,
     selectedProgressUser,

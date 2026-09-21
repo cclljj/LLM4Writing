@@ -39,6 +39,19 @@ test("source-guard: personal-progress route includes outline + step8 artifact fi
   assert.ok(src.includes("userDraftStep8:"), "personal-progress route must include userDraftStep8 field");
 });
 
+test("source-guard: teacher personal log renders the selected student's Step8 revision artifact", async () => {
+  const hookSrc = await read("../app/teacher/_hooks/useMonitorData.ts");
+  const tabSrc = await read("../app/teacher/_components/LearningMonitorTab.tsx");
+  const panelSrc = await read("../app/teacher/_components/PersonalLogPanel.tsx");
+  const routeSrc = await read("../app/api/teacher/personal-progress/route.ts");
+  assert.ok(hookSrc.includes("setUserDraftStep8(data.userDraftStep8 ?? \"\")"), "teacher monitor state should retain the Step8 artifact returned by personal progress");
+  assert.ok(tabSrc.includes("userDraftStep8={userDraftStep8}"), "teacher monitor should pass the Step8 artifact into the personal log");
+  assert.ok(panelSrc.includes('getWorkflowStepByCapability(workflowOwner, "revision")'), "personal log should resolve the revision step from workflow capabilities");
+  assert.ok(panelSrc.includes("userDraftStep8 ? revisionStep : undefined"), "personal log should include artifact-only revision steps");
+  assert.ok(panelSrc.includes("revisionStep !== undefined && step === revisionStep && step8Block"), "personal log should render the revision draft in its matching step");
+  assert.ok(routeSrc.includes("latestWork?.draftStep8"), "teacher personal progress should return the latest Step8 draft from the course");
+});
+
 test("source-guard: course implementation report renders artifact-only Step8 work", async () => {
   const src = await read("../app/teacher/_components/CourseImplementationReportTab.tsx");
   assert.ok(src.includes("userDraftStep8"), "course report should track the Step8 polished draft artifact");

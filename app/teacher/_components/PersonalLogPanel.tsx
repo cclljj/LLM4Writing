@@ -19,6 +19,7 @@ function PersonalLogPanel({
   personalMessages,
   userOutline,
   userStep3SubmittedOutline,
+  userDraftStep8,
   workflowSteps,
   stepExpanded,
   onToggleStep
@@ -33,6 +34,7 @@ function PersonalLogPanel({
   personalMessages: MonitorMessage[];
   userOutline: string;
   userStep3SubmittedOutline: string;
+  userDraftStep8: string;
   workflowSteps?: CourseWorkflowStep[];
   stepExpanded: Record<number, boolean>;
   onToggleStep: (step: number) => void;
@@ -64,7 +66,7 @@ function PersonalLogPanel({
           </select>
         </div>
       ) : null}
-      {expanded && personalMessages.length > 0 ? (() => {
+      {expanded && (personalMessages.length > 0 || userStep3SubmittedOutline || userOutline || userDraftStep8) ? (() => {
         const scopedPersonalMessages = selectedProgressUser
           ? getPersonalScopedMessagesForStudentHistory(personalMessages, selectedProgressUser)
           : personalMessages;
@@ -72,12 +74,14 @@ function PersonalLogPanel({
         const workflowOwner = { workflowSteps };
         const outlineStep = getWorkflowStepByCapability(workflowOwner, "outline")?.step;
         const peerOutlineStep = getWorkflowStepByCapability(workflowOwner, "peer_outline")?.step;
+        const revisionStep = getWorkflowStepByCapability(workflowOwner, "revision")?.step;
         const hasStep4Revised = Boolean(userOutline && userOutline !== userStep3SubmittedOutline);
         const personalSteps = getStepsFromMessages(scopedPersonalMessages, {
           workflowSteps,
           includeSteps: [
             userStep3SubmittedOutline ? outlineStep : undefined,
             hasStep4Revised ? peerOutlineStep : undefined,
+            userDraftStep8 ? revisionStep : undefined,
           ].filter((step): step is number => typeof step === "number"),
         });
 
@@ -92,6 +96,13 @@ function PersonalLogPanel({
           <div style={{ borderTop: "2px solid var(--line)", padding: "12px 0", marginTop: 4 }}>
             <strong style={{ fontSize: 13, color: "var(--muted-strong)" }}>{stepNames.get(peerOutlineStep) ?? "修正"}後結構樹</strong>
             <OutlineSvg mermaidText={userOutline} label={`${stepNames.get(peerOutlineStep) ?? "修正"}後`} />
+          </div>
+        ) : null;
+
+        const step8Block = userDraftStep8 && revisionStep !== undefined ? (
+          <div style={{ borderTop: "2px solid var(--line)", padding: "12px 0", marginTop: 4 }}>
+            <strong style={{ fontSize: 13, color: "var(--muted-strong)" }}>{stepNames.get(revisionStep) ?? "修正文稿"}潤飾稿</strong>
+            <div dangerouslySetInnerHTML={{ __html: renderMessageHtml(userDraftStep8) }} />
           </div>
         ) : null;
 
@@ -137,6 +148,7 @@ function PersonalLogPanel({
                       ))}
                       {outlineStep !== undefined && step === outlineStep && step3Block}
                       {peerOutlineStep !== undefined && step === peerOutlineStep && step4Block}
+                      {revisionStep !== undefined && step === revisionStep && step8Block}
                     </>
                   ) : null}
                 </div>

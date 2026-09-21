@@ -775,7 +775,7 @@ LLM 未設定或串流失敗時需提供可讀 fallback，避免學生停留在�
 | `ClassJoinStatusTable.tsx` | 全班加入狀態表格（可排序、出缺席標記、查看個人進度） |
 | `ProgressStatsPanel.tsx` | 課堂進度統計（小組與個人，含分頁） |
 | `GroupLogPanel.tsx` | 小組對話紀錄面板（逐步驟展開、Step3/4 結構樹區塊） |
-| `PersonalLogPanel.tsx` | 個人對話紀錄面板（逐步驟展開、Step3/4 結構樹區塊） |
+| `PersonalLogPanel.tsx` | 個人對話紀錄面板（逐步驟展開、Step3/4 結構樹與 Step8 潤飾稿區塊） |
 | `monitor-log-utils.ts` | 對話紀錄面板共用純函式（步驟清單、個人訊息過濾） |
 | `monitor-utils.ts` | 監控純函式（#460）：step gate 判斷、推進建議、卡關風險、步驟停留時間 |
 | `app/teacher/_hooks/useMonitorData.ts` | 監控資料層（#460）：session 清單與自適應輪詢（#239）、課程診斷、個人進度、課程生命週期操作 |
@@ -1125,6 +1125,7 @@ Loading 規則（#270）：
 - 個人對話紀錄內建學生選擇器，選項格式 `小組 N: 姓名 (帳號)`。
 - 未選擇時顯示提示文字。
 - 小組對話紀錄：Step3 完成結構樹顯示於步驟 2 卡片末尾；Step4 修正後結構樹顯示於步驟 4 卡片末尾。
+- 個人對話紀錄：須顯示所選學生的 Step3 完成結構樹、Step4 修正後結構樹，以及 Step8 已儲存的潤飾稿；各產物顯示於 workflow capability 對應的步驟卡片。即使沒有對話訊息，仍須建立有產物的步驟卡片。
 - 個人課程成果報告：Step3 原始輸入架構圖必須直接使用 `step3SubmittedOutlines` 快照，顯示於步驟 3 卡片末尾；Step4 討論後修正架構圖使用可變的 `outlines`，顯示於步驟 4 卡片末尾。不得以 Step4 `outlines` 回填或冒充 Step3；步驟清單即使沒有對話訊息，也必須因架構圖產物建立對應步驟。
 - 結構樹 SVG 不可置於整個對話面板頂部，須依步驟順序與訊息穿插顯示。
 - 對話訊息若含 Mermaid 結構樹，需於訊息下方同步渲染 SVG。

@@ -100,6 +100,8 @@ export default function LearningMonitorTab({
     setUserOutline,
     userStep3SubmittedOutline,
     setUserStep3SubmittedOutline,
+    userDraftStep8,
+    setUserDraftStep8,
     setProgressSessionId,
     selectedProgressUser,
     setSelectedProgressUser,
@@ -762,6 +764,7 @@ export default function LearningMonitorTab({
                   setPersonalMessages([]);
                   setUserOutline("");
                   setUserStep3SubmittedOutline("");
+                  setUserDraftStep8("");
                   return;
                 }
                 const opt = personalLogOptions.find((o) => o.username === username);
@@ -773,6 +776,7 @@ export default function LearningMonitorTab({
               personalMessages={personalMessages}
               userOutline={userOutline}
               userStep3SubmittedOutline={userStep3SubmittedOutline}
+              userDraftStep8={userDraftStep8}
               workflowSteps={monitorSelected?.workflowSteps}
               stepExpanded={personalLogStepExpanded}
               onToggleStep={(step) => setPersonalLogStepExpanded((prev) => ({ ...prev, [step]: !(prev[step] ?? false) }))}
