@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createRequire } from "node:module";
 import { ChatMessage, SessionState } from "../src/lib/types";
 import { resolveCourseGuidedDiscussionSubstepsFromConfig, resolveCourseWorkflowStepsFromConfig } from "../src/lib/course-workflow";
 import { validateStep4DiscussionMessage, validateStudentAnswer, validateDraftContent, validateStudentAnswerSimple } from "../src/lib/answer-validation";
@@ -979,6 +980,13 @@ test("renderMessageHtml handles legacy escaped newlines and outer markdown code 
   assert.match(html, /<ul><li>重點一<\/li><li>重點二<\/li><\/ul>/);
   assert.equal(html.includes("```"), false);
   assert.equal(html.includes("## 總結報告"), false);
+});
+
+test("isomorphic DOMPurify loads through CommonJS and removes unsafe markup", () => {
+  const require = createRequire(import.meta.url);
+  const DOMPurify = require("isomorphic-dompurify") as { sanitize(input: string): string };
+
+  assert.equal(DOMPurify.sanitize('<img src="x" onerror="alert(1)"><p>safe</p>'), '<img src="x"><p>safe</p>');
 });
 
 test("renderMessageHtml unwraps JSON-shaped Step10 report text before markdown rendering", () => {
