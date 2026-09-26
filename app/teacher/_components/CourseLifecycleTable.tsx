@@ -1,6 +1,7 @@
 "use client";
 
 import { memo } from "react";
+import { formatTaipeiDateTime } from "@/src/lib/time-format";
 
 type CourseStatus = "not_started" | "in_progress" | "paused" | "ended";
 
@@ -13,6 +14,7 @@ type LifecycleActivity = {
   title: string;
   ownerTeacherUsername?: string;
   courseStatus?: CourseStatus;
+  lastActiveAt?: string | null;
 };
 
 function getCourseStatusLabel(status?: CourseStatus) {
@@ -59,6 +61,7 @@ function CourseLifecycleTable({
         <table className="pro-table">
           <thead>
             <tr>
+              <th>最後更新時間</th>
               <th>學年／學期</th>
               <th>學校</th>
               <th>班級</th>
@@ -91,6 +94,7 @@ function CourseLifecycleTable({
               const enabledButtonStyle = { width: "auto" } as const;
               return (
                 <tr key={activity.id}>
+                  <td>{activity.lastActiveAt ? formatTaipeiDateTime(activity.lastActiveAt) : "—"}</td>
                   <td>{activity.academicYear}／{activity.academicYearTerm}</td>
                   <td>{activity.school}</td>
                   <td>{activity.classNumber}</td>

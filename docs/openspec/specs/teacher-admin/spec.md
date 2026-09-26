@@ -110,6 +110,13 @@ The learning management UI SHALL expose course state controls consistent with th
 - **THEN** every course row shows academic year/term before school and class
 - **AND** the academic year/term filter contains only combinations that exist in the current filtered course data
 
+#### Scenario: Course list latest activity ordering
+
+- **GIVEN** learning management has visible courses with and without persisted learning activity
+- **WHEN** teacher/admin opens the course list
+- **THEN** the first column shows each course's latest persisted active-record time in Taipei time, or `—` when none exists
+- **AND** courses are ordered from the most recently active to the least recently active, with courses that have no active record last
+
 #### Scenario: In-progress course
 
 - **GIVEN** a course is `in_progress`

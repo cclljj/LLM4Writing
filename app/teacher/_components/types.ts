@@ -41,6 +41,8 @@ export type ActivityRow = {
   studentCandidates?: string[];
   courseStatus?: "not_started" | "in_progress" | "paused" | "ended";
   courseEndedAt?: string;
+  /** Latest persisted activity time across this course's learning sessions. */
+  lastActiveAt?: string | null;
 };
 
 export type MonitorSession = {

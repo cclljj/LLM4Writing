@@ -1381,6 +1381,51 @@ export async function listMonitorSessionsByActivityId(
 
 export type MonitorActivityRevision = { total: number; updatedAt: string | null };
 
+/**
+ * Returns the latest persisted activity for each requested course in one query.
+ * Used by the learning-management list, where issuing one session query per
+ * course would make the initial view unnecessarily slow.
+ */
+export async function getMonitorActivityRevisions(activityIds: string[]): Promise<Map<string, MonitorActivityRevision>> {
+  const ids = Array.from(new Set(activityIds.map((id) => id.trim()).filter(Boolean)));
+  if (ids.length === 0) return new Map();
+
+  if (!isDatabaseEnabled()) {
+    const revisions = new Map<string, MonitorActivityRevision>();
+    for (const id of ids) {
+      const sessions = Array.from(getMemoryStore().values()).filter(
+        (session) => session.workflow === "spec10" && session.activityId === id
+      );
+      const updatedAt = sessions
+        .map((session) => memoryUpdatedAt.get(session.id) ?? session.createdAt)
+        .sort()
+        .at(-1) ?? null;
+      revisions.set(id, { total: sessions.length, updatedAt });
+    }
+    return revisions;
+  }
+
+  await ensureSessionTable();
+  const sql = getSqlClient();
+  const rows = await sql<{ activity_id: string; count: string; updated_at: Date | null }[]>`
+    SELECT COALESCE(activity_id, payload->>'activityId') AS activity_id,
+           COUNT(*)::text AS count,
+           MAX(updated_at) AS updated_at
+    FROM llm4writing_sessions
+    WHERE (workflow = 'spec10' OR (workflow IS NULL AND payload->>'workflow' = 'spec10'))
+      AND COALESCE(activity_id, payload->>'activityId') = ANY(${sql.array(ids)})
+    GROUP BY COALESCE(activity_id, payload->>'activityId')
+  `;
+  const revisions = new Map<string, MonitorActivityRevision>(ids.map((id) => [id, { total: 0, updatedAt: null }]));
+  for (const row of rows) {
+    revisions.set(row.activity_id, {
+      total: parseInt(row.count, 10),
+      updatedAt: row.updated_at?.toISOString() ?? null
+    });
+  }
+  return revisions;
+}
+
 export async function getMonitorActivityRevision(activityId: string): Promise<MonitorActivityRevision> {
   const trimmedActivityId = activityId.trim();
   if (!trimmedActivityId) return { total: 0, updatedAt: null };

@@ -442,3 +442,15 @@ test("source-guard: teacher course views show and filter by academic year and te
   assert.ok(diagnosticsSrc.includes("series.academicYear"), "diagnostics trends should render academic year");
   assert.ok(diagnosticsRouteSrc.includes("academicYear: activity?.academicYear"), "diagnostics API should expose activity academic year");
 });
+
+test("source-guard: learning management shows and orders courses by latest activity", async () => {
+  const monitorSrc = await read("../app/teacher/_components/LearningMonitorTab.tsx");
+  const lifecycleSrc = await read("../app/teacher/_components/CourseLifecycleTable.tsx");
+  const activitiesRouteSrc = await read("../app/api/admin/activities/route.ts");
+  assert.ok(activitiesRouteSrc.includes("getMonitorActivityRevisions"), "activities API should load activity revisions in a batch");
+  assert.ok(activitiesRouteSrc.includes("lastActiveAt"), "activities API should return each course's latest activity time");
+  assert.ok(monitorSrc.includes("Number.NEGATIVE_INFINITY"), "courses with no activity should sort after dated courses");
+  assert.ok(monitorSrc.includes("normalizedBTime - normalizedATime"), "courses should sort from newest to oldest activity");
+  assert.ok(lifecycleSrc.includes("<th>最後更新時間</th>"), "learning management should render the latest activity column first");
+  assert.ok(lifecycleSrc.includes("formatTaipeiDateTime(activity.lastActiveAt)"), "latest activity time should use Taipei formatting");
+});

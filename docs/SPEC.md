@@ -1012,7 +1012,7 @@ classnumber,username,name,school,role,password,ownerTeacherUsername
 
 #### 6.6.2 學習管理：課程清單
 
-課程清單欄位：學年／學期、學校、班級、課程、目前狀態、操作。
+課程清單欄位：最後更新時間、學年／學期、學校、班級、課程、目前狀態、操作。
 
 每列操作：
 
@@ -1030,6 +1030,8 @@ classnumber,username,name,school,role,password,ownerTeacherUsername
 - 篩選選單：學校、班級、學年／學期、課程、狀態，預設全部；學年／學期只列出目前資料庫中、且符合已選學校／班級範圍的實際組合。
 - 進入分頁時主動刷新資料。
 - 課程清單載入不得被 monitor/session 查詢阻塞。
+- 「最後更新時間」為該課程所有 learning session 最後一次持久化 active 紀錄的時間，以台北時間顯示；無 active 紀錄時顯示 `—`。
+- 清單應依「最後更新時間」由近至遠排序；無 active 紀錄的課程排在最後。
 
 課程狀態按鈕：
 

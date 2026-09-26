@@ -163,13 +163,21 @@ export default function LearningMonitorTab({
   }, [activities, learningSchoolFilter, learningClassFilter]);
 
   const filteredLearningActivities = useMemo(() => {
-    return activities.filter((item) => {
+    const filtered = activities.filter((item) => {
       if (learningSchoolFilter !== "all" && item.school !== learningSchoolFilter) return false;
       if (learningClassFilter !== "all" && item.classNumber !== learningClassFilter) return false;
       if (learningAcademicTermFilter !== "all" && `${item.academicYear}::${item.academicYearTerm}` !== learningAcademicTermFilter) return false;
       if (learningCourseFilter !== "all" && item.id !== learningCourseFilter) return false;
       if (learningStatusFilter !== "all" && (item.courseStatus ?? "not_started") !== learningStatusFilter) return false;
       return true;
+    });
+    return filtered.sort((a, b) => {
+      const aTime = a.lastActiveAt ? Date.parse(a.lastActiveAt) : Number.NEGATIVE_INFINITY;
+      const bTime = b.lastActiveAt ? Date.parse(b.lastActiveAt) : Number.NEGATIVE_INFINITY;
+      const normalizedATime = Number.isFinite(aTime) ? aTime : Number.NEGATIVE_INFINITY;
+      const normalizedBTime = Number.isFinite(bTime) ? bTime : Number.NEGATIVE_INFINITY;
+      if (normalizedATime !== normalizedBTime) return normalizedBTime - normalizedATime;
+      return a.id.localeCompare(b.id, "zh-Hant");
     });
   }, [activities, learningSchoolFilter, learningClassFilter, learningAcademicTermFilter, learningCourseFilter, learningStatusFilter]);
 

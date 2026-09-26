@@ -8,7 +8,7 @@ import {
   hydrateDomainState
 } from "@/src/lib/activity-store";
 import { getUsersVisibleToTeacherStore, listUsersStore } from "@/src/lib/user-store";
-import { deleteSessionsByActivityId, hasStudentActivityByActivityId } from "@/src/lib/store";
+import { deleteSessionsByActivityId, getMonitorActivityRevisions, hasStudentActivityByActivityId } from "@/src/lib/store";
 import { recordAuditLog } from "@/src/lib/audit-log-store";
 
 export async function GET() {
@@ -31,8 +31,10 @@ export async function GET() {
     user.role === "admin"
       ? baseActivities
       : baseActivities.filter((activity) => visibleClasses.has(`${activity.school}::${activity.classNumber}`));
+  const activityRevisions = await getMonitorActivityRevisions(scopedActivities.map((activity) => activity.id));
   const activities = scopedActivities.map((activity) => ({
     ...activity,
+    lastActiveAt: activityRevisions.get(activity.id)?.updatedAt ?? null,
     studentCandidates: visibleStudents
       .filter((student) => student.school === activity.school && student.classNumber === activity.classNumber)
       .map((student) => student.username)

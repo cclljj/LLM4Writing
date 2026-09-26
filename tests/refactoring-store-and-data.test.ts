@@ -4,6 +4,7 @@ import type { SessionState } from "../src/lib/types";
 import {
   countSessions,
   deleteSessionsByActivityId,
+  getMonitorActivityRevisions,
   getMonitorActivityRevision,
   getSession,
   getSessionPollSnapshot,
@@ -163,6 +164,19 @@ test("store behavior: monitor summaries are activity-scoped and paginated", asyn
   assert.equal(page.sessions.length, 1);
   assert.equal(page.total >= 2, true);
   assert.equal(page.sessions[0]?.activityId, activityId);
+
+  await deleteSessionsByActivityId(activityId);
+});
+
+test("store behavior: batch activity revisions include the latest update and empty activities", async () => {
+  const activityId = `oc-monitor-batch-${Date.now()}`;
+  const emptyActivityId = `${activityId}-empty`;
+  await saveSession(makeSession(`t-monitor-batch-${Math.random()}`, { activityId }));
+
+  const revisions = await getMonitorActivityRevisions([activityId, emptyActivityId]);
+  assert.equal(revisions.get(activityId)?.total, 1);
+  assert.ok(revisions.get(activityId)?.updatedAt);
+  assert.deepEqual(revisions.get(emptyActivityId), { total: 0, updatedAt: null });
 
   await deleteSessionsByActivityId(activityId);
 });
