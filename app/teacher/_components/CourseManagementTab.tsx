@@ -104,23 +104,26 @@ export default function CourseManagementTab({
   const currentFormSchool = loginRole === "admin" ? taskForm.school : teacherSchool;
 
   // 學年是課程設定的第一個欄位；其後的學校與班級均由該學年學生資料推導。
+  // 編輯舊課程時，也保留其原本值，避免學生帳號異動後下拉選單顯示空白。
   const allSchools = useMemo(() => {
-    return Array.from(
-      new Set(users.filter((u) => u.role === "student" && u.academicYear === taskForm.academicYear && u.school).map((u) => u.school))
-    ).sort((a, b) => a.localeCompare(b, "zh-Hant"));
-  }, [users, taskForm.academicYear]);
+    const schools = new Set(
+      users.filter((u) => u.role === "student" && u.academicYear === taskForm.academicYear && u.school).map((u) => u.school)
+    );
+    if (taskForm.id && taskForm.school) schools.add(taskForm.school);
+    return Array.from(schools).sort((a, b) => a.localeCompare(b, "zh-Hant"));
+  }, [users, taskForm.id, taskForm.school, taskForm.academicYear]);
 
   // 班級選單（依 currentFormSchool 過濾）
   const classOptionsForForm = useMemo(() => {
     if (!currentFormSchool) return [];
-    return Array.from(
-      new Set(
-        users
-          .filter((u) => u.role === "student" && u.school === currentFormSchool && u.academicYear === taskForm.academicYear && u.classNumber)
-          .map((u) => u.classNumber!)
-      )
-    ).sort();
-  }, [users, currentFormSchool, taskForm.academicYear]);
+    const classNumbers = new Set(
+      users
+        .filter((u) => u.role === "student" && u.school === currentFormSchool && u.academicYear === taskForm.academicYear && u.classNumber)
+        .map((u) => u.classNumber!)
+    );
+    if (taskForm.id && taskForm.classNumber) classNumbers.add(taskForm.classNumber);
+    return Array.from(classNumbers).sort();
+  }, [users, currentFormSchool, taskForm.id, taskForm.classNumber, taskForm.academicYear]);
 
   // An existing course keeps its recorded owner. New courses derive an owner
   // from the currently selected school-year/class's students (#254).

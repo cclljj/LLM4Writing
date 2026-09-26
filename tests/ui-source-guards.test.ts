@@ -29,6 +29,12 @@ test("source-guard: editing a course retains its stored bound teacher", async ()
   assert.ok(src.includes("taskForm.ownerTeacherUsername.trim() || best"), "stored teacher binding should take precedence over a student-derived owner");
 });
 
+test("source-guard: editing a course retains its stored school and class choices", async () => {
+  const src = await read("../app/teacher/_components/CourseManagementTab.tsx");
+  assert.ok(src.includes("if (taskForm.id && taskForm.school) schools.add(taskForm.school)"), "editing should retain the stored school in its select options");
+  assert.ok(src.includes("if (taskForm.id && taskForm.classNumber) classNumbers.add(taskForm.classNumber)"), "editing should retain the stored class in its select options");
+});
+
 test("source-guard: personal history review includes the current student's revision draft", async () => {
   const pageSrc = await read("../app/student/page.tsx");
   const historySrc = await read("../app/student/_components/HistoryReview.tsx");
