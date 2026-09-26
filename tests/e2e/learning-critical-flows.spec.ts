@@ -14,7 +14,8 @@ type LoggedInActors = {
 let loggedInActors: LoggedInActors | null = null;
 
 async function login(page: Page, username: string, password: string) {
-  const response = await page.request.post("/api/auth/login", { data: { username, password } });
+  const academicYear = username === "student" ? "115" : "999";
+  const response = await page.request.post("/api/auth/login", { data: { username, password, academicYear } });
   let data: { redirectTo?: string; error?: string } = {};
   try {
     data = (await response.json()) as { redirectTo?: string; error?: string };
@@ -48,7 +49,12 @@ function mutateOutlineForCompletion(outline: string): string {
   return outline.replace(/\["([^"]+)"\]/g, (_full, label: string) => `["${label}（已修訂）"]`);
 }
 
-async function setupInProgressCourse(adminPage: Page, suffix: string, classNumber: string): Promise<{ activityId: string; title: string }> {
+async function setupInProgressCourse(
+  adminPage: Page,
+  suffix: string,
+  classNumber: string,
+  academicYear = "115"
+): Promise<{ activityId: string; title: string }> {
   const title = `E2E-${suffix}-${Date.now()}`;
   let activityId = "";
   let activityTitle = title;
@@ -57,7 +63,9 @@ async function setupInProgressCourse(adminPage: Page, suffix: string, classNumbe
   const activitiesRes = await adminPage.request.get("/api/admin/activities");
   expect(activitiesRes.ok()).toBeTruthy();
   const activitiesData = (await activitiesRes.json()) as { activities?: Array<Record<string, unknown>> };
-  const classActivities = (activitiesData.activities ?? []).filter((item) => item.classNumber === classNumber);
+  const classActivities = (activitiesData.activities ?? []).filter(
+    (item) => item.classNumber === classNumber && item.academicYear === academicYear
+  );
   const reusable =
     classActivities.find((item) => item.courseStatus === "in_progress" || item.courseStatus === "not_started" || item.courseStatus === "paused") ??
     classActivities[0];
@@ -67,34 +75,25 @@ async function setupInProgressCourse(adminPage: Page, suffix: string, classNumbe
     activityTitle = typeof reusable.title === "string" && reusable.title.trim().length > 0 ? reusable.title : title;
     courseStatus = typeof reusable.courseStatus === "string" ? reusable.courseStatus : undefined;
   } else {
-    const essaysRes = await adminPage.request.get("/api/admin/essays");
-    expect(essaysRes.ok()).toBeTruthy();
-    const essaysData = (await essaysRes.json()) as { essays?: Array<Record<string, unknown>> };
-    let essayId =
-      (essaysData.essays ?? []).find((essay) => essay.enabled !== false && typeof essay.id === "string")?.id as
-        | string
-        | undefined;
-
-    if (!essayId) {
-      const seedEssayId = `essay-e2e-${Date.now()}-${Math.floor(Math.random() * 10_000)}`;
-      const createEssayRes = await postFromPage(adminPage, "/api/admin/essays", {
-        id: seedEssayId,
-        title: `${title}-essay`,
-        genre: "議論文",
-        description: "seed for e2e",
-        enabled: true
-      });
-      expect(createEssayRes.status, `essay create failed: ${JSON.stringify(createEssayRes.body)}`).toBe(200);
-      const created = createEssayRes.body as Record<string, unknown>;
-      const savedEssay = created.saved as Record<string, unknown> | undefined;
-      essayId = typeof savedEssay?.id === "string" ? savedEssay.id : undefined;
-      expect(essayId, "expected created essay id").toBeTruthy();
-    }
+    const seedEssayId = `essay-e2e-${Date.now()}-${Math.floor(Math.random() * 10_000)}`;
+    const createEssayRes = await postFromPage(adminPage, "/api/admin/essays", {
+      id: seedEssayId,
+      title: `${title}-essay`,
+      genre: "議論文",
+      description: "seed for e2e",
+      enabled: true
+    });
+    expect(createEssayRes.status, `essay create failed: ${JSON.stringify(createEssayRes.body)}`).toBe(200);
+    const created = createEssayRes.body as Record<string, unknown>;
+    const savedEssay = created.saved as Record<string, unknown> | undefined;
+    const essayId = typeof savedEssay?.id === "string" ? savedEssay.id : undefined;
+    expect(essayId, "expected created essay id").toBeTruthy();
 
     let openClassCreated = false;
     for (let attempt = 0; attempt < 5; attempt += 1) {
       const openClassRes = await postFromPage(adminPage, "/api/admin/openclasses", {
         classNumber,
+        academicYear,
         essayId,
         durationMinutes: 40,
         supplemental: "E2E supplemental"

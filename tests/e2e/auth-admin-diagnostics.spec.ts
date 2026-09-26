@@ -3,7 +3,8 @@ import { expect, test } from "@playwright/test";
 test.describe.configure({ mode: "serial" });
 
 async function login(page: import("@playwright/test").Page, username: string, password: string) {
-  const response = await page.request.post("/api/auth/login", { data: { username, password } });
+  const academicYear = username === "student" ? "115" : "999";
+  const response = await page.request.post("/api/auth/login", { data: { username, password, academicYear } });
   let data: { redirectTo?: string; error?: string } = {};
   try {
     data = (await response.json()) as { redirectTo?: string; error?: string };
