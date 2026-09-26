@@ -112,7 +112,7 @@ export default function CourseManagementTab({
     return Array.from(
       new Set(
         users
-          .filter((u) => u.role === "student" && u.school === currentFormSchool && u.classNumber)
+          .filter((u) => u.role === "student" && u.school === currentFormSchool && u.academicYear === taskForm.academicYear && u.classNumber)
           .map((u) => u.classNumber!)
       )
     ).sort();
@@ -123,7 +123,7 @@ export default function CourseManagementTab({
   const formOwnerTeacher = useMemo<{ username: string; name: string } | null>(() => {
     if (!currentFormSchool || !taskForm.classNumber) return null;
     const classStudents = users.filter(
-      (u) => u.role === "student" && u.school === currentFormSchool && u.classNumber === taskForm.classNumber
+      (u) => u.role === "student" && u.school === currentFormSchool && u.academicYear === taskForm.academicYear && u.classNumber === taskForm.classNumber
     );
     const counts = new Map<string, number>();
     for (const s of classStudents) {
@@ -219,7 +219,7 @@ export default function CourseManagementTab({
       return;
     }
     const studentsForClass = users
-      .filter((u) => u.role === "student" && u.school === currentFormSchool && u.classNumber === taskForm.classNumber)
+      .filter((u) => u.role === "student" && u.school === currentFormSchool && u.academicYear === taskForm.academicYear && u.classNumber === taskForm.classNumber)
       .map((u) => u.username);
     deferStateUpdate(() => {
       setUnassignedStudents(studentsForClass);
@@ -281,9 +281,9 @@ export default function CourseManagementTab({
     setGroupCount(2);
   }
 
-  function getStudentsForClass(school: string, classNumber: string): string[] {
+  function getStudentsForClass(school: string, classNumber: string, academicYear: string): string[] {
     return users
-      .filter((u) => u.role === "student" && u.school === school && u.classNumber === classNumber)
+      .filter((u) => u.role === "student" && u.school === school && u.academicYear === academicYear && u.classNumber === classNumber)
       .map((u) => u.username);
   }
 
@@ -355,11 +355,11 @@ export default function CourseManagementTab({
       const groups = activity.groups.map((g) => ({ ...g, members: [...g.members] }));
       setEditableGroups(groups);
       setGroupCount(Math.max(1, groups.length || 2));
-      const candidates = activity.studentCandidates ?? getStudentsForClass(openClass.school, openClass.classNumber);
+      const candidates = activity.studentCandidates ?? getStudentsForClass(openClass.school, openClass.classNumber, openClass.academicYear);
       const assigned = new Set(groups.flatMap((g) => g.members));
       setUnassignedStudents(candidates.filter((u) => !assigned.has(u)));
     } else {
-      const candidates = getStudentsForClass(openClass.school, openClass.classNumber);
+      const candidates = getStudentsForClass(openClass.school, openClass.classNumber, openClass.academicYear);
       setEditableGroups(buildEmptyGroups(2));
       setGroupCount(2);
       setUnassignedStudents(candidates);

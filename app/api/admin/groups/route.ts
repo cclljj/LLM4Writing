@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
   const visibleUsers = user.role === "admin" ? await listUsersStore() : await getUsersVisibleToTeacherStore(user.username);
   const allowedStudents = visibleUsers
     .filter((student) => student.role === "student")
-    .filter((student) => student.school === activity.school && student.classNumber === activity.classNumber)
+    .filter((student) => student.school === activity.school && student.classNumber === activity.classNumber && student.academicYear === activity.academicYear)
     .map((student) => student.username);
 
   const updated = updateActivityGroups(body.activityId, body.groups, allowedStudents);

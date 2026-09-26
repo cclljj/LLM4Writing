@@ -4,6 +4,7 @@ export type AuthRole = "student" | "teacher" | "admin";
 
 export interface AuthUser {
   username: string;
+  academicYear?: string;
   role: AuthRole;
 }
 
@@ -13,6 +14,7 @@ export interface AuthSessionClaims extends AuthUser {
 
 type AuthTokenPayload = {
   username: string;
+  academicYear?: string;
   role: AuthRole;
   sessionVersion: number;
   exp: number;
@@ -28,14 +30,15 @@ function normalizeSessionVersion(input: unknown): number {
   return asInt > 0 ? asInt : 1;
 }
 
-export async function validateCredential(username: string, password: string): Promise<AuthSessionClaims | undefined> {
-  const user = await validateUserCredentialStore(username, password);
+export async function validateCredential(username: string, password: string, academicYear?: string): Promise<AuthSessionClaims | undefined> {
+  const user = await validateUserCredentialStore(username, password, academicYear);
   if (!user) {
     return undefined;
   }
 
   return {
     username: user.username,
+    ...(user.academicYear ? { academicYear: user.academicYear } : {}),
     role: user.role,
     sessionVersion: normalizeSessionVersion(user.sessionVersion)
   };
@@ -97,6 +100,7 @@ function isAuthRole(role: unknown): role is AuthRole {
 export async function createAuthSessionToken(user: AuthSessionClaims, nowMs = Date.now()): Promise<string> {
   const payload: AuthTokenPayload = {
     username: user.username,
+    ...(user.academicYear ? { academicYear: user.academicYear } : {}),
     role: user.role,
     sessionVersion: normalizeSessionVersion(user.sessionVersion),
     exp: Math.floor(nowMs / 1000) + AUTH_SESSION_TTL_SECONDS,
@@ -126,6 +130,7 @@ export async function verifyAuthSessionToken(token: string, nowMs = Date.now()):
   if (!Number.isFinite(payload.exp) || payload.exp! <= Math.floor(nowMs / 1000)) return null;
   return {
     username: payload.username,
+    ...(payload.academicYear ? { academicYear: payload.academicYear } : {}),
     role: payload.role,
     sessionVersion: normalizeSessionVersion(payload.sessionVersion)
   };

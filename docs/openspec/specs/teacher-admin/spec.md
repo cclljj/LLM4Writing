@@ -6,6 +6,15 @@ This domain describes teacher and admin UI behavior, course management, learning
 
 ## Requirements
 
+### Requirement: Academic-year account identity
+
+The system SHALL store `academic_year` for every account. A student account is uniquely identified by `(username, academic_year)` and may reuse a username in another academic year. Teachers and administrators SHALL use `999`.
+
+#### Scenario: Course students match the configured year and class
+
+- **WHEN** a writing course is configured
+- **THEN** eligible students have the same school, academic year, and class number as the course
+
 ### Requirement: Teacher Workspace Tabs
 
 The teacher workspace SHALL provide account management, course management, and learning management capabilities.

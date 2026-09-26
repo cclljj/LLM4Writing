@@ -17,7 +17,7 @@ export async function GET() {
     );
   }
 
-  const profile = await getUserStore(user.username);
+  const profile = await getUserStore(user.username, user.academicYear ?? "999");
   if (!profile || (profile.role && profile.role !== user.role)) {
     return NextResponse.json(
       { authenticated: false },

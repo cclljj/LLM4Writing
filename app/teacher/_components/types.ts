@@ -1,7 +1,7 @@
 import { ArtifactDiagnostics, QualitySignals } from "@/src/lib/learning-diagnostics";
 import { ChatMessage, CourseWorkflowStep, GuidedDiscussionSubsteps, SessionAttendanceOverrides, SessionMakeupWork } from "@/src/lib/types";
 
-export type UserRow = { username: string; name: string; school: string; role: string; ownerTeacherUsername?: string; classNumber?: string };
+export type UserRow = { username: string; academicYear: string; name: string; school: string; role: string; ownerTeacherUsername?: string; classNumber?: string };
 export type EssayRow = {
   id: string;
   title: string;

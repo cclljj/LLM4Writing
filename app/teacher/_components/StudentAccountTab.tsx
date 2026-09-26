@@ -39,6 +39,7 @@ export default function StudentAccountTab({
   const [deleteUserTarget, setDeleteUserTarget] = useState<UserRow | null>(null);
   const [editingUser, setEditingUser] = useState<{
     username: string;
+    academicYear: string;
     name: string;
     school: string;
     role: "student" | "teacher";
@@ -53,6 +54,7 @@ export default function StudentAccountTab({
     role: "student" as "student" | "teacher",
     ownerTeacherUsername: "",
     classNumber: "",
+    academicYear: "115",
     password: ""
   });
   const [csvInput, setCsvInput] = useState("");
@@ -60,6 +62,7 @@ export default function StudentAccountTab({
   const [isBulkCreatingUsers, setIsBulkCreatingUsers] = useState(false);
   const [bulkCreateDots, setBulkCreateDots] = useState<"..." | "......">("...");
   const [resetTargetUser, setResetTargetUser] = useState("");
+  const [resetTargetAcademicYear, setResetTargetAcademicYear] = useState("999");
   const [resetMode, setResetMode] = useState<"system" | "manual">("system");
   const [generatedPassword, setGeneratedPassword] = useState("");
   const [manualResetPassword, setManualResetPassword] = useState("");
@@ -263,11 +266,11 @@ export default function StudentAccountTab({
 
     lines.forEach((line, idx) => {
       const cols = splitCsvLine(line);
-      if (cols.length !== 6 && cols.length !== 7) {
-        errors.push(`第 ${idx + 1} 列欄位數錯誤（需 6 或 7 欄）`);
+      if (cols.length !== 7 && cols.length !== 8) {
+        errors.push(`第 ${idx + 1} 列欄位數錯誤（需 7 或 8 欄）`);
         return;
       }
-      const [classNumberRaw = "", username, name, school, role, password, ownerTeacherUsernameRaw = ""] = cols.map((v) => v.trim());
+      const [academicYear, classNumberRaw = "", username, name, school, role, password, ownerTeacherUsernameRaw = ""] = cols.map((v) => v.trim());
       const classNumber = classNumberRaw.trim();
       const ownerTeacherUsername = ownerTeacherUsernameRaw.trim();
       if (!username || !name || !school || !role || !password) {
@@ -287,6 +290,7 @@ export default function StudentAccountTab({
         errors.push(`第 ${idx + 1} 列 password 至少 6 碼`);
       }
       if (role === "student") {
+        if (!["114", "115"].includes(academicYear)) errors.push(`第 ${idx + 1} 列 student 學年必須是 114 或 115`);
         if (!classNumber) {
           errors.push(`第 ${idx + 1} 列 student 必填班級號碼`);
         }
@@ -298,17 +302,19 @@ export default function StudentAccountTab({
           }
         }
       }
-      if (seen.has(username)) {
+      const userIndex = `${username}::${role === "student" ? academicYear : "999"}`;
+      if (seen.has(userIndex)) {
         errors.push(`第 ${idx + 1} 列 username 重複`);
       }
-      seen.add(username);
+      seen.add(userIndex);
     });
     return errors;
   }
 
-  function openResetPassword(username: string) {
+  function openResetPassword(username: string, academicYear: string) {
     const newGenerated = createRandomPassword();
     setResetTargetUser(username);
+    setResetTargetAcademicYear(academicYear);
     setResetMode("system");
     setGeneratedPassword(newGenerated);
     setManualResetPassword("");
@@ -334,7 +340,7 @@ export default function StudentAccountTab({
     const response = await fetch("/api/admin/users", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "reset_password", username: resetTargetUser, newPassword: nextPassword })
+      body: JSON.stringify({ action: "reset_password", username: resetTargetUser, academicYear: resetTargetAcademicYear, newPassword: nextPassword })
     });
     if (!response.ok) {
       const data = await response.json();
@@ -353,7 +359,7 @@ export default function StudentAccountTab({
     setAccountSuccess("");
     const validationErrors = validateCsvRows(
       [
-        `${newUserForm.classNumber},${newUserForm.username},${newUserForm.name},${newUserForm.school},${newUserForm.role},${newUserForm.password},${newUserForm.ownerTeacherUsername}`
+        `${newUserForm.academicYear},${newUserForm.classNumber},${newUserForm.username},${newUserForm.name},${newUserForm.school},${newUserForm.role},${newUserForm.password},${newUserForm.ownerTeacherUsername}`
       ],
       { isAdmin: loginRole === "admin" }
     );
@@ -392,6 +398,7 @@ export default function StudentAccountTab({
       role: "student",
       ownerTeacherUsername: "",
       classNumber: "",
+      academicYear: "115",
       password: ""
     });
     setAccountSuccess("已新增帳號。");
@@ -436,7 +443,7 @@ export default function StudentAccountTab({
     const response = await fetch("/api/admin/users", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: editingUser.username, patch })
+      body: JSON.stringify({ username: editingUser.username, academicYear: editingUser.academicYear, patch })
     });
     const data = await response.json();
     if (!response.ok) {
@@ -448,7 +455,7 @@ export default function StudentAccountTab({
     await onRefresh();
   }
 
-  async function deleteUser(username: string) {
+  async function deleteUser(username: string, academicYear: string) {
     setDeleteUserTarget(null);
     setAccountError("");
     setAccountSuccess("");
@@ -457,7 +464,7 @@ export default function StudentAccountTab({
       const response = await fetch("/api/admin/users", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username })
+        body: JSON.stringify({ username, academicYear })
       });
       const data = await response.json();
       if (!response.ok) {
@@ -577,6 +584,14 @@ export default function StudentAccountTab({
             ) : null}
             {newUserForm.role === "student" ? (
               <div className="col">
+                <label>學年</label>
+                <select value={newUserForm.academicYear} onChange={(e) => setNewUserForm((prev) => ({ ...prev, academicYear: e.target.value }))}>
+                  <option value="115">115</option><option value="114">114</option>
+                </select>
+              </div>
+            ) : null}
+            {newUserForm.role === "student" ? (
+              <div className="col">
                 <label>學校（自動帶入）</label>
                 <input value={newUserForm.school} readOnly />
               </div>
@@ -636,7 +651,7 @@ export default function StudentAccountTab({
             <small style={{ display: "block" }}>
               請使用逗號分隔，欄位順序固定為：
               <code style={{ marginLeft: 6 }}>
-                classnumber,username,name,school,role,password[,ownerTeacherUsername]
+                academicyear,classnumber,username,name,school,role,password[,ownerTeacherUsername]
               </code>
             </small>
             <small style={{ display: "block", marginTop: 4 }}>
@@ -663,8 +678,8 @@ export default function StudentAccountTab({
             onChange={(e) => setCsvInput(e.target.value)}
             placeholder={
               loginRole === "admin"
-                ? "classnumber,username,name,school,role,password,ownerTeacherUsername\n701,student10,王小明,Demo High,student,abc12345,teacher"
-                : "classnumber,username,name,school,role,password\n701,student10,王小明,Demo High,student,abc12345"
+                ? "academicyear,classnumber,username,name,school,role,password,ownerTeacherUsername\n115,701,student10,王小明,Demo High,student,abc12345,teacher"
+                : "academicyear,classnumber,username,name,school,role,password\n115,701,student10,王小明,Demo High,student,abc12345"
             }
           />
           <div className="row" style={{ marginTop: 10 }}>
@@ -680,8 +695,8 @@ export default function StudentAccountTab({
                 onClick={() =>
                   setCsvInput(
                     loginRole === "admin"
-                      ? "classnumber,username,name,school,role,password,ownerTeacherUsername"
-                      : "classnumber,username,name,school,role,password"
+                      ? "academicyear,classnumber,username,name,school,role,password,ownerTeacherUsername"
+                      : "academicyear,classnumber,username,name,school,role,password"
                   )
                 }
               >
@@ -996,6 +1011,7 @@ export default function StudentAccountTab({
                               onClick={() =>
                                 setEditingUser({
                                   username: user.username,
+                                  academicYear: user.academicYear,
                                   name: user.name,
                                   school: user.school,
                                   role: user.role === "teacher" ? "teacher" : "student",
@@ -1011,7 +1027,7 @@ export default function StudentAccountTab({
                               type="button"
                               className="secondary"
                               style={{ width: "auto" }}
-                              onClick={() => openResetPassword(user.username)}
+                              onClick={() => openResetPassword(user.username, user.academicYear)}
                             >
                               重設密碼
                             </button>
@@ -1076,7 +1092,7 @@ export default function StudentAccountTab({
         busy={Boolean(deletingUsername)}
         onCancel={() => setDeleteUserTarget(null)}
         onConfirm={() => {
-          if (deleteUserTarget) void deleteUser(deleteUserTarget.username);
+          if (deleteUserTarget) void deleteUser(deleteUserTarget.username, deleteUserTarget.academicYear);
         }}
       />
     </>

@@ -268,6 +268,8 @@ export interface Activity {
 
 export interface UserAccount {
   username: string;
+  /** Students are identified together with this school year; staff use "999". */
+  academicYear: string;
   name: string;
   school: string;
   role: "student" | "teacher" | "admin";

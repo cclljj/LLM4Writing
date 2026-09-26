@@ -18,7 +18,7 @@ import { clientSafeErrorDetail } from "@/src/lib/error-redaction";
 
 export async function POST(request: NextRequest) {
   try {
-    const body = (await request.json()) as { username?: string; password?: string };
+    const body = (await request.json()) as { username?: string; password?: string; academicYear?: string };
     const username = (body.username ?? "").trim();
     const password = body.password ?? "";
 
@@ -33,7 +33,14 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const claims = await validateCredential(username, password);
+    // Staff accounts always use the reserved 999 year, so they do not need a
+    // separate login form. Students must select their actual academic year.
+    const requestedAcademicYear = body.academicYear?.trim();
+    const claims =
+      (await validateCredential(username, password, requestedAcademicYear)) ??
+      (requestedAcademicYear && requestedAcademicYear !== "999"
+        ? await validateCredential(username, password, "999")
+        : undefined);
     if (!claims) {
       if (!isLoginRateLimitDisabled() && username) await recordLoginFailure(username);
       return NextResponse.json({ error: "invalid_credentials" }, { status: 401 });
@@ -42,7 +49,7 @@ export async function POST(request: NextRequest) {
     // Success — clear failure record
     if (!isLoginRateLimitDisabled()) await clearLoginFailures(username);
 
-    const user = { username: claims.username, role: claims.role };
+    const user = { username: claims.username, academicYear: claims.academicYear, role: claims.role };
 
     const response = NextResponse.json({
       ok: true,

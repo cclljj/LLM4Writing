@@ -24,6 +24,7 @@ type UserInput = {
   password?: string;
   ownerTeacherUsername?: string;
   classNumber?: string;
+  academicYear?: string;
 };
 
 async function recordUserCreateAudit(input: {
@@ -72,6 +73,7 @@ export async function POST(request: NextRequest) {
   const body = (await request.json()) as {
     action?: "create" | "reset_password" | "bulk_create_from_csv";
     username?: string;
+    academicYear?: string;
     newPassword?: string;
     user?: UserInput;
     csv?: string;
@@ -85,7 +87,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "password_too_short" }, { status: 400 });
     }
 
-    const target = await getUserStore(body.username);
+    const target = await getUserStore(body.username, body.academicYear?.trim() || "999");
     if (!target) {
       return NextResponse.json({ error: "user_not_found" }, { status: 404 });
     }
@@ -93,7 +95,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "forbidden_target" }, { status: 403 });
     }
 
-    const ok = await resetUserPasswordStore(body.username, body.newPassword);
+    const ok = await resetUserPasswordStore(body.username, body.newPassword, target.academicYear);
     if (!ok) {
       return NextResponse.json({ error: "user_not_found" }, { status: 404 });
     }
@@ -170,7 +172,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: parsed.error }, { status: 400 });
     }
 
-    const existing = new Set((await listUsersStore()).map((item) => item.username));
+    const existing = new Set((await listUsersStore()).map((item) => `${item.username}::${item.academicYear}`));
     const seenInFile = new Set<string>();
     const errors: Array<{ line: number; message: string }> = [];
     const validRows: Array<{
@@ -182,6 +184,7 @@ export async function POST(request: NextRequest) {
       password: string;
       ownerTeacherUsername?: string;
       classNumber?: string;
+      academicYear?: string;
     }> = [];
 
     for (const row of parsed.rows) {
@@ -214,18 +217,19 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      if (existing.has(checked.user.username)) {
+      const userIndex = `${checked.user.username}::${checked.user.academicYear}`;
+      if (existing.has(userIndex)) {
         errors.push({ line: row.line, message: `username_exists:${checked.user.username}` });
         await recordUserCreateAudit({ requester, username: checked.user.username, source: "bulk", result: "failed", line: row.line, error: "username_exists" });
         continue;
       }
-      if (seenInFile.has(checked.user.username)) {
+      if (seenInFile.has(userIndex)) {
         errors.push({ line: row.line, message: `duplicated_username_in_csv:${checked.user.username}` });
         await recordUserCreateAudit({ requester, username: checked.user.username, source: "bulk", result: "failed", line: row.line, error: "duplicated_username_in_csv" });
         continue;
       }
 
-      seenInFile.add(checked.user.username);
+      seenInFile.add(userIndex);
       validRows.push({ ...checked.user, line: row.line });
     }
 
@@ -266,6 +270,7 @@ export async function PUT(request: NextRequest) {
 
   const body = (await request.json()) as {
     username?: string;
+    academicYear?: string;
     patch?: { name?: string; school?: string; role?: string; password?: string; ownerTeacherUsername?: string; classNumber?: string };
   };
 
@@ -273,7 +278,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: "missing_required_fields" }, { status: 400 });
   }
 
-  const target = await getUserStore(body.username);
+  const target = await getUserStore(body.username, body.academicYear?.trim() || "999");
   if (!target) {
     return NextResponse.json({ error: "user_not_found" }, { status: 404 });
   }
@@ -344,7 +349,7 @@ export async function PUT(request: NextRequest) {
     }
   }
 
-  const result = await updateUserStore(body.username, patch);
+  const result = await updateUserStore(body.username, target.academicYear, patch);
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: 400 });
   }
@@ -358,12 +363,12 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
-  const body = (await request.json()) as { username?: string };
+  const body = (await request.json()) as { username?: string; academicYear?: string };
   if (!body.username) {
     return NextResponse.json({ error: "missing_required_fields" }, { status: 400 });
   }
 
-  const target = await getUserStore(body.username);
+  const target = await getUserStore(body.username, body.academicYear?.trim() || "999");
   if (!target) {
     return NextResponse.json({ error: "user_not_found" }, { status: 404 });
   }
@@ -380,7 +385,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: "cannot_delete_admin" }, { status: 403 });
   }
 
-  const result = await deleteUserStore(body.username);
+  const result = await deleteUserStore(body.username, target.academicYear);
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: 400 });
   }
@@ -418,6 +423,7 @@ async function validateUserFields(input: UserInput): Promise<
         password: string;
         ownerTeacherUsername?: string;
         classNumber?: string;
+        academicYear?: string;
       };
     }
   | { ok: false; error: string }
@@ -429,6 +435,7 @@ async function validateUserFields(input: UserInput): Promise<
   const password = input.password ?? "";
   const ownerTeacherUsername = (input.ownerTeacherUsername ?? "").trim();
   const classNumber = (input.classNumber ?? "").trim();
+  const academicYear = (input.academicYear ?? "").trim();
 
   if (!username || !name || !school || !role || !password) {
     return { ok: false, error: "missing_required_fields" };
@@ -444,6 +451,9 @@ async function validateUserFields(input: UserInput): Promise<
   }
   if (role === "student" && !classNumber) {
     return { ok: false, error: "missing_class_number" };
+  }
+  if (role === "student" && !["114", "115"].includes(academicYear)) {
+    return { ok: false, error: "invalid_academic_year" };
   }
   if (role === "student" && ownerTeacherUsername) {
     const teachers = await getTeacherUsersStore();
@@ -462,7 +472,8 @@ async function validateUserFields(input: UserInput): Promise<
       role,
       password,
       ownerTeacherUsername: role === "student" ? ownerTeacherUsername : undefined,
-      classNumber: role === "student" ? classNumber : undefined
+      classNumber: role === "student" ? classNumber : undefined,
+      academicYear: role === "student" ? academicYear : "999"
     }
   };
 }
@@ -479,6 +490,7 @@ function parseUserCsv(csvText: string):
           role?: string;
           password?: string;
           classNumber?: string;
+          academicYear?: string;
           ownerTeacherUsername?: string;
         };
       }>;
@@ -496,10 +508,10 @@ function parseUserCsv(csvText: string):
   let startIndex = 0;
   const header = splitCsvLine(lines[0]!);
   const normalizedHeader = header.map((h) => h.toLowerCase());
-  const headerMatches6 = normalizedHeader.join(",") === "classnumber,username,name,school,role,password";
-  const headerMatches7 = normalizedHeader.join(",") === "classnumber,username,name,school,role,password,ownerteacherusername";
-  const headerMatchesZh6 = header.join(",") === "班級號碼,帳號,姓名,學校,角色,密碼";
-  const headerMatchesZh7 = header.join(",") === "班級號碼,帳號,姓名,學校,角色,密碼,綁定教師";
+  const headerMatches6 = normalizedHeader.join(",") === "academicyear,classnumber,username,name,school,role,password";
+  const headerMatches7 = normalizedHeader.join(",") === "academicyear,classnumber,username,name,school,role,password,ownerteacherusername";
+  const headerMatchesZh6 = header.join(",") === "學年,班級號碼,帳號,姓名,學校,角色,密碼";
+  const headerMatchesZh7 = header.join(",") === "學年,班級號碼,帳號,姓名,學校,角色,密碼,綁定教師";
   if (headerMatches6 || headerMatches7 || headerMatchesZh6 || headerMatchesZh7) {
     startIndex = 1;
   }
@@ -513,28 +525,30 @@ function parseUserCsv(csvText: string):
       role?: string;
       password?: string;
       classNumber?: string;
+      academicYear?: string;
       ownerTeacherUsername?: string;
     };
   }> = [];
 
   for (let idx = startIndex; idx < lines.length; idx += 1) {
     const cells = splitCsvLine(lines[idx]!);
-    if (cells.length !== 6 && cells.length !== 7) {
+    if (cells.length !== 7 && cells.length !== 8) {
       return { ok: false, error: `csv_invalid_column_count_line_${idx + 1}` };
     }
 
-    const hasOwner = cells.length >= 7;
+    const hasOwner = cells.length >= 8;
 
     rows.push({
       line: idx + 1,
       values: {
-        classNumber: cells[0],
-        username: cells[1],
-        name: cells[2],
-        school: cells[3],
-        role: cells[4],
-        password: cells[5],
-        ownerTeacherUsername: hasOwner ? cells[6] : ""
+        academicYear: cells[0],
+        classNumber: cells[1],
+        username: cells[2],
+        name: cells[3],
+        school: cells[4],
+        role: cells[5],
+        password: cells[6],
+        ownerTeacherUsername: hasOwner ? cells[7] : ""
       }
     });
   }

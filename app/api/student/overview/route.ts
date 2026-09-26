@@ -12,7 +12,7 @@ export async function GET() {
   }
 
   await hydrateDomainState();
-  const profile = await getUserStore(user.username);
+  const profile = await getUserStore(user.username, user.academicYear ?? "999");
   if (!profile || (profile.role && profile.role !== "student")) {
     return NextResponse.json({ error: "student_profile_not_found" }, { status: 404 });
   }
@@ -24,7 +24,7 @@ export async function GET() {
 
   const activities = getAllActivities();
   const classCourses = activities
-    .filter((activity) => activity.school === profile.school && activity.classNumber === profile.classNumber)
+    .filter((activity) => activity.school === profile.school && activity.classNumber === profile.classNumber && activity.academicYear === profile.academicYear)
     .map((activity) => {
       const ownGroup = activity.groups.find((group) => group.members.includes(user.username));
       const groupStatus = ownGroup

@@ -190,21 +190,22 @@ Upstash 啟用條件：
 
 教師可見班級：
 
-- 由可見學生集合的 `(school, classNumber)` 推導。
+- 由可見學生集合的 `(school, academicYear, classNumber)` 推導。
 
 教師可見寫作任務：
 
-- 任務的 `(school, classNumber)` 必須落在教師可見班級集合。
+- 任務的 `(school, academicYear, classNumber)` 必須落在教師可見班級集合。
 
 教師可操作分組候選學生：
 
 - `student.school == activity.school`
+- `student.academicYear == activity.academicYear`
 - `student.classNumber == activity.classNumber`
 - 且學生在教師可見學生集合中。
 
 ### 3.3 班級歸屬規則
 
-同一學校 + 同一班級號碼不可同時掛在不同教師名下。
+同一學校 + 同一學年 + 同一班級號碼不可同時掛在不同教師名下。
 
 - 建立或更新 student 時必須檢查 `class_owner_teacher_conflict`。
 - 寫作任務建立時需推導並綁定 owner teacher，避免 admin 協助設定後課程歸屬不明。
@@ -218,6 +219,7 @@ Upstash 啟用條件：
 ```ts
 {
   username: string;
+  academicYear: string;
   name: string;
   school: string;
   role: "student" | "teacher" | "admin";
@@ -995,11 +997,11 @@ reload 行為：
 
 - 支援帳號 CRUD、reset password、CSV 批次建帳。
 - teacher/admin 依權限限制可操作資料。
-- student 帳號必填 `classNumber`。
+- student 帳號必填 `academicYear`（114 或 115）及 `classNumber`；單筆新增預設為 115。教師與管理員的 academicYear 一律為 999。
 - 使用者清單角色顯示中文：學生、教師、管理員。
 - admin 帳號列在 UI 中為系統保留帳號，不顯示一般列的「修改 / 重設密碼 / 刪除」操作；已登入 admin 仍可用同源 `POST /api/admin/users` 的 `reset_password` action 重設 admin 密碼。
 - 搜尋區塊位於使用者清單上方。
-- CSV 欄位順序固定 `classnumber` 第一欄。
+- CSV 欄位順序固定 `academicyear` 第一欄：`academicyear,classnumber,username,name,school,role,password[,ownerTeacherUsername]`。
 - 刪除 UX（#257）：確認後該列按鈕變灰顯示「處理中...」，頁面上方顯示藍底處理中 banner；成功後顯示綠底成功提示 5 秒。
 - CSV 批次新增送出後需顯示等待提示：「系統新增帳號中，這步驟需要一點時間，請耐心等候 ...」，且尾端點點在 `...` / `......` 間交替，以降低當機錯覺。
 - CSV 批次新增需逐筆驗證實際建立結果；任一筆失敗時顯示 CSV 行號與錯誤原因，不得誤顯示成功。若同批已有成功建立的帳號，名單仍需刷新顯示。
@@ -1008,8 +1010,8 @@ reload 行為：
 CSV 格式：
 
 ```csv
-classnumber,username,name,school,role,password
-classnumber,username,name,school,role,password,ownerTeacherUsername
+academicyear,classnumber,username,name,school,role,password
+academicyear,classnumber,username,name,school,role,password,ownerTeacherUsername
 ```
 
 #### 6.6.2 學習管理：課程清單

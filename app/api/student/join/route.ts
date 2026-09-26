@@ -6,7 +6,7 @@ import { loadActivityWithConfig } from "@/src/lib/prompt-config";
 import { resolveStructureTreeTemplate } from "@/src/lib/genre-resolver";
 import { listSessionsByActivityId, saveSession } from "@/src/lib/store";
 import { markUserOnline } from "@/src/lib/session-presence";
-import { listUsersStore } from "@/src/lib/user-store";
+import { getUserStore, listUsersStore } from "@/src/lib/user-store";
 
 function isSingleNodeOutline(outline: string): boolean {
   const raw = outline.trim();
@@ -55,6 +55,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "activity_not_found" }, { status: 404 });
     }
     const { activity, promptConfig: resolvedConfig, workflowSteps, guidedDiscussionSubsteps } = loaded;
+    const profile = await getUserStore(user.username, user.academicYear ?? "999");
+    if (!profile || profile.role !== "student" || profile.school !== activity.school || profile.classNumber !== activity.classNumber || profile.academicYear !== activity.academicYear) {
+      return NextResponse.json({ error: "course_not_available_for_student" }, { status: 403 });
+    }
 
     if (activity.courseStatus === "not_started") {
       return NextResponse.json({ error: "course_not_started" }, { status: 400 });

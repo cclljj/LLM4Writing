@@ -59,10 +59,11 @@ const KEY = "__llm4writing_domain_state__";
 const REMOVED_ESSAY_IDS = new Set(["essay-1", "essay-2", "essay-3"]);
 
 const defaultUsers: UserAccount[] = [
-  { username: "admin", name: "System Admin", school: "Demo High", role: "admin" },
-  { username: "teacher", name: "Teacher One", school: "Demo High", role: "teacher" },
+  { username: "admin", academicYear: "999", name: "System Admin", school: "Demo High", role: "admin" },
+  { username: "teacher", academicYear: "999", name: "Teacher One", school: "Demo High", role: "teacher" },
   {
     username: "student",
+    academicYear: "115",
     name: "Student One",
     school: "Demo High",
     role: "student",
@@ -71,6 +72,7 @@ const defaultUsers: UserAccount[] = [
   },
   {
     username: "s1",
+    academicYear: "115",
     name: "S1",
     school: "Demo High",
     role: "student",
@@ -79,6 +81,7 @@ const defaultUsers: UserAccount[] = [
   },
   {
     username: "s2",
+    academicYear: "115",
     name: "S2",
     school: "Demo High",
     role: "student",
@@ -87,6 +90,7 @@ const defaultUsers: UserAccount[] = [
   },
   {
     username: "s3",
+    academicYear: "115",
     name: "S3",
     school: "Demo High",
     role: "student",
@@ -828,6 +832,7 @@ export function createUserAccount(input: {
 
   users.push({
     username: input.username,
+    academicYear: input.role === "student" ? "115" : "999",
     name: input.name,
     school: input.school,
     role: input.role,

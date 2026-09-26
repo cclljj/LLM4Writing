@@ -9,12 +9,27 @@ type MemoryUserStore = Map<string, StoredUser>;
 const KEY = "__llm4writing_users__";
 const BCRYPT_ROUNDS = 12;
 const DEFAULT_SESSION_VERSION = 1;
+const STAFF_ACADEMIC_YEAR = "999";
+const DEFAULT_STUDENT_ACADEMIC_YEAR = "115";
+const LEGACY_STUDENT_CUTOFF = new Date("2026-09-01T00:00:00.000Z");
+
+function userKey(username: string, academicYear: string): string {
+  return `${username}\u0000${academicYear}`;
+}
+
+function normalizeAcademicYear(value: unknown, role?: string, createdAt?: unknown): string {
+  if (role === "teacher" || role === "admin") return STAFF_ACADEMIC_YEAR;
+  if (typeof value === "string" && value.trim()) return value.trim();
+  if (createdAt && new Date(String(createdAt)) < LEGACY_STUDENT_CUTOFF) return "114";
+  return DEFAULT_STUDENT_ACADEMIC_YEAR;
+}
 
 const defaultUsers: StoredUser[] = [
-  { username: "admin", name: "System Admin", school: "Demo High", role: "admin", password: "admin123", sessionVersion: 1 },
-  { username: "teacher", name: "Teacher One", school: "Demo High", role: "teacher", password: "teacher123", sessionVersion: 1 },
+  { username: "admin", academicYear: "999", name: "System Admin", school: "Demo High", role: "admin", password: "admin123", sessionVersion: 1 },
+  { username: "teacher", academicYear: "999", name: "Teacher One", school: "Demo High", role: "teacher", password: "teacher123", sessionVersion: 1 },
   {
     username: "student",
+    academicYear: "115",
     name: "Student One",
     school: "Demo High",
     role: "student",
@@ -25,6 +40,7 @@ const defaultUsers: StoredUser[] = [
   },
   {
     username: "s1",
+    academicYear: "115",
     name: "S1",
     school: "Demo High",
     role: "student",
@@ -35,6 +51,7 @@ const defaultUsers: StoredUser[] = [
   },
   {
     username: "s2",
+    academicYear: "115",
     name: "S2",
     school: "Demo High",
     role: "student",
@@ -45,6 +62,7 @@ const defaultUsers: StoredUser[] = [
   },
   {
     username: "s3",
+    academicYear: "115",
     name: "S3",
     school: "Demo High",
     role: "student",
@@ -66,7 +84,7 @@ function getMemoryStore(): MemoryUserStore {
   const globalScope = globalThis as unknown as Record<string, MemoryUserStore | undefined>;
   if (!globalScope[KEY]) {
     const seeded = new Map<string, StoredUser>();
-    defaultUsers.forEach((user) => seeded.set(user.username, { ...user, password: hashPasswordSync(user.password) }));
+    defaultUsers.forEach((user) => seeded.set(userKey(user.username, user.academicYear), { ...user, password: hashPasswordSync(user.password) }));
     globalScope[KEY] = seeded;
   }
   return globalScope[KEY] as MemoryUserStore;
@@ -112,16 +130,27 @@ async function ensureUserTable(): Promise<void> {
         SELECT COALESCE(to_regclass('llm4writing_users')::text, to_regclass('public.llm4writing_users')::text) AS regclass
       `;
       if (existing[0]?.regclass) {
+        try {
+          await sql`ALTER TABLE llm4writing_users ADD COLUMN IF NOT EXISTS academic_year TEXT NOT NULL DEFAULT '999'`;
+          await sql`UPDATE llm4writing_users SET academic_year = CASE WHEN COALESCE(payload->>'role', '') IN ('teacher', 'admin') THEN '999' WHEN created_at < '2026-09-01T00:00:00.000Z'::timestamptz THEN '114' ELSE '115' END WHERE academic_year = '999' OR academic_year IS NULL`;
+          await sql`UPDATE llm4writing_users SET payload = jsonb_set(COALESCE(payload, '{}'::jsonb), '{academicYear}', to_jsonb(academic_year), true) WHERE COALESCE(payload->>'academicYear', '') <> academic_year`;
+          await sql`ALTER TABLE llm4writing_users DROP CONSTRAINT IF EXISTS llm4writing_users_pkey`;
+          await sql`ALTER TABLE llm4writing_users ADD PRIMARY KEY (username, academic_year)`;
+        } catch (error) {
+          if (!isPermissionLikeError(error)) throw error;
+        }
         return;
       }
       try {
         await sql`
           CREATE TABLE IF NOT EXISTS llm4writing_users (
-            username TEXT PRIMARY KEY,
+            username TEXT NOT NULL,
+            academic_year TEXT NOT NULL,
             payload JSONB NOT NULL,
             password TEXT NOT NULL,
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (username, academic_year)
           )
         `;
       } catch (error) {
@@ -143,9 +172,9 @@ async function ensureUserTable(): Promise<void> {
           const passwordHash = await hashPassword(password);
           try {
             await sql`
-              INSERT INTO llm4writing_users (username, payload, password)
-              VALUES (${user.username}, ${JSON.stringify(payload)}::jsonb, ${passwordHash})
-              ON CONFLICT (username) DO NOTHING
+              INSERT INTO llm4writing_users (username, academic_year, payload, password)
+              VALUES (${user.username}, ${user.academicYear}, ${JSON.stringify(payload)}::jsonb, ${passwordHash})
+              ON CONFLICT (username, academic_year) DO NOTHING
             `;
           } catch (error) {
             // Production DB roles may be read-only for DML; do not fail login flow for that.
@@ -230,6 +259,7 @@ function normalizePayload(payload: unknown, fallbackUsername?: string): UserAcco
   return {
     ...((candidate as unknown) as Partial<UserAccount>),
     username,
+    academicYear: normalizeAcademicYear(candidate.academicYear, role, candidate.createdAt),
     ...(role ? { role } : {}),
     sessionVersion: normalizeSessionVersion(candidate.sessionVersion)
   } as UserAccount;
@@ -242,18 +272,18 @@ export async function listUsersStore(): Promise<UserAccount[]> {
 
   await ensureUserTable();
   const sql = getSqlClient();
-  const rows = await sql<{ payload: unknown; password: string }[]>`
-    SELECT payload, password
+  const rows = await sql<{ payload: unknown; password: string; academic_year: string; created_at: string }[]>`
+    SELECT payload, password, academic_year, created_at
     FROM llm4writing_users
     ORDER BY username ASC
   `;
 
-  return rows.map((row) => normalizePayload(row.payload));
+  return rows.map((row) => ({ ...normalizePayload(row.payload), academicYear: normalizeAcademicYear(row.academic_year, normalizePayload(row.payload).role, row.created_at) }));
 }
 
-export async function getUserStore(username: string): Promise<UserAccount | undefined> {
+export async function getUserStore(username: string, academicYear = STAFF_ACADEMIC_YEAR): Promise<UserAccount | undefined> {
   if (!isDatabaseEnabled()) {
-    const row = getMemoryStore().get(username);
+    const row = getMemoryStore().get(userKey(username, academicYear));
     return row ? stripPassword(row) : undefined;
   }
 
@@ -263,23 +293,24 @@ export async function getUserStore(username: string): Promise<UserAccount | unde
     return sql<{ payload: unknown }[]>`
       SELECT payload
       FROM llm4writing_users
-      WHERE username = ${username}
+      WHERE username = ${username} AND academic_year = ${academicYear}
       LIMIT 1
     `;
   });
 
-  return rows[0] ? normalizePayload(rows[0].payload, username) : undefined;
+  return rows[0] ? { ...normalizePayload(rows[0].payload, username), academicYear } : undefined;
 }
 
-export async function validateUserCredentialStore(username: string, password: string): Promise<UserAccount | undefined> {
+export async function validateUserCredentialStore(username: string, password: string, academicYear?: string): Promise<UserAccount | undefined> {
+  const selectedYear = academicYear?.trim() || STAFF_ACADEMIC_YEAR;
   if (!isDatabaseEnabled()) {
-    const row = getMemoryStore().get(username);
+    const row = getMemoryStore().get(userKey(username, selectedYear));
     if (!row) return undefined;
     const verification = await verifyPasswordAndUpgradeStatus(row.password, password);
     if (!verification.ok) return undefined;
     if (verification.needsUpgrade) {
       row.password = await hashPassword(password);
-      getMemoryStore().set(username, row);
+      getMemoryStore().set(userKey(username, selectedYear), row);
     }
     return stripPassword(row);
   }
@@ -290,7 +321,7 @@ export async function validateUserCredentialStore(username: string, password: st
     return sql<{ payload: unknown; password: string }[]>`
       SELECT payload, password
       FROM llm4writing_users
-      WHERE username = ${username}
+      WHERE username = ${username} AND academic_year = ${selectedYear}
       LIMIT 1
     `;
   });
@@ -304,21 +335,21 @@ export async function validateUserCredentialStore(username: string, password: st
     await sql`
       UPDATE llm4writing_users
       SET password = ${await hashPassword(password)}, updated_at = NOW()
-      WHERE username = ${username}
+      WHERE username = ${username} AND academic_year = ${selectedYear}
     `;
   }
-  return normalizePayload(row.payload, username);
+  return { ...normalizePayload(row.payload, username), academicYear: selectedYear };
 }
 
-export async function resetUserPasswordStore(username: string, newPassword: string): Promise<boolean> {
+export async function resetUserPasswordStore(username: string, newPassword: string, academicYear = STAFF_ACADEMIC_YEAR): Promise<boolean> {
   const passwordHash = await hashPassword(newPassword);
 
   if (!isDatabaseEnabled()) {
-    const existing = getMemoryStore().get(username);
+    const existing = getMemoryStore().get(userKey(username, academicYear));
     if (!existing) return false;
     existing.password = passwordHash;
     existing.sessionVersion = normalizeSessionVersion(existing.sessionVersion) + 1;
-    getMemoryStore().set(username, existing);
+    getMemoryStore().set(userKey(username, academicYear), existing);
     return true;
   }
 
@@ -327,12 +358,12 @@ export async function resetUserPasswordStore(username: string, newPassword: stri
   const rows = await sql<{ payload: unknown }[]>`
     SELECT payload
     FROM llm4writing_users
-    WHERE username = ${username}
+    WHERE username = ${username} AND academic_year = ${academicYear}
     LIMIT 1
   `;
   const row = rows[0];
   if (!row) return false;
-  const currentPayload = normalizePayload(row.payload, username);
+  const currentPayload = { ...normalizePayload(row.payload, username), academicYear };
   const nextPayload: UserAccount = {
     ...currentPayload,
     username,
@@ -343,7 +374,7 @@ export async function resetUserPasswordStore(username: string, newPassword: stri
     SET payload = ${JSON.stringify(nextPayload)}::jsonb,
         password = ${passwordHash},
         updated_at = NOW()
-    WHERE username = ${username}
+    WHERE username = ${username} AND academic_year = ${academicYear}
   `;
   return true;
 }
@@ -356,8 +387,10 @@ export async function createUserStore(input: {
   password: string;
   ownerTeacherUsername?: string;
   classNumber?: string;
+  academicYear?: string;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
-  const exists = await getUserStore(input.username);
+  const academicYear = normalizeAcademicYear(input.academicYear, input.role);
+  const exists = await getUserStore(input.username, academicYear);
   if (exists) return { ok: false, error: "username_exists" };
 
   if (input.role === "student") {
@@ -370,6 +403,7 @@ export async function createUserStore(input: {
     const hasTeacherConflict = users.some(
       (user) =>
         user.role === "student" &&
+        user.academicYear === academicYear &&
         user.school === input.school &&
         user.classNumber === input.classNumber &&
         user.ownerTeacherUsername &&
@@ -380,6 +414,7 @@ export async function createUserStore(input: {
 
   const safePayload: UserAccount = {
     username: input.username,
+    academicYear,
     name: input.name,
     school: input.school,
     role: input.role,
@@ -390,15 +425,15 @@ export async function createUserStore(input: {
   const passwordHash = await hashPassword(input.password);
 
   if (!isDatabaseEnabled()) {
-    getMemoryStore().set(input.username, { ...safePayload, password: passwordHash });
+    getMemoryStore().set(userKey(input.username, academicYear), { ...safePayload, password: passwordHash });
     return { ok: true };
   }
 
   await ensureUserTable();
   const sql = getSqlClient();
   await sql`
-    INSERT INTO llm4writing_users (username, payload, password)
-    VALUES (${input.username}, ${JSON.stringify(safePayload)}::jsonb, ${passwordHash})
+    INSERT INTO llm4writing_users (username, academic_year, payload, password)
+    VALUES (${input.username}, ${academicYear}, ${JSON.stringify(safePayload)}::jsonb, ${passwordHash})
   `;
 
   return { ok: true };
@@ -406,6 +441,7 @@ export async function createUserStore(input: {
 
 export async function updateUserStore(
   username: string,
+  academicYear: string,
   patch: {
     name?: string;
     school?: string;
@@ -415,7 +451,7 @@ export async function updateUserStore(
     classNumber?: string;
   }
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const existing = await getUserStore(username);
+  const existing = await getUserStore(username, academicYear);
   if (!existing) return { ok: false, error: "user_not_found" };
 
   const nextRole = patch.role ?? existing.role;
@@ -432,7 +468,7 @@ export async function updateUserStore(
     const users = await listUsersStore();
     const hasTeacherConflict = users.some(
       (user) =>
-        user.username !== username &&
+        (user.username !== username || user.academicYear !== academicYear) &&
         user.role === "student" &&
         user.school === (patch.school ?? existing.school) &&
         user.classNumber === nextClassNumber &&
@@ -444,6 +480,7 @@ export async function updateUserStore(
 
   const nextPayload: UserAccount = {
     username,
+    academicYear: existing.academicYear,
     name: patch.name ?? existing.name,
     school: patch.school ?? existing.school,
     role: nextRole,
@@ -456,11 +493,11 @@ export async function updateUserStore(
   nextPayload.sessionVersion = shouldRevokeExistingSessions ? currentVersion + 1 : currentVersion;
 
   if (!isDatabaseEnabled()) {
-    const existingRaw = getMemoryStore().get(username);
+    const existingRaw = getMemoryStore().get(userKey(username, academicYear));
     if (!existingRaw) return { ok: false, error: "user_not_found" };
     const passwordHash =
       patch.password !== undefined && patch.password.length > 0 ? await hashPassword(patch.password) : existingRaw.password;
-    getMemoryStore().set(username, {
+    getMemoryStore().set(userKey(username, academicYear), {
       ...nextPayload,
       password: passwordHash
     });
@@ -476,22 +513,22 @@ export async function updateUserStore(
       SET payload = ${JSON.stringify(nextPayload)}::jsonb,
           password = ${passwordHash},
           updated_at = NOW()
-      WHERE username = ${username}
+      WHERE username = ${username} AND academic_year = ${academicYear}
     `;
   } else {
     await sql`
       UPDATE llm4writing_users
       SET payload = ${JSON.stringify(nextPayload)}::jsonb,
           updated_at = NOW()
-      WHERE username = ${username}
+      WHERE username = ${username} AND academic_year = ${academicYear}
     `;
   }
 
   return { ok: true };
 }
 
-export async function deleteUserStore(username: string): Promise<{ ok: true } | { ok: false; error: string }> {
-  const existing = await getUserStore(username);
+export async function deleteUserStore(username: string, academicYear: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  const existing = await getUserStore(username, academicYear);
   if (!existing) return { ok: false, error: "user_not_found" };
 
   if (existing.role === "teacher") {
@@ -501,13 +538,13 @@ export async function deleteUserStore(username: string): Promise<{ ok: true } | 
   }
 
   if (!isDatabaseEnabled()) {
-    getMemoryStore().delete(username);
+    getMemoryStore().delete(userKey(username, academicYear));
     return { ok: true };
   }
 
   await ensureUserTable();
   const sql = getSqlClient();
-  await sql`DELETE FROM llm4writing_users WHERE username = ${username}`;
+  await sql`DELETE FROM llm4writing_users WHERE username = ${username} AND academic_year = ${academicYear}`;
   return { ok: true };
 }
 

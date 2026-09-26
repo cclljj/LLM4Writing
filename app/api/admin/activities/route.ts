@@ -25,18 +25,18 @@ export async function GET() {
   const baseActivities = getAllActivities();
   const visibleUsers = user.role === "admin" ? await listUsersStore() : await getUsersVisibleToTeacherStore(user.username);
   const visibleStudents = visibleUsers.filter((u) => u.role === "student");
-  const visibleClasses = new Set(visibleStudents.map((u) => `${u.school}::${u.classNumber ?? ""}`));
+  const visibleClasses = new Set(visibleStudents.map((u) => `${u.school}::${u.academicYear}::${u.classNumber ?? ""}`));
 
   const scopedActivities =
     user.role === "admin"
       ? baseActivities
-      : baseActivities.filter((activity) => visibleClasses.has(`${activity.school}::${activity.classNumber}`));
+      : baseActivities.filter((activity) => visibleClasses.has(`${activity.school}::${activity.academicYear}::${activity.classNumber}`));
   const activityRevisions = await getMonitorActivityRevisions(scopedActivities.map((activity) => activity.id));
   const activities = scopedActivities.map((activity) => ({
     ...activity,
     lastActiveAt: activityRevisions.get(activity.id)?.updatedAt ?? null,
     studentCandidates: visibleStudents
-      .filter((student) => student.school === activity.school && student.classNumber === activity.classNumber)
+      .filter((student) => student.school === activity.school && student.classNumber === activity.classNumber && student.academicYear === activity.academicYear)
       .map((student) => student.username)
   }));
 
