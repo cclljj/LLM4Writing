@@ -99,12 +99,12 @@ export default function CourseManagementTab({
   // form 取得當前用於分組的學校（admin = taskForm.school；teacher = teacherSchool）
   const currentFormSchool = loginRole === "admin" ? taskForm.school : teacherSchool;
 
-  // 學校選單（admin form 用）：所有有學生的學校
+  // 學年是課程設定的第一個欄位；其後的學校與班級均由該學年學生資料推導。
   const allSchools = useMemo(() => {
     return Array.from(
-      new Set(users.filter((u) => u.role === "student" && u.school).map((u) => u.school))
+      new Set(users.filter((u) => u.role === "student" && u.academicYear === taskForm.academicYear && u.school).map((u) => u.school))
     ).sort((a, b) => a.localeCompare(b, "zh-Hant"));
-  }, [users]);
+  }, [users, taskForm.academicYear]);
 
   // 班級選單（依 currentFormSchool 過濾）
   const classOptionsForForm = useMemo(() => {
@@ -116,7 +116,7 @@ export default function CourseManagementTab({
           .map((u) => u.classNumber!)
       )
     ).sort();
-  }, [users, currentFormSchool]);
+  }, [users, currentFormSchool, taskForm.academicYear]);
 
   // Derive bound teacher (姓名 + 帳號) for the currently selected school+class (#254).
   // Counts ownerTeacherUsername among that class's students; picks the most common.
@@ -193,6 +193,14 @@ export default function CourseManagementTab({
   useEffect(() => {
     deferStateUpdate(() => setListClassFilter("all"));
   }, [listSchoolFilter]);
+
+  // 切換學年時，先清除後續的學校、班級與分組選擇。
+  useEffect(() => {
+    if (taskForm.id) return;
+    deferStateUpdate(() =>
+      setTaskForm((prev) => ({ ...prev, school: loginRole === "admin" ? "" : prev.school, classNumber: "" }))
+    );
+  }, [taskForm.academicYear, taskForm.id, loginRole]);
 
   // 當 admin 切換 form 學校時，重置班級
   useEffect(() => {
@@ -789,9 +797,13 @@ export default function CourseManagementTab({
         <h2>{taskForm.id ? "增修寫作任務（編輯中）" : "增修寫作任務"}</h2>
         <h3 style={{ margin: "0 0 6px" }}>文章設定</h3>
         <form onSubmit={saveTaskWithGroups} className="row">
+          <div className="col">
+            <label>學年</label>
+            <input inputMode="numeric" value={taskForm.academicYear} onChange={(e) => setTaskForm({ ...taskForm, academicYear: e.target.value })} disabled={Boolean(taskForm.id)} />
+          </div>
           {loginRole === "admin" ? (
             <div className="col">
-              <label>學校</label>
+              <label>國中</label>
               <select
                 value={taskForm.school}
                 onChange={(e) => setTaskForm({ ...taskForm, school: e.target.value })}
@@ -807,7 +819,7 @@ export default function CourseManagementTab({
             </div>
           ) : null}
           <div className="col">
-            <label>班級號碼（{loginRole === "admin" ? "依選定學校過濾" : "由教師所屬學校帶入"}）</label>
+            <label>班級號碼（{loginRole === "admin" ? "依選定學年與國中過濾" : "依選定學年與教師所屬國中過濾"}）</label>
             <select
               value={taskForm.classNumber}
               onChange={(e) => setTaskForm({ ...taskForm, classNumber: e.target.value })}
@@ -828,14 +840,6 @@ export default function CourseManagementTab({
                   : "綁定教師：找不到此班學生的綁定教師，請先在帳號管理為學生指派教師。"}
               </small>
             ) : null}
-          </div>
-          <div className="col">
-            <label>學年</label>
-            <input
-              inputMode="numeric"
-              value={taskForm.academicYear}
-              onChange={(e) => setTaskForm({ ...taskForm, academicYear: e.target.value })}
-            />
           </div>
           <div className="col">
             <label>學期</label>

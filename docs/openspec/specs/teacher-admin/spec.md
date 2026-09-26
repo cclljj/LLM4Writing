@@ -15,6 +15,11 @@ The system SHALL store `academic_year` for every account. A student account is u
 - **WHEN** a writing course is configured
 - **THEN** eligible students have the same school, academic year, and class number as the course
 
+#### Scenario: Course setup selects its target population in order
+
+- **WHEN** an administrator creates a writing course
+- **THEN** the form presents academic year first, then only schools with students in that year, then only class numbers with students in the selected school and year
+
 ### Requirement: Teacher Workspace Tabs
 
 The teacher workspace SHALL provide account management, course management, and learning management capabilities.

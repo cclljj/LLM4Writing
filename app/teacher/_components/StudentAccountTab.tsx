@@ -67,6 +67,10 @@ export default function StudentAccountTab({
   const [generatedPassword, setGeneratedPassword] = useState("");
   const [manualResetPassword, setManualResetPassword] = useState("");
 
+  function accountKey(user: Pick<UserRow, "username" | "academicYear">): string {
+    return `${user.username}::${user.academicYear}`;
+  }
+
   const classFilterOptions = useMemo(() => {
     if (schoolFilter === "all") return [];
     const uniqClassNumbers = Array.from(
@@ -409,7 +413,7 @@ export default function StudentAccountTab({
     if (!editingUser) return;
     setAccountError("");
     setAccountSuccess("");
-    const row = `${editingUser.classNumber},${editingUser.username},${editingUser.name},${editingUser.school},${editingUser.role},${
+    const row = `${editingUser.academicYear},${editingUser.classNumber},${editingUser.username},${editingUser.name},${editingUser.school},${editingUser.role},${
       editingUser.password || "placeholder123"
     },${editingUser.ownerTeacherUsername}`;
     const validationErrors = validateCsvRows([row], {
@@ -456,10 +460,11 @@ export default function StudentAccountTab({
   }
 
   async function deleteUser(username: string, academicYear: string) {
+    const targetKey = accountKey({ username, academicYear });
     setDeleteUserTarget(null);
     setAccountError("");
     setAccountSuccess("");
-    setDeletingUsername(username);
+    setDeletingUsername(targetKey);
     try {
       const response = await fetch("/api/admin/users", {
         method: "DELETE",
@@ -864,6 +869,7 @@ export default function StudentAccountTab({
                     {getSortIndicator("username")}
                   </button>
                 </th>
+                <th>學年</th>
                 <th>
                   姓名
                   <button type="button" className="secondary" style={{ width: "auto", marginLeft: 6, padding: "2px 6px" }} onClick={() => toggleUserSort("name")}>
@@ -884,10 +890,11 @@ export default function StudentAccountTab({
             </thead>
             <tbody>
               {pagedUsers.map((user, idx) => (
-                <tr key={user.username}>
+                <tr key={accountKey(user)}>
                   <td>{userPageStartIndex + idx + 1}</td>
                   <td>{user.username}</td>
-                  {editingUser?.username === user.username ? (
+                  <td>{user.academicYear}</td>
+                  {editingUser && accountKey(editingUser) === accountKey(user) ? (
                     <>
                       <td>
                         <input
@@ -1039,13 +1046,13 @@ export default function StudentAccountTab({
                                 color: "var(--danger-text)",
                                 borderColor: "var(--danger-border)",
                                 background: "var(--danger-bg)",
-                                opacity: deletingUsername === user.username ? 0.6 : 1,
-                                cursor: deletingUsername === user.username ? "wait" : undefined
+                                opacity: deletingUsername === accountKey(user) ? 0.6 : 1,
+                                cursor: deletingUsername === accountKey(user) ? "wait" : undefined
                               }}
                               disabled={Boolean(deletingUsername)}
                               onClick={() => setDeleteUserTarget(user)}
                             >
-                              {deletingUsername === user.username ? "處理中..." : "刪除"}
+                              {deletingUsername === accountKey(user) ? "處理中..." : "刪除"}
                             </button>
                           </div>
                         )}

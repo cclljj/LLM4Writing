@@ -35,8 +35,8 @@ export async function GET() {
   if (user.role === "teacher") {
     const visibleUsers = await getUsersVisibleToTeacherStore(user.username);
     const visibleStudents = visibleUsers.filter((item) => item.role === "student");
-    const visibleClasses = new Set(visibleStudents.map((student) => `${student.school}::${student.classNumber ?? ""}`));
-    visibleOpenClasses = allOpenClasses.filter((openClass) => visibleClasses.has(`${openClass.school}::${openClass.classNumber}`));
+    const visibleClasses = new Set(visibleStudents.map((student) => `${student.school}::${student.academicYear}::${student.classNumber ?? ""}`));
+    visibleOpenClasses = allOpenClasses.filter((openClass) => visibleClasses.has(`${openClass.school}::${openClass.academicYear}::${openClass.classNumber}`));
   }
 
   const enriched = visibleOpenClasses.map((openClass) => ({
@@ -84,13 +84,12 @@ export async function POST(request: NextRequest) {
 
   if (user.role === "teacher") {
     const visibleUsers = await getUsersVisibleToTeacherStore(user.username);
-    const allowedClassNumbers = new Set(
+    const allowedClasses = new Set(
       visibleUsers
         .filter((item) => item.role === "student")
-        .map((item) => item.classNumber)
-        .filter((value): value is string => Boolean(value))
+        .map((item) => `${item.academicYear}::${item.classNumber ?? ""}`)
     );
-    if (!allowedClassNumbers.has(classNumber)) {
+    if (!allowedClasses.has(`${academicYear}::${classNumber}`)) {
       return NextResponse.json({ error: "class_not_in_teacher_scope" }, { status: 403 });
     }
   }
@@ -106,7 +105,7 @@ export async function POST(request: NextRequest) {
     // Auto-derive from the most common ownerTeacherUsername among that class's students.
     const allUsers = await listUsersStore();
     const classStudents = allUsers.filter(
-      (u) => u.role === "student" && u.school === targetSchool && u.classNumber === classNumber
+      (u) => u.role === "student" && u.school === targetSchool && u.academicYear === academicYear && u.classNumber === classNumber
     );
     const counts = new Map<string, number>();
     for (const s of classStudents) {

@@ -150,7 +150,9 @@ function normalizeDomainState(input: unknown): DomainState {
     : [];
   const mergedUsers = [...base.users];
   usersFromPayload.forEach((user) => {
-    const idx = mergedUsers.findIndex((item) => item.username === user.username);
+    const idx = mergedUsers.findIndex(
+      (item) => item.username === user.username && item.academicYear === user.academicYear
+    );
     if (idx >= 0) mergedUsers[idx] = { ...mergedUsers[idx], ...user };
     else mergedUsers.push({ ...user });
   });
