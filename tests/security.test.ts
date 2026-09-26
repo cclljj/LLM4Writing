@@ -447,6 +447,10 @@ test("user store: hashes passwords and migrates legacy plaintext on successful l
   assert.ok(userStore.includes("sessionVersion) + 1"), "password/role mutations should bump session version");
   assert.ok(userStore.includes("ALLOW_DB_DEFAULT_USERS"), "db default-user seeding should require explicit opt-in env in production");
   assert.ok(userStore.includes('process.env.NODE_ENV !== "production"'), "production should not auto-seed default DB users");
+  assert.ok(
+    userStore.includes("payload->'payload'->'user'->>'role'"),
+    "academic-year migration should recognize teachers in legacy nested user payloads"
+  );
 });
 
 test("session start route: validates participant scope for teacher/admin", async () => {

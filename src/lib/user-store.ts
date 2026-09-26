@@ -132,7 +132,21 @@ async function ensureUserTable(): Promise<void> {
       if (existing[0]?.regclass) {
         try {
           await sql`ALTER TABLE llm4writing_users ADD COLUMN IF NOT EXISTS academic_year TEXT NOT NULL DEFAULT '999'`;
-          await sql`UPDATE llm4writing_users SET academic_year = CASE WHEN COALESCE(payload->>'role', '') IN ('teacher', 'admin') THEN '999' WHEN created_at < '2026-09-01T00:00:00.000Z'::timestamptz THEN '114' ELSE '115' END WHERE academic_year = '999' OR academic_year IS NULL`;
+          // Legacy records may wrap the user object in payload and/or user. Read
+          // all supported shapes so staff are always stored under academic year
+          // 999, including rows that a prior migration incorrectly classified as
+          // a student academic year.
+          await sql`
+            UPDATE llm4writing_users
+            SET academic_year = CASE
+              WHEN LOWER(COALESCE(payload->>'role', payload->'payload'->>'role', payload->'payload'->'user'->>'role', payload->'user'->>'role', '')) IN ('teacher', 'admin') THEN '999'
+              WHEN created_at < '2026-09-01T00:00:00.000Z'::timestamptz THEN '114'
+              ELSE '115'
+            END
+            WHERE academic_year = '999'
+              OR academic_year IS NULL
+              OR LOWER(COALESCE(payload->>'role', payload->'payload'->>'role', payload->'payload'->'user'->>'role', payload->'user'->>'role', '')) IN ('teacher', 'admin')
+          `;
           // Some legacy rows stored payload as a JSON scalar. jsonb_set only accepts
           // an object when writing the academicYear path, so leave those payloads
           // intact; normalizePayload can still deserialize them when they are read.
