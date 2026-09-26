@@ -69,7 +69,11 @@ export default function CourseManagementTab({
     academicYearTerm: DEFAULT_ACADEMIC_YEAR_TERM,
     essayId: "",
     durationMinutes: 40,
-    supplemental: ""
+    supplemental: "",
+    // Keep an existing course's owner while it is being edited.  Student
+    // accounts are historical data and may no longer match the course's
+    // school-year/class after the course was created.
+    ownerTeacherUsername: ""
   });
   const [editableGroups, setEditableGroups] = useState<ActivityGroup[]>([]);
   const [unassignedStudents, setUnassignedStudents] = useState<string[]>([]);
@@ -118,8 +122,8 @@ export default function CourseManagementTab({
     ).sort();
   }, [users, currentFormSchool, taskForm.academicYear]);
 
-  // Derive bound teacher (姓名 + 帳號) for the currently selected school+class (#254).
-  // Counts ownerTeacherUsername among that class's students; picks the most common.
+  // An existing course keeps its recorded owner. New courses derive an owner
+  // from the currently selected school-year/class's students (#254).
   const formOwnerTeacher = useMemo<{ username: string; name: string } | null>(() => {
     if (!currentFormSchool || !taskForm.classNumber) return null;
     const classStudents = users.filter(
@@ -139,10 +143,11 @@ export default function CourseManagementTab({
         bestCount = c;
       }
     }
-    if (!best) return null;
-    const teacherUser = users.find((u) => u.username === best);
-    return { username: best, name: teacherUser?.name ?? best };
-  }, [users, currentFormSchool, taskForm.classNumber]);
+    const ownerUsername = taskForm.ownerTeacherUsername.trim() || best;
+    if (!ownerUsername) return null;
+    const teacherUser = users.find((u) => u.username === ownerUsername);
+    return { username: ownerUsername, name: teacherUser?.name ?? ownerUsername };
+  }, [users, currentFormSchool, taskForm.academicYear, taskForm.classNumber, taskForm.ownerTeacherUsername]);
 
   // 列表篩選用：admin 學校選單 = 已有任務的學校
   const listSchoolOptions = useMemo(() => {
@@ -282,7 +287,8 @@ export default function CourseManagementTab({
       academicYearTerm: DEFAULT_ACADEMIC_YEAR_TERM,
       essayId: "",
       durationMinutes: 40,
-      supplemental: ""
+      supplemental: "",
+      ownerTeacherUsername: ""
     });
     setEditableGroups([]);
     setUnassignedStudents([]);
@@ -357,7 +363,8 @@ export default function CourseManagementTab({
       academicYearTerm: openClass.academicYearTerm,
       essayId: openClass.essayId,
       durationMinutes: openClass.durationMinutes,
-      supplemental: openClass.supplemental
+      supplemental: openClass.supplemental,
+      ownerTeacherUsername: openClass.ownerTeacherUsername ?? ""
     });
     if (activity) {
       const groups = activity.groups.map((g) => ({ ...g, members: [...g.members] }));

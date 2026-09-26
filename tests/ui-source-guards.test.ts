@@ -23,6 +23,12 @@ test("source-guard: account class filter keys class numbers by academic year", a
   assert.ok(src.includes("{academicYear}-{classNumber}"), "class filter options should display academicYear-classNumber");
 });
 
+test("source-guard: editing a course retains its stored bound teacher", async () => {
+  const src = await read("../app/teacher/_components/CourseManagementTab.tsx");
+  assert.ok(src.includes("ownerTeacherUsername: openClass.ownerTeacherUsername ?? \"\""), "editing should load the course's stored teacher binding");
+  assert.ok(src.includes("taskForm.ownerTeacherUsername.trim() || best"), "stored teacher binding should take precedence over a student-derived owner");
+});
+
 test("source-guard: personal history review includes the current student's revision draft", async () => {
   const pageSrc = await read("../app/student/page.tsx");
   const historySrc = await read("../app/student/_components/HistoryReview.tsx");
