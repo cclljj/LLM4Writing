@@ -91,6 +91,14 @@ The system SHALL support role-aware account CRUD, reset password, and CSV batch 
 
 The system SHALL let authorized users create, edit, group, paginate, filter, and delete writing tasks according to role boundaries.
 
+#### Scenario: Academic term selection and legacy task migration
+
+- **GIVEN** an authorized user configures a writing task
+- **WHEN** they select its academic term
+- **THEN** academic year is limited to `114` or `115` with `115` as the new-task default
+- **AND** academic semester is limited to `1` or `2` with `1` as the new-task default
+- **AND** legacy tasks with a recoverable creation time before 2026-09-01 in Asia/Taipei are assigned `114-2`; tasks from that date onward are assigned `115-1`
+
 #### Scenario: Teacher task visibility
 
 - **GIVEN** a teacher opens writing task management

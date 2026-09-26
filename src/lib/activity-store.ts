@@ -15,6 +15,8 @@ export type Essay = {
 
 export type OpenClassTask = {
   id: string;
+  /** Immutable creation time used when migrating legacy academic terms. */
+  createdAt?: string;
   school: string;
   classNumber: string;
   academicYear: string;
@@ -116,6 +118,15 @@ const defaultActivityGroupMap: Record<string, ActivityGroup[]> = {};
 
 const defaultCourseStatusMap: Record<string, "not_started" | "in_progress" | "paused" | "ended"> = {};
 const defaultCourseEndedAtMap: Record<string, string> = {};
+const LEGACY_COURSE_TERM_CUTOFF = new Date("2026-09-01T00:00:00+08:00");
+
+export function resolveAcademicTermFromCourseCreatedAt(createdAt: unknown): { academicYear: string; academicYearTerm: string } {
+  const createdAtMs = new Date(typeof createdAt === "string" ? createdAt : "").getTime();
+  if (Number.isFinite(createdAtMs) && createdAtMs < LEGACY_COURSE_TERM_CUTOFF.getTime()) {
+    return { academicYear: "114", academicYearTerm: "2" };
+  }
+  return { academicYear: "115", academicYearTerm: "1" };
+}
 
 function cloneState(): DomainState {
   return {
@@ -173,11 +184,17 @@ function normalizeDomainState(input: unknown): DomainState {
   const openClassesFromPayload = Array.isArray(raw.openClasses)
     ? raw.openClasses
         .filter((openClass): openClass is OpenClassTask => Boolean(openClass && typeof openClass.id === "string"))
-        .map((openClass) => ({
-          ...openClass,
-          academicYear: typeof openClass.academicYear === "string" && openClass.academicYear.trim() ? openClass.academicYear.trim() : DEFAULT_ACADEMIC_YEAR,
-          academicYearTerm: typeof openClass.academicYearTerm === "string" && openClass.academicYearTerm.trim() ? openClass.academicYearTerm.trim() : DEFAULT_ACADEMIC_YEAR_TERM
-        }))
+        .map((openClass) => {
+          const legacyTerm = resolveAcademicTermFromCourseCreatedAt(openClass.createdAt);
+          return {
+            ...openClass,
+            academicYear: typeof openClass.academicYear === "string" && openClass.academicYear.trim() ? openClass.academicYear.trim() : legacyTerm.academicYear,
+            academicYearTerm:
+              typeof openClass.academicYearTerm === "string" && openClass.academicYearTerm.trim()
+                ? openClass.academicYearTerm.trim()
+                : legacyTerm.academicYearTerm
+          };
+        })
     : [];
   const mergedOpenClasses = [...base.openClasses];
   openClassesFromPayload.forEach((openClass) => {
@@ -273,6 +290,7 @@ function getSqlClient(): Sql {
 }
 
 let domainInitPromise: Promise<void> | undefined;
+let didBackfillOpenClassTermsFromAudit = false;
 
 function isPermissionLikeError(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
@@ -309,6 +327,38 @@ async function ensureDomainTable(): Promise<void> {
     });
   }
   await domainInitPromise;
+}
+
+async function backfillOpenClassTermsFromAudit(): Promise<boolean> {
+  if (didBackfillOpenClassTermsFromAudit || !isDatabaseEnabled() || openClasses.length === 0) return false;
+  didBackfillOpenClassTermsFromAudit = true;
+
+  const sql = getSqlClient();
+  const auditTable = await sql<{ regclass: string | null }[]>`
+    SELECT COALESCE(to_regclass('llm4writing_audit_logs')::text, to_regclass('public.llm4writing_audit_logs')::text) AS regclass
+  `;
+  if (!auditTable[0]?.regclass) return false;
+
+  const rows = await sql<{ target_id: string; created_at: Date }[]>`
+    SELECT target_id, MIN(created_at) AS created_at
+    FROM llm4writing_audit_logs
+    WHERE action = 'openclass_create' AND target_id <> ''
+    GROUP BY target_id
+  `;
+  const createdAtByTaskId = new Map(rows.map((row) => [row.target_id, row.created_at.toISOString()]));
+  let changed = false;
+  for (const openClass of openClasses) {
+    const createdAt = openClass.createdAt ?? createdAtByTaskId.get(openClass.id);
+    if (!createdAt) continue;
+    const term = resolveAcademicTermFromCourseCreatedAt(createdAt);
+    if (openClass.createdAt !== createdAt || openClass.academicYear !== term.academicYear || openClass.academicYearTerm !== term.academicYearTerm) {
+      openClass.createdAt = createdAt;
+      openClass.academicYear = term.academicYear;
+      openClass.academicYearTerm = term.academicYearTerm;
+      changed = true;
+    }
+  }
+  return changed;
 }
 
 function applyState(next: DomainState) {
@@ -378,7 +428,8 @@ export async function hydrateDomainState(): Promise<void> {
   }
   const normalized = normalizeDomainState(row.payload);
   applyState(normalized);
-  if (typeof row.payload === "string") {
+  const didBackfillTerms = await backfillOpenClassTermsFromAudit();
+  if (typeof row.payload === "string" || didBackfillTerms) {
     // Migrate legacy double-encoded JSON payload to proper JSON object format.
     try {
       await flushDomainState();
@@ -756,6 +807,7 @@ export function upsertOpenClass(input: {
 
   const created: OpenClassTask = {
     id: computeNextOpenClassId(openClasses.map((openClass) => openClass.id)),
+    createdAt: new Date().toISOString(),
     school: input.school,
     classNumber: input.classNumber,
     academicYear,

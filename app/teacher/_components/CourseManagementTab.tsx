@@ -799,7 +799,10 @@ export default function CourseManagementTab({
         <form onSubmit={saveTaskWithGroups} className="row">
           <div className="col">
             <label>學年</label>
-            <input inputMode="numeric" value={taskForm.academicYear} onChange={(e) => setTaskForm({ ...taskForm, academicYear: e.target.value })} disabled={Boolean(taskForm.id)} />
+            <select value={taskForm.academicYear} onChange={(e) => setTaskForm({ ...taskForm, academicYear: e.target.value })} disabled={Boolean(taskForm.id)}>
+              <option value="114">114</option>
+              <option value="115">115</option>
+            </select>
           </div>
           {loginRole === "admin" ? (
             <div className="col">
@@ -843,11 +846,10 @@ export default function CourseManagementTab({
           </div>
           <div className="col">
             <label>學期</label>
-            <input
-              inputMode="numeric"
-              value={taskForm.academicYearTerm}
-              onChange={(e) => setTaskForm({ ...taskForm, academicYearTerm: e.target.value })}
-            />
+            <select value={taskForm.academicYearTerm} onChange={(e) => setTaskForm({ ...taskForm, academicYearTerm: e.target.value })}>
+              <option value="1">1</option>
+              <option value="2">2</option>
+            </select>
           </div>
           <div className="col">
             <label>主題（含 ID）</label>

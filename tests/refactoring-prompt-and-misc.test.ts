@@ -6,6 +6,7 @@ import {
   findActivity,
   getCourseEndedAt,
   getCourseStatus,
+  resolveAcademicTermFromCourseCreatedAt,
   startCourse,
   togglePauseOrResumeCourse,
   upsertEssay,
@@ -17,6 +18,11 @@ test("activity store behavior: open class id generation uses max existing sequen
   assert.equal(computeNextOpenClassId(["oc-001", "oc-009", "oc-010"]), "oc-011");
   assert.equal(computeNextOpenClassId(["x", "oc-099", "oc-003"]), "oc-100");
   assert.equal(computeNextOpenClassId([]), "oc-001");
+});
+
+test("activity store behavior: legacy course dates map to the requested academic terms", () => {
+  assert.deepEqual(resolveAcademicTermFromCourseCreatedAt("2026-08-31T15:59:59.999Z"), { academicYear: "114", academicYearTerm: "2" });
+  assert.deepEqual(resolveAcademicTermFromCourseCreatedAt("2026-08-31T16:00:00.000Z"), { academicYear: "115", academicYearTerm: "1" });
 });
 
 test("activity store behavior: course state transitions are valid", () => {

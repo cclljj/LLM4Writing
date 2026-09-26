@@ -78,6 +78,9 @@ export async function POST(request: NextRequest) {
   const classNumber = body.classNumber.trim();
   const academicYear = body.academicYear?.trim() || DEFAULT_ACADEMIC_YEAR;
   const academicYearTerm = body.academicYearTerm?.trim() || DEFAULT_ACADEMIC_YEAR_TERM;
+  if (!["114", "115"].includes(academicYear) || !["1", "2"].includes(academicYearTerm)) {
+    return NextResponse.json({ error: "invalid_academic_term" }, { status: 400 });
+  }
   if (!classNumber) {
     return NextResponse.json({ error: "missing_class_number" }, { status: 400 });
   }
