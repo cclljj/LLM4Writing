@@ -23,6 +23,7 @@ function mapActionLabel(action: string): string {
   if (action === "activity_delete") return "刪除課程";
   if (action === "teacher_step_switch") return "切換步驟";
   if (action === "user_reset_password") return "重設密碼";
+  if (action === "user_create") return "新增帳號";
   return action;
 }
 

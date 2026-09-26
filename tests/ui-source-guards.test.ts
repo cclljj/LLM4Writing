@@ -384,6 +384,18 @@ test("source-guard: research export is scoped, ended-only, and audited", async (
   assert.ok(uiSrc.includes("包含學生帳號"), "course report UI should expose explicit account identity mode");
 });
 
+test("source-guard: account creation reports row failures and audits every result", async () => {
+  const usersRouteSrc = await read("../app/api/admin/users/route.ts");
+  const accountSrc = await read("../app/teacher/_components/StudentAccountTab.tsx");
+  const auditSrc = await read("../app/teacher/_components/AdminAuditLogPanel.tsx");
+  assert.ok(usersRouteSrc.includes("recordUserCreateAudit"), "account creation should write an audit entry for each result");
+  assert.ok(usersRouteSrc.includes('action: "user_create"'), "account creation audit entries should use an explicit action");
+  assert.ok(usersRouteSrc.includes("bulk_create_partial_failure"), "partially failed CSV imports should not report full success");
+  assert.ok(usersRouteSrc.includes("line: newUser.line"), "CSV creation audit entries should retain their source line");
+  assert.ok(accountSrc.includes("await onRefresh().catch(() => undefined)"), "account list should refresh after a partial CSV failure");
+  assert.ok(auditSrc.includes('action === "user_create"'), "audit log UI should label account creation entries");
+});
+
 test("source-guard: course report UI exposes PDF and portfolio JSON exports separately", async () => {
   const uiSrc = await read("../app/teacher/_components/CourseImplementationReportTab.tsx");
   const routeSrc = await read("../app/api/teacher/course-report-exports/route.ts");

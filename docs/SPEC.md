@@ -1002,6 +1002,8 @@ reload 行為：
 - CSV 欄位順序固定 `classnumber` 第一欄。
 - 刪除 UX（#257）：確認後該列按鈕變灰顯示「處理中...」，頁面上方顯示藍底處理中 banner；成功後顯示綠底成功提示 5 秒。
 - CSV 批次新增送出後需顯示等待提示：「系統新增帳號中，這步驟需要一點時間，請耐心等候 ...」，且尾端點點在 `...` / `......` 間交替，以降低當機錯覺。
+- CSV 批次新增需逐筆驗證實際建立結果；任一筆失敗時顯示 CSV 行號與錯誤原因，不得誤顯示成功。若同批已有成功建立的帳號，名單仍需刷新顯示。
+- 單筆與 CSV 批次帳號新增的每一筆成功或失敗都需寫入 audit log（`action=user_create`），details 包含 `source`、`result`，批次另含 `line`；失敗紀錄另含安全的錯誤碼，不得記錄密碼。
 
 CSV 格式：
 
@@ -1875,6 +1877,7 @@ Request:
 - 重設密碼 payload：`{ "action": "reset_password", "username": "<target>", "newPassword": "<至少 6 碼>" }`。
 - 已登入 admin 可呼叫 reset password action 重設任一帳號，包含 UI 標示為系統保留的 `admin` 帳號；teacher 仍只能管理自己與自己學生。
 - 重設密碼成功後需寫入 audit log（`action=user_reset_password`），並由 user store 寫入 bcrypt hash、遞增 `payload.sessionVersion`、更新 `updated_at`。
+- 單筆或 CSV 批次帳號新增的每筆結果都需寫入 audit log（`action=user_create`）：details 包含來源、成功/失敗結果，以及批次 CSV 行號；失敗時應附安全錯誤碼且不得記錄密碼。CSV 有任一筆未建立時，API 回傳行號與原因，不能回報整批成功。
 - 若無法使用已登入 admin session，可在 production Supabase SQL Editor / `psql` fallback 直接更新 `llm4writing_users`；必須先在安全環境產生 bcrypt hash，不得把明文密碼寫進 SQL，且 SQL 必須限制 `username = 'admin'` 與 admin role，避免誤改其他帳號。
 
 ## 8. Prompt 與 LLM 配置

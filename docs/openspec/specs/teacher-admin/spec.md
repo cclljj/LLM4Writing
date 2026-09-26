@@ -64,6 +64,15 @@ The system SHALL support role-aware account CRUD, reset password, and CSV batch 
 - **WHEN** the deletion request is in progress
 - **THEN** the affected row button and page feedback show processing state, followed by success feedback after completion
 
+#### Scenario: Account creation results and audit trail
+
+- **GIVEN** a teacher or admin creates one or more accounts
+- **WHEN** each account creation attempt completes or fails validation
+- **THEN** the system writes one `user_create` audit log entry per attempted account with its source and result, without storing a password
+- **AND** CSV attempts include the source line number and a safe failure code when applicable
+- **AND** if any CSV row cannot be created, the UI shows its line number and reason instead of reporting the batch as wholly successful
+- **AND** the user list refreshes so any successfully created rows remain visible
+
 ### Requirement: Course Task Management
 
 The system SHALL let authorized users create, edit, group, paginate, filter, and delete writing tasks according to role boundaries.

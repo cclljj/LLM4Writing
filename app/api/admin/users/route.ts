@@ -26,6 +26,30 @@ type UserInput = {
   classNumber?: string;
 };
 
+async function recordUserCreateAudit(input: {
+  requester: AuthUser;
+  username?: string;
+  source: "single" | "bulk";
+  result: "succeeded" | "failed";
+  line?: number;
+  error?: string;
+}) {
+  await recordAuditLog({
+    actorUsername: input.requester.username,
+    actorRole: input.requester.role,
+    action: "user_create",
+    targetType: "user",
+    targetId: input.username?.trim() ?? "",
+    targetLabel: input.username?.trim() ?? "",
+    details: {
+      source: input.source,
+      result: input.result,
+      ...(typeof input.line === "number" ? { line: input.line } : {}),
+      ...(input.error ? { error: input.error } : {})
+    }
+  });
+}
+
 export async function GET() {
   const user = await getCurrentUser();
   if (!user || (user.role !== "teacher" && user.role !== "admin")) {
@@ -91,11 +115,19 @@ export async function POST(request: NextRequest) {
 
     const checked = await validateUserFields(body.user);
     if (!checked.ok) {
+      await recordUserCreateAudit({
+        requester,
+        username: body.user.username,
+        source: "single",
+        result: "failed",
+        error: checked.error
+      });
       return NextResponse.json({ error: checked.error }, { status: 400 });
     }
 
     if (requester.role === "teacher") {
       if (checked.user.role !== "student") {
+        await recordUserCreateAudit({ requester, username: checked.user.username, source: "single", result: "failed", error: "teacher_can_only_create_students" });
         return NextResponse.json({ error: "teacher_can_only_create_students" }, { status: 403 });
       }
       checked.user.ownerTeacherUsername = requester.username;
@@ -103,17 +135,27 @@ export async function POST(request: NextRequest) {
 
     if (requester.role === "admin") {
       if (checked.user.role === "admin") {
+        await recordUserCreateAudit({ requester, username: checked.user.username, source: "single", result: "failed", error: "cannot_create_admin_account" });
         return NextResponse.json({ error: "cannot_create_admin_account" }, { status: 403 });
       }
       if (checked.user.role === "student" && !checked.user.ownerTeacherUsername) {
+        await recordUserCreateAudit({ requester, username: checked.user.username, source: "single", result: "failed", error: "missing_owner_teacher" });
         return NextResponse.json({ error: "missing_owner_teacher" }, { status: 400 });
       }
     }
 
-    const result = await createUserStore(checked.user);
-    if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: 409 });
+    try {
+      const result = await createUserStore(checked.user);
+      if (!result.ok) {
+        await recordUserCreateAudit({ requester, username: checked.user.username, source: "single", result: "failed", error: result.error });
+        return NextResponse.json({ error: result.error }, { status: 409 });
+      }
+    } catch {
+      await recordUserCreateAudit({ requester, username: checked.user.username, source: "single", result: "failed", error: "create_user_failed" });
+      return NextResponse.json({ error: "create_user_failed" }, { status: 500 });
     }
+
+    await recordUserCreateAudit({ requester, username: checked.user.username, source: "single", result: "succeeded" });
 
     return NextResponse.json({ ok: true });
   }
@@ -133,6 +175,7 @@ export async function POST(request: NextRequest) {
     const errors: Array<{ line: number; message: string }> = [];
     const validRows: Array<{
       username: string;
+      line: number;
       name: string;
       school: string;
       role: "student" | "teacher" | "admin";
@@ -145,12 +188,14 @@ export async function POST(request: NextRequest) {
       const checked = await validateUserFields(row.values);
       if (!checked.ok) {
         errors.push({ line: row.line, message: checked.error });
+        await recordUserCreateAudit({ requester, username: row.values.username, source: "bulk", result: "failed", line: row.line, error: checked.error });
         continue;
       }
 
       if (requester.role === "teacher") {
         if (checked.user.role !== "student") {
           errors.push({ line: row.line, message: "teacher_can_only_create_students" });
+          await recordUserCreateAudit({ requester, username: checked.user.username, source: "bulk", result: "failed", line: row.line, error: "teacher_can_only_create_students" });
           continue;
         }
         checked.user.ownerTeacherUsername = requester.username;
@@ -159,25 +204,29 @@ export async function POST(request: NextRequest) {
       if (requester.role === "admin") {
         if (checked.user.role === "admin") {
           errors.push({ line: row.line, message: "cannot_create_admin_account" });
+          await recordUserCreateAudit({ requester, username: checked.user.username, source: "bulk", result: "failed", line: row.line, error: "cannot_create_admin_account" });
           continue;
         }
         if (checked.user.role === "student" && !checked.user.ownerTeacherUsername) {
           errors.push({ line: row.line, message: "missing_owner_teacher" });
+          await recordUserCreateAudit({ requester, username: checked.user.username, source: "bulk", result: "failed", line: row.line, error: "missing_owner_teacher" });
           continue;
         }
       }
 
       if (existing.has(checked.user.username)) {
         errors.push({ line: row.line, message: `username_exists:${checked.user.username}` });
+        await recordUserCreateAudit({ requester, username: checked.user.username, source: "bulk", result: "failed", line: row.line, error: "username_exists" });
         continue;
       }
       if (seenInFile.has(checked.user.username)) {
         errors.push({ line: row.line, message: `duplicated_username_in_csv:${checked.user.username}` });
+        await recordUserCreateAudit({ requester, username: checked.user.username, source: "bulk", result: "failed", line: row.line, error: "duplicated_username_in_csv" });
         continue;
       }
 
       seenInFile.add(checked.user.username);
-      validRows.push(checked.user);
+      validRows.push({ ...checked.user, line: row.line });
     }
 
     if (errors.length > 0) {
@@ -185,7 +234,22 @@ export async function POST(request: NextRequest) {
     }
 
     for (const newUser of validRows) {
-      await createUserStore(newUser);
+      try {
+        const result = await createUserStore(newUser);
+        if (!result.ok) {
+          errors.push({ line: newUser.line, message: result.error });
+          await recordUserCreateAudit({ requester, username: newUser.username, source: "bulk", result: "failed", line: newUser.line, error: result.error });
+          continue;
+        }
+        await recordUserCreateAudit({ requester, username: newUser.username, source: "bulk", result: "succeeded", line: newUser.line });
+      } catch {
+        errors.push({ line: newUser.line, message: "create_user_failed" });
+        await recordUserCreateAudit({ requester, username: newUser.username, source: "bulk", result: "failed", line: newUser.line, error: "create_user_failed" });
+      }
+    }
+
+    if (errors.length > 0) {
+      return NextResponse.json({ error: "bulk_create_partial_failure", details: errors }, { status: 409 });
     }
 
     return NextResponse.json({ ok: true, createdCount: validRows.length });

@@ -508,6 +508,7 @@ export default function StudentAccountTab({
         const detail = Array.isArray(data.details)
           ? data.details.map((d: { line: number; message: string }) => `line ${d.line}: ${d.message}`).join("; ")
           : data.error;
+        await onRefresh().catch(() => undefined);
         setAccountError(detail ?? "bulk_create_failed");
         return;
       }
