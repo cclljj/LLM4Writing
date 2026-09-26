@@ -147,6 +147,23 @@ async function ensureUserTable(): Promise<void> {
               OR academic_year IS NULL
               OR LOWER(COALESCE(payload->>'role', payload->'payload'->>'role', payload->'payload'->'user'->>'role', payload->'user'->>'role', '')) IN ('teacher', 'admin')
           `;
+          // The oldest rows store an entire JSON document inside a JSON string.
+          // PostgreSQL cannot inspect its role directly, but normalizePayload can;
+          // correct only the staff rows without rewriting their legacy payload.
+          const scalarPayloadRows = await sql<{ username: string; payload: unknown; academic_year: string }[]>`
+            SELECT username, payload, academic_year
+            FROM llm4writing_users
+            WHERE jsonb_typeof(payload) = 'string' AND academic_year <> '999'
+          `;
+          for (const row of scalarPayloadRows) {
+            const legacyUser = normalizePayload(row.payload, row.username);
+            if (legacyUser.role !== "teacher" && legacyUser.role !== "admin") continue;
+            await sql`
+              UPDATE llm4writing_users
+              SET academic_year = '999'
+              WHERE username = ${row.username} AND academic_year = ${row.academic_year}
+            `;
+          }
           // Some legacy rows stored payload as a JSON scalar. jsonb_set only accepts
           // an object when writing the academicYear path, so leave those payloads
           // intact; normalizePayload can still deserialize them when they are read.
@@ -327,7 +344,23 @@ export async function getUserStore(username: string, academicYear = STAFF_ACADEM
     `;
   });
 
-  return rows[0] ? { ...normalizePayload(rows[0].payload, username), academicYear } : undefined;
+  if (rows[0]) return { ...normalizePayload(rows[0].payload, username), academicYear };
+
+  // Preserve staff lookup for legacy scalar payloads while their academic-year
+  // correction is being applied. Student lookups remain strictly composite.
+  if (academicYear !== STAFF_ACADEMIC_YEAR) return undefined;
+  const legacyRows = await retryOnce(async () => {
+    const sql = getSqlClient();
+    return sql<{ payload: unknown }[]>`
+      SELECT payload
+      FROM llm4writing_users
+      WHERE username = ${username}
+    `;
+  });
+  const legacyStaff = legacyRows
+    .map((row) => normalizePayload(row.payload, username))
+    .find((user) => user.role === "teacher" || user.role === "admin");
+  return legacyStaff ? { ...legacyStaff, academicYear: STAFF_ACADEMIC_YEAR } : undefined;
 }
 
 export async function validateUserCredentialStore(username: string, password: string): Promise<UserAccount | undefined> {

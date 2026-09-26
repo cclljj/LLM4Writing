@@ -451,6 +451,10 @@ test("user store: hashes passwords and migrates legacy plaintext on successful l
     userStore.includes("payload->'payload'->'user'->>'role'"),
     "academic-year migration should recognize teachers in legacy nested user payloads"
   );
+  assert.ok(
+    userStore.includes("jsonb_typeof(payload) = 'string'") && userStore.includes("const legacyStaff"),
+    "legacy scalar user payloads should be corrected and remain discoverable as staff"
+  );
 });
 
 test("session start route: validates participant scope for teacher/admin", async () => {
