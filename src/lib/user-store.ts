@@ -133,9 +133,24 @@ async function ensureUserTable(): Promise<void> {
         try {
           await sql`ALTER TABLE llm4writing_users ADD COLUMN IF NOT EXISTS academic_year TEXT NOT NULL DEFAULT '999'`;
           await sql`UPDATE llm4writing_users SET academic_year = CASE WHEN COALESCE(payload->>'role', '') IN ('teacher', 'admin') THEN '999' WHEN created_at < '2026-09-01T00:00:00.000Z'::timestamptz THEN '114' ELSE '115' END WHERE academic_year = '999' OR academic_year IS NULL`;
-          await sql`UPDATE llm4writing_users SET payload = jsonb_set(COALESCE(payload, '{}'::jsonb), '{academicYear}', to_jsonb(academic_year), true) WHERE COALESCE(payload->>'academicYear', '') <> academic_year`;
-          await sql`ALTER TABLE llm4writing_users DROP CONSTRAINT IF EXISTS llm4writing_users_pkey`;
-          await sql`ALTER TABLE llm4writing_users ADD PRIMARY KEY (username, academic_year)`;
+          // Some legacy rows stored payload as a JSON scalar. jsonb_set only accepts
+          // an object when writing the academicYear path, so leave those payloads
+          // intact; normalizePayload can still deserialize them when they are read.
+          await sql`UPDATE llm4writing_users SET payload = jsonb_set(payload, '{academicYear}', to_jsonb(academic_year), true) WHERE jsonb_typeof(payload) = 'object' AND COALESCE(payload->>'academicYear', '') <> academic_year`;
+
+          // A serverless instance may initialize this store many times. Only replace
+          // the legacy username-only primary key when it is not already composite.
+          const primaryKey = await sql<{ definition: string }[]>`
+            SELECT pg_get_constraintdef(oid) AS definition
+            FROM pg_constraint
+            WHERE conrelid = 'llm4writing_users'::regclass AND contype = 'p'
+            LIMIT 1
+          `;
+          const primaryKeyDefinition = primaryKey[0]?.definition.replace(/\s+/g, " ").toLowerCase() ?? "";
+          if (primaryKeyDefinition !== "primary key (username, academic_year)") {
+            await sql`ALTER TABLE llm4writing_users DROP CONSTRAINT IF EXISTS llm4writing_users_pkey`;
+            await sql`ALTER TABLE llm4writing_users ADD PRIMARY KEY (username, academic_year)`;
+          }
         } catch (error) {
           if (!isPermissionLikeError(error)) throw error;
         }
