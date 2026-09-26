@@ -17,6 +17,12 @@ test("source-guard: student course-history page includes Step6/7/8/10 latestWork
   assert.ok(src.includes("history.latestWork.step10Report"), "history page should include Step10 report artifact");
 });
 
+test("source-guard: account class filter keys class numbers by academic year", async () => {
+  const src = await read("../app/teacher/_components/StudentAccountTab.tsx");
+  assert.ok(src.includes("${user.academicYear}::${user.classNumber ?? \"\"}"), "class filter should compare the academic year and class number together");
+  assert.ok(src.includes("{academicYear}-{classNumber}"), "class filter options should display academicYear-classNumber");
+});
+
 test("source-guard: personal history review includes the current student's revision draft", async () => {
   const pageSrc = await read("../app/student/page.tsx");
   const historySrc = await read("../app/student/_components/HistoryReview.tsx");

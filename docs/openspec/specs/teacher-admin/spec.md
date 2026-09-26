@@ -59,6 +59,13 @@ The system SHALL support role-aware account CRUD, reset password, and CSV batch 
 - **WHEN** required ownership or class fields are missing
 - **THEN** the system rejects the operation
 
+#### Scenario: Account list class filter distinguishes academic years
+
+- **GIVEN** student accounts from different academic years share a class number
+- **WHEN** an authorized user filters the account list by class
+- **THEN** each option is displayed as `academicYear-classNumber` (for example `114-805`)
+- **AND** selecting an option returns only students from that academic year and class
+
 #### Scenario: Secure temporary password generation
 
 - **GIVEN** the account management UI generates a temporary password

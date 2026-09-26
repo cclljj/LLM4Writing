@@ -73,19 +73,16 @@ export default function StudentAccountTab({
 
   const classFilterOptions = useMemo(() => {
     if (schoolFilter === "all") return [];
-    const uniqClassNumbers = Array.from(
-      new Set(
-        users
-          .filter((user) => user.role === "student" && user.school === schoolFilter)
-          .map((user) => user.classNumber)
-          .filter((value): value is string => Boolean(value))
-      )
-    );
-    return uniqClassNumbers.sort((a, b) => {
-      const nA = Number(a);
-      const nB = Number(b);
-      if (Number.isFinite(nA) && Number.isFinite(nB)) return nB - nA;
-      return b.localeCompare(a, "zh-Hant");
+    const options = new Map<string, { academicYear: string; classNumber: string }>();
+    users
+      .filter((user) => user.role === "student" && user.school === schoolFilter && user.classNumber)
+      .forEach((user) => {
+        options.set(`${user.academicYear}::${user.classNumber}`, { academicYear: user.academicYear, classNumber: user.classNumber! });
+      });
+    return Array.from(options.values()).sort((a, b) => {
+      const yearOrder = b.academicYear.localeCompare(a.academicYear, undefined, { numeric: true });
+      if (yearOrder !== 0) return yearOrder;
+      return b.classNumber.localeCompare(a.classNumber, undefined, { numeric: true });
     });
   }, [users, schoolFilter]);
 
@@ -103,7 +100,7 @@ export default function StudentAccountTab({
       if (roleFilter !== "all" && user.role !== roleFilter) return false;
       if (schoolFilter !== "all" && user.school !== schoolFilter) return false;
       if (roleFilter === "student" && schoolFilter !== "all") {
-        if (classFilter && (user.classNumber ?? "") !== classFilter) return false;
+        if (classFilter && `${user.academicYear}::${user.classNumber ?? ""}` !== classFilter) return false;
       }
       if (!keyword) return true;
       return (
@@ -845,12 +842,12 @@ export default function StudentAccountTab({
           </div>
           {roleFilter === "student" && schoolFilter !== "all" ? (
             <div className="col">
-              <label>班級篩選（由大到小）</label>
+              <label>學年－班級篩選（由大到小）</label>
               <select value={classFilter} onChange={(e) => setClassFilter(e.target.value)}>
                 <option value="">全部班級</option>
-                {classFilterOptions.map((classNumber) => (
-                  <option key={classNumber} value={classNumber}>
-                    {classNumber}
+                {classFilterOptions.map(({ academicYear, classNumber }) => (
+                  <option key={`${academicYear}::${classNumber}`} value={`${academicYear}::${classNumber}`}>
+                    {academicYear}-{classNumber}
                   </option>
                 ))}
               </select>

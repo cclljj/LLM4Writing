@@ -1000,6 +1000,7 @@ reload 行為：
 - 支援帳號 CRUD、reset password、CSV 批次建帳。
 - teacher/admin 依權限限制可操作資料。
 - student 帳號必填 `academicYear`（114 或 115）及 `classNumber`；單筆新增預設為 115。教師與管理員的 academicYear 一律為 999。帳號管理清單、編輯與刪除的 UI 識別鍵使用 `(username, academicYear)`。
+- 帳號管理的學生班級篩選以 `(academicYear, classNumber)` 作為值，選項顯示為 `學年-班級號碼`（例如 `114-805`），不得混合不同學年的同班號學生。
 - 使用者清單角色顯示中文：學生、教師、管理員。
 - admin 帳號列在 UI 中為系統保留帳號，不顯示一般列的「修改 / 重設密碼 / 刪除」操作；已登入 admin 仍可用同源 `POST /api/admin/users` 的 `reset_password` action 重設 admin 密碼。
 - 搜尋區塊位於使用者清單上方。
