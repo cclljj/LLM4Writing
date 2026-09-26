@@ -301,44 +301,51 @@ export async function getUserStore(username: string, academicYear = STAFF_ACADEM
   return rows[0] ? { ...normalizePayload(rows[0].payload, username), academicYear } : undefined;
 }
 
-export async function validateUserCredentialStore(username: string, password: string, academicYear?: string): Promise<UserAccount | undefined> {
-  const selectedYear = academicYear?.trim() || STAFF_ACADEMIC_YEAR;
+export async function validateUserCredentialStore(username: string, password: string): Promise<UserAccount | undefined> {
   if (!isDatabaseEnabled()) {
-    const row = getMemoryStore().get(userKey(username, selectedYear));
-    if (!row) return undefined;
-    const verification = await verifyPasswordAndUpgradeStatus(row.password, password);
-    if (!verification.ok) return undefined;
-    if (verification.needsUpgrade) {
-      row.password = await hashPassword(password);
-      getMemoryStore().set(userKey(username, selectedYear), row);
+    const candidates = Array.from(getMemoryStore().values())
+      .filter((row) => row.username === username)
+      .sort((a, b) => {
+        const roleOrder = Number(a.role !== "student") - Number(b.role !== "student");
+        return roleOrder || b.academicYear.localeCompare(a.academicYear, undefined, { numeric: true });
+      });
+    for (const row of candidates) {
+      const verification = await verifyPasswordAndUpgradeStatus(row.password, password);
+      if (!verification.ok) continue;
+      if (verification.needsUpgrade) {
+        row.password = await hashPassword(password);
+        getMemoryStore().set(userKey(username, row.academicYear), row);
+      }
+      return stripPassword(row);
     }
-    return stripPassword(row);
+    return undefined;
   }
 
   const rows = await retryOnce(async () => {
     await ensureUserTable();
     const sql = getSqlClient();
-    return sql<{ payload: unknown; password: string }[]>`
-      SELECT payload, password
+    return sql<{ payload: unknown; password: string; academic_year: string }[]>`
+      SELECT payload, password, academic_year
       FROM llm4writing_users
-      WHERE username = ${username} AND academic_year = ${selectedYear}
-      LIMIT 1
+      WHERE username = ${username}
+      ORDER BY CASE WHEN payload->>'role' = 'student' THEN 0 ELSE 1 END, academic_year DESC
     `;
   });
 
-  const row = rows[0];
-  if (!row) return undefined;
-  const verification = await verifyPasswordAndUpgradeStatus(row.password, password);
-  if (!verification.ok) return undefined;
-  if (verification.needsUpgrade) {
-    const sql = getSqlClient();
-    await sql`
-      UPDATE llm4writing_users
-      SET password = ${await hashPassword(password)}, updated_at = NOW()
-      WHERE username = ${username} AND academic_year = ${selectedYear}
-    `;
+  for (const row of rows) {
+    const verification = await verifyPasswordAndUpgradeStatus(row.password, password);
+    if (!verification.ok) continue;
+    if (verification.needsUpgrade) {
+      const sql = getSqlClient();
+      await sql`
+        UPDATE llm4writing_users
+        SET password = ${await hashPassword(password)}, updated_at = NOW()
+        WHERE username = ${username} AND academic_year = ${row.academic_year}
+      `;
+    }
+    return { ...normalizePayload(row.payload, username), academicYear: row.academic_year };
   }
-  return { ...normalizePayload(row.payload, username), academicYear: selectedYear };
+  return undefined;
 }
 
 export async function resetUserPasswordStore(username: string, newPassword: string, academicYear = STAFF_ACADEMIC_YEAR): Promise<boolean> {

@@ -216,6 +216,8 @@ Upstash 啟用條件：
 
 ### 4.1 UserAccount
 
+登入只需要帳號與密碼；系統會在同 username 的帳號中驗證密碼，並把符合帳號的 academicYear 寫入登入 session。
+
 ```ts
 {
   username: string;

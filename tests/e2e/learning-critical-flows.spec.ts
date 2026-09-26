@@ -14,8 +14,7 @@ type LoggedInActors = {
 let loggedInActors: LoggedInActors | null = null;
 
 async function login(page: Page, username: string, password: string) {
-  const academicYear = username === "student" ? "115" : "999";
-  const response = await page.request.post("/api/auth/login", { data: { username, password, academicYear } });
+  const response = await page.request.post("/api/auth/login", { data: { username, password } });
   let data: { redirectTo?: string; error?: string } = {};
   try {
     data = (await response.json()) as { redirectTo?: string; error?: string };

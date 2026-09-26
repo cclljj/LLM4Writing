@@ -6,7 +6,6 @@ import { formatUserError } from "@/src/lib/error-messages";
 export default function HomePage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [academicYear, setAcademicYear] = useState("115");
   const [error, setError] = useState("");
 
   async function handleLogin(event: FormEvent) {
@@ -16,7 +15,7 @@ export default function HomePage() {
     const response = await fetch("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password, academicYear })
+      body: JSON.stringify({ username, password })
     });
 
     const data = await response.json();
@@ -55,13 +54,6 @@ export default function HomePage() {
           <form onSubmit={handleLogin}>
             <label>帳號</label>
             <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="請輸入帳號" />
-
-            <label style={{ marginTop: 10 }}>學年（學生必填）</label>
-            <select value={academicYear} onChange={(e) => setAcademicYear(e.target.value)}>
-              <option value="115">115</option>
-              <option value="114">114</option>
-              <option value="999">教師／管理員</option>
-            </select>
 
             <label style={{ marginTop: 10 }}>密碼</label>
             <input

@@ -30,8 +30,8 @@ function normalizeSessionVersion(input: unknown): number {
   return asInt > 0 ? asInt : 1;
 }
 
-export async function validateCredential(username: string, password: string, academicYear?: string): Promise<AuthSessionClaims | undefined> {
-  const user = await validateUserCredentialStore(username, password, academicYear);
+export async function validateCredential(username: string, password: string): Promise<AuthSessionClaims | undefined> {
+  const user = await validateUserCredentialStore(username, password);
   if (!user) {
     return undefined;
   }
