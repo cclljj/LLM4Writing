@@ -1,6 +1,6 @@
 import { jsPDF } from "jspdf";
 import { buildCourseReportTimelineItems } from "@/src/lib/course-report-pdf-timeline";
-import { fromMermaid } from "@/src/lib/outline-utils";
+import { buildOutlinePreview } from "@/src/lib/outline-utils";
 import { maskPeerUsernames, normalizeReportMarkdownText } from "@/src/lib/report-rendering";
 import { formatTaipeiDateTime } from "@/src/lib/time-format";
 import { COURSE_REPORT_VERSION } from "@/src/lib/course-report-version";
@@ -158,56 +158,13 @@ function formatRole(role: string): string {
   return role || "未知";
 }
 
-export type PdfOutlineTreeNode = {
-  id: string;
-  parentId: string | null;
-  text: string;
-  depth: number;
-  column: 0 | 1;
-  row: number;
-};
-
 /**
- * Keep the graph's parent/child relationship while assigning siblings to two
- * staggered columns. The actual dimensions are measured by jsPDF so node text
- * can wrap at its final width instead of being squeezed into a scaled image.
+ * Use the same dagre-generated graph model as the web OutlineSvg component.
+ * The PDF renderer draws it on its own landscape page, rather than trying to
+ * invent a separate compact tree layout for A4 portrait pages.
  */
-export function buildStaggeredOutlineTree(mermaidText: string): PdfOutlineTreeNode[] {
-  const nodes = fromMermaid(mermaidText);
-  const byId = new Map(nodes.map((node) => [node.id, node]));
-  const depthCache = new Map<string, number>();
-  const depthFor = (id: string, visiting = new Set<string>()): number => {
-    const cached = depthCache.get(id);
-    if (cached !== undefined) return cached;
-    if (visiting.has(id)) return 1;
-    visiting.add(id);
-    const parentId = byId.get(id)?.parentId;
-    const depth = parentId && byId.has(parentId) ? depthFor(parentId, visiting) + 1 : 1;
-    visiting.delete(id);
-    depthCache.set(id, depth);
-    return depth;
-  };
-
-  const levels = new Map<number, typeof nodes>();
-  for (const node of nodes) {
-    const depth = depthFor(node.id);
-    const level = levels.get(depth) ?? [];
-    level.push(node);
-    levels.set(depth, level);
-  }
-
-  return Array.from(levels.entries())
-    .sort(([left], [right]) => left - right)
-    .flatMap(([depth, level]) =>
-      level.map((node, index) => ({
-        id: node.id,
-        parentId: node.parentId,
-        text: stripInlineMarkdown(node.text),
-        depth,
-        column: (index % 2) as 0 | 1,
-        row: Math.floor(index / 2),
-      })),
-    );
+export function buildPrintableOutlinePreview(mermaidText: string) {
+  return buildOutlinePreview(mermaidText, { maxLines: 40 });
 }
 
 export async function generateCourseImplementationPdf(input: CourseImplementationPdfInput): Promise<Blob> {
@@ -245,7 +202,7 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
   }
 
   function newPage(): void {
-    doc.addPage();
+    doc.addPage("a4", "portrait");
     pageNo += 1;
     y = PAGE.marginTop;
     drawPageChrome();
@@ -456,85 +413,61 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
   const peerOutlineTitle = peerOutlineStep !== undefined ? `${getWorkflowStepName(input, peerOutlineStep)}修正後架構圖` : "修正後架構圖";
 
   function drawOutlineTree(kind: "submitted_outline" | "revised_outline", mermaidText: string): void {
-    const tree = buildStaggeredOutlineTree(mermaidText);
-    if (tree.length === 0) return;
+    const preview = buildPrintableOutlinePreview(mermaidText);
+    if (!preview) return;
     const title = kind === "submitted_outline" ? outlineTitle : peerOutlineTitle;
-    ensureSpacePx(34);
-    const diagramStartY = y + 34;
-    const nodeW = 222;
-    const nodePadding = 12;
-    const nodeLineHeight = 16;
-    const staggerOffset = 28;
-    const rowGap = 18;
-    const levelGap = 38;
-    const leftX = PAGE.marginX + 8;
-    const rightX = PAGE.marginX + contentWidth - nodeW - 8;
-    const centeredX = PAGE.marginX + (contentWidth - nodeW) / 2;
-    const nodes = tree.map((node) => {
-      doc.setFontSize(10.5);
-      const lines = doc.splitTextToSize(node.text || "（空白）", nodeW - nodePadding * 2) as string[];
-      return { ...node, lines, x: leftX, y: 0, w: nodeW, h: Math.max(38, lines.length * nodeLineHeight + nodePadding * 2) };
-    });
-    const levels = new Map<number, typeof nodes>();
-    for (const node of nodes) {
-      const level = levels.get(node.depth) ?? [];
-      level.push(node);
-      levels.set(node.depth, level);
-    }
+    doc.addPage("a4", "landscape");
+    pageNo += 1;
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const pageMargin = 30;
+    const titleHeight = 38;
+    const availableWidth = pageWidth - pageMargin * 2;
+    const availableHeight = pageHeight - pageMargin * 2 - titleHeight;
+    const scale = Math.min(1.15, availableWidth / preview.width, availableHeight / preview.height);
+    const offsetX = (pageWidth - preview.width * scale) / 2;
+    const offsetY = pageMargin + titleHeight + (availableHeight - preview.height * scale) / 2;
 
-    let levelY = diagramStartY;
-    for (const level of Array.from(levels.values())) {
-      const singleNode = level.length === 1;
-      const rowHeights = new Map<number, number>();
-      for (const node of level) rowHeights.set(node.row, Math.max(rowHeights.get(node.row) ?? 0, node.h + (node.column === 1 ? staggerOffset : 0)));
-      const rowStarts = new Map<number, number>();
-      let rowY = levelY;
-      for (const row of Array.from(rowHeights.keys()).sort((left, right) => left - right)) {
-        rowStarts.set(row, rowY);
-        rowY += (rowHeights.get(row) ?? 0) + rowGap;
-      }
-      for (const node of level) {
-        node.x = singleNode ? centeredX : node.column === 0 ? leftX : rightX;
-        node.y = (rowStarts.get(node.row) ?? levelY) + (node.column === 1 ? staggerOffset : 0);
-      }
-      levelY = rowY + levelGap;
-    }
+    setFillColor(COLORS.topBar);
+    doc.rect(0, 0, pageWidth, 30, "F");
+    doc.setFontSize(12);
+    setFontStyle("bold");
+    setTextColor([255, 255, 255]);
+    doc.text(`LLM4Writing 課程實施報告 - ${title}`, pageMargin, 20);
+    doc.setFontSize(9);
+    doc.text(`第 ${pageNo} 頁`, pageWidth - pageMargin - 44, pageHeight - 14);
+    setFontStyle("normal");
+    setTextColor(COLORS.text);
 
-    const treeBottom = Math.max(...nodes.map((node) => node.y + node.h));
-    if (treeBottom + 14 > PAGE.height - PAGE.marginBottom) {
-      newPage();
-    }
-    writeSectionHeader(title);
-    const shift = y - diagramStartY;
-    for (const node of nodes) node.y += shift;
-
-    const byId = new Map(nodes.map((node) => [node.id, node]));
     setDrawColor(COLORS.edge);
-    doc.setLineWidth(1.2);
-    for (const node of nodes) {
-      const parent = node.parentId ? byId.get(node.parentId) : undefined;
-      if (!parent) continue;
-      const sourceX = parent.x + parent.w / 2;
-      const sourceY = parent.y + parent.h;
-      const targetX = node.x + node.w / 2;
-      const targetY = node.y;
-      const bendY = sourceY + 12 + node.column * 5;
-      doc.line(sourceX, sourceY, sourceX, bendY);
-      doc.line(sourceX, bendY, targetX, bendY);
-      doc.line(targetX, bendY, targetX, targetY);
+    doc.setLineWidth(2 * scale);
+    for (const edge of preview.edges) {
+      for (let index = 1; index < edge.points.length; index += 1) {
+        const from = edge.points[index - 1]!;
+        const to = edge.points[index]!;
+        doc.line(offsetX + from.x * scale, offsetY + from.y * scale, offsetX + to.x * scale, offsetY + to.y * scale);
+      }
     }
 
-    for (const node of nodes) {
-      setFillColor(node.depth % 2 === 0 ? [248, 250, 252] : COLORS.nodeFill);
+    for (const node of preview.nodes) {
+      const width = (node.w ?? 180) * scale;
+      const height = (node.h ?? 84) * scale;
+      const x = offsetX + node.x * scale;
+      const nodeY = offsetY + node.y * scale;
+      setFillColor(COLORS.nodeFill);
       setDrawColor(COLORS.nodeStroke);
-      doc.roundedRect(node.x, node.y, node.w, node.h, 6, 6, "FD");
-      setFontStyle("bold");
+      doc.roundedRect(x, nodeY, width, height, 10 * scale, 10 * scale, "FD");
+      doc.setFontSize(12 * scale);
+      setFontStyle("normal");
       setTextColor(COLORS.title);
-      doc.text(node.lines, node.x + nodePadding, node.y + nodePadding + 10);
+      const lines = node.lines && node.lines.length > 0 ? node.lines : node.text.split("\n");
+      const textX = x + width / 2;
+      const textY = nodeY + 18 * scale;
+      lines.forEach((line, index) => doc.text(line, textX, textY + index * 16 * scale, { align: "center" }));
     }
     setFontStyle("normal");
     setTextColor(COLORS.text);
-    y = Math.max(...nodes.map((node) => node.y + node.h)) + 16;
+    y = PAGE.height;
   }
 
   function drawMessageCard(msg: PdfMessage, index: number): void {
@@ -590,16 +523,6 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
       const previous = timelineItems[i - 1];
       const previousStep = previous ? (previous.type === "outline" ? previous.step : previous.msg.step) : -1;
       if (step !== previousStep) {
-        ensureSpacePx(34);
-        setFillColor([226, 232, 240]);
-        doc.roundedRect(PAGE.marginX, y - 4, contentWidth, 24, 5, 5, "F");
-        doc.setFontSize(11);
-        setTextColor(COLORS.title);
-        const name = getWorkflowStepName(input, step);
-        doc.text(`Step ${step}${name ? ` - ${name}` : ""}`, PAGE.marginX + 8, y + 12);
-        setTextColor(COLORS.text);
-        y += 30;
-
         if (outlineStep !== undefined && step === outlineStep && step3Outline && !insertedStep3) {
           drawOutlineTree("submitted_outline", step3Outline);
           insertedStep3 = true;
@@ -607,6 +530,18 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
         if (peerOutlineStep !== undefined && step === peerOutlineStep && hasStep4Outline && !insertedStep4) {
           drawOutlineTree("revised_outline", step4Outline);
           insertedStep4 = true;
+        }
+        const hasMessageInStep = timelineItems.some((timelineItem) => timelineItem.type === "message" && timelineItem.msg.step === step);
+        if (hasMessageInStep) {
+          ensureSpacePx(34);
+          setFillColor([226, 232, 240]);
+          doc.roundedRect(PAGE.marginX, y - 4, contentWidth, 24, 5, 5, "F");
+          doc.setFontSize(11);
+          setTextColor(COLORS.title);
+          const name = getWorkflowStepName(input, step);
+          doc.text(`Step ${step}${name ? ` - ${name}` : ""}`, PAGE.marginX + 8, y + 12);
+          setTextColor(COLORS.text);
+          y += 30;
         }
       }
 
