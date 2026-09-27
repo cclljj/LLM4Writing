@@ -385,9 +385,9 @@ The course management area SHALL provide ended-course reports and student-level 
 
 - **GIVEN** the student's Step3 submitted or Step4 revised structure tree contains long node text
 - **WHEN** the student PDF report is generated
-- **THEN** each tree is rendered as a vertically flowing, indented hierarchy of cards
-- **AND** every node's text wraps without overlap or truncation
-- **AND** tree rows may continue on a new page rather than being shrunk to fit one page
+- **THEN** each tree retains node cards and parent-child connector lines
+- **AND** same-level nodes alternate between two columns with staggered vertical positions, and connector lines bend around the cards
+- **AND** every node's text wraps without overlap or truncation, and the tree may start on a new page rather than being shrunk to fit one page
 
 #### Scenario: Exported report artifacts mask peer accounts
 

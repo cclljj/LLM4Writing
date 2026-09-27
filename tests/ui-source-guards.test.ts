@@ -41,10 +41,11 @@ test("source-guard: learning monitor shows every saved Step 4 outline", async ()
   assert.equal(src.includes("userOutline && userOutline !== userStep3SubmittedOutline"), false, "Step 4 must not disappear when it matches Step 3 text");
 });
 
-test("source-guard: course PDF uses paginated readable outline rows", async () => {
+test("source-guard: course PDF uses a staggered connected outline tree", async () => {
   const src = await read("../src/lib/courseImplementationPdf.ts");
-  assert.ok(src.includes("buildReadableOutlineRows"), "PDF should derive readable outline rows");
-  assert.ok(src.includes("function drawOutlineTree"), "PDF should render an outline tree rather than scale a graph into one page");
+  assert.ok(src.includes("buildStaggeredOutlineTree"), "PDF should retain outline nodes and parent links");
+  assert.ok(src.includes("const staggerOffset = 28"), "same-level nodes should use staggered vertical positions");
+  assert.ok(src.includes("doc.line(sourceX, bendY, targetX, bendY)"), "parent-child links should bend between node cards");
   assert.equal(src.includes("doc.addImage(png.dataUrl"), false, "PDF should not shrink a rasterized graph until labels overlap");
 });
 

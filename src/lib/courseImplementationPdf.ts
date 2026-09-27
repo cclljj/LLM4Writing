@@ -158,14 +158,21 @@ function formatRole(role: string): string {
   return role || "未知";
 }
 
-export type PdfOutlineRow = { depth: number; text: string };
+export type PdfOutlineTreeNode = {
+  id: string;
+  parentId: string | null;
+  text: string;
+  depth: number;
+  column: 0 | 1;
+  row: number;
+};
 
 /**
- * PDFs use a vertically flowing tree rather than a scaled graph. Graphs can
- * become wider than A4 and make node labels overlap; rows paginate naturally
- * and keep every node's text readable.
+ * Keep the graph's parent/child relationship while assigning siblings to two
+ * staggered columns. The actual dimensions are measured by jsPDF so node text
+ * can wrap at its final width instead of being squeezed into a scaled image.
  */
-export function buildReadableOutlineRows(mermaidText: string): PdfOutlineRow[] {
+export function buildStaggeredOutlineTree(mermaidText: string): PdfOutlineTreeNode[] {
   const nodes = fromMermaid(mermaidText);
   const byId = new Map(nodes.map((node) => [node.id, node]));
   const depthCache = new Map<string, number>();
@@ -181,10 +188,26 @@ export function buildReadableOutlineRows(mermaidText: string): PdfOutlineRow[] {
     return depth;
   };
 
-  return nodes
-    .map((node, index) => ({ depth: depthFor(node.id), text: stripInlineMarkdown(node.text), index }))
-    .sort((a, b) => a.depth - b.depth || a.index - b.index)
-    .map(({ depth, text }) => ({ depth, text }));
+  const levels = new Map<number, typeof nodes>();
+  for (const node of nodes) {
+    const depth = depthFor(node.id);
+    const level = levels.get(depth) ?? [];
+    level.push(node);
+    levels.set(depth, level);
+  }
+
+  return Array.from(levels.entries())
+    .sort(([left], [right]) => left - right)
+    .flatMap(([depth, level]) =>
+      level.map((node, index) => ({
+        id: node.id,
+        parentId: node.parentId,
+        text: stripInlineMarkdown(node.text),
+        depth,
+        column: (index % 2) as 0 | 1,
+        row: Math.floor(index / 2),
+      })),
+    );
 }
 
 export async function generateCourseImplementationPdf(input: CourseImplementationPdfInput): Promise<Blob> {
@@ -433,36 +456,85 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
   const peerOutlineTitle = peerOutlineStep !== undefined ? `${getWorkflowStepName(input, peerOutlineStep)}修正後架構圖` : "修正後架構圖";
 
   function drawOutlineTree(kind: "submitted_outline" | "revised_outline", mermaidText: string): void {
-    const rows = buildReadableOutlineRows(mermaidText);
-    if (rows.length === 0) return;
+    const tree = buildStaggeredOutlineTree(mermaidText);
+    if (tree.length === 0) return;
     const title = kind === "submitted_outline" ? outlineTitle : peerOutlineTitle;
-    writeSectionHeader(title);
-    for (const row of rows) {
-      const indent = Math.min(84, (row.depth - 1) * 20);
-      const cardX = PAGE.marginX + 10 + indent;
-      const cardW = contentWidth - 20 - indent;
-      const textX = cardX + 12;
-      const textW = cardW - 24;
+    ensureSpacePx(34);
+    const diagramStartY = y + 34;
+    const nodeW = 222;
+    const nodePadding = 12;
+    const nodeLineHeight = 16;
+    const staggerOffset = 28;
+    const rowGap = 18;
+    const levelGap = 38;
+    const leftX = PAGE.marginX + 8;
+    const rightX = PAGE.marginX + contentWidth - nodeW - 8;
+    const centeredX = PAGE.marginX + (contentWidth - nodeW) / 2;
+    const nodes = tree.map((node) => {
       doc.setFontSize(10.5);
-      const lines = doc.splitTextToSize(row.text || "（空白）", textW) as string[];
-      const lineHeight = 16;
-      const cardH = Math.max(34, lines.length * lineHeight + 16);
-      ensureSpacePx(cardH + 8);
-      if (row.depth > 1) {
-        setDrawColor(COLORS.edge);
-        doc.setLineWidth(1.2);
-        doc.line(PAGE.marginX + indent, y + cardH / 2 - 2, cardX - 5, y + cardH / 2 - 2);
+      const lines = doc.splitTextToSize(node.text || "（空白）", nodeW - nodePadding * 2) as string[];
+      return { ...node, lines, x: leftX, y: 0, w: nodeW, h: Math.max(38, lines.length * nodeLineHeight + nodePadding * 2) };
+    });
+    const levels = new Map<number, typeof nodes>();
+    for (const node of nodes) {
+      const level = levels.get(node.depth) ?? [];
+      level.push(node);
+      levels.set(node.depth, level);
+    }
+
+    let levelY = diagramStartY;
+    for (const level of Array.from(levels.values())) {
+      const singleNode = level.length === 1;
+      const rowHeights = new Map<number, number>();
+      for (const node of level) rowHeights.set(node.row, Math.max(rowHeights.get(node.row) ?? 0, node.h + (node.column === 1 ? staggerOffset : 0)));
+      const rowStarts = new Map<number, number>();
+      let rowY = levelY;
+      for (const row of Array.from(rowHeights.keys()).sort((left, right) => left - right)) {
+        rowStarts.set(row, rowY);
+        rowY += (rowHeights.get(row) ?? 0) + rowGap;
       }
-      setFillColor(row.depth % 2 === 0 ? [248, 250, 252] : COLORS.nodeFill);
+      for (const node of level) {
+        node.x = singleNode ? centeredX : node.column === 0 ? leftX : rightX;
+        node.y = (rowStarts.get(node.row) ?? levelY) + (node.column === 1 ? staggerOffset : 0);
+      }
+      levelY = rowY + levelGap;
+    }
+
+    const treeBottom = Math.max(...nodes.map((node) => node.y + node.h));
+    if (treeBottom + 14 > PAGE.height - PAGE.marginBottom) {
+      newPage();
+    }
+    writeSectionHeader(title);
+    const shift = y - diagramStartY;
+    for (const node of nodes) node.y += shift;
+
+    const byId = new Map(nodes.map((node) => [node.id, node]));
+    setDrawColor(COLORS.edge);
+    doc.setLineWidth(1.2);
+    for (const node of nodes) {
+      const parent = node.parentId ? byId.get(node.parentId) : undefined;
+      if (!parent) continue;
+      const sourceX = parent.x + parent.w / 2;
+      const sourceY = parent.y + parent.h;
+      const targetX = node.x + node.w / 2;
+      const targetY = node.y;
+      const bendY = sourceY + 12 + node.column * 5;
+      doc.line(sourceX, sourceY, sourceX, bendY);
+      doc.line(sourceX, bendY, targetX, bendY);
+      doc.line(targetX, bendY, targetX, targetY);
+    }
+
+    for (const node of nodes) {
+      setFillColor(node.depth % 2 === 0 ? [248, 250, 252] : COLORS.nodeFill);
       setDrawColor(COLORS.nodeStroke);
-      doc.roundedRect(cardX, y - 10, cardW, cardH, 6, 6, "FD");
+      doc.roundedRect(node.x, node.y, node.w, node.h, 6, 6, "FD");
       setFontStyle("bold");
       setTextColor(COLORS.title);
-      doc.text(lines, textX, y + 5);
-      setFontStyle("normal");
-      setTextColor(COLORS.text);
-      y += cardH + 8;
+      doc.text(node.lines, node.x + nodePadding, node.y + nodePadding + 10);
     }
+    setFontStyle("normal");
+    setTextColor(COLORS.text);
+    y = Math.max(...nodes.map((node) => node.y + node.h)) + 16;
   }
 
   function drawMessageCard(msg: PdfMessage, index: number): void {
