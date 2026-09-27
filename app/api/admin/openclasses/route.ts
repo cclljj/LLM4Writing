@@ -9,7 +9,7 @@ import {
 import { getUserStore, getUsersVisibleToTeacherStore, listUsersStore } from "@/src/lib/user-store";
 import { listActivityIdsWithStudentMessages } from "@/src/lib/store";
 import { recordAuditLog } from "@/src/lib/audit-log-store";
-import { DEFAULT_ACADEMIC_YEAR, DEFAULT_ACADEMIC_YEAR_TERM } from "@/src/lib/academic-term-defaults";
+import { DEFAULT_ACADEMIC_YEAR, DEFAULT_ACADEMIC_YEAR_TERM, isEnabledAcademicTerm } from "@/src/lib/academic-term-defaults";
 
 /**
  * Returns a Set of activityIds that already have at least one student message (#254).
@@ -78,7 +78,11 @@ export async function POST(request: NextRequest) {
   const classNumber = body.classNumber.trim();
   const academicYear = body.academicYear?.trim() || DEFAULT_ACADEMIC_YEAR;
   const academicYearTerm = body.academicYearTerm?.trim() || DEFAULT_ACADEMIC_YEAR_TERM;
-  if (!["114", "115"].includes(academicYear) || !["1", "2"].includes(academicYearTerm)) {
+  const existing = body.id ? getOpenClasses().find((openClass) => openClass.id === body.id) : undefined;
+  const keepsStoredHistoricalTerm = Boolean(
+    existing && existing.academicYear === academicYear && existing.academicYearTerm === academicYearTerm
+  );
+  if (!isEnabledAcademicTerm(academicYear, academicYearTerm) && !keepsStoredHistoricalTerm) {
     return NextResponse.json({ error: "invalid_academic_term" }, { status: 400 });
   }
   if (!classNumber) {

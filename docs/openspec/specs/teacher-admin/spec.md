@@ -8,7 +8,20 @@ This domain describes teacher and admin UI behavior, course management, learning
 
 ### Requirement: Academic-year account identity
 
-The system SHALL store `academic_year` for every account. A student account is uniquely identified by `(username, academic_year)` and may reuse a username in another academic year. Teachers and administrators SHALL use `999`.
+The system SHALL store `academic_year` for every account. A student account is uniquely identified by `(username, academic_year)` and may reuse a username in another academic year. Teachers and administrators SHALL be normalized to `999`, regardless of any submitted academic-year value.
+
+#### Scenario: Academic year and term options use shared configuration
+
+- **GIVEN** an administrator manages accounts or writing courses
+- **WHEN** the available school year or enabled terms change
+- **THEN** account validation, CSV validation, course validation, and their forms use the same centrally configured rules
+- **AND** a historical course retains its stored school year and term as an editable option
+
+#### Scenario: Class-owner conflict is scoped to a school year
+
+- **GIVEN** two student accounts have the same school and class number in different academic years
+- **WHEN** either account is created or edited with a different bound teacher
+- **THEN** the system does not report a class-owner conflict across the two academic years
 
 #### Scenario: Course students match the configured year and class
 

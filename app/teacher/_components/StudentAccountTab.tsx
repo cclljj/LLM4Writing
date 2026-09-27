@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { deferStateUpdate } from "@/src/lib/defer-state-update";
+import { ACADEMIC_YEARS, DEFAULT_ACADEMIC_YEAR, isEnabledAcademicYear, STAFF_ACADEMIC_YEAR } from "@/src/lib/academic-term-defaults";
 import { UserRow } from "./types";
 import ConfirmDialog from "./ConfirmDialog";
 
@@ -54,7 +55,7 @@ export default function StudentAccountTab({
     role: "student" as "student" | "teacher",
     ownerTeacherUsername: "",
     classNumber: "",
-    academicYear: "115",
+    academicYear: DEFAULT_ACADEMIC_YEAR,
     password: ""
   });
   const [csvInput, setCsvInput] = useState("");
@@ -62,7 +63,7 @@ export default function StudentAccountTab({
   const [isBulkCreatingUsers, setIsBulkCreatingUsers] = useState(false);
   const [bulkCreateDots, setBulkCreateDots] = useState<"..." | "......">("...");
   const [resetTargetUser, setResetTargetUser] = useState("");
-  const [resetTargetAcademicYear, setResetTargetAcademicYear] = useState("999");
+  const [resetTargetAcademicYear, setResetTargetAcademicYear] = useState(STAFF_ACADEMIC_YEAR);
   const [resetMode, setResetMode] = useState<"system" | "manual">("system");
   const [generatedPassword, setGeneratedPassword] = useState("");
   const [manualResetPassword, setManualResetPassword] = useState("");
@@ -291,7 +292,7 @@ export default function StudentAccountTab({
         errors.push(`第 ${idx + 1} 列 password 至少 6 碼`);
       }
       if (role === "student") {
-        if (!["114", "115"].includes(academicYear)) errors.push(`第 ${idx + 1} 列 student 學年必須是 114 或 115`);
+        if (!isEnabledAcademicYear(academicYear)) errors.push(`第 ${idx + 1} 列 student 學年必須是 ${ACADEMIC_YEARS.join(" 或 ")}`);
         if (!classNumber) {
           errors.push(`第 ${idx + 1} 列 student 必填班級號碼`);
         }
@@ -303,7 +304,7 @@ export default function StudentAccountTab({
           }
         }
       }
-      const userIndex = `${username}::${role === "student" ? academicYear : "999"}`;
+      const userIndex = `${username}::${role === "student" ? academicYear : STAFF_ACADEMIC_YEAR}`;
       if (seen.has(userIndex)) {
         errors.push(`第 ${idx + 1} 列 username 重複`);
       }
@@ -399,7 +400,7 @@ export default function StudentAccountTab({
       role: "student",
       ownerTeacherUsername: "",
       classNumber: "",
-      academicYear: "115",
+      academicYear: DEFAULT_ACADEMIC_YEAR,
       password: ""
     });
     setAccountSuccess("已新增帳號。");
@@ -588,7 +589,9 @@ export default function StudentAccountTab({
               <div className="col">
                 <label>學年</label>
                 <select value={newUserForm.academicYear} onChange={(e) => setNewUserForm((prev) => ({ ...prev, academicYear: e.target.value }))}>
-                  <option value="115">115</option><option value="114">114</option>
+                  {ACADEMIC_YEARS.map((academicYear) => (
+                    <option key={academicYear} value={academicYear}>{academicYear}</option>
+                  ))}
                 </select>
               </div>
             ) : null}

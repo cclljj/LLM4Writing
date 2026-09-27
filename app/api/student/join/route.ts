@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/src/lib/auth-server";
+import { STAFF_ACADEMIC_YEAR } from "@/src/lib/academic-term-defaults";
 import { createSession } from "@/src/lib/engine";
 import { hydrateDomainState } from "@/src/lib/activity-store";
 import { loadActivityWithConfig } from "@/src/lib/prompt-config";
@@ -55,7 +56,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "activity_not_found" }, { status: 404 });
     }
     const { activity, promptConfig: resolvedConfig, workflowSteps, guidedDiscussionSubsteps } = loaded;
-    const profile = await getUserStore(user.username, user.academicYear ?? "999");
+    const profile = await getUserStore(user.username, user.academicYear ?? STAFF_ACADEMIC_YEAR);
     if (!profile || profile.role !== "student" || profile.school !== activity.school || profile.classNumber !== activity.classNumber || profile.academicYear !== activity.academicYear) {
       return NextResponse.json({ error: "course_not_available_for_student" }, { status: 403 });
     }

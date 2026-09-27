@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/src/lib/auth-server";
+import { DEFAULT_ACADEMIC_YEAR, DEFAULT_ACADEMIC_YEAR_TERM, STAFF_ACADEMIC_YEAR } from "@/src/lib/academic-term-defaults";
 import { getAllActivities, hydrateDomainState } from "@/src/lib/activity-store";
 import { listSessionsByParticipant } from "@/src/lib/store";
 import { getUserStore } from "@/src/lib/user-store";
-import { DEFAULT_ACADEMIC_YEAR, DEFAULT_ACADEMIC_YEAR_TERM } from "@/src/lib/academic-term-defaults";
 
 export async function GET() {
   const user = await getCurrentUser();
@@ -12,7 +12,7 @@ export async function GET() {
   }
 
   await hydrateDomainState();
-  const profile = await getUserStore(user.username, user.academicYear ?? "999");
+  const profile = await getUserStore(user.username, user.academicYear ?? STAFF_ACADEMIC_YEAR);
   if (!profile || (profile.role && profile.role !== "student")) {
     return NextResponse.json({ error: "student_profile_not_found" }, { status: 404 });
   }

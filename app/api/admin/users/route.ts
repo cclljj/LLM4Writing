@@ -13,6 +13,7 @@ import {
   updateUserStore
 } from "@/src/lib/user-store";
 import { recordAuditLog } from "@/src/lib/audit-log-store";
+import { isEnabledAcademicYear, STAFF_ACADEMIC_YEAR } from "@/src/lib/academic-term-defaults";
 
 type ManageRole = "student" | "teacher" | "admin";
 
@@ -87,7 +88,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "password_too_short" }, { status: 400 });
     }
 
-    const target = await getUserStore(body.username, body.academicYear?.trim() || "999");
+    const target = await getUserStore(body.username, body.academicYear?.trim() || STAFF_ACADEMIC_YEAR);
     if (!target) {
       return NextResponse.json({ error: "user_not_found" }, { status: 404 });
     }
@@ -278,7 +279,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: "missing_required_fields" }, { status: 400 });
   }
 
-  const target = await getUserStore(body.username, body.academicYear?.trim() || "999");
+  const target = await getUserStore(body.username, body.academicYear?.trim() || STAFF_ACADEMIC_YEAR);
   if (!target) {
     return NextResponse.json({ error: "user_not_found" }, { status: 404 });
   }
@@ -368,7 +369,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: "missing_required_fields" }, { status: 400 });
   }
 
-  const target = await getUserStore(body.username, body.academicYear?.trim() || "999");
+  const target = await getUserStore(body.username, body.academicYear?.trim() || STAFF_ACADEMIC_YEAR);
   if (!target) {
     return NextResponse.json({ error: "user_not_found" }, { status: 404 });
   }
@@ -452,7 +453,7 @@ async function validateUserFields(input: UserInput): Promise<
   if (role === "student" && !classNumber) {
     return { ok: false, error: "missing_class_number" };
   }
-  if (role === "student" && !["114", "115"].includes(academicYear)) {
+  if (role === "student" && !isEnabledAcademicYear(academicYear)) {
     return { ok: false, error: "invalid_academic_year" };
   }
   if (role === "student" && ownerTeacherUsername) {
@@ -473,7 +474,7 @@ async function validateUserFields(input: UserInput): Promise<
       password,
       ownerTeacherUsername: role === "student" ? ownerTeacherUsername : undefined,
       classNumber: role === "student" ? classNumber : undefined,
-      academicYear: role === "student" ? academicYear : "999"
+      academicYear: role === "student" ? academicYear : STAFF_ACADEMIC_YEAR
     }
   };
 }

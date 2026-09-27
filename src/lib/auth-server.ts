@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { AUTH_COOKIE_SESSION, AuthUser, verifyAuthSessionToken } from "@/src/lib/auth";
 import { getUserStore } from "@/src/lib/user-store";
+import { STAFF_ACADEMIC_YEAR } from "@/src/lib/academic-term-defaults";
 
 export async function getCurrentUser(): Promise<AuthUser | null> {
   const store = await cookies();
@@ -10,7 +11,7 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
   const tokenUser = await verifyAuthSessionToken(token);
   if (!tokenUser) return null;
 
-  const currentUser = await getUserStore(tokenUser.username, tokenUser.academicYear ?? "999");
+  const currentUser = await getUserStore(tokenUser.username, tokenUser.academicYear ?? STAFF_ACADEMIC_YEAR);
   if (!currentUser || currentUser.role !== tokenUser.role) return null;
   const currentSessionVersion =
     typeof currentUser.sessionVersion === "number" && Number.isFinite(currentUser.sessionVersion)

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/src/lib/auth-server";
+import { STAFF_ACADEMIC_YEAR } from "@/src/lib/academic-term-defaults";
 import { getUserStore } from "@/src/lib/user-store";
 
 export async function GET() {
@@ -17,7 +18,7 @@ export async function GET() {
     );
   }
 
-  const profile = await getUserStore(user.username, user.academicYear ?? "999");
+  const profile = await getUserStore(user.username, user.academicYear ?? STAFF_ACADEMIC_YEAR);
   if (!profile || (profile.role && profile.role !== user.role)) {
     return NextResponse.json(
       { authenticated: false },

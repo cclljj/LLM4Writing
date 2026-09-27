@@ -2,6 +2,11 @@ import bcrypt from "bcryptjs";
 import postgres, { Sql } from "postgres";
 import { UserAccount } from "@/src/lib/types";
 import { getDatabaseUrl, getPostgresClientOptions, isDatabaseEnabled } from "@/src/lib/db-config";
+import {
+  DEFAULT_ACADEMIC_YEAR,
+  LEGACY_STUDENT_ACADEMIC_YEAR,
+  STAFF_ACADEMIC_YEAR
+} from "@/src/lib/academic-term-defaults";
 
 type StoredUser = UserAccount & { password: string };
 type MemoryUserStore = Map<string, StoredUser>;
@@ -9,8 +14,6 @@ type MemoryUserStore = Map<string, StoredUser>;
 const KEY = "__llm4writing_users__";
 const BCRYPT_ROUNDS = 12;
 const DEFAULT_SESSION_VERSION = 1;
-const STAFF_ACADEMIC_YEAR = "999";
-const DEFAULT_STUDENT_ACADEMIC_YEAR = "115";
 const LEGACY_STUDENT_CUTOFF = new Date("2026-09-01T00:00:00.000Z");
 
 function userKey(username: string, academicYear: string): string {
@@ -20,16 +23,16 @@ function userKey(username: string, academicYear: string): string {
 function normalizeAcademicYear(value: unknown, role?: string, createdAt?: unknown): string {
   if (role === "teacher" || role === "admin") return STAFF_ACADEMIC_YEAR;
   if (typeof value === "string" && value.trim()) return value.trim();
-  if (createdAt && new Date(String(createdAt)) < LEGACY_STUDENT_CUTOFF) return "114";
-  return DEFAULT_STUDENT_ACADEMIC_YEAR;
+  if (createdAt && new Date(String(createdAt)) < LEGACY_STUDENT_CUTOFF) return LEGACY_STUDENT_ACADEMIC_YEAR;
+  return DEFAULT_ACADEMIC_YEAR;
 }
 
 const defaultUsers: StoredUser[] = [
-  { username: "admin", academicYear: "999", name: "System Admin", school: "Demo High", role: "admin", password: "admin123", sessionVersion: 1 },
-  { username: "teacher", academicYear: "999", name: "Teacher One", school: "Demo High", role: "teacher", password: "teacher123", sessionVersion: 1 },
+  { username: "admin", academicYear: STAFF_ACADEMIC_YEAR, name: "System Admin", school: "Demo High", role: "admin", password: "admin123", sessionVersion: 1 },
+  { username: "teacher", academicYear: STAFF_ACADEMIC_YEAR, name: "Teacher One", school: "Demo High", role: "teacher", password: "teacher123", sessionVersion: 1 },
   {
     username: "student",
-    academicYear: "115",
+    academicYear: DEFAULT_ACADEMIC_YEAR,
     name: "Student One",
     school: "Demo High",
     role: "student",
@@ -40,7 +43,7 @@ const defaultUsers: StoredUser[] = [
   },
   {
     username: "s1",
-    academicYear: "115",
+    academicYear: DEFAULT_ACADEMIC_YEAR,
     name: "S1",
     school: "Demo High",
     role: "student",
@@ -51,7 +54,7 @@ const defaultUsers: StoredUser[] = [
   },
   {
     username: "s2",
-    academicYear: "115",
+    academicYear: DEFAULT_ACADEMIC_YEAR,
     name: "S2",
     school: "Demo High",
     role: "student",
@@ -62,7 +65,7 @@ const defaultUsers: StoredUser[] = [
   },
   {
     username: "s3",
-    academicYear: "115",
+    academicYear: DEFAULT_ACADEMIC_YEAR,
     name: "S3",
     school: "Demo High",
     role: "student",
@@ -539,6 +542,7 @@ export async function updateUserStore(
       (user) =>
         (user.username !== username || user.academicYear !== academicYear) &&
         user.role === "student" &&
+        user.academicYear === academicYear &&
         user.school === (patch.school ?? existing.school) &&
         user.classNumber === nextClassNumber &&
         user.ownerTeacherUsername &&

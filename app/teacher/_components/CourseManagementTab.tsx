@@ -2,7 +2,12 @@
 
 import { DragEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { deferStateUpdate } from "@/src/lib/defer-state-update";
-import { DEFAULT_ACADEMIC_YEAR, DEFAULT_ACADEMIC_YEAR_TERM } from "@/src/lib/academic-term-defaults";
+import {
+  ACADEMIC_YEARS,
+  DEFAULT_ACADEMIC_YEAR,
+  DEFAULT_ACADEMIC_YEAR_TERM,
+  getEnabledAcademicTerms
+} from "@/src/lib/academic-term-defaults";
 import { ActivityGroup, ActivityRow, EssayRow, OpenClassRow, UserRow, genreOptions } from "./types";
 import CourseImplementationReportTab from "./CourseImplementationReportTab";
 import ConfirmDialog from "./ConfirmDialog";
@@ -103,6 +108,22 @@ export default function CourseManagementTab({
   // form 取得當前用於分組的學校（admin = taskForm.school；teacher = teacherSchool）
   const currentFormSchool = loginRole === "admin" ? taskForm.school : teacherSchool;
 
+  // New tasks use the configured school years. Keep a historical course's
+  // saved year selectable if a later configuration change retires it.
+  const academicYearOptionsForForm = useMemo(() => {
+    const academicYears = new Set<string>(ACADEMIC_YEARS);
+    if (taskForm.id && taskForm.academicYear) academicYears.add(taskForm.academicYear);
+    return Array.from(academicYears);
+  }, [taskForm.academicYear, taskForm.id]);
+
+  // Keep an existing legacy course's saved term selectable, while new courses
+  // only offer terms enabled for the selected school year.
+  const termOptionsForForm = useMemo(() => {
+    const terms = new Set<string>(getEnabledAcademicTerms(taskForm.academicYear));
+    if (taskForm.id && taskForm.academicYearTerm) terms.add(taskForm.academicYearTerm);
+    return Array.from(terms);
+  }, [taskForm.academicYear, taskForm.academicYearTerm, taskForm.id]);
+
   // 學年是課程設定的第一個欄位；其後的學校與班級均由該學年學生資料推導。
   // 編輯舊課程時，也保留其原本值，避免學生帳號異動後下拉選單顯示空白。
   const allSchools = useMemo(() => {
@@ -202,12 +223,20 @@ export default function CourseManagementTab({
     deferStateUpdate(() => setListClassFilter("all"));
   }, [listSchoolFilter]);
 
-  // 切換學年時，先清除後續的學校、班級與分組選擇。
+  // 切換學年時，先清除後續的學校、班級與分組選擇，並套用該學年第一個啟用學期。
   useEffect(() => {
     if (taskForm.id) return;
-    deferStateUpdate(() =>
-      setTaskForm((prev) => ({ ...prev, school: loginRole === "admin" ? "" : prev.school, classNumber: "" }))
-    );
+    deferStateUpdate(() => {
+      setTaskForm((prev) => {
+        const enabledTerms = getEnabledAcademicTerms(prev.academicYear);
+        return {
+          ...prev,
+          school: loginRole === "admin" ? "" : prev.school,
+          classNumber: "",
+          academicYearTerm: enabledTerms.includes(prev.academicYearTerm) ? prev.academicYearTerm : (enabledTerms[0] ?? "")
+        };
+      });
+    });
   }, [taskForm.academicYear, taskForm.id, loginRole]);
 
   // 當 admin 切換 form 學校時，重置班級
@@ -810,8 +839,9 @@ export default function CourseManagementTab({
           <div className="col">
             <label>學年</label>
             <select value={taskForm.academicYear} onChange={(e) => setTaskForm({ ...taskForm, academicYear: e.target.value })} disabled={Boolean(taskForm.id)}>
-              <option value="114">114</option>
-              <option value="115">115</option>
+              {academicYearOptionsForForm.map((academicYear) => (
+                <option key={academicYear} value={academicYear}>{academicYear}</option>
+              ))}
             </select>
           </div>
           {loginRole === "admin" ? (
@@ -857,8 +887,9 @@ export default function CourseManagementTab({
           <div className="col">
             <label>學期</label>
             <select value={taskForm.academicYearTerm} onChange={(e) => setTaskForm({ ...taskForm, academicYearTerm: e.target.value })}>
-              <option value="1">1</option>
-              <option value="2">2</option>
+              {termOptionsForForm.map((academicYearTerm) => (
+                <option key={academicYearTerm} value={academicYearTerm}>{academicYearTerm}</option>
+              ))}
             </select>
           </div>
           <div className="col">

@@ -3,7 +3,13 @@ import postgres, { Sql } from "postgres";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { getDatabaseUrl, getPostgresClientOptions, isDatabaseEnabled } from "@/src/lib/db-config";
-import { DEFAULT_ACADEMIC_YEAR, DEFAULT_ACADEMIC_YEAR_TERM } from "@/src/lib/academic-term-defaults";
+import {
+  DEFAULT_ACADEMIC_YEAR,
+  DEFAULT_ACADEMIC_YEAR_TERM,
+  isEnabledAcademicTerm,
+  LEGACY_COURSE_TERM,
+  STAFF_ACADEMIC_YEAR
+} from "@/src/lib/academic-term-defaults";
 
 export type Essay = {
   id: string;
@@ -61,11 +67,11 @@ const KEY = "__llm4writing_domain_state__";
 const REMOVED_ESSAY_IDS = new Set(["essay-1", "essay-2", "essay-3"]);
 
 const defaultUsers: UserAccount[] = [
-  { username: "admin", academicYear: "999", name: "System Admin", school: "Demo High", role: "admin" },
-  { username: "teacher", academicYear: "999", name: "Teacher One", school: "Demo High", role: "teacher" },
+  { username: "admin", academicYear: STAFF_ACADEMIC_YEAR, name: "System Admin", school: "Demo High", role: "admin" },
+  { username: "teacher", academicYear: STAFF_ACADEMIC_YEAR, name: "Teacher One", school: "Demo High", role: "teacher" },
   {
     username: "student",
-    academicYear: "115",
+    academicYear: DEFAULT_ACADEMIC_YEAR,
     name: "Student One",
     school: "Demo High",
     role: "student",
@@ -74,7 +80,7 @@ const defaultUsers: UserAccount[] = [
   },
   {
     username: "s1",
-    academicYear: "115",
+    academicYear: DEFAULT_ACADEMIC_YEAR,
     name: "S1",
     school: "Demo High",
     role: "student",
@@ -83,7 +89,7 @@ const defaultUsers: UserAccount[] = [
   },
   {
     username: "s2",
-    academicYear: "115",
+    academicYear: DEFAULT_ACADEMIC_YEAR,
     name: "S2",
     school: "Demo High",
     role: "student",
@@ -92,7 +98,7 @@ const defaultUsers: UserAccount[] = [
   },
   {
     username: "s3",
-    academicYear: "115",
+    academicYear: DEFAULT_ACADEMIC_YEAR,
     name: "S3",
     school: "Demo High",
     role: "student",
@@ -123,9 +129,9 @@ const LEGACY_COURSE_TERM_CUTOFF = new Date("2026-09-01T00:00:00+08:00");
 export function resolveAcademicTermFromCourseCreatedAt(createdAt: unknown): { academicYear: string; academicYearTerm: string } {
   const createdAtMs = new Date(typeof createdAt === "string" ? createdAt : "").getTime();
   if (Number.isFinite(createdAtMs) && createdAtMs < LEGACY_COURSE_TERM_CUTOFF.getTime()) {
-    return { academicYear: "114", academicYearTerm: "2" };
+    return { ...LEGACY_COURSE_TERM };
   }
-  return { academicYear: "115", academicYearTerm: "1" };
+  return { academicYear: DEFAULT_ACADEMIC_YEAR, academicYearTerm: DEFAULT_ACADEMIC_YEAR_TERM };
 }
 
 function cloneState(): DomainState {
@@ -766,12 +772,18 @@ export function upsertOpenClass(input: {
 }) {
   const academicYear = input.academicYear?.trim() || DEFAULT_ACADEMIC_YEAR;
   const academicYearTerm = input.academicYearTerm?.trim() || DEFAULT_ACADEMIC_YEAR_TERM;
+  const existing = input.id ? openClasses.find((openClass) => openClass.id === input.id) : undefined;
+  const keepsStoredHistoricalTerm = Boolean(
+    existing && existing.academicYear === academicYear && existing.academicYearTerm === academicYearTerm
+  );
+  if (!isEnabledAcademicTerm(academicYear, academicYearTerm) && !keepsStoredHistoricalTerm) {
+    return { ok: false as const, error: "invalid_academic_term" };
+  }
   const essay = findEssay(input.essayId);
   if (!essay) {
     return { ok: false as const, error: "essay_not_found" };
   }
 
-  const existing = input.id ? openClasses.find((openClass) => openClass.id === input.id) : undefined;
   const canReuseDisabledEssay = Boolean(existing && existing.essayId === input.essayId);
   if (!essay.enabled && !canReuseDisabledEssay) {
     return { ok: false as const, error: "essay_disabled" };
@@ -886,7 +898,7 @@ export function createUserAccount(input: {
 
   users.push({
     username: input.username,
-    academicYear: input.role === "student" ? "115" : "999",
+    academicYear: input.role === "student" ? DEFAULT_ACADEMIC_YEAR : STAFF_ACADEMIC_YEAR,
     name: input.name,
     school: input.school,
     role: input.role,
