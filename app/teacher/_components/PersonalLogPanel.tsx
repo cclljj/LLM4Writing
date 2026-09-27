@@ -75,7 +75,10 @@ function PersonalLogPanel({
         const outlineStep = getWorkflowStepByCapability(workflowOwner, "outline")?.step;
         const peerOutlineStep = getWorkflowStepByCapability(workflowOwner, "peer_outline")?.step;
         const revisionStep = getWorkflowStepByCapability(workflowOwner, "revision")?.step;
-        const hasStep4Revised = Boolean(userOutline && userOutline !== userStep3SubmittedOutline);
+        // Step 4 is a distinct learning artifact. It may legitimately be the
+        // same text as the submitted Step 3 outline, so do not hide it merely
+        // because the two snapshots happen to match.
+        const hasStep4Revised = Boolean(userOutline);
         const personalSteps = getStepsFromMessages(scopedPersonalMessages, {
           workflowSteps,
           includeSteps: [

@@ -35,6 +35,19 @@ test("source-guard: editing a course retains its stored school and class choices
   assert.ok(src.includes("if (taskForm.id && taskForm.classNumber) classNumbers.add(taskForm.classNumber)"), "editing should retain the stored class in its select options");
 });
 
+test("source-guard: learning monitor shows every saved Step 4 outline", async () => {
+  const src = await read("../app/teacher/_components/PersonalLogPanel.tsx");
+  assert.ok(src.includes("const hasStep4Revised = Boolean(userOutline)"), "Step 4 should render whenever its saved outline exists");
+  assert.equal(src.includes("userOutline && userOutline !== userStep3SubmittedOutline"), false, "Step 4 must not disappear when it matches Step 3 text");
+});
+
+test("source-guard: course PDF uses paginated readable outline rows", async () => {
+  const src = await read("../src/lib/courseImplementationPdf.ts");
+  assert.ok(src.includes("buildReadableOutlineRows"), "PDF should derive readable outline rows");
+  assert.ok(src.includes("function drawOutlineTree"), "PDF should render an outline tree rather than scale a graph into one page");
+  assert.equal(src.includes("doc.addImage(png.dataUrl"), false, "PDF should not shrink a rasterized graph until labels overlap");
+});
+
 test("source-guard: personal history review includes the current student's revision draft", async () => {
   const pageSrc = await read("../app/student/page.tsx");
   const historySrc = await read("../app/student/_components/HistoryReview.tsx");

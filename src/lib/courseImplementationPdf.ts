@@ -1,6 +1,6 @@
 import { jsPDF } from "jspdf";
 import { buildCourseReportTimelineItems } from "@/src/lib/course-report-pdf-timeline";
-import { buildOutlinePreview } from "@/src/lib/outline-utils";
+import { fromMermaid } from "@/src/lib/outline-utils";
 import { maskPeerUsernames, normalizeReportMarkdownText } from "@/src/lib/report-rendering";
 import { formatTaipeiDateTime } from "@/src/lib/time-format";
 import { COURSE_REPORT_VERSION } from "@/src/lib/course-report-version";
@@ -158,79 +158,33 @@ function formatRole(role: string): string {
   return role || "未知";
 }
 
-let mermaidInitDone = false;
+export type PdfOutlineRow = { depth: number; text: string };
 
-async function renderMermaidSvg(mermaidText: string): Promise<string | null> {
-  const normalized = sanitize(mermaidText);
-  if (!normalized) return null;
-  if (typeof window === "undefined" || typeof document === "undefined") return null;
+/**
+ * PDFs use a vertically flowing tree rather than a scaled graph. Graphs can
+ * become wider than A4 and make node labels overlap; rows paginate naturally
+ * and keep every node's text readable.
+ */
+export function buildReadableOutlineRows(mermaidText: string): PdfOutlineRow[] {
+  const nodes = fromMermaid(mermaidText);
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  const depthCache = new Map<string, number>();
+  const depthFor = (id: string, visiting = new Set<string>()): number => {
+    const cached = depthCache.get(id);
+    if (cached !== undefined) return cached;
+    if (visiting.has(id)) return 1;
+    visiting.add(id);
+    const parentId = byId.get(id)?.parentId;
+    const depth = parentId && byId.has(parentId) ? depthFor(parentId, visiting) + 1 : 1;
+    visiting.delete(id);
+    depthCache.set(id, depth);
+    return depth;
+  };
 
-  const mermaidModule = await import("mermaid");
-  const mermaid = mermaidModule.default;
-  if (!mermaidInitDone) {
-    mermaid.initialize({
-      startOnLoad: false,
-      securityLevel: "loose",
-      theme: "default",
-      flowchart: {
-        htmlLabels: false,
-        useMaxWidth: false,
-      },
-    });
-    mermaidInitDone = true;
-  }
-
-  const container = document.createElement("div");
-  container.style.position = "fixed";
-  container.style.left = "-10000px";
-  container.style.top = "0";
-  container.style.width = "1px";
-  container.style.height = "1px";
-  document.body.appendChild(container);
-  try {
-    const id = `mermaid-pdf-${Math.random().toString(36).slice(2, 10)}`;
-    const { svg } = await mermaid.render(id, normalized, container);
-    return svg;
-  } finally {
-    container.remove();
-  }
-}
-
-async function svgToPngDataUrl(svg: string): Promise<{ dataUrl: string; width: number; height: number } | null> {
-  if (typeof window === "undefined" || typeof document === "undefined") return null;
-  const parser = new DOMParser();
-  const parsed = parser.parseFromString(svg, "image/svg+xml");
-  const root = parsed.documentElement;
-  const widthAttr = Number(root.getAttribute("width") ?? "");
-  const heightAttr = Number(root.getAttribute("height") ?? "");
-  const viewBoxAttr = root.getAttribute("viewBox") ?? "";
-  const viewBoxParts = viewBoxAttr.split(/\s+/).map((n) => Number(n));
-  const vbWidth = viewBoxParts.length === 4 ? viewBoxParts[2] : NaN;
-  const vbHeight = viewBoxParts.length === 4 ? viewBoxParts[3] : NaN;
-  const width = Number.isFinite(widthAttr) && widthAttr > 0 ? widthAttr : Number.isFinite(vbWidth) ? vbWidth : 1200;
-  const height = Number.isFinite(heightAttr) && heightAttr > 0 ? heightAttr : Number.isFinite(vbHeight) ? vbHeight : 800;
-
-  const blob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  try {
-    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-      const image = new Image();
-      image.onload = () => resolve(image);
-      image.onerror = () => reject(new Error("svg_image_load_failed"));
-      image.src = url;
-    });
-    const scale = 2;
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.max(1, Math.round(width * scale));
-    canvas.height = Math.max(1, Math.round(height * scale));
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return null;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-    return { dataUrl: canvas.toDataURL("image/png"), width, height };
-  } finally {
-    URL.revokeObjectURL(url);
-  }
+  return nodes
+    .map((node, index) => ({ depth: depthFor(node.id), text: stripInlineMarkdown(node.text), index }))
+    .sort((a, b) => a.depth - b.depth || a.index - b.index)
+    .map(({ depth, text }) => ({ depth, text }));
 }
 
 export async function generateCourseImplementationPdf(input: CourseImplementationPdfInput): Promise<Blob> {
@@ -478,104 +432,36 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
   const outlineTitle = outlineStep !== undefined ? `${getWorkflowStepName(input, outlineStep)}原始輸入架構圖` : "原始輸入架構圖";
   const peerOutlineTitle = peerOutlineStep !== undefined ? `${getWorkflowStepName(input, peerOutlineStep)}修正後架構圖` : "修正後架構圖";
 
-  function drawOutlineGraphFallback(kind: "submitted_outline" | "revised_outline", mermaidText: string): void {
-    const preview = buildOutlinePreview(mermaidText, { maxLines: 40 });
-    if (!preview) return;
-
+  function drawOutlineTree(kind: "submitted_outline" | "revised_outline", mermaidText: string): void {
+    const rows = buildReadableOutlineRows(mermaidText);
+    if (rows.length === 0) return;
     const title = kind === "submitted_outline" ? outlineTitle : peerOutlineTitle;
     writeSectionHeader(title);
-
-    const maxGraphHeight = PAGE.height - PAGE.marginTop - PAGE.marginBottom - 40;
-    if (y + Math.min(preview.height, maxGraphHeight) + 18 > PAGE.height - PAGE.marginBottom) {
-      newPage();
-    }
-    const graphScale = Math.min((contentWidth - 24) / preview.width, maxGraphHeight / preview.height, 1);
-    const graphW = preview.width * graphScale;
-    const graphH = preview.height * graphScale;
-    const boxX = PAGE.marginX + (contentWidth - graphW) / 2;
-
-    ensureSpacePx(graphH + 18);
-    setFillColor([248, 250, 252]);
-    setDrawColor(COLORS.sectionStroke);
-    doc.roundedRect(PAGE.marginX, y - 6, contentWidth, graphH + 12, 8, 8, "FD");
-
-    const centerOf = (node: { x: number; y: number; w?: number; h?: number }) => ({
-      x: (node.x + (node.w ?? 180) / 2) * graphScale,
-      y: (node.y + (node.h ?? 84) / 2) * graphScale,
-    });
-
-    const nodeMap = new Map(preview.nodes.map((n) => [n.id, n]));
-
-    setDrawColor(COLORS.edge);
-    doc.setLineWidth(1.2);
-    preview.nodes
-      .filter((n) => n.parentId)
-      .forEach((node) => {
-        const parent = node.parentId ? nodeMap.get(node.parentId) : null;
-        if (!parent) return;
-        const parentCenter = centerOf(parent);
-        const nodeCenter = centerOf(node);
-        doc.line(boxX + parentCenter.x, y + parentCenter.y, boxX + nodeCenter.x, y + node.y * graphScale);
-      });
-
-    preview.nodes.forEach((node) => {
-      const sx = node.x * graphScale;
-      const sy = node.y * graphScale;
-      const nodeW = (node.w ?? 180) * graphScale;
-      const nodeH = (node.h ?? 84) * graphScale;
-      setFillColor(COLORS.nodeFill);
+    for (const row of rows) {
+      const indent = Math.min(84, (row.depth - 1) * 20);
+      const cardX = PAGE.marginX + 10 + indent;
+      const cardW = contentWidth - 20 - indent;
+      const textX = cardX + 12;
+      const textW = cardW - 24;
+      doc.setFontSize(10.5);
+      const lines = doc.splitTextToSize(row.text || "（空白）", textW) as string[];
+      const lineHeight = 16;
+      const cardH = Math.max(34, lines.length * lineHeight + 16);
+      ensureSpacePx(cardH + 8);
+      if (row.depth > 1) {
+        setDrawColor(COLORS.edge);
+        doc.setLineWidth(1.2);
+        doc.line(PAGE.marginX + indent, y + cardH / 2 - 2, cardX - 5, y + cardH / 2 - 2);
+      }
+      setFillColor(row.depth % 2 === 0 ? [248, 250, 252] : COLORS.nodeFill);
       setDrawColor(COLORS.nodeStroke);
-      doc.roundedRect(boxX + sx, y + sy, nodeW, nodeH, 8, 8, "FD");
-
-      const textMaxWidth = nodeW - 12;
-      const lines = (node.lines && node.lines.length > 0 ? node.lines : doc.splitTextToSize(stripInlineMarkdown(node.text), textMaxWidth)) as string[];
-      doc.setFontSize(Math.max(7.5, 11 * graphScale));
+      doc.roundedRect(cardX, y - 10, cardW, cardH, 6, 6, "FD");
       setFontStyle("bold");
       setTextColor(COLORS.title);
-      doc.text(lines, boxX + sx + 6, y + sy + 16 * graphScale);
+      doc.text(lines, textX, y + 5);
       setFontStyle("normal");
       setTextColor(COLORS.text);
-    });
-
-    y += graphH + 18;
-  }
-
-  async function drawOutlineGraph(kind: "submitted_outline" | "revised_outline", mermaidText: string): Promise<void> {
-    const title = kind === "submitted_outline" ? outlineTitle : peerOutlineTitle;
-    writeSectionHeader(title);
-
-    try {
-      const svg = await renderMermaidSvg(mermaidText);
-      if (!svg) {
-        // Fallback to deterministic local preview graph when Mermaid SVG rendering is unavailable.
-        y -= 34;
-        drawOutlineGraphFallback(kind, mermaidText);
-        return;
-      }
-      const png = await svgToPngDataUrl(svg);
-      if (!png) {
-        y -= 34;
-        drawOutlineGraphFallback(kind, mermaidText);
-        return;
-      }
-
-      const maxGraphHeight = PAGE.height - PAGE.marginTop - PAGE.marginBottom - 40;
-      if (y + Math.min(png.height, maxGraphHeight) + 18 > PAGE.height - PAGE.marginBottom) {
-        newPage();
-      }
-      const graphScale = Math.min((contentWidth - 24) / png.width, maxGraphHeight / png.height, 1);
-      const graphW = png.width * graphScale;
-      const graphH = png.height * graphScale;
-      const boxX = PAGE.marginX + (contentWidth - graphW) / 2;
-      ensureSpacePx(graphH + 18);
-      setFillColor([248, 250, 252]);
-      setDrawColor(COLORS.sectionStroke);
-      doc.roundedRect(PAGE.marginX, y - 6, contentWidth, graphH + 12, 8, 8, "FD");
-      doc.addImage(png.dataUrl, "PNG", boxX, y, graphW, graphH);
-      y += graphH + 18;
-    } catch {
-      y -= 34;
-      drawOutlineGraphFallback(kind, mermaidText);
+      y += cardH + 8;
     }
   }
 
@@ -643,22 +529,22 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
         y += 30;
 
         if (outlineStep !== undefined && step === outlineStep && step3Outline && !insertedStep3) {
-          await drawOutlineGraph("submitted_outline", step3Outline);
+          drawOutlineTree("submitted_outline", step3Outline);
           insertedStep3 = true;
         }
         if (peerOutlineStep !== undefined && step === peerOutlineStep && hasStep4Outline && !insertedStep4) {
-          await drawOutlineGraph("revised_outline", step4Outline);
+          drawOutlineTree("revised_outline", step4Outline);
           insertedStep4 = true;
         }
       }
 
       if (item.type === "outline") {
         if (item.outlineKind === "submitted_outline" && step3Outline && !insertedStep3) {
-          await drawOutlineGraph("submitted_outline", step3Outline);
+          drawOutlineTree("submitted_outline", step3Outline);
           insertedStep3 = true;
         }
         if (item.outlineKind === "revised_outline" && hasStep4Outline && !insertedStep4) {
-          await drawOutlineGraph("revised_outline", step4Outline);
+          drawOutlineTree("revised_outline", step4Outline);
           insertedStep4 = true;
         }
         continue;
@@ -671,10 +557,10 @@ export async function generateCourseImplementationPdf(input: CourseImplementatio
 
     // Fallback placement in case outlines exist but step messages are absent.
     if (outlineStep !== undefined && step3Outline && !insertedStep3) {
-      await drawOutlineGraph("submitted_outline", step3Outline);
+      drawOutlineTree("submitted_outline", step3Outline);
     }
     if (peerOutlineStep !== undefined && hasStep4Outline && !insertedStep4) {
-      await drawOutlineGraph("revised_outline", step4Outline);
+      drawOutlineTree("revised_outline", step4Outline);
     }
   }
 
