@@ -763,7 +763,7 @@ LLM 未設定或串流失敗時需提供可讀 fallback，避免學生停留在�
 | `StudentAccountTab.tsx` | 帳號管理分頁 |
 | `CourseManagementTab.tsx` | 課程管理分頁 |
 | `CourseImplementationReportTab.tsx` | 課程實施報告子頁：已結束課程清單、學生完成度、個人紀錄 |
-| `src/lib/courseImplementationPdf.ts` | 課程實施報告 PDF v1 產生器（前後端共用），含 Markdown 排版與 Step3/4 結構樹圖形繪製 |
+| `src/lib/courseImplementationPdf.ts` | 課程實施報告 PDF v1 產生器（前後端共用），含 Markdown 排版與 Step3/4 可跨頁分層結構樹卡片 |
 | `LearningMonitorTab.tsx` | 學習管理分頁、監控、儀表板、對話紀錄 |
 | `TeacherDashboard.tsx` | 課堂儀表板 |
 | `CourseDiagnosticsPanel.tsx` | 學習管理課程診斷摘要、場次表格與分頁 |
@@ -1134,10 +1134,11 @@ Loading 規則（#270）：
 - 個人對話紀錄內建學生選擇器，選項格式 `小組 N: 姓名 (帳號)`。
 - 未選擇時顯示提示文字。
 - 小組對話紀錄：Step3 完成結構樹顯示於步驟 2 卡片末尾；Step4 修正後結構樹顯示於步驟 4 卡片末尾。
-- 個人對話紀錄：須顯示所選學生的 Step3 完成結構樹、Step4 修正後結構樹，以及 Step8 已儲存的潤飾稿；各產物顯示於 workflow capability 對應的步驟卡片。即使沒有對話訊息，仍須建立有產物的步驟卡片。
+- 個人對話紀錄：須顯示所選學生的 Step3 完成結構樹、Step4 修正後結構樹，以及 Step8 已儲存的潤飾稿；各產物顯示於 workflow capability 對應的步驟卡片。只要已儲存 Step4 結構樹，即使內容剛好與 Step3 快照相同，仍須顯示 Step4 產物。即使沒有對話訊息，仍須建立有產物的步驟卡片。
 - 個人課程成果報告：Step3 原始輸入架構圖必須直接使用 `step3SubmittedOutlines` 快照，顯示於步驟 3 卡片末尾；Step4 討論後修正架構圖使用可變的 `outlines`，顯示於步驟 4 卡片末尾。不得以 Step4 `outlines` 回填或冒充 Step3；步驟清單即使沒有對話訊息，也必須因架構圖產物建立對應步驟。
 - 結構樹 SVG 不可置於整個對話面板頂部，須依步驟順序與訊息穿插顯示。
 - 對話訊息若含 Mermaid 結構樹，需於訊息下方同步渲染 SVG。
+- 課程實施報告 PDF 的 Step3 原始結構樹與 Step4 修正後結構樹，須以可跨頁的分層樹狀卡片呈現；每個節點文字需完整換行且不可重疊，不得為了塞入單頁而縮小整張圖至不可讀。
 
 #### 6.6.5 學習管理：卡關偵測
 

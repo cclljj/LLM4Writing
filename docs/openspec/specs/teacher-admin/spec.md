@@ -318,6 +318,7 @@ The learning monitor SHALL provide group and personal records organized by step.
 - **GIVEN** a teacher selects one student from the joined-status list
 - **WHEN** personal progress loads
 - **THEN** the UI shows that student's messages, Step3 submitted outline, and Step4 outline in step-scoped cards
+- **AND** a saved Step4 outline appears even when its text is identical to the Step3 submitted-outline snapshot
 
 ### Requirement: Course Implementation Report
 
@@ -380,13 +381,13 @@ The course management area SHALL provide ended-course reports and student-level 
 - **THEN** the message body may continue across page boundaries
 - **AND** the renderer does not force the entire message card to a new page solely because of estimated body height
 
-#### Scenario: PDF report keeps Step4 structure tree readable
+#### Scenario: PDF report keeps Step3 and Step4 structure trees readable
 
-- **GIVEN** the student's Step4 revised structure tree contains long node text
+- **GIVEN** the student's Step3 submitted or Step4 revised structure tree contains long node text
 - **WHEN** the student PDF report is generated
-- **THEN** the Step4 graph is scaled to the available page width and height
-- **AND** important node text is not truncated with ellipses
-- **AND** the graph may start on a new page when needed to preserve readability
+- **THEN** each tree is rendered as a vertically flowing, indented hierarchy of cards
+- **AND** every node's text wraps without overlap or truncation
+- **AND** tree rows may continue on a new page rather than being shrunk to fit one page
 
 #### Scenario: Exported report artifacts mask peer accounts
 
