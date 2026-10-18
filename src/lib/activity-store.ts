@@ -792,6 +792,8 @@ export function upsertOpenClass(input: {
   const duplicate = openClasses.find(
     (openClass) =>
       openClass.school === input.school &&
+      openClass.academicYear === academicYear &&
+      openClass.academicYearTerm === academicYearTerm &&
       openClass.classNumber === input.classNumber &&
       openClass.essayId === input.essayId &&
       openClass.id !== input.id

@@ -119,6 +119,25 @@ The system SHALL let authorized users create, edit, group, paginate, filter, and
 - **AND** academic semester is limited to `1` or `2` with `1` as the new-task default
 - **AND** legacy tasks with a recoverable creation time before 2026-09-01 in Asia/Taipei are assigned `114-2`; tasks from that date onward are assigned `115-1`
 
+#### Scenario: Reuse a writing topic across academic terms
+
+- **GIVEN** a task already assigns a writing topic to a school and class number
+- **WHEN** an authorized user assigns the same topic in a different academic year or semester
+- **THEN** the system creates an independent task regardless of whether the teacher is the same or different
+- **AND** duplicate validation does not rewrite existing tasks, groups, or learning records
+
+#### Scenario: Reject a duplicate within the same academic term
+
+- **GIVEN** a task already has the same school, academic year, semester, class number, and writing topic ID
+- **WHEN** an authorized user creates another task with that combination, even for a different teacher
+- **THEN** the system rejects it with `duplicate_class_essay_assignment` without changing existing data
+
+#### Scenario: Editing a task checks other tasks only
+
+- **WHEN** an authorized user edits a writing task
+- **THEN** duplicate validation excludes that task's own ID
+- **AND** changing its assignment to match another task's school, academic year, semester, class number, and topic ID is rejected without changing either task
+
 #### Scenario: Teacher task visibility
 
 - **GIVEN** a teacher opens writing task management
