@@ -1,7 +1,7 @@
 # LLM4Writing
 
 [![Deploy to Vercel](https://github.com/cclljj/LLM4Writing/actions/workflows/vercel-deploy.yml/badge.svg)](https://github.com/cclljj/LLM4Writing/actions/workflows/vercel-deploy.yml)
-[![Next.js](https://img.shields.io/badge/Next.js-16.2.6-000000?logo=nextdotjs)](https://nextjs.org/)
+[![Next.js](https://img.shields.io/badge/Next.js-16.4.2-000000?logo=nextdotjs)](https://nextjs.org/)
 [![React](https://img.shields.io/badge/React-19.2.0-149ECA?logo=react&logoColor=white)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8.3-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Node](https://img.shields.io/badge/Node.js-20%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
