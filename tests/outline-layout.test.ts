@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import OutlineSvg from "@/app/_components/OutlineSvg";
 import { buildOutlinePreview } from "@/src/lib/outline-utils";
 
 function overlap(
@@ -60,4 +63,41 @@ flowchart TB
   assert.ok(target);
   assert.equal(target!.lines?.join("").includes("…"), false);
   assert.equal(target!.lines?.join(""), longText);
+});
+
+test("saved Mermaid-format outlines still render as SVG in history and report views", () => {
+  const savedOutline = [
+    "```mermaid",
+    "graph TD",
+    'A["海洋保育"]',
+    'A --> B["減少塑膠垃圾"]',
+    'B --> C["自備水壺<br/>重複使用"]',
+    "```"
+  ].join("\r\n");
+
+  for (const compact of [true, false]) {
+    const html = renderToStaticMarkup(createElement(OutlineSvg, {
+      mermaidText: savedOutline,
+      label: "既有結構樹",
+      compact
+    }));
+    assert.match(html, /<svg[^>]+role="img"/);
+    assert.equal((html.match(/<polyline\b/g) ?? []).length, 2);
+    for (const text of ["海洋保育", "減少塑膠垃圾", "自備水壺", "重複使用"]) {
+      assert.ok(html.includes(text));
+    }
+    assert.ok(!html.includes("```mermaid"));
+  }
+});
+
+test("outline labels containing HTML remain text in the SVG renderer", () => {
+  for (const label of ["<script>alert(1)</script>", "<img src=x onerror=alert(1)>"]) {
+    const html = renderToStaticMarkup(createElement(OutlineSvg, {
+      mermaidText: `graph TD\nA["${label}"]`
+    }));
+    assert.match(html, /<svg/);
+    assert.ok(!html.includes("<script"));
+    assert.ok(!html.includes("<img"));
+    assert.ok(html.includes("&lt;"));
+  }
 });

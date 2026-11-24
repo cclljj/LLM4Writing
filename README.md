@@ -1,7 +1,7 @@
 # LLM4Writing
 
 [![Deploy to Vercel](https://github.com/cclljj/LLM4Writing/actions/workflows/vercel-deploy.yml/badge.svg)](https://github.com/cclljj/LLM4Writing/actions/workflows/vercel-deploy.yml)
-[![Next.js](https://img.shields.io/badge/Next.js-16.4.2-000000?logo=nextdotjs)](https://nextjs.org/)
+[![Next.js](https://img.shields.io/badge/Next.js-16.4.5-000000?logo=nextdotjs)](https://nextjs.org/)
 [![React](https://img.shields.io/badge/React-19.2.0-149ECA?logo=react&logoColor=white)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8.3-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Node](https://img.shields.io/badge/Node.js-20%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
@@ -39,6 +39,8 @@
 - 管理端診斷面板（KPI、fallback 率、錯誤分類、趨勢）
 - 管理端操作審計日誌（新增任務、刪除課程、切步驟、重設密碼）
 - 課程實施報告與學生個人 PDF 匯出
+
+結構樹沿用 Mermaid 文字儲存格式，由專案內的解析器、Dagre 與 SVG 繪製；PDF 使用相同佈局。網站不依賴 Mermaid／KaTeX 渲染套件。
 
 ---
 

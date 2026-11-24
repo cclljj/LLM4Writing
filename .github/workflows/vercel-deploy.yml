@@ -22,7 +22,8 @@ permissions:
 
 jobs:
   quality-gate:
-    runs-on: ubuntu-latest
+    # Playwright 1.59 supports Ubuntu 24.04, but not Ubuntu 26.04.
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v5
